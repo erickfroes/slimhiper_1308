@@ -71,11 +71,7 @@ export default function Patient360Content({ patientId }: Patient360ContentProps)
           { label: data.profile.name },
         ]}
       />
-      <PatientHeaderCard
-        profile={data.profile}
-        activePackage={data.activePackage}
-        clinicalStatus={data.clinicalStatus}
-      />
+      <PatientHeaderCard data={data} />
       <Patient360Tabs data={data} />
     </div>
   );
