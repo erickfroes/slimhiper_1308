@@ -595,3 +595,52 @@ export interface PatientReportDefinition {
   badgeColor?: string;
   exportImplemented: boolean;
 }
+
+// ─── Clinic Program / Package Template types ──────────────────────────────────
+
+export type ProgramStatus = 'ativo' | 'arquivado' | 'rascunho';
+export type ProgramPaymentModel = 'parcelado' | 'avista' | 'assinatura' | 'hibrido';
+
+export interface ProgramPhase {
+  name: string;
+  durationWeeks: number;
+  description: string;
+}
+
+export interface ProgramService {
+  label: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface ProgramAppEntitlement {
+  key: string;
+  label: string;
+  enabled: boolean;
+}
+
+export interface ProgramRequiredDocument {
+  label: string;
+  required: boolean;
+}
+
+export interface ClinicProgram {
+  id: string;
+  name: string;
+  programType: ProgramType;
+  objective: string;
+  durationWeeks: number;
+  status: ProgramStatus;
+  phases: ProgramPhase[];
+  includedServices: ProgramService[];
+  checkInsTotal: number;
+  checkInFrequency: string;
+  appEntitlements: ProgramAppEntitlement[];
+  requiredDocuments: ProgramRequiredDocument[];
+  paymentModel: ProgramPaymentModel;
+  paymentDescription: string;
+  activePatients: number;
+  createdAt: string;
+  updatedAt: string;
+  color: string;
+}
