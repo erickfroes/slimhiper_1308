@@ -644,3 +644,56 @@ export interface ClinicProgram {
   updatedAt: string;
   color: string;
 }
+
+// ─── Program Builder types ────────────────────────────────────────────────────
+
+export type BuilderStepKey =
+  | 'dados_gerais'
+  | 'fases' |'servicos' |'entitlements' |'checkins' |'documentos' |'financeiro' |'equipe' |'revisao';
+
+export interface BuilderStep {
+  key: BuilderStepKey;
+  label: string;
+  description: string;
+}
+
+export interface ProgramBuilderTeamMember {
+  id: string;
+  name: string;
+  role: string;
+  specialty: string;
+}
+
+export interface ProgramBuilderCheckinTemplate {
+  id: string;
+  label: string;
+  frequency: string;
+  channel: 'app' | 'whatsapp' | 'email' | 'presencial';
+  questions: string[];
+}
+
+export interface ProgramBuilderFinancialConfig {
+  paymentModel: ProgramPaymentModel;
+  basePrice: number;
+  installments?: number;
+  discountPercent?: number;
+  description: string;
+}
+
+export interface ProgramBuilderDraft {
+  name: string;
+  programType: ProgramType | '';
+  objective: string;
+  durationWeeks: number;
+  color: string;
+  status: ProgramStatus;
+  phases: ProgramPhase[];
+  includedServices: ProgramService[];
+  appEntitlements: ProgramAppEntitlement[];
+  checkInsTotal: number;
+  checkInFrequency: string;
+  checkinTemplates: ProgramBuilderCheckinTemplate[];
+  requiredDocuments: ProgramRequiredDocument[];
+  financial: ProgramBuilderFinancialConfig;
+  team: ProgramBuilderTeamMember[];
+}
