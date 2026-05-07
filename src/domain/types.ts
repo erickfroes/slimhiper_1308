@@ -83,6 +83,10 @@ export interface PatientPackageSummary {
   usedConsultations: number;
   totalNutritionSessions: number;
   usedNutritionSessions: number;
+  packageHistory?: PatientPackageHistoryItem[];
+  packageEntitlements?: PatientPackageEntitlement[];
+  serviceUsage?: PatientPackageServiceUsage[];
+  packageLimits?: PatientPackageLimit[];
 }
 
 export interface PatientMeasurementSummary {
@@ -399,6 +403,49 @@ export interface PatientChatSummary {
   lastMessageFrom: string;
   unreadCount: number;
   isOpen: boolean;
+  messages?: PatientChatMessage[];
+  shortcuts?: PatientChatShortcut[];
+  responsibleTeamMember?: PatientChatResponsibleMember;
+  serviceHours?: PatientChatServiceHours;
+  slaExpected?: PatientChatSla;
+}
+
+// ─── Chat domain types ────────────────────────────────────────────────────────
+
+export interface PatientChatMessage {
+  id: string;
+  from: 'patient' | 'staff';
+  text: string;
+  time: string;
+  read: boolean;
+}
+
+export interface PatientChatShortcut {
+  id: string;
+  text: string;
+}
+
+export interface PatientChatThread {
+  id: string;
+  date: string;
+  summary: string;
+  messageCount: number;
+}
+
+export interface PatientChatResponsibleMember {
+  name: string;
+  role: string;
+}
+
+export interface PatientChatServiceHours {
+  days: string;
+  start: string;
+  end: string;
+}
+
+export interface PatientChatSla {
+  label: string;
+  note: string;
 }
 
 // ─── Document 360 types ───────────────────────────────────────────────────────
@@ -504,4 +551,35 @@ export interface PatientReviewItem {
   name: string;
   issue: string;
   severity: 'critico' | 'alto' | 'medio' | 'baixo';
+}
+
+// ─── Package domain types ─────────────────────────────────────────────────────
+
+export interface PatientPackageHistoryItem {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: 'concluido' | 'cancelado' | 'ativo';
+  totalWeeks: number;
+  reason?: string;
+}
+
+export interface PatientPackageEntitlement {
+  key: string;
+  label: string;
+  enabled: boolean;
+}
+
+export interface PatientPackageServiceUsage {
+  label: string;
+  used: number;
+  total: number;
+  color: string;
+  bgColor: string;
+}
+
+export interface PatientPackageLimit {
+  label: string;
+  value: string;
 }

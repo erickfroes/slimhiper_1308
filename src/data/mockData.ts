@@ -15,6 +15,8 @@ import type {
   PatientPrescriptionSummary,
   PatientNutritionPlanSummary,
   PatientChatSummary,
+  PatientChatMessage,
+  PatientChatShortcut,
   Patient360Summary,
   DashboardStats,
   WaitingQueueEntry,
@@ -27,8 +29,12 @@ import type {
   NutritionPlanHistory,
   MealAdherenceEntry,
   MealPhoto,
-  NutritionTeamNote } from
-'@/domain/types';
+  NutritionTeamNote,
+  PatientPackageHistoryItem,
+  PatientPackageEntitlement,
+  PatientPackageServiceUsage,
+  PatientPackageLimit,
+} from '@/domain/types';
 
 // ─── PRIMARY MOCK PATIENT: Juliana Pereira ───────────────────────────────────
 
@@ -49,6 +55,70 @@ export const mockPatientJuliana: PatientProfile = {
   tags: ['emagrecimento', 'prioridade']
 };
 
+export const mockPackageHistoryJuliana: PatientPackageHistoryItem[] = [
+  {
+    id: 'pkg-hist-001',
+    name: 'Avaliação Inicial — 4 Semanas',
+    startDate: '2025-12-01',
+    endDate: '2025-12-28',
+    status: 'concluido',
+    totalWeeks: 4,
+  },
+  {
+    id: 'pkg-hist-002',
+    name: 'Emagrecimento 8 Semanas',
+    startDate: '2026-01-06',
+    endDate: '2026-03-02',
+    status: 'concluido',
+    totalWeeks: 8,
+  },
+];
+
+export const mockPackageEntitlementsJuliana: PatientPackageEntitlement[] = [
+  { key: 'chat', label: 'Chat com equipe', enabled: true },
+  { key: 'comunidade', label: 'Comunidade', enabled: false },
+  { key: 'documentos', label: 'Documentos incluídos', enabled: true },
+  { key: 'app', label: 'App do paciente', enabled: true },
+];
+
+export const mockServiceUsageJuliana: PatientPackageServiceUsage[] = [
+  {
+    label: 'Consultas',
+    used: 2,
+    total: 6,
+    color: 'bg-teal-500',
+    bgColor: 'bg-teal-50 text-teal-700',
+  },
+  {
+    label: 'Bioimpedância',
+    used: 1,
+    total: 3,
+    color: 'bg-violet-500',
+    bgColor: 'bg-violet-50 text-violet-700',
+  },
+  {
+    label: 'Check-ins',
+    used: 4,
+    total: 12,
+    color: 'bg-amber-500',
+    bgColor: 'bg-amber-50 text-amber-700',
+  },
+  {
+    label: 'Sessões de Nutrição',
+    used: 1,
+    total: 4,
+    color: 'bg-emerald-500',
+    bgColor: 'bg-emerald-50 text-emerald-700',
+  },
+];
+
+export const mockPackageLimitsJuliana: PatientPackageLimit[] = [
+  { label: 'Validade máxima', value: '12 semanas' },
+  { label: 'Sessões extras permitidas', value: 'Não incluídas' },
+  { label: 'Pausa permitida', value: 'Até 2 semanas' },
+  { label: 'Transferência de saldo', value: 'Não permitida' },
+];
+
 export const mockPackageJuliana: PatientPackageSummary = {
   id: 'pkg-001',
   patientId: 'patient-001',
@@ -62,7 +132,11 @@ export const mockPackageJuliana: PatientPackageSummary = {
   totalConsultations: 6,
   usedConsultations: 2,
   totalNutritionSessions: 4,
-  usedNutritionSessions: 1
+  usedNutritionSessions: 1,
+  packageHistory: mockPackageHistoryJuliana,
+  packageEntitlements: mockPackageEntitlementsJuliana,
+  serviceUsage: mockServiceUsageJuliana,
+  packageLimits: mockPackageLimitsJuliana,
 };
 
 export const mockClinicalStatusJuliana: ClinicalStatusSummary = {
@@ -1269,6 +1343,51 @@ export const mockNutritionPlanJuliana: PatientNutritionPlanSummary = {
   NutritionTeamNote[]
 };
 
+export const mockChatMessagesJuliana: PatientChatMessage[] = [
+  {
+    id: 'msg-001',
+    from: 'patient',
+    text: 'Oi! Tudo bem? Tenho uma dúvida sobre o remédio.',
+    time: '09:45',
+    read: true,
+  },
+  {
+    id: 'msg-002',
+    from: 'staff',
+    text: 'Olá Juliana! Pode perguntar, estou aqui.',
+    time: '09:52',
+    read: true,
+  },
+  {
+    id: 'msg-003',
+    from: 'patient',
+    text: 'Posso tomar a Metformina em horário diferente hoje? Tive um jantar tardio.',
+    time: '10:15',
+    read: true,
+  },
+  {
+    id: 'msg-004',
+    from: 'staff',
+    text: 'Sim, pode tomar junto com a próxima refeição principal. Só não pule a dose!',
+    time: '10:22',
+    read: true,
+  },
+  {
+    id: 'msg-005',
+    from: 'patient',
+    text: 'Entendi, obrigada! Vou tomar assim que chegar em casa.',
+    time: '10:30',
+    read: false,
+  },
+];
+
+export const mockChatShortcutsJuliana: PatientChatShortcut[] = [
+  { id: 'sc-001', text: 'Consulta agendada para amanhã às 14h.' },
+  { id: 'sc-002', text: 'Lembrete: tomar medicação em jejum.' },
+  { id: 'sc-003', text: 'Resultado de exame disponível no app.' },
+  { id: 'sc-004', text: 'Confirmar presença na próxima sessão?' },
+];
+
 export const mockChatJuliana: PatientChatSummary = {
   id: 'chat-001',
   patientId: 'patient-001',
@@ -1276,7 +1395,22 @@ export const mockChatJuliana: PatientChatSummary = {
   lastMessagePreview: 'Dra, posso tomar o remédio em outro horário hoje?',
   lastMessageFrom: 'Juliana Pereira',
   unreadCount: 2,
-  isOpen: true
+  isOpen: true,
+  responsibleTeamMember: {
+    name: 'Dra. Ana Lima',
+    role: 'Nutricionista',
+  },
+  serviceHours: {
+    days: 'Seg–Sex',
+    start: '08:00',
+    end: '18:00',
+  },
+  slaExpected: {
+    label: 'Até 4 horas',
+    note: 'em dias úteis',
+  },
+  messages: mockChatMessagesJuliana,
+  shortcuts: mockChatShortcutsJuliana,
 };
 
 export const mockPatient360Juliana: Patient360Summary = {

@@ -21,64 +21,17 @@ interface TabChatProps {
   patientName: string;
 }
 
-interface MockMessage {
-  id: string;
-  from: 'patient' | 'staff';
-  text: string;
-  time: string;
-  read: boolean;
-}
-
-const mockMessages: MockMessage[] = [
-  {
-    id: 'msg-001',
-    from: 'patient',
-    text: 'Oi! Tudo bem? Tenho uma dúvida sobre o remédio.',
-    time: '09:45',
-    read: true,
-  },
-  {
-    id: 'msg-002',
-    from: 'staff',
-    text: 'Olá Juliana! Pode perguntar, estou aqui.',
-    time: '09:52',
-    read: true,
-  },
-  {
-    id: 'msg-003',
-    from: 'patient',
-    text: 'Posso tomar a Metformina em horário diferente hoje? Tive um jantar tardio.',
-    time: '10:15',
-    read: true,
-  },
-  {
-    id: 'msg-004',
-    from: 'staff',
-    text: 'Sim, pode tomar junto com a próxima refeição principal. Só não pule a dose!',
-    time: '10:22',
-    read: true,
-  },
-  {
-    id: 'msg-005',
-    from: 'patient',
-    text: 'Entendi, obrigada! Vou tomar assim que chegar em casa.',
-    time: '10:30',
-    read: false,
-  },
-];
-
-const atalhos = [
-  'Consulta agendada para amanhã às 14h.',
-  'Lembrete: tomar medicação em jejum.',
-  'Resultado de exame disponível no app.',
-  'Confirmar presença na próxima sessão?',
-];
-
 export default function TabChat({ chat, patientName }: TabChatProps) {
   const [quickMessage, setQuickMessage] = useState('');
   const [sent, setSent] = useState(false);
   const [markedAnswered, setMarkedAnswered] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+
+  const messages = chat.messages ?? [];
+  const shortcuts = chat.shortcuts ?? [];
+  const responsible = chat.responsibleTeamMember;
+  const serviceHours = chat.serviceHours;
+  const sla = chat.slaExpected;
 
   const handleSend = () => {
     if (!quickMessage.trim()) return;
@@ -91,8 +44,8 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
     setMarkedAnswered(true);
   };
 
-  const unreadMessages = mockMessages.filter((m) => m.from === 'patient' && !m.read);
-  const lastMessage = mockMessages[mockMessages.length - 1];
+  const unreadMessages = messages.filter((m) => m.from === 'patient' && !m.read);
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
 
   return (
     <div className="space-y-4">
@@ -104,8 +57,8 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-0.5">Responsável</p>
-            <p className="text-sm font-semibold text-foreground">Dra. Ana Lima</p>
-            <p className="text-xs text-muted-foreground">Nutricionista</p>
+            <p className="text-sm font-semibold text-foreground">{responsible?.name ?? '—'}</p>
+            <p className="text-xs text-muted-foreground">{responsible?.role ?? ''}</p>
           </div>
         </div>
 
@@ -115,8 +68,10 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-0.5">Horário de atendimento</p>
-            <p className="text-sm font-semibold text-foreground">Seg–Sex</p>
-            <p className="text-xs text-muted-foreground">08:00 – 18:00</p>
+            <p className="text-sm font-semibold text-foreground">{serviceHours?.days ?? '—'}</p>
+            <p className="text-xs text-muted-foreground">
+              {serviceHours ? `${serviceHours.start} – ${serviceHours.end}` : ''}
+            </p>
           </div>
         </div>
 
@@ -126,8 +81,8 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-0.5">SLA esperado</p>
-            <p className="text-sm font-semibold text-foreground">Até 4 horas</p>
-            <p className="text-xs text-muted-foreground">em dias úteis</p>
+            <p className="text-sm font-semibold text-foreground">{sla?.label ?? '—'}</p>
+            <p className="text-xs text-muted-foreground">{sla?.note ?? ''}</p>
           </div>
         </div>
       </div>
@@ -156,20 +111,20 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
         </div>
 
         <div className="divide-y divide-border">
-          {mockMessages.slice(-4).map((msg) => (
+          {messages.slice(-4).map((msg) => (
             <div key={msg.id} className="flex items-start gap-3 px-4 py-3">
               <div
                 className={[
                   'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5',
-                  msg.from === 'staff' ?'bg-primary/10 text-primary' :'bg-muted text-muted-foreground',
+                  msg.from === 'staff' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
                 ].join(' ')}
               >
-                {msg.from === 'staff' ? 'A' : patientName[0]}
+                {msg.from === 'staff' ? (responsible?.name?.[0] ?? 'A') : patientName[0]}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-xs font-medium text-foreground">
-                    {msg.from === 'staff' ? 'Dra. Ana Lima' : patientName}
+                    {msg.from === 'staff' ? (responsible?.name ?? 'Equipe') : patientName}
                   </span>
                   <span className="text-xs text-muted-foreground">{msg.time}</span>
                   {msg.from === 'staff' && (
@@ -189,33 +144,37 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
         </div>
 
         {/* Last message summary */}
-        <div className="px-4 py-2 bg-muted/20 border-t border-border flex items-center gap-2">
-          <Clock size={12} className="text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">
-            Última mensagem: {lastMessage.time} — {lastMessage.from === 'patient' ? patientName : 'Dra. Ana Lima'}
-          </span>
-        </div>
+        {lastMessage && (
+          <div className="px-4 py-2 bg-muted/20 border-t border-border flex items-center gap-2">
+            <Clock size={12} className="text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
+              Última mensagem: {lastMessage.time} — {lastMessage.from === 'patient' ? patientName : (responsible?.name ?? 'Equipe')}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Atalhos */}
-      <div className="card-base p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Zap size={14} className="text-primary" />
-          <span className="text-sm font-semibold text-foreground">Atalhos</span>
+      {shortcuts.length > 0 && (
+        <div className="card-base p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap size={14} className="text-primary" />
+            <span className="text-sm font-semibold text-foreground">Atalhos</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {shortcuts.map((sc) => (
+              <button
+                key={sc.id}
+                onClick={() => setQuickMessage(sc.text)}
+                className="flex items-center gap-2 text-left px-3 py-2 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors group"
+              >
+                <ChevronRight size={13} className="text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
+                <span className="text-xs text-foreground truncate">{sc.text}</span>
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {atalhos.map((text, i) => (
-            <button
-              key={i}
-              onClick={() => setQuickMessage(text)}
-              className="flex items-center gap-2 text-left px-3 py-2 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors group"
-            >
-              <ChevronRight size={13} className="text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-              <span className="text-xs text-foreground truncate">{text}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Enviar mensagem rápida */}
       <div className="card-base p-4">
