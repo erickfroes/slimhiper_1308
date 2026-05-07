@@ -453,7 +453,7 @@ export default function PatientListContent() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Link
-                          href="/paciente-360"
+                          href={`/clinic/patients/${patient.id}`}
                           className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
                           title="Abrir Paciente 360"
                         >

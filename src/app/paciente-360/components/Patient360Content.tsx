@@ -67,7 +67,7 @@ export default function Patient360Content({ patientId }: Patient360ContentProps)
       <PageHeader
         title="Paciente 360°"
         breadcrumb={[
-          { label: 'Pacientes', href: '/patient-list' },
+          { label: 'Pacientes', href: '/clinic/patients' },
           { label: data.profile.name },
         ]}
       />

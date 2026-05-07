@@ -175,7 +175,7 @@ export default function DashboardContent() {
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
             Atualizar
           </button>
-          <Link href="/patient-list" className="btn-primary text-xs">
+          <Link href="/clinic/patients" className="btn-primary text-xs">
             <Users size={14} />
             Ver Pacientes
           </Link>
@@ -369,20 +369,20 @@ export default function DashboardContent() {
               </div>
               <span className="text-sm font-semibold text-foreground">Requerem Revisão</span>
             </div>
-            <Link href="/patient-list" className="text-xs text-primary font-medium hover:underline flex items-center gap-0.5">
+            <Link href="/clinic/patients" className="text-xs text-primary font-medium hover:underline flex items-center gap-0.5">
               Ver lista <ChevronRight size={12} />
             </Link>
           </div>
           <div className="space-y-2">
             {[
-              { id: 'rev-001', name: 'Camila Torres', issue: 'Adesão crítica · 55%', severity: 'critico' },
-              { id: 'rev-002', name: 'Thiago Carvalho', issue: '4 alertas ativos', severity: 'critico' },
-              { id: 'rev-003', name: 'Larissa Martins', issue: 'Inadimplente · fatura vencida', severity: 'alto' },
-              { id: 'rev-004', name: 'Juliana Pereira', issue: 'Adesão caiu para 68% (sem 3)', severity: 'medio' },
+              { id: 'patient-003', name: 'Camila Torres', issue: 'Adesão crítica · 55%', severity: 'critico' },
+              { id: 'patient-010', name: 'Thiago Carvalho', issue: '4 alertas ativos', severity: 'critico' },
+              { id: 'patient-007', name: 'Larissa Martins', issue: 'Inadimplente · fatura vencida', severity: 'alto' },
+              { id: 'patient-001', name: 'Juliana Pereira', issue: 'Adesão caiu para 68% (sem 3)', severity: 'medio' },
             ].map((p) => (
               <Link
                 key={p.id}
-                href="/paciente-360"
+                href={`/clinic/patients/${p.id}`}
                 className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted transition-colors group"
               >
                 <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">

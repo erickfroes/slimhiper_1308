@@ -1,11 +1,5 @@
-import React from 'react';
-import DashboardShell from '@/components/DashboardShell';
-import Patient360Content from './components/Patient360Content';
+import { redirect } from 'next/navigation';
 
-export default function Paciente360Page() {
-  return (
-    <DashboardShell>
-      <Patient360Content patientId="patient-001" />
-    </DashboardShell>
-  );
+export default function Paciente360RedirectPage() {
+  redirect('/clinic/patients/patient-001');
 }
