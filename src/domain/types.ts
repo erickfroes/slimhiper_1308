@@ -252,6 +252,14 @@ export interface PatientPrescriptionSummary {
   prescribedBy: string;
   isActive: boolean;
   notes?: string;
+  // Extended fields
+  category?: 'prescricao_medica' | 'suplementacao' | 'orientacoes_nutricionais' | 'orientacoes_gerais';
+  status?: 'ativo' | 'expirado' | 'cancelado' | 'pendente_assinatura' | 'rascunho';
+  issueDate?: string;
+  validity?: string;
+  linkedDocument?: string;
+  signatureStatus?: 'assinado' | 'pendente' | 'nao_requerido';
+  version?: string;
 }
 
 export interface PatientNutritionPlanSummary {
