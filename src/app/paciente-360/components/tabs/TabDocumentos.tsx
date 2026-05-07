@@ -1,168 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { PatientDocumentSummary } from '@/domain/types';
+import type { PatientDocument360Item, PatientDocumentCategory } from '@/domain/types';
 import EmptyState from '@/components/EmptyState';
-import { FileText, Download, Eye, Info, ShieldCheck, Package, Send, ChevronDown, ChevronUp, CheckCircle2, Clock, AlertCircle, XCircle, Search,  } from 'lucide-react';
+import { FileText, Download, Eye, Info, ShieldCheck, Package, Send, ChevronDown, ChevronUp, CheckCircle2, Clock, AlertCircle, XCircle, Search } from 'lucide-react';
 
-// ─── Extended document type for Documentos tab ───────────────────────────────
+// ─── Category filter type (adds virtual filter keys) ─────────────────────────
 
-type DocCategory =
-  | 'relatorio' |'prescricao' |'termo' |'contrato' |'consentimento' |'orientacao' |'pacote_evidencia' |'assinado' |'pendente';
-
-interface ExtendedDocument {
-  id: string;
-  name: string;
-  category: DocCategory;
-  tipo: string;
-  status: 'assinado' | 'pendente_assinatura' | 'em_analise' | 'vencido' | 'cancelado' | 'disponivel';
-  assinatura: 'assinado' | 'pendente' | 'nao_requerido';
-  emitidoEm: string;
-  ultimoAcesso?: string;
-  emitidoPor: string;
-  hasEvidencePackage?: boolean;
-}
-
-// ─── Mock extended documents ─────────────────────────────────────────────────
-
-const extendedDocuments: ExtendedDocument[] = [
-  // Relatórios
-  {
-    id: 'doc-r-001',
-    name: 'Relatório de Avaliação Inicial',
-    category: 'relatorio',
-    tipo: 'Relatório',
-    status: 'assinado',
-    assinatura: 'assinado',
-    emitidoEm: '10/04/2026',
-    ultimoAcesso: '05/05/2026',
-    emitidoPor: 'Dra. Fernanda Lima',
-    hasEvidencePackage: true,
-  },
-  {
-    id: 'doc-r-002',
-    name: 'Relatório de Evolução — Semana 4',
-    category: 'relatorio',
-    tipo: 'Relatório',
-    status: 'disponivel',
-    assinatura: 'nao_requerido',
-    emitidoEm: '05/05/2026',
-    ultimoAcesso: '06/05/2026',
-    emitidoPor: 'Dra. Fernanda Lima',
-  },
-  // Prescrições
-  {
-    id: 'doc-p-001',
-    name: 'Prescrição — Metformina 500mg',
-    category: 'prescricao',
-    tipo: 'Prescrição Médica',
-    status: 'assinado',
-    assinatura: 'assinado',
-    emitidoEm: '10/04/2026',
-    ultimoAcesso: '28/04/2026',
-    emitidoPor: 'Dra. Fernanda Lima',
-    hasEvidencePackage: false,
-  },
-  {
-    id: 'doc-p-002',
-    name: 'Prescrição — Vitamina D3 2000 UI',
-    category: 'prescricao',
-    tipo: 'Prescrição Médica',
-    status: 'assinado',
-    assinatura: 'assinado',
-    emitidoEm: '28/04/2026',
-    ultimoAcesso: '02/05/2026',
-    emitidoPor: 'Dra. Fernanda Lima',
-  },
-  // Termos
-  {
-    id: 'doc-t-001',
-    name: 'Termo de Responsabilidade — Uso de Medicamento',
-    category: 'termo',
-    tipo: 'Termo',
-    status: 'assinado',
-    assinatura: 'assinado',
-    emitidoEm: '10/04/2026',
-    ultimoAcesso: '10/04/2026',
-    emitidoPor: 'Coord. Ana Souza',
-    hasEvidencePackage: true,
-  },
-  // Contratos
-  {
-    id: 'doc-c-001',
-    name: 'Contrato de Prestação de Serviços',
-    category: 'contrato',
-    tipo: 'Contrato',
-    status: 'assinado',
-    assinatura: 'assinado',
-    emitidoEm: '08/04/2026',
-    ultimoAcesso: '09/04/2026',
-    emitidoPor: 'Coord. Ana Souza',
-    hasEvidencePackage: true,
-  },
-  // Consentimentos
-  {
-    id: 'doc-co-001',
-    name: 'Termo de Consentimento Livre e Esclarecido',
-    category: 'consentimento',
-    tipo: 'Consentimento',
-    status: 'pendente_assinatura',
-    assinatura: 'pendente',
-    emitidoEm: '02/05/2026',
-    emitidoPor: 'Dra. Fernanda Lima',
-  },
-  {
-    id: 'doc-co-002',
-    name: 'Consentimento para Uso de Imagem',
-    category: 'consentimento',
-    tipo: 'Consentimento',
-    status: 'assinado',
-    assinatura: 'assinado',
-    emitidoEm: '08/04/2026',
-    ultimoAcesso: '09/04/2026',
-    emitidoPor: 'Coord. Ana Souza',
-  },
-  // Orientações
-  {
-    id: 'doc-or-001',
-    name: 'Orientações Nutricionais — Fase 1',
-    category: 'orientacao',
-    tipo: 'Orientação',
-    status: 'disponivel',
-    assinatura: 'nao_requerido',
-    emitidoEm: '10/04/2026',
-    ultimoAcesso: '24/04/2026',
-    emitidoPor: 'Nutr. Carlos Mendes',
-  },
-  {
-    id: 'doc-or-002',
-    name: 'Orientações Gerais de Estilo de Vida',
-    category: 'orientacao',
-    tipo: 'Orientação',
-    status: 'disponivel',
-    assinatura: 'nao_requerido',
-    emitidoEm: '10/04/2026',
-    ultimoAcesso: '15/04/2026',
-    emitidoPor: 'Dra. Fernanda Lima',
-  },
-  // Pacotes de evidência
-  {
-    id: 'doc-pe-001',
-    name: 'Pacote de Evidência — Contrato Inicial',
-    category: 'pacote_evidencia',
-    tipo: 'Pacote de Evidência',
-    status: 'disponivel',
-    assinatura: 'nao_requerido',
-    emitidoEm: '09/04/2026',
-    ultimoAcesso: '01/05/2026',
-    emitidoPor: 'Sistema',
-    hasEvidencePackage: true,
-  },
-];
+type DocFilterKey = PatientDocumentCategory | 'todos' | 'assinado' | 'pendente';
 
 // ─── Category config ──────────────────────────────────────────────────────────
 
-const CATEGORIES: { key: DocCategory | 'todos'; label: string; count?: number }[] = [
+const CATEGORIES: { key: DocFilterKey; label: string }[] = [
   { key: 'todos', label: 'Todos' },
   { key: 'relatorio', label: 'Relatórios' },
   { key: 'prescricao', label: 'Prescrições' },
@@ -177,8 +26,8 @@ const CATEGORIES: { key: DocCategory | 'todos'; label: string; count?: number }[
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: ExtendedDocument['status'] }) {
-  const map: Record<ExtendedDocument['status'], { label: string; icon: React.ReactNode; cls: string }> = {
+function StatusBadge({ status }: { status: PatientDocument360Item['status'] }) {
+  const map: Record<PatientDocument360Item['status'], { label: string; icon: React.ReactNode; cls: string }> = {
     assinado: { label: 'Assinado', icon: <CheckCircle2 size={11} />, cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
     pendente_assinatura: { label: 'Pendente assinatura', icon: <Clock size={11} />, cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
     em_analise: { label: 'Em análise', icon: <AlertCircle size={11} />, cls: 'bg-blue-50 text-blue-700 border border-blue-200' },
@@ -195,7 +44,7 @@ function StatusBadge({ status }: { status: ExtendedDocument['status'] }) {
   );
 }
 
-function AssinaturaBadge({ assinatura }: { assinatura: ExtendedDocument['assinatura'] }) {
+function AssinaturaBadge({ assinatura }: { assinatura: PatientDocument360Item['assinatura'] }) {
   if (assinatura === 'assinado') {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
@@ -218,7 +67,7 @@ function AssinaturaBadge({ assinatura }: { assinatura: ExtendedDocument['assinat
 // ─── Row actions ──────────────────────────────────────────────────────────────
 
 interface RowActionsProps {
-  doc: ExtendedDocument;
+  doc: PatientDocument360Item;
 }
 
 function RowActions({ doc }: RowActionsProps) {
@@ -269,14 +118,14 @@ function RowActions({ doc }: RowActionsProps) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface TabDocumentosProps {
-  documents: PatientDocumentSummary[];
+  documents360: PatientDocument360Item[];
 }
 
-export default function TabDocumentos({ documents: _documents }: TabDocumentosProps) {
-  const [activeCategory, setActiveCategory] = useState<DocCategory | 'todos'>('todos');
+export default function TabDocumentos({ documents360 }: TabDocumentosProps) {
+  const [activeCategory, setActiveCategory] = useState<DocFilterKey>('todos');
   const [search, setSearch] = useState('');
 
-  const filtered = extendedDocuments.filter((doc) => {
+  const filtered = documents360.filter((doc) => {
     const matchesCategory =
       activeCategory === 'todos'
         ? true
@@ -298,12 +147,12 @@ export default function TabDocumentos({ documents: _documents }: TabDocumentosPr
     ...cat,
     count:
       cat.key === 'todos'
-        ? extendedDocuments.length
+        ? documents360.length
         : cat.key === 'assinado'
-        ? extendedDocuments.filter((d) => d.assinatura === 'assinado').length
+        ? documents360.filter((d) => d.assinatura === 'assinado').length
         : cat.key === 'pendente'
-        ? extendedDocuments.filter((d) => d.assinatura === 'pendente').length
-        : extendedDocuments.filter((d) => d.category === cat.key).length,
+        ? documents360.filter((d) => d.assinatura === 'pendente').length
+        : documents360.filter((d) => d.category === cat.key).length,
   }));
 
   return (
@@ -311,7 +160,7 @@ export default function TabDocumentos({ documents: _documents }: TabDocumentosPr
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm font-semibold text-foreground">
-          Documentos ({extendedDocuments.length})
+          Documentos ({documents360.length})
         </p>
         <div className="flex items-center gap-2">
           <div className="relative">

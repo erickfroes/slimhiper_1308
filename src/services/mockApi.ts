@@ -9,6 +9,7 @@ import type {
   AppointmentSummary,
   DashboardAlert,
   PatientReviewItem,
+  PatientDocument360Item,
 } from '@/domain/types';
 
 import {
@@ -19,6 +20,7 @@ import {
   mockTodayAppointments,
   mockDashboardAlerts,
   mockPatientsNeedingReview,
+  mockDocuments360Juliana,
 } from '@/data/mockData';
 
 // Simulate async API delay
@@ -72,4 +74,11 @@ export async function getPatient360(patientId: string): Promise<Patient360Summar
   }
   // For demo, return Juliana for any patient ID
   return mockPatient360Juliana;
+}
+
+export async function getPatientDocuments360(patientId: string): Promise<PatientDocument360Item[]> {
+  await delay(350);
+  // TODO: replace with → supabase.from('patient_documents_360').select('*').eq('patient_id', patientId)
+  void patientId;
+  return mockDocuments360Juliana;
 }
