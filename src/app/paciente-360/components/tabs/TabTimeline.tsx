@@ -125,9 +125,32 @@ function getStatusBadgeClass(status: string): string {
 
 // ─── Group events by date label ───────────────────────────────────────────────
 
+function resolveDetailsHref(event: PatientTimelineEvent): string | undefined {
+  // agenda events → appointment detail placeholder
+  if (event.category === 'agenda') {
+    return `/clinic/agenda?appointmentId=${event.id}`;
+  }
+  // SOAP events → future encounter route placeholder
+  if (event.type === 'soap_atualizado') {
+    return `/clinic/patients/${event.patientId}/encounters/${event.id}`;
+  }
+  // documents events → Documentos tab placeholder
+  if (event.category === 'documents') {
+    return `/clinic/patients/${event.patientId}?tab=documentos`;
+  }
+  // financial events → Financeiro tab placeholder
+  if (event.category === 'financial') {
+    return `/clinic/patients/${event.patientId}?tab=financeiro`;
+  }
+  // fallback: keep original detailsHref if present
+  return event.detailsHref;
+}
+
 function groupByDate(events: PatientTimelineEvent[]): { label: string; events: PatientTimelineEvent[] }[] {
+  // Sort descending by date before grouping
+  const sorted = [...events].sort((a, b) => b.date.localeCompare(a.date));
   const map = new Map<string, PatientTimelineEvent[]>();
-  for (const ev of events) {
+  for (const ev of sorted) {
     const existing = map.get(ev.date) ?? [];
     existing.push(ev);
     map.set(ev.date, existing);
@@ -156,6 +179,7 @@ function EventCard({ event, isLast }: EventCardProps) {
   const cfg = eventTypeConfig[event.type] ?? eventTypeConfig.consulta;
   const IconComp = cfg.icon;
   const catCfg = event.category ? categoryBadgeConfig[event.category] : null;
+  const resolvedHref = resolveDetailsHref(event);
 
   return (
     <div className="flex gap-3 group">
@@ -210,9 +234,9 @@ function EventCard({ event, isLast }: EventCardProps) {
           </div>
 
           {/* Action link */}
-          {event.detailsHref && event.actionLabel && (
+          {resolvedHref && event.actionLabel && (
             <a
-              href={event.detailsHref}
+              href={resolvedHref}
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors"
             >
               <ExternalLink size={11} />
