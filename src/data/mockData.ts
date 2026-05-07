@@ -19,6 +19,8 @@ import type {
   WaitingQueueEntry,
   PatientListRow,
   Tenant,
+  DashboardAlert,
+  PatientReviewItem,
 } from '@/domain/types';
 
 // ─── PRIMARY MOCK PATIENT: Juliana Pereira ───────────────────────────────────
@@ -950,4 +952,48 @@ export const mockTenants: Tenant[] = [
     webhookErrors: 1,
     integrationErrors: 0,
   },
+];
+
+// ─── DASHBOARD ALERTS ─────────────────────────────────────────────────────────
+
+export const mockDashboardAlerts: DashboardAlert[] = [
+  {
+    id: 'dash-alert-001',
+    patientId: 'patient-003',
+    severity: 'alto',
+    title: 'Camila Torres — Adesão crítica (55%)',
+    description: '3 semanas consecutivas abaixo de 60%. Protocolo de reengajamento recomendado.',
+    createdAt: '2026-05-07',
+    isResolved: false,
+    category: 'adesao',
+  },
+  {
+    id: 'dash-alert-002',
+    patientId: 'patient-010',
+    severity: 'critico',
+    title: 'Thiago Carvalho — 4 alertas ativos',
+    description: 'Adesão 45%, inadimplência pendente, 2 documentos vencidos.',
+    createdAt: '2026-05-07',
+    isResolved: false,
+    category: 'protocolo',
+  },
+  {
+    id: 'dash-alert-003',
+    patientId: 'patient-007',
+    severity: 'medio',
+    title: 'Larissa Martins — Fatura vencida',
+    description: 'Parcela 2 vencida há 5 dias. Contato necessário.',
+    createdAt: '2026-05-06',
+    isResolved: false,
+    category: 'financeiro',
+  },
+];
+
+// ─── PATIENTS NEEDING REVIEW ──────────────────────────────────────────────────
+
+export const mockPatientsNeedingReview: PatientReviewItem[] = [
+  { id: 'patient-003', name: 'Camila Torres', issue: 'Adesão crítica · 55%', severity: 'critico' },
+  { id: 'patient-010', name: 'Thiago Carvalho', issue: '4 alertas ativos', severity: 'critico' },
+  { id: 'patient-007', name: 'Larissa Martins', issue: 'Inadimplente · fatura vencida', severity: 'alto' },
+  { id: 'patient-001', name: 'Juliana Pereira', issue: 'Adesão caiu para 68% (sem 3)', severity: 'medio' },
 ];

@@ -9,8 +9,8 @@ import StatusBadge from '@/components/StatusBadge';
 import AlertPanel from '@/components/AlertPanel';
 import QuickActionsCard from '@/components/QuickActionsCard';
 import { SkeletonCard } from '@/components/LoadingSkeleton';
-import { getDashboardStats, getWaitingQueue, getTodayAppointments } from '@/services/mockApi';
-import type { DashboardStats, WaitingQueueEntry, AppointmentSummary } from '@/domain/types';
+import { getDashboardStats, getWaitingQueue, getTodayAppointments, getDashboardAlerts, getPatientsNeedingReview } from '@/services/mockApi';
+import type { DashboardStats, WaitingQueueEntry, AppointmentSummary, DashboardAlert, PatientReviewItem } from '@/domain/types';
 import dynamic from 'next/dynamic';
 import Icon from '@/components/ui/AppIcon';
 
@@ -77,6 +77,8 @@ export default function DashboardContent() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [queue, setQueue] = useState<WaitingQueueEntry[]>([]);
   const [appointments, setAppointments] = useState<AppointmentSummary[]>([]);
+  const [clinicAlerts, setClinicAlerts] = useState<DashboardAlert[]>([]);
+  const [reviewPatients, setReviewPatients] = useState<PatientReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -85,10 +87,18 @@ export default function DashboardContent() {
     else setLoading(true);
     try {
       // Backend integration point: replace with Supabase calls via getDashboardStats(), getWaitingQueue(), getTodayAppointments()
-      const [s, q, a] = await Promise.all([getDashboardStats(), getWaitingQueue(), getTodayAppointments()]);
+      const [s, q, a, alerts, review] = await Promise.all([
+        getDashboardStats(),
+        getWaitingQueue(),
+        getTodayAppointments(),
+        getDashboardAlerts(),
+        getPatientsNeedingReview(),
+      ]);
       setStats(s);
       setQueue(q);
       setAppointments(a);
+      setClinicAlerts(alerts);
+      setReviewPatients(review);
       if (isRefresh) toast.success('Dados atualizados');
     } catch {
       toast.error('Falha ao carregar dados do dashboard. Tente novamente.');
@@ -124,39 +134,6 @@ export default function DashboardContent() {
 
   const completedToday = appointments.filter((a) => a.status === 'concluido').length;
   const remainingToday = appointments.filter((a) => ['agendado', 'chegou', 'triagem', 'medidas', 'bioimpedancia', 'aguardando_medico', 'em_consulta', 'checkout'].includes(a.status)).length;
-
-  const clinicAlerts = [
-    {
-      id: 'dash-alert-001',
-      patientId: 'patient-003',
-      severity: 'alto' as const,
-      title: 'Camila Torres — Adesão crítica (55%)',
-      description: '3 semanas consecutivas abaixo de 60%. Protocolo de reengajamento recomendado.',
-      createdAt: '2026-05-07',
-      isResolved: false,
-      category: 'adesao' as const,
-    },
-    {
-      id: 'dash-alert-002',
-      patientId: 'patient-010',
-      severity: 'critico' as const,
-      title: 'Thiago Carvalho — 4 alertas ativos',
-      description: 'Adesão 45%, inadimplência pendente, 2 documentos vencidos.',
-      createdAt: '2026-05-07',
-      isResolved: false,
-      category: 'protocolo' as const,
-    },
-    {
-      id: 'dash-alert-003',
-      patientId: 'patient-007',
-      severity: 'medio' as const,
-      title: 'Larissa Martins — Fatura vencida',
-      description: 'Parcela 2 vencida há 5 dias. Contato necessário.',
-      createdAt: '2026-05-06',
-      isResolved: false,
-      category: 'financeiro' as const,
-    },
-  ];
 
   return (
     <div className="p-6 xl:p-8 max-w-screen-2xl mx-auto space-y-6">
@@ -374,12 +351,7 @@ export default function DashboardContent() {
             </Link>
           </div>
           <div className="space-y-2">
-            {[
-              { id: 'patient-003', name: 'Camila Torres', issue: 'Adesão crítica · 55%', severity: 'critico' },
-              { id: 'patient-010', name: 'Thiago Carvalho', issue: '4 alertas ativos', severity: 'critico' },
-              { id: 'patient-007', name: 'Larissa Martins', issue: 'Inadimplente · fatura vencida', severity: 'alto' },
-              { id: 'patient-001', name: 'Juliana Pereira', issue: 'Adesão caiu para 68% (sem 3)', severity: 'medio' },
-            ].map((p) => (
+            {reviewPatients.map((p) => (
               <Link
                 key={p.id}
                 href={`/clinic/patients/${p.id}`}

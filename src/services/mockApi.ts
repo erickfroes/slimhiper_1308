@@ -7,6 +7,8 @@ import type {
   DashboardStats,
   WaitingQueueEntry,
   AppointmentSummary,
+  DashboardAlert,
+  PatientReviewItem,
 } from '@/domain/types';
 
 import {
@@ -15,6 +17,8 @@ import {
   mockDashboardStats,
   mockWaitingQueue,
   mockTodayAppointments,
+  mockDashboardAlerts,
+  mockPatientsNeedingReview,
 } from '@/data/mockData';
 
 // Simulate async API delay
@@ -38,6 +42,18 @@ export async function getTodayAppointments(): Promise<AppointmentSummary[]> {
   await delay(400);
   // TODO: replace with → supabase.from('appointments').select(...).eq('date', today)
   return mockTodayAppointments;
+}
+
+export async function getDashboardAlerts(): Promise<DashboardAlert[]> {
+  await delay(300);
+  // TODO: replace with → supabase.from('alerts').select(...).eq('is_resolved', false).order('severity')
+  return mockDashboardAlerts;
+}
+
+export async function getPatientsNeedingReview(): Promise<PatientReviewItem[]> {
+  await delay(300);
+  // TODO: replace with → supabase.from('patients').select(...).filter('alert_count', 'gt', 0).order('alert_count', { ascending: false })
+  return mockPatientsNeedingReview;
 }
 
 // ─── PATIENTS ─────────────────────────────────────────────────────────────────

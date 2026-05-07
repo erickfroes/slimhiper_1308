@@ -330,3 +330,21 @@ export interface PatientListRow {
   status: PatientStatus;
   avatarUrl?: string;
 }
+
+export interface DashboardAlert {
+  id: string;
+  patientId: string;
+  severity: AlertSeverity;
+  title: string;
+  description: string;
+  createdAt: string;
+  isResolved: boolean;
+  category: 'clinico' | 'financeiro' | 'adesao' | 'documento' | 'protocolo';
+}
+
+export interface PatientReviewItem {
+  id: string;
+  name: string;
+  issue: string;
+  severity: 'critico' | 'alto' | 'medio' | 'baixo';
+}
