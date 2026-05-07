@@ -1,12 +1,14 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { Phone, Mail, User, MapPin, UserCheck, Package, CalendarClock, Clock, Play, CalendarPlus, FileText, MessageSquare, CreditCard, BarChart2, Pencil,  } from 'lucide-react';
 import type { Patient360Summary } from '@/domain/types';
 import StatusBadge from './StatusBadge';
 
 interface PatientHeaderCardProps {
   data: Patient360Summary;
+  patientId: string;
 }
 
 const clinicalRiskConfig = {
@@ -92,7 +94,7 @@ function BadgePill({ label, className }: BadgePillProps) {
   );
 }
 
-export default function PatientHeaderCard({ data }: PatientHeaderCardProps) {
+export default function PatientHeaderCard({ data, patientId }: PatientHeaderCardProps) {
   const { profile, activePackage, financial, clinicalRisk, mainUnit, responsibleProfessional, lastUpdate, upcomingAppointments } = data;
 
   const nextAppointment = upcomingAppointments?.find(a => a.status === 'agendado');
@@ -182,13 +184,13 @@ export default function PatientHeaderCard({ data }: PatientHeaderCardProps) {
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2 flex-shrink-0 lg:ml-auto">
             {/* Primary action */}
-            <button
-              type="button"
+            <Link
+              href={`/clinic/patients/${patientId}/encounter`}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors"
             >
               {primaryAction.icon}
               {primaryAction.label}
-            </button>
+            </Link>
 
             {/* Secondary actions */}
             {secondaryActions.map((action) => (
