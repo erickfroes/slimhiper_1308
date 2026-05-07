@@ -157,6 +157,8 @@ export interface AppointmentSummary {
   professionalRole: string;
   roomName?: string;
   notes?: string;
+  attendanceLink?: string;
+  recommendedReturn?: string; // ISO date string for recommended follow-up
 }
 
 export interface EncounterSummary {

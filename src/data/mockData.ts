@@ -224,6 +224,8 @@ export const mockAppointmentsJuliana: AppointmentSummary[] = [
     professionalName: 'Dra. Fernanda Lima',
     professionalRole: 'Médica',
     roomName: 'Consultório 2',
+    attendanceLink: 'https://meet.slimhiper.com/appt-001',
+    recommendedReturn: '2026-07-10',
   },
   {
     id: 'appt-002',
@@ -236,6 +238,7 @@ export const mockAppointmentsJuliana: AppointmentSummary[] = [
     professionalName: 'Nutr. Carlos Mendes',
     professionalRole: 'Nutricionista',
     roomName: 'Sala de Nutrição',
+    attendanceLink: 'https://meet.slimhiper.com/appt-002',
   },
   {
     id: 'appt-003',
@@ -249,6 +252,7 @@ export const mockAppointmentsJuliana: AppointmentSummary[] = [
     professionalRole: 'Médica',
     roomName: 'Consultório 2',
     notes: 'Evolução positiva. Perdeu 1,8kg. Ajuste no plano alimentar.',
+    recommendedReturn: '2026-06-12',
   },
   {
     id: 'appt-004',
@@ -262,6 +266,33 @@ export const mockAppointmentsJuliana: AppointmentSummary[] = [
     professionalRole: 'Médica',
     roomName: 'Consultório 2',
     notes: 'Avaliação inicial completa. Iniciou programa Emagrecimento 12 Semanas.',
+  },
+  {
+    id: 'appt-005',
+    patientId: 'patient-001',
+    patientName: 'Juliana Pereira',
+    type: 'consulta_medica',
+    status: 'cancelado',
+    scheduledAt: '2026-03-28T11:00:00',
+    durationMinutes: 45,
+    professionalName: 'Dra. Fernanda Lima',
+    professionalRole: 'Médica',
+    roomName: 'Consultório 2',
+    notes: 'Cancelado pela paciente — reagendado para 10/04.',
+  },
+  {
+    id: 'appt-006',
+    patientId: 'patient-001',
+    patientName: 'Juliana Pereira',
+    type: 'nutricao',
+    status: 'falta',
+    scheduledAt: '2026-03-15T09:30:00',
+    durationMinutes: 30,
+    professionalName: 'Nutr. Carlos Mendes',
+    professionalRole: 'Nutricionista',
+    roomName: 'Sala de Nutrição',
+    notes: 'Paciente não compareceu e não avisou.',
+    recommendedReturn: '2026-05-20',
   },
 ];
 
