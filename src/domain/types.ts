@@ -583,3 +583,15 @@ export interface PatientPackageLimit {
   label: string;
   value: string;
 }
+
+// ─── Report definition types ──────────────────────────────────────────────────
+
+export interface PatientReportDefinition {
+  key: string;
+  label: string;
+  description: string;
+  iconKey: string;
+  badge?: string;
+  badgeColor?: string;
+  exportImplemented: boolean;
+}

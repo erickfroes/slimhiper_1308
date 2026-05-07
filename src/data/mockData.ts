@@ -34,6 +34,7 @@ import type {
   PatientPackageEntitlement,
   PatientPackageServiceUsage,
   PatientPackageLimit,
+  PatientReportDefinition,
 } from '@/domain/types';
 
 // ─── PRIMARY MOCK PATIENT: Juliana Pereira ───────────────────────────────────
@@ -117,6 +118,68 @@ export const mockPackageLimitsJuliana: PatientPackageLimit[] = [
   { label: 'Sessões extras permitidas', value: 'Não incluídas' },
   { label: 'Pausa permitida', value: 'Até 2 semanas' },
   { label: 'Transferência de saldo', value: 'Não permitida' },
+];
+
+// ─── Report definitions ───────────────────────────────────────────────────────
+
+export const mockReportDefinitions: PatientReportDefinition[] = [
+  {
+    key: 'resumo-clinico',
+    label: 'Resumo Clínico',
+    description: 'Visão geral do histórico clínico, diagnósticos, evoluções e indicadores de saúde do paciente.',
+    iconKey: 'FileText',
+    badge: 'Atualizado',
+    badgeColor: 'bg-green-100 text-green-700',
+    exportImplemented: false,
+  },
+  {
+    key: 'resumo-financeiro',
+    label: 'Resumo Financeiro',
+    description: 'Consolidado de valores contratados, pagos, em aberto e parcelas futuras do paciente.',
+    iconKey: 'DollarSign',
+    badge: 'Disponível',
+    badgeColor: 'bg-blue-100 text-blue-700',
+    exportImplemented: false,
+  },
+  {
+    key: 'servicos-consumidos',
+    label: 'Serviços Consumidos',
+    description: 'Lista detalhada de todos os serviços utilizados, datas, profissionais e status de cada atendimento.',
+    iconKey: 'ShoppingBag',
+    exportImplemented: false,
+  },
+  {
+    key: 'documentos-emitidos',
+    label: 'Documentos Emitidos',
+    description: 'Relação de prescrições, atestados, laudos e demais documentos gerados para o paciente.',
+    iconKey: 'FileCheck',
+    exportImplemented: false,
+  },
+  {
+    key: 'adesao-plano',
+    label: 'Adesão ao Plano',
+    description: 'Índice de adesão ao plano alimentar, check-ins realizados, metas atingidas e tendências.',
+    iconKey: 'Target',
+    badge: 'Novo',
+    badgeColor: 'bg-pink-100 text-pink-700',
+    exportImplemented: false,
+  },
+  {
+    key: 'timeline-consolidada',
+    label: 'Timeline Consolidada',
+    description: 'Linha do tempo completa com todos os eventos clínicos, financeiros e de comunicação do paciente.',
+    iconKey: 'Clock',
+    exportImplemented: false,
+  },
+  {
+    key: 'alertas',
+    label: 'Alertas',
+    description: 'Resumo de alertas ativos, pendências clínicas, vencimentos e notificações relevantes do paciente.',
+    iconKey: 'Bell',
+    badge: '3 ativos',
+    badgeColor: 'bg-red-100 text-red-700',
+    exportImplemented: false,
+  },
 ];
 
 export const mockPackageJuliana: PatientPackageSummary = {
