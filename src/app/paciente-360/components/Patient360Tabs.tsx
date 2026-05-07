@@ -63,7 +63,7 @@ export default function Patient360Tabs({ data }: Patient360TabsProps) {
         {activeTab === 'timeline' && <TabTimeline events={data.recentTimeline} />}
         {activeTab === 'consultas' && <TabConsultas appointments={data.upcomingAppointments} />}
         {activeTab === 'nutricao' && <TabNutricao plan={data.nutritionPlan} />}
-        {activeTab === 'prescricoes' && <TabPrescricoes prescriptions={data.prescriptions} />}
+        {activeTab === 'prescricoes' && <TabPrescricoes prescriptions={data.prescriptions} currentRole="physician" />}
         {activeTab === 'documentos' && <TabDocumentos documents={data.documents} />}
         {activeTab === 'financeiro' && <TabFinanceiro financial={data.financial} />}
         {activeTab === 'pacotes' && <TabPacotes pkg={data.activePackage} />}

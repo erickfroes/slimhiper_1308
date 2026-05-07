@@ -11,6 +11,8 @@ import type {
   NutritionTeamNote,
 } from '@/domain/types';
 import { Flame, Beef, Wheat, Droplets, UtensilsCrossed, Leaf, Apple, Fish, Clock, ChevronDown, ChevronUp, Plus, Pencil, Copy, Send, Archive, Smartphone, XCircle, Camera, MessageSquare, Lock, History, BarChart2,  } from 'lucide-react';
+import Icon from '@/components/ui/AppIcon';
+
 
 interface TabNutricaoProps {
   plan: PatientNutritionPlanSummary;
