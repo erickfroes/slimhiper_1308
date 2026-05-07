@@ -117,15 +117,23 @@ export interface ClinicalStatusSummary {
 
 export interface PatientFinancialSummary {
   status: FinancialStatus;
+  financialState?: 'em_dia' | 'pagamento_atrasado' | 'cobranca_pendente';
   totalContractValue: number;
   totalPaid: number;
   totalPending: number;
   totalOverdue: number;
+  futureParcelas?: number;
+  futureParcelasAmount?: number;
+  overdueParcelasCount?: number;
   nextDueDate?: string;
   nextDueAmount?: number;
   lastPaymentDate?: string;
   lastPaymentAmount?: number;
   invoices: InvoiceSummary[];
+  paymentHistory?: PatientPaymentRecord[];
+  charges?: PatientCharge[];
+  receipts?: PatientReceipt[];
+  negotiations?: PatientNegotiation[];
 }
 
 export interface InvoiceSummary {
@@ -135,6 +143,49 @@ export interface InvoiceSummary {
   dueDate: string;
   paidAt?: string;
   status: 'pago' | 'pendente' | 'vencido' | 'cancelado';
+}
+
+export interface PatientPaymentRecord {
+  id: string;
+  description: string;
+  amount: number;
+  paidAt: string;
+  method: 'pix' | 'cartao_credito' | 'cartao_debito' | 'boleto' | 'dinheiro' | 'transferencia';
+  registeredBy: string;
+  receiptId?: string;
+}
+
+export interface PatientCharge {
+  id: string;
+  description: string;
+  amount: number;
+  issuedAt: string;
+  dueDate: string;
+  status: 'pendente' | 'pago' | 'vencido' | 'cancelado';
+  chargeType: 'boleto' | 'pix' | 'link_pagamento' | 'cartao';
+  sentAt?: string;
+}
+
+export interface PatientReceipt {
+  id: string;
+  description: string;
+  amount: number;
+  issuedAt: string;
+  paymentDate: string;
+  issuedBy: string;
+  receiptNumber: string;
+}
+
+export interface PatientNegotiation {
+  id: string;
+  description: string;
+  originalAmount: number;
+  negotiatedAmount: number;
+  installments: number;
+  status: 'ativa' | 'concluida' | 'cancelada' | 'pendente_aprovacao';
+  createdAt: string;
+  createdBy: string;
+  notes?: string;
 }
 
 export type AppointmentStatus =

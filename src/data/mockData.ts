@@ -91,10 +91,14 @@ export const mockClinicalStatusJuliana: ClinicalStatusSummary = {
 
 export const mockFinancialJuliana: PatientFinancialSummary = {
   status: 'em_dia',
+  financialState: 'em_dia',
   totalContractValue: 3600,
   totalPaid: 1200,
   totalPending: 2400,
   totalOverdue: 0,
+  futureParcelas: 6,
+  futureParcelasAmount: 2400,
+  overdueParcelasCount: 0,
   nextDueDate: '2026-06-01',
   nextDueAmount: 400,
   lastPaymentDate: '2026-05-01',
@@ -144,8 +148,85 @@ export const mockFinancialJuliana: PatientFinancialSummary = {
     amount: 400,
     dueDate: '2026-08-01',
     status: 'pendente'
-  }]
-
+  }],
+  paymentHistory: [
+  {
+    id: 'pay-001',
+    description: 'Parcela 1/9 — Emagrecimento 12 Semanas',
+    amount: 400,
+    paidAt: '2026-03-01',
+    method: 'pix',
+    registeredBy: 'Coord. Ana Souza',
+    receiptId: 'rec-001'
+  },
+  {
+    id: 'pay-002',
+    description: 'Parcela 2/9 — Emagrecimento 12 Semanas',
+    amount: 400,
+    paidAt: '2026-04-02',
+    method: 'cartao_credito',
+    registeredBy: 'Coord. Ana Souza',
+    receiptId: 'rec-002'
+  },
+  {
+    id: 'pay-003',
+    description: 'Parcela 3/9 — Emagrecimento 12 Semanas',
+    amount: 400,
+    paidAt: '2026-05-01',
+    method: 'pix',
+    registeredBy: 'Sistema',
+    receiptId: 'rec-003'
+  }],
+  charges: [
+  {
+    id: 'chg-001',
+    description: 'Parcela 4/9 — Emagrecimento 12 Semanas',
+    amount: 400,
+    issuedAt: '2026-05-20',
+    dueDate: '2026-06-01',
+    status: 'pendente',
+    chargeType: 'pix',
+    sentAt: '2026-05-20'
+  },
+  {
+    id: 'chg-002',
+    description: 'Taxa de avaliação corporal adicional',
+    amount: 120,
+    issuedAt: '2026-04-28',
+    dueDate: '2026-05-15',
+    status: 'pago',
+    chargeType: 'link_pagamento',
+    sentAt: '2026-04-28'
+  }],
+  receipts: [
+  {
+    id: 'rec-001',
+    description: 'Parcela 1/9 — Emagrecimento 12 Semanas',
+    amount: 400,
+    issuedAt: '2026-03-01',
+    paymentDate: '2026-03-01',
+    issuedBy: 'Coord. Ana Souza',
+    receiptNumber: 'REC-2026-001'
+  },
+  {
+    id: 'rec-002',
+    description: 'Parcela 2/9 — Emagrecimento 12 Semanas',
+    amount: 400,
+    issuedAt: '2026-04-02',
+    paymentDate: '2026-04-02',
+    issuedBy: 'Coord. Ana Souza',
+    receiptNumber: 'REC-2026-002'
+  },
+  {
+    id: 'rec-003',
+    description: 'Parcela 3/9 — Emagrecimento 12 Semanas',
+    amount: 400,
+    issuedAt: '2026-05-01',
+    paymentDate: '2026-05-01',
+    issuedBy: 'Sistema',
+    receiptNumber: 'REC-2026-003'
+  }],
+  negotiations: []
 };
 
 export const mockAlertsJuliana: PatientAlert[] = [
