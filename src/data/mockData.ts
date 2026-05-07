@@ -15,6 +15,8 @@ import type {
   PatientPrescriptionSummary,
   PatientNutritionPlanSummary,
   PatientChatSummary,
+  PatientChatMessage,
+  PatientChatShortcut,
   Patient360Summary,
   DashboardStats,
   WaitingQueueEntry,
@@ -1341,6 +1343,51 @@ export const mockNutritionPlanJuliana: PatientNutritionPlanSummary = {
   NutritionTeamNote[]
 };
 
+export const mockChatMessagesJuliana: PatientChatMessage[] = [
+  {
+    id: 'msg-001',
+    from: 'patient',
+    text: 'Oi! Tudo bem? Tenho uma dúvida sobre o remédio.',
+    time: '09:45',
+    read: true,
+  },
+  {
+    id: 'msg-002',
+    from: 'staff',
+    text: 'Olá Juliana! Pode perguntar, estou aqui.',
+    time: '09:52',
+    read: true,
+  },
+  {
+    id: 'msg-003',
+    from: 'patient',
+    text: 'Posso tomar a Metformina em horário diferente hoje? Tive um jantar tardio.',
+    time: '10:15',
+    read: true,
+  },
+  {
+    id: 'msg-004',
+    from: 'staff',
+    text: 'Sim, pode tomar junto com a próxima refeição principal. Só não pule a dose!',
+    time: '10:22',
+    read: true,
+  },
+  {
+    id: 'msg-005',
+    from: 'patient',
+    text: 'Entendi, obrigada! Vou tomar assim que chegar em casa.',
+    time: '10:30',
+    read: false,
+  },
+];
+
+export const mockChatShortcutsJuliana: PatientChatShortcut[] = [
+  { id: 'sc-001', text: 'Consulta agendada para amanhã às 14h.' },
+  { id: 'sc-002', text: 'Lembrete: tomar medicação em jejum.' },
+  { id: 'sc-003', text: 'Resultado de exame disponível no app.' },
+  { id: 'sc-004', text: 'Confirmar presença na próxima sessão?' },
+];
+
 export const mockChatJuliana: PatientChatSummary = {
   id: 'chat-001',
   patientId: 'patient-001',
@@ -1348,7 +1395,22 @@ export const mockChatJuliana: PatientChatSummary = {
   lastMessagePreview: 'Dra, posso tomar o remédio em outro horário hoje?',
   lastMessageFrom: 'Juliana Pereira',
   unreadCount: 2,
-  isOpen: true
+  isOpen: true,
+  responsibleTeamMember: {
+    name: 'Dra. Ana Lima',
+    role: 'Nutricionista',
+  },
+  serviceHours: {
+    days: 'Seg–Sex',
+    start: '08:00',
+    end: '18:00',
+  },
+  slaExpected: {
+    label: 'Até 4 horas',
+    note: 'em dias úteis',
+  },
+  messages: mockChatMessagesJuliana,
+  shortcuts: mockChatShortcutsJuliana,
 };
 
 export const mockPatient360Juliana: Patient360Summary = {

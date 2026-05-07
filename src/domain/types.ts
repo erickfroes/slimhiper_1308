@@ -403,6 +403,49 @@ export interface PatientChatSummary {
   lastMessageFrom: string;
   unreadCount: number;
   isOpen: boolean;
+  messages?: PatientChatMessage[];
+  shortcuts?: PatientChatShortcut[];
+  responsibleTeamMember?: PatientChatResponsibleMember;
+  serviceHours?: PatientChatServiceHours;
+  slaExpected?: PatientChatSla;
+}
+
+// ─── Chat domain types ────────────────────────────────────────────────────────
+
+export interface PatientChatMessage {
+  id: string;
+  from: 'patient' | 'staff';
+  text: string;
+  time: string;
+  read: boolean;
+}
+
+export interface PatientChatShortcut {
+  id: string;
+  text: string;
+}
+
+export interface PatientChatThread {
+  id: string;
+  date: string;
+  summary: string;
+  messageCount: number;
+}
+
+export interface PatientChatResponsibleMember {
+  name: string;
+  role: string;
+}
+
+export interface PatientChatServiceHours {
+  days: string;
+  start: string;
+  end: string;
+}
+
+export interface PatientChatSla {
+  label: string;
+  note: string;
 }
 
 // ─── Document 360 types ───────────────────────────────────────────────────────
