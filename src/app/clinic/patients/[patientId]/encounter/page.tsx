@@ -1,0 +1,571 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import DashboardShell from '@/components/DashboardShell';
+import { getPatient360 } from '@/services/mockApi';
+import type { Patient360Summary } from '@/domain/types';
+import { ArrowLeft, Save, CheckCircle, FlaskConical, Pill, ClipboardList, UserPlus, RefreshCw, AlertTriangle, Activity, ChevronDown, ChevronUp, Clock, User, Stethoscope, FileText, Zap,  } from 'lucide-react';
+
+// ─── Mock encounter-specific data ────────────────────────────────────────────
+
+const mockBioimpedancia = {
+  date: '2026-05-05',
+  gorduraCorporal: '32.4%',
+  massaMuscular: '44.2 kg',
+  gorduraVisceral: '9',
+  aguaCorporal: '51.3%',
+  metabolismoBasal: '1.482 kcal',
+};
+
+const mockExames = [
+  { nome: 'Hemograma Completo', solicitadoEm: '2026-04-23', status: 'pendente' },
+  { nome: 'Glicemia em Jejum', solicitadoEm: '2026-04-10', resultado: '98 mg/dL', status: 'concluido' },
+  { nome: 'TSH', solicitadoEm: '2026-04-10', resultado: '2.1 mUI/L', status: 'concluido' },
+  { nome: 'Colesterol Total', solicitadoEm: '2026-04-10', resultado: '187 mg/dL', status: 'concluido' },
+];
+
+const mockSintomasRecentes = [
+  { sintoma: 'Fadiga leve ao final do dia', relatadoEm: '2026-05-04' },
+  { sintoma: 'Dificuldade para dormir (2–3x/semana)', relatadoEm: '2026-04-28' },
+  { sintoma: 'Ansiedade relacionada à dieta', relatadoEm: '2026-04-20' },
+];
+
+const mockPendencias = [
+  { titulo: 'Enviar resultado do hemograma', prazo: '2026-05-10', prioridade: 'alta' },
+  { titulo: 'Assinar Termo de Consentimento Revisado', prazo: '2026-05-12', prioridade: 'alta' },
+  { titulo: 'Registrar medidas semanais', prazo: '2026-05-09', prioridade: 'media' },
+];
+
+const mockUltimosAtendimentos = [
+  {
+    data: '2026-04-24',
+    tipo: 'Retorno Médico',
+    profissional: 'Dra. Fernanda Lima',
+    resumo: 'Evolução positiva. Perdeu 1,8 kg. Ajuste no plano alimentar.',
+  },
+  {
+    data: '2026-04-10',
+    tipo: 'Avaliação Inicial',
+    profissional: 'Dra. Fernanda Lima',
+    resumo: 'Avaliação inicial completa. Iniciou programa Emagrecimento 12 Semanas.',
+  },
+  {
+    data: '2026-03-15',
+    tipo: 'Nutrição',
+    profissional: 'Nutr. Carlos Mendes',
+    resumo: 'Paciente não compareceu e não avisou.',
+  },
+];
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SectionCard({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors"
+      >
+        <span className="text-xs font-semibold text-foreground uppercase tracking-wide">{title}</span>
+        {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+}
+
+function RiskBadge({ risk }: { risk: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    baixo: { label: 'Risco Baixo', cls: 'bg-green-100 text-green-700' },
+    moderado: { label: 'Risco Moderado', cls: 'bg-amber-100 text-amber-700' },
+    alto: { label: 'Risco Alto', cls: 'bg-orange-100 text-orange-700' },
+    critico: { label: 'Risco Crítico', cls: 'bg-red-100 text-red-700' },
+  };
+  const r = map[risk] ?? { label: risk, cls: 'bg-muted text-muted-foreground' };
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${r.cls}`}>
+      <AlertTriangle size={10} />
+      {r.label}
+    </span>
+  );
+}
+
+function MetricPill({ label, value, unit }: { label: string; value: string | number; unit?: string }) {
+  return (
+    <div className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs font-semibold text-foreground">
+        {value}{unit ? <span className="font-normal text-muted-foreground ml-0.5">{unit}</span> : null}
+      </span>
+    </div>
+  );
+}
+
+function SOAPField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  rows = 5,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  rows?: number;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-semibold text-foreground uppercase tracking-wide">{label}</label>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+      />
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function EncounterPage() {
+  const params = useParams();
+  const router = useRouter();
+  const patientId = params?.patientId as string;
+
+  const [data, setData] = useState<Patient360Summary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [soap, setSoap] = useState({ S: '', O: '', A: '', P: '' });
+  const [saved, setSaved] = useState(false);
+  const [finalized, setFinalized] = useState(false);
+
+  useEffect(() => {
+    getPatient360(patientId).then((d) => {
+      setData(d);
+      setLoading(false);
+    });
+  }, [patientId]);
+
+  const handleSaveDraft = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const handleFinalize = () => {
+    setFinalized(true);
+  };
+
+  if (loading) {
+    return (
+      <DashboardShell>
+        <div className="flex items-center justify-center h-64">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      </DashboardShell>
+    );
+  }
+
+  if (!data) return null;
+
+  const { profile, activePackage, clinicalStatus, prescriptions, alerts, tasks } = data;
+
+  const activePrescriptions = prescriptions?.filter((p) => p.isActive) ?? [];
+  const openTasks = tasks?.filter((t) => !t.isCompleted) ?? [];
+
+  return (
+    <DashboardShell>
+      <div className="flex flex-col h-full">
+        {/* ── Top bar ── */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push(`/clinic/patients/${patientId}`)}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft size={15} />
+              Voltar ao Paciente 360
+            </button>
+            <span className="text-muted-foreground/40">|</span>
+            <div className="flex items-center gap-2">
+              <Stethoscope size={16} className="text-primary" />
+              <span className="text-sm font-semibold text-foreground">Atendimento SOAP</span>
+            </div>
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              {profile.name}
+            </span>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button
+              onClick={() => {}}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <FlaskConical size={13} />
+              Solicitar Exames
+            </button>
+            <button
+              onClick={() => {}}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <Pill size={13} />
+              Criar Prescrição
+            </button>
+            <button
+              onClick={() => {}}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <RefreshCw size={13} />
+              Atualizar Plano
+            </button>
+            <button
+              onClick={() => {}}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <UserPlus size={13} />
+              Atribuir Tarefa
+            </button>
+            <button
+              onClick={handleSaveDraft}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                saved
+                  ? 'bg-green-50 border-green-300 text-green-700' :'border-primary/40 text-primary hover:bg-primary/5'
+              }`}
+            >
+              <Save size={13} />
+              {saved ? 'Rascunho salvo!' : 'Salvar Rascunho'}
+            </button>
+            <button
+              onClick={handleFinalize}
+              disabled={finalized}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                finalized
+                  ? 'bg-green-600 text-white cursor-default' :'bg-primary text-primary-foreground hover:bg-primary/90'
+              }`}
+            >
+              <CheckCircle size={13} />
+              {finalized ? 'Atendimento Finalizado' : 'Finalizar Atendimento'}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Three-column body ── */}
+        <div className="flex-1 overflow-hidden grid grid-cols-[280px_1fr_280px] gap-0 min-h-0">
+
+          {/* ── LEFT COLUMN ── */}
+          <div className="border-r border-border overflow-y-auto scrollbar-thin p-4 space-y-3 bg-muted/20">
+
+            {/* Patient summary */}
+            <SectionCard title="Paciente">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <User size={18} className="text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{profile.name}</p>
+                  <p className="text-xs text-muted-foreground">{profile.age} anos · {profile.preferredName ? `"${profile.preferredName}"` : ''}</p>
+                </div>
+              </div>
+              <div className="space-y-0">
+                <MetricPill label="CPF" value={profile.cpfMasked} />
+                <MetricPill label="Telefone" value={profile.phone} />
+                <MetricPill label="Status" value={profile.status === 'ativo' ? 'Ativo' : profile.status} />
+                {data.responsibleProfessional && (
+                  <MetricPill label="Responsável" value={data.responsibleProfessional} />
+                )}
+                {data.mainUnit && (
+                  <MetricPill label="Unidade" value={data.mainUnit} />
+                )}
+              </div>
+              {data.clinicalRisk && (
+                <div className="mt-3">
+                  <RiskBadge risk={data.clinicalRisk} />
+                </div>
+              )}
+            </SectionCard>
+
+            {/* Active package */}
+            <SectionCard title="Pacote Ativo">
+              <p className="text-sm font-semibold text-foreground mb-1">{activePackage.programName}</p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Semana {activePackage.currentWeek} de {activePackage.totalWeeks} · Início {activePackage.startDate}
+              </p>
+              <div className="w-full bg-muted rounded-full h-1.5 mb-1">
+                <div
+                  className="bg-primary h-1.5 rounded-full"
+                  style={{ width: `${Math.round((activePackage.currentWeek / activePackage.totalWeeks) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground text-right">
+                {Math.round((activePackage.currentWeek / activePackage.totalWeeks) * 100)}% concluído
+              </p>
+              <div className="mt-3 space-y-0">
+                <MetricPill
+                  label="Consultas"
+                  value={`${activePackage.usedConsultations}/${activePackage.totalConsultations}`}
+                />
+                <MetricPill
+                  label="Sessões Nutrição"
+                  value={`${activePackage.usedNutritionSessions}/${activePackage.totalNutritionSessions}`}
+                />
+                <MetricPill label="Término" value={activePackage.endDate} />
+              </div>
+            </SectionCard>
+
+            {/* Latest metrics */}
+            <SectionCard title="Últimas Medidas">
+              <div className="space-y-0">
+                <MetricPill label="Peso atual" value={clinicalStatus.currentWeightKg} unit=" kg" />
+                <MetricPill label="Peso inicial" value={clinicalStatus.startWeightKg} unit=" kg" />
+                <MetricPill label="Meta" value={clinicalStatus.goalWeightKg} unit=" kg" />
+                <MetricPill label="Perdido" value={clinicalStatus.weightLostKg} unit=" kg" />
+                <MetricPill label="IMC" value={clinicalStatus.currentBmi} />
+                <MetricPill label="Adesão semanal" value={`${clinicalStatus.weeklyAdherencePercent}%`} />
+                <MetricPill label="Última medição" value={clinicalStatus.lastMeasuredAt} />
+              </div>
+            </SectionCard>
+
+            {/* Alerts */}
+            {alerts && alerts.filter(a => !a.isResolved).length > 0 && (
+              <SectionCard title="Alertas Ativos">
+                <div className="space-y-2">
+                  {alerts.filter(a => !a.isResolved).map((alert) => (
+                    <div key={alert.id} className="flex items-start gap-2 p-2 rounded-lg bg-amber-50 border border-amber-100">
+                      <AlertTriangle size={12} className="text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-amber-800">{alert.title}</p>
+                        <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">{alert.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+          </div>
+
+          {/* ── CENTER COLUMN — SOAP Editor ── */}
+          <div className="overflow-y-auto scrollbar-thin p-6 space-y-5">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText size={16} className="text-primary" />
+              <h2 className="text-base font-semibold text-foreground">Registro SOAP</h2>
+              <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
+                <Clock size={12} />
+                {new Date().toLocaleDateString('pt-BR')}
+              </span>
+            </div>
+
+            {finalized && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm font-medium">
+                <CheckCircle size={15} />
+                Atendimento finalizado com sucesso. Registro salvo no prontuário.
+              </div>
+            )}
+
+            <SOAPField
+              label="S — Subjetivo"
+              value={soap.S}
+              onChange={(v) => setSoap((p) => ({ ...p, S: v }))}
+              placeholder="Queixa principal, história da doença atual, sintomas relatados pelo paciente, histórico relevante..."
+              rows={6}
+            />
+            <SOAPField
+              label="O — Objetivo"
+              value={soap.O}
+              onChange={(v) => setSoap((p) => ({ ...p, O: v }))}
+              placeholder="Dados objetivos: peso, IMC, pressão arterial, exame físico, resultados de exames, bioimpedância..."
+              rows={6}
+            />
+            <SOAPField
+              label="A — Avaliação"
+              value={soap.A}
+              onChange={(v) => setSoap((p) => ({ ...p, A: v }))}
+              placeholder="Diagnóstico, hipóteses diagnósticas, análise clínica, evolução do quadro, resposta ao tratamento..."
+              rows={6}
+            />
+            <SOAPField
+              label="P — Plano"
+              value={soap.P}
+              onChange={(v) => setSoap((p) => ({ ...p, P: v }))}
+              placeholder="Conduta, prescrições, solicitação de exames, orientações, retorno, encaminhamentos, ajustes no programa..."
+              rows={6}
+            />
+
+            {/* Bottom action row */}
+            <div className="flex items-center gap-3 pt-2 border-t border-border">
+              <button
+                onClick={handleSaveDraft}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl border transition-colors ${
+                  saved
+                    ? 'bg-green-50 border-green-300 text-green-700' :'border-primary/40 text-primary hover:bg-primary/5'
+                }`}
+              >
+                <Save size={14} />
+                {saved ? 'Salvo!' : 'Salvar Rascunho'}
+              </button>
+              <button
+                onClick={handleFinalize}
+                disabled={finalized}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${
+                  finalized
+                    ? 'bg-green-600 text-white cursor-default' :'bg-primary text-primary-foreground hover:bg-primary/90'
+                }`}
+              >
+                <CheckCircle size={14} />
+                {finalized ? 'Finalizado' : 'Finalizar Atendimento'}
+              </button>
+            </div>
+          </div>
+
+          {/* ── RIGHT COLUMN — Clinical context ── */}
+          <div className="border-l border-border overflow-y-auto scrollbar-thin p-4 space-y-3 bg-muted/20">
+
+            {/* Programa ativo */}
+            <SectionCard title="Programa Ativo">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap size={13} className="text-primary" />
+                <span className="text-sm font-semibold text-foreground">{activePackage.programName}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Semana {activePackage.currentWeek}/{activePackage.totalWeeks} · Status:{' '}
+                <span className="font-medium text-green-700 capitalize">{activePackage.status}</span>
+              </p>
+            </SectionCard>
+
+            {/* Alergias */}
+            <SectionCard title="Alergias">
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/60 border border-dashed border-border">
+                <AlertTriangle size={12} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground italic">Nenhuma alergia registrada</span>
+              </div>
+            </SectionCard>
+
+            {/* Medicamentos / Prescrições ativas */}
+            <SectionCard title="Prescrições Ativas">
+              {activePrescriptions.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">Nenhuma prescrição ativa.</p>
+              ) : (
+                <div className="space-y-2">
+                  {activePrescriptions.slice(0, 4).map((p) => (
+                    <div key={p.id} className="flex items-start gap-2 p-2 rounded-lg bg-blue-50 border border-blue-100">
+                      <Pill size={11} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-blue-800">{p.medicationName}</p>
+                        <p className="text-xs text-blue-700">{p.dosage} · {p.frequency}</p>
+                        <p className="text-xs text-blue-600 mt-0.5">{p.prescribedBy}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
+            {/* Últimas medidas */}
+            <SectionCard title="Últimas Medidas" defaultOpen={false}>
+              <div className="space-y-0">
+                <MetricPill label="Peso" value={clinicalStatus.currentWeightKg} unit=" kg" />
+                <MetricPill label="IMC" value={clinicalStatus.currentBmi} />
+                <MetricPill label="Adesão" value={`${clinicalStatus.weeklyAdherencePercent}%`} />
+                <MetricPill label="Perdido" value={clinicalStatus.weightLostKg} unit=" kg" />
+              </div>
+            </SectionCard>
+
+            {/* Bioimpedância */}
+            <SectionCard title="Bioimpedância" defaultOpen={false}>
+              <p className="text-xs text-muted-foreground mb-2">Última: {mockBioimpedancia.date}</p>
+              <div className="space-y-0">
+                <MetricPill label="Gordura corporal" value={mockBioimpedancia.gorduraCorporal} />
+                <MetricPill label="Massa muscular" value={mockBioimpedancia.massaMuscular} />
+                <MetricPill label="Gordura visceral" value={mockBioimpedancia.gorduraVisceral} />
+                <MetricPill label="Água corporal" value={mockBioimpedancia.aguaCorporal} />
+                <MetricPill label="Metabolismo basal" value={mockBioimpedancia.metabolismoBasal} />
+              </div>
+            </SectionCard>
+
+            {/* Exames */}
+            <SectionCard title="Exames" defaultOpen={false}>
+              <div className="space-y-2">
+                {mockExames.map((e, i) => (
+                  <div key={i} className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">{e.nome}</p>
+                      <p className="text-xs text-muted-foreground">{e.solicitadoEm}</p>
+                    </div>
+                    <span
+                      className={`text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                        e.status === 'concluido'
+                          ? 'bg-green-100 text-green-700' :'bg-amber-100 text-amber-700'
+                      }`}
+                    >
+                      {e.status === 'concluido' ? e.resultado : 'Pendente'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+
+            {/* Sintomas recentes */}
+            <SectionCard title="Sintomas Recentes" defaultOpen={false}>
+              <div className="space-y-2">
+                {mockSintomasRecentes.map((s, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <Activity size={11} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-foreground">{s.sintoma}</p>
+                      <p className="text-xs text-muted-foreground">{s.relatadoEm}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+
+            {/* Pendências */}
+            <SectionCard title="Pendências" defaultOpen={false}>
+              <div className="space-y-2">
+                {openTasks.length > 0
+                  ? openTasks.map((t) => (
+                      <div key={t.id} className="flex items-start gap-2">
+                        <ClipboardList size={11} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs font-medium text-foreground">{t.title}</p>
+                          <p className="text-xs text-muted-foreground">Prazo: {t.dueDate} · {t.assignedTo}</p>
+                        </div>
+                      </div>
+                    ))
+                  : mockPendencias.map((p, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <ClipboardList size={11} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs font-medium text-foreground">{p.titulo}</p>
+                          <p className="text-xs text-muted-foreground">Prazo: {p.prazo}</p>
+                        </div>
+                      </div>
+                    ))}
+              </div>
+            </SectionCard>
+
+            {/* Últimos atendimentos */}
+            <SectionCard title="Últimos Atendimentos" defaultOpen={false}>
+              <div className="space-y-3">
+                {mockUltimosAtendimentos.map((a, i) => (
+                  <div key={i} className="border-b border-border pb-2 last:border-0 last:pb-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-xs font-semibold text-foreground">{a.tipo}</span>
+                      <span className="text-xs text-muted-foreground">{a.data}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{a.profissional}</p>
+                    <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">{a.resumo}</p>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          </div>
+        </div>
+      </div>
+    </DashboardShell>
+  );
+}
