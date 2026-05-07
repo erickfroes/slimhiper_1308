@@ -401,6 +401,27 @@ export interface PatientChatSummary {
   isOpen: boolean;
 }
 
+// ─── Document 360 types ───────────────────────────────────────────────────────
+
+export type PatientDocumentCategory =
+  | 'relatorio' |'prescricao' |'termo' |'contrato' |'consentimento' |'orientacao' |'pacote_evidencia';
+
+export type PatientDocumentSignatureStatus = 'assinado' | 'pendente' | 'nao_requerido';
+
+export interface PatientDocument360Item {
+  id: string;
+  patientId: string;
+  name: string;
+  category: PatientDocumentCategory;
+  tipo: string;
+  status: 'assinado' | 'pendente_assinatura' | 'em_analise' | 'vencido' | 'cancelado' | 'disponivel';
+  assinatura: PatientDocumentSignatureStatus;
+  emitidoEm: string;
+  ultimoAcesso?: string;
+  emitidoPor: string;
+  hasEvidencePackage?: boolean;
+}
+
 export interface Patient360Summary {
   profile: PatientProfile;
   activePackage: PatientPackageSummary;

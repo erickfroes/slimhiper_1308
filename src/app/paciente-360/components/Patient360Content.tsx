@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { getPatient360 } from '@/services/mockApi';
-import type { Patient360Summary } from '@/domain/types';
+import { getPatient360, getPatientDocuments360 } from '@/services/mockApi';
+import type { Patient360Summary, PatientDocument360Item } from '@/domain/types';
 import PatientHeaderCard from '@/components/PatientHeaderCard';
 import Patient360Tabs from './Patient360Tabs';
 import { SkeletonCard } from '@/components/LoadingSkeleton';
@@ -15,12 +15,19 @@ interface Patient360ContentProps {
 
 export default function Patient360Content({ patientId }: Patient360ContentProps) {
   const [data, setData] = useState<Patient360Summary | null>(null);
+  const [documents360, setDocuments360] = useState<PatientDocument360Item[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Backend integration point: replace with getPatient360(patientId) Supabase call
-    getPatient360(patientId)
-      .then(setData)
+    Promise.all([
+      getPatient360(patientId),
+      getPatientDocuments360(patientId),
+    ])
+      .then(([patient, docs]) => {
+        setData(patient);
+        setDocuments360(docs);
+      })
       .catch(() => toast.error('Falha ao carregar dados do paciente. Tente novamente.'))
       .finally(() => setLoading(false));
   }, [patientId]);
@@ -72,7 +79,7 @@ export default function Patient360Content({ patientId }: Patient360ContentProps)
         ]}
       />
       <PatientHeaderCard data={data} />
-      <Patient360Tabs data={data} />
+      <Patient360Tabs data={data} documents360={documents360} />
     </div>
   );
 }
