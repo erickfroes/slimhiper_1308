@@ -27,8 +27,12 @@ import type {
   NutritionPlanHistory,
   MealAdherenceEntry,
   MealPhoto,
-  NutritionTeamNote } from
-'@/domain/types';
+  NutritionTeamNote,
+  PatientPackageHistoryItem,
+  PatientPackageEntitlement,
+  PatientPackageServiceUsage,
+  PatientPackageLimit,
+} from '@/domain/types';
 
 // ─── PRIMARY MOCK PATIENT: Juliana Pereira ───────────────────────────────────
 
@@ -49,6 +53,70 @@ export const mockPatientJuliana: PatientProfile = {
   tags: ['emagrecimento', 'prioridade']
 };
 
+export const mockPackageHistoryJuliana: PatientPackageHistoryItem[] = [
+  {
+    id: 'pkg-hist-001',
+    name: 'Avaliação Inicial — 4 Semanas',
+    startDate: '2025-12-01',
+    endDate: '2025-12-28',
+    status: 'concluido',
+    totalWeeks: 4,
+  },
+  {
+    id: 'pkg-hist-002',
+    name: 'Emagrecimento 8 Semanas',
+    startDate: '2026-01-06',
+    endDate: '2026-03-02',
+    status: 'concluido',
+    totalWeeks: 8,
+  },
+];
+
+export const mockPackageEntitlementsJuliana: PatientPackageEntitlement[] = [
+  { key: 'chat', label: 'Chat com equipe', enabled: true },
+  { key: 'comunidade', label: 'Comunidade', enabled: false },
+  { key: 'documentos', label: 'Documentos incluídos', enabled: true },
+  { key: 'app', label: 'App do paciente', enabled: true },
+];
+
+export const mockServiceUsageJuliana: PatientPackageServiceUsage[] = [
+  {
+    label: 'Consultas',
+    used: 2,
+    total: 6,
+    color: 'bg-teal-500',
+    bgColor: 'bg-teal-50 text-teal-700',
+  },
+  {
+    label: 'Bioimpedância',
+    used: 1,
+    total: 3,
+    color: 'bg-violet-500',
+    bgColor: 'bg-violet-50 text-violet-700',
+  },
+  {
+    label: 'Check-ins',
+    used: 4,
+    total: 12,
+    color: 'bg-amber-500',
+    bgColor: 'bg-amber-50 text-amber-700',
+  },
+  {
+    label: 'Sessões de Nutrição',
+    used: 1,
+    total: 4,
+    color: 'bg-emerald-500',
+    bgColor: 'bg-emerald-50 text-emerald-700',
+  },
+];
+
+export const mockPackageLimitsJuliana: PatientPackageLimit[] = [
+  { label: 'Validade máxima', value: '12 semanas' },
+  { label: 'Sessões extras permitidas', value: 'Não incluídas' },
+  { label: 'Pausa permitida', value: 'Até 2 semanas' },
+  { label: 'Transferência de saldo', value: 'Não permitida' },
+];
+
 export const mockPackageJuliana: PatientPackageSummary = {
   id: 'pkg-001',
   patientId: 'patient-001',
@@ -62,7 +130,11 @@ export const mockPackageJuliana: PatientPackageSummary = {
   totalConsultations: 6,
   usedConsultations: 2,
   totalNutritionSessions: 4,
-  usedNutritionSessions: 1
+  usedNutritionSessions: 1,
+  packageHistory: mockPackageHistoryJuliana,
+  packageEntitlements: mockPackageEntitlementsJuliana,
+  serviceUsage: mockServiceUsageJuliana,
+  packageLimits: mockPackageLimitsJuliana,
 };
 
 export const mockClinicalStatusJuliana: ClinicalStatusSummary = {

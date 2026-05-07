@@ -83,6 +83,10 @@ export interface PatientPackageSummary {
   usedConsultations: number;
   totalNutritionSessions: number;
   usedNutritionSessions: number;
+  packageHistory?: PatientPackageHistoryItem[];
+  packageEntitlements?: PatientPackageEntitlement[];
+  serviceUsage?: PatientPackageServiceUsage[];
+  packageLimits?: PatientPackageLimit[];
 }
 
 export interface PatientMeasurementSummary {
@@ -504,4 +508,35 @@ export interface PatientReviewItem {
   name: string;
   issue: string;
   severity: 'critico' | 'alto' | 'medio' | 'baixo';
+}
+
+// ─── Package domain types ─────────────────────────────────────────────────────
+
+export interface PatientPackageHistoryItem {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: 'concluido' | 'cancelado' | 'ativo';
+  totalWeeks: number;
+  reason?: string;
+}
+
+export interface PatientPackageEntitlement {
+  key: string;
+  label: string;
+  enabled: boolean;
+}
+
+export interface PatientPackageServiceUsage {
+  label: string;
+  used: number;
+  total: number;
+  color: string;
+  bgColor: string;
+}
+
+export interface PatientPackageLimit {
+  label: string;
+  value: string;
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { PatientPackageSummary } from '@/domain/types';
+import type { PatientPackageSummary, PatientPackageHistoryItem, PatientPackageEntitlement, PatientPackageServiceUsage, PatientPackageLimit } from '@/domain/types';
 import {
   Package,
   Calendar,
@@ -28,43 +28,6 @@ import {
 interface TabPacotesProps {
   pkg: PatientPackageSummary;
 }
-
-interface ServiceItem {
-  label: string;
-  used: number;
-  total: number;
-  color: string;
-  bgColor: string;
-}
-
-interface PackageHistoryItem {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  status: 'concluido' | 'cancelado' | 'ativo';
-  totalWeeks: number;
-  reason?: string;
-}
-
-const mockHistory: PackageHistoryItem[] = [
-  {
-    id: 'pkg-hist-001',
-    name: 'Avaliação Inicial — 4 Semanas',
-    startDate: '2025-12-01',
-    endDate: '2025-12-28',
-    status: 'concluido',
-    totalWeeks: 4,
-  },
-  {
-    id: 'pkg-hist-002',
-    name: 'Emagrecimento 8 Semanas',
-    startDate: '2026-01-06',
-    endDate: '2026-03-02',
-    status: 'concluido',
-    totalWeeks: 8,
-  },
-];
 
 function StatusBadge({ status }: { status: 'ativo' | 'concluido' | 'cancelado' | 'pausado' | 'aguardando' }) {
   const map: Record<string, { label: string; className: string }> = {
@@ -112,32 +75,27 @@ function EntitlementRow({
   );
 }
 
+const ENTITLEMENT_ICONS: Record<string, React.ReactNode> = {
+  chat: <MessageCircle size={14} />,
+  comunidade: <Users size={14} />,
+  documentos: <FileText size={14} />,
+  app: <Smartphone size={14} />,
+};
+
 export default function TabPacotes({ pkg }: TabPacotesProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const progressPercent = Math.round((pkg.currentWeek / pkg.totalWeeks) * 100);
 
-  const services: ServiceItem[] = [
+  const packageHistory: PatientPackageHistoryItem[] = pkg.packageHistory ?? [];
+  const packageEntitlements: PatientPackageEntitlement[] = pkg.packageEntitlements ?? [];
+  const serviceUsage: PatientPackageServiceUsage[] = pkg.serviceUsage ?? [
     {
       label: 'Consultas',
       used: pkg.usedConsultations,
       total: pkg.totalConsultations,
       color: 'bg-teal-500',
       bgColor: 'bg-teal-50 text-teal-700',
-    },
-    {
-      label: 'Bioimpedância',
-      used: 1,
-      total: 3,
-      color: 'bg-violet-500',
-      bgColor: 'bg-violet-50 text-violet-700',
-    },
-    {
-      label: 'Check-ins',
-      used: 4,
-      total: 12,
-      color: 'bg-amber-500',
-      bgColor: 'bg-amber-50 text-amber-700',
     },
     {
       label: 'Sessões de Nutrição',
@@ -147,6 +105,7 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
       bgColor: 'bg-emerald-50 text-emerald-700',
     },
   ];
+  const packageLimits: PatientPackageLimit[] = pkg.packageLimits ?? [];
 
   const actions = [
     {
@@ -251,7 +210,7 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
       <div className="card-base p-5">
         <p className="text-sm font-semibold text-foreground mb-4">Serviços do Pacote</p>
         <div className="space-y-4">
-          {services.map((svc) => {
+          {serviceUsage.map((svc) => {
             const pct = Math.round((svc.used / svc.total) * 100);
             const remaining = svc.total - svc.used;
             return (
@@ -281,77 +240,62 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
           <div>
             <p className="text-xs text-muted-foreground">Incluídos</p>
             <p className="text-sm font-bold text-foreground">
-              {services.reduce((a, s) => a + s.total, 0)}
+              {serviceUsage.reduce((a, s) => a + s.total, 0)}
             </p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Utilizados</p>
             <p className="text-sm font-bold text-teal-600">
-              {services.reduce((a, s) => a + s.used, 0)}
+              {serviceUsage.reduce((a, s) => a + s.used, 0)}
             </p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Restantes</p>
             <p className="text-sm font-bold text-amber-600">
-              {services.reduce((a, s) => a + (s.total - s.used), 0)}
+              {serviceUsage.reduce((a, s) => a + (s.total - s.used), 0)}
             </p>
           </div>
         </div>
       </div>
 
       {/* ── App Entitlements ── */}
-      <div className="card-base p-5">
-        <p className="text-sm font-semibold text-foreground mb-1">Entitlements do App</p>
-        <p className="text-xs text-muted-foreground mb-3">Funcionalidades liberadas para o paciente</p>
-        <div>
-          <EntitlementRow
-            icon={<MessageCircle size={14} />}
-            label="Chat com equipe"
-            enabled={true}
-          />
-          <EntitlementRow
-            icon={<Users size={14} />}
-            label="Comunidade"
-            enabled={false}
-          />
-          <EntitlementRow
-            icon={<FileText size={14} />}
-            label="Documentos incluídos"
-            enabled={true}
-          />
-          <EntitlementRow
-            icon={<Smartphone size={14} />}
-            label="App do paciente"
-            enabled={true}
-          />
+      {packageEntitlements.length > 0 && (
+        <div className="card-base p-5">
+          <p className="text-sm font-semibold text-foreground mb-1">Entitlements do App</p>
+          <p className="text-xs text-muted-foreground mb-3">Funcionalidades liberadas para o paciente</p>
+          <div>
+            {packageEntitlements.map((ent) => (
+              <EntitlementRow
+                key={ent.key}
+                icon={ENTITLEMENT_ICONS[ent.key] ?? <FileText size={14} />}
+                label={ent.label}
+                enabled={ent.enabled}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Package Limits ── */}
-      <div className="card-base p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle size={14} className="text-amber-500" />
-          <p className="text-sm font-semibold text-foreground">Limites do Pacote</p>
-        </div>
-        <div className="space-y-2 text-xs text-muted-foreground">
-          <div className="flex justify-between py-1.5 border-b border-border">
-            <span>Validade máxima</span>
-            <span className="font-medium text-foreground">12 semanas</span>
+      {packageLimits.length > 0 && (
+        <div className="card-base p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle size={14} className="text-amber-500" />
+            <p className="text-sm font-semibold text-foreground">Limites do Pacote</p>
           </div>
-          <div className="flex justify-between py-1.5 border-b border-border">
-            <span>Sessões extras permitidas</span>
-            <span className="font-medium text-foreground">Não incluídas</span>
-          </div>
-          <div className="flex justify-between py-1.5 border-b border-border">
-            <span>Pausa permitida</span>
-            <span className="font-medium text-foreground">Até 2 semanas</span>
-          </div>
-          <div className="flex justify-between py-1.5">
-            <span>Transferência de saldo</span>
-            <span className="font-medium text-foreground">Não permitida</span>
+          <div className="space-y-2 text-xs text-muted-foreground">
+            {packageLimits.map((limit, idx) => (
+              <div
+                key={limit.label}
+                className={`flex justify-between py-1.5 ${idx < packageLimits.length - 1 ? 'border-b border-border' : ''}`}
+              >
+                <span>{limit.label}</span>
+                <span className="font-medium text-foreground">{limit.value}</span>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── Package History ── */}
       <div className="card-base overflow-hidden">
@@ -363,7 +307,7 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
             <History size={14} className="text-muted-foreground" />
             <p className="text-sm font-semibold text-foreground">Histórico de Pacotes</p>
             <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-              {mockHistory.length}
+              {packageHistory.length}
             </span>
           </div>
           {historyOpen ? <ChevronUp size={15} className="text-muted-foreground" /> : <ChevronDown size={15} className="text-muted-foreground" />}
@@ -371,7 +315,7 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
 
         {historyOpen && (
           <div className="border-t border-border divide-y divide-border">
-            {mockHistory.map((h) => (
+            {packageHistory.map((h) => (
               <div key={h.id} className="px-5 py-3 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-foreground">{h.name}</p>
