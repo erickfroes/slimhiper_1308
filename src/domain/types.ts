@@ -267,6 +267,69 @@ export interface PatientNutritionPlanSummary {
   nutritionistName: string;
   isActive: boolean;
   adherencePercent?: number;
+  meals?: NutritionMeal[];
+  foodGroups?: NutritionFoodGroup[];
+  planHistory?: NutritionPlanHistory[];
+  mealAdherence?: MealAdherenceEntry[];
+  mealPhotos?: MealPhoto[];
+  teamNotes?: NutritionTeamNote[];
+}
+
+export interface NutritionMeal {
+  id: string;
+  name: string;
+  time: string;
+  targetCalories: number;
+  targetProteinG: number;
+  targetCarbsG: number;
+  targetFatG: number;
+  description?: string;
+}
+
+export interface NutritionFoodGroup {
+  label: string;
+  category: 'fonte_proteica' | 'carboidrato' | 'vegetais' | 'gorduras_boas' | 'frutas' | 'liquidos';
+  portionDescription: string;
+  dailyServings: number;
+  examples: string[];
+}
+
+export interface NutritionPlanHistory {
+  id: string;
+  planName: string;
+  createdAt: string;
+  archivedAt?: string;
+  nutritionistName: string;
+  targetCalories: number;
+  status: 'ativo' | 'arquivado' | 'duplicado';
+  notes?: string;
+}
+
+export interface MealAdherenceEntry {
+  week: number;
+  label: string;
+  adherencePercent: number;
+  mealsLogged: number;
+  mealsTotal: number;
+}
+
+export interface MealPhoto {
+  id: string;
+  mealName: string;
+  photoUrl: string;
+  submittedAt: string;
+  note?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+}
+
+export interface NutritionTeamNote {
+  id: string;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  createdAt: string;
+  isInternal: boolean;
 }
 
 export interface PatientChatSummary {
