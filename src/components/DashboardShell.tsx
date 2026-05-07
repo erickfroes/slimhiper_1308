@@ -32,13 +32,13 @@ interface NavItem {
 }
 
 const clinicNavItems: NavItem[] = [
-  { key: 'nav-dashboard', label: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { key: 'nav-pacientes', label: 'Pacientes', href: '/patient-list', icon: Users, badge: 8 },
+  { key: 'nav-dashboard', label: 'Dashboard', href: '/clinic/dashboard', icon: LayoutDashboard },
+  { key: 'nav-pacientes', label: 'Pacientes', href: '/clinic/patients', icon: Users, badge: 8 },
   { key: 'nav-agenda', label: 'Agenda', href: '/clinic/agenda', icon: CalendarDays, badge: 3 },
-  { key: 'nav-programas', label: 'Programas', href: '/clinic/programas', icon: BookOpen },
-  { key: 'nav-documentos', label: 'Documentos', href: '/clinic/documentos', icon: FileText, badge: 6 },
+  { key: 'nav-programas', label: 'Programas', href: '/clinic/programs', icon: BookOpen },
+  { key: 'nav-documentos', label: 'Documentos', href: '/clinic/documents', icon: FileText, badge: 6 },
   { key: 'nav-financeiro', label: 'Financeiro', href: '/clinic/financeiro', icon: CreditCard, badge: 4 },
-  { key: 'nav-configuracoes', label: 'Configurações', href: '/clinic/configuracoes', icon: Settings },
+  { key: 'nav-configuracoes', label: 'Configurações', href: '/clinic/settings', icon: Settings },
 ];
 
 interface DashboardShellProps {
@@ -51,7 +51,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
 
   const isActive = (href: string) => {
-    if (href === '/') return pathname === '/';
+    if (href === '/clinic/dashboard') return pathname === '/clinic/dashboard' || pathname === '/';
     return pathname.startsWith(href);
   };
 

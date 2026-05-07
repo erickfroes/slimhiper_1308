@@ -1,11 +1,5 @@
-import React from 'react';
-import DashboardShell from '@/components/DashboardShell';
-import PatientListContent from './components/PatientListContent';
+import { redirect } from 'next/navigation';
 
-export default function PatientListPage() {
-  return (
-    <DashboardShell>
-      <PatientListContent />
-    </DashboardShell>
-  );
+export default function PatientListRedirectPage() {
+  redirect('/clinic/patients');
 }

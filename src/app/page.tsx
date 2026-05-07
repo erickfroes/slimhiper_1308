@@ -1,14 +1,5 @@
-// Clinic Dashboard — entry point screen
-// Backend integration point: replace service calls in components with Supabase queries
+import { redirect } from 'next/navigation';
 
-import React from 'react';
-import DashboardShell from '@/components/DashboardShell';
-import DashboardContent from './components/DashboardContent';
-
-export default function ClinicDashboardPage() {
-  return (
-    <DashboardShell>
-      <DashboardContent />
-    </DashboardShell>
-  );
+export default function RootPage() {
+  redirect('/clinic/dashboard');
 }
