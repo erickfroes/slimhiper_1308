@@ -2,16 +2,7 @@
 
 import React from 'react';
 import dynamic from 'next/dynamic';
-import {
-  Scale,
-  Target,
-  TrendingDown,
-  Activity,
-  AlertTriangle,
-  CheckSquare,
-  Clock,
-  Calendar,
-} from 'lucide-react';
+import { Scale, Target, Activity, AlertTriangle, CheckSquare, Clock, Calendar, FileText, DollarSign, Stethoscope, TrendingUp,  } from 'lucide-react';
 import type { Patient360Summary } from '@/domain/types';
 import AlertPanel from '@/components/AlertPanel';
 import TimelineEventCard from '@/components/TimelineEventCard';
@@ -102,47 +93,141 @@ interface TabResumoProps {
 }
 
 export default function TabResumo({ data }: TabResumoProps) {
-  const { clinicalStatus, alerts, tasks, upcomingAppointments, recentTimeline, financial, activePackage } = data;
+  const { clinicalStatus, alerts, tasks, upcomingAppointments, recentTimeline, financial, activePackage, documents } = data;
 
   const pendingTasks = tasks.filter((t) => !t.isCompleted);
   const completedTasks = tasks.filter((t) => t.isCompleted);
 
+  // KPI derived values
+  const pendingDocs = documents.filter((d) => d.status === 'pendente_assinatura' || d.status === 'em_analise').length;
+  const completedConsultations = upcomingAppointments.filter((a) => a.status === 'concluido').length;
+  const programProgressLabel = `Sem. ${activePackage.currentWeek} / ${activePackage.totalWeeks}`;
+  const bmiCategory =
+    clinicalStatus.currentBmi < 18.5
+      ? 'Abaixo do peso'
+      : clinicalStatus.currentBmi < 25
+      ? 'Normal'
+      : clinicalStatus.currentBmi < 30
+      ? 'Sobrepeso' :'Obesidade';
+  const adherenceColor =
+    clinicalStatus.adherenceLevel === 'critico' ?'text-negative'
+      : clinicalStatus.adherenceLevel === 'excelente' ?'text-positive'
+      : clinicalStatus.adherenceLevel === 'bom' ?'text-teal-600' :'text-amber-600';
+  const adherenceBg =
+    clinicalStatus.adherenceLevel === 'critico' ?'bg-red-50'
+      : clinicalStatus.adherenceLevel === 'excelente' ?'bg-emerald-50'
+      : clinicalStatus.adherenceLevel === 'bom' ?'bg-teal-50' :'bg-amber-50';
+  const financialColor =
+    financial.status === 'em_dia' ?'text-positive'
+      : financial.status === 'inadimplente' ?'text-negative' :'text-amber-600';
+  const financialBg =
+    financial.status === 'em_dia' ?'bg-emerald-50'
+      : financial.status === 'inadimplente' ?'bg-red-50' :'bg-amber-50';
+  const financialLabel =
+    financial.status === 'em_dia' ? 'Em dia' : financial.status === 'inadimplente' ? 'Inadimplente' : 'Pendente';
+  const saldoAberto = financial.totalPending + financial.totalOverdue;
+
   return (
     <div className="space-y-5">
-      {/* Row 1: 4 metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          icon={Scale}
-          label="Peso Atual"
-          value={`${clinicalStatus.currentWeightKg} kg`}
-          sub={`Meta: ${clinicalStatus.goalWeightKg} kg`}
-          color="text-primary"
-          bg="bg-primary/10"
-        />
-        <MetricCard
-          icon={TrendingDown}
-          label="Peso Perdido"
-          value={`-${clinicalStatus.weightLostKg} kg`}
-          sub={`Falta ${clinicalStatus.weightToGoKg} kg para meta`}
-          color="text-positive"
-          bg="bg-emerald-50"
-        />
-        <MetricCard
-          icon={Activity}
-          label="IMC Atual"
-          value={String(clinicalStatus.currentBmi)}
-          sub={`Início: ${clinicalStatus.startWeightKg} kg`}
-          color="text-indigo-600"
-          bg="bg-indigo-50"
-        />
-        <MetricCard
-          icon={Target}
-          label="Adesão Semanal"
-          value={`${clinicalStatus.weeklyAdherencePercent}%`}
-          sub={`Nível: ${clinicalStatus.adherenceLevel}`}
-          color={clinicalStatus.adherenceLevel === 'critico' ? 'text-negative' : clinicalStatus.adherenceLevel === 'excelente' ? 'text-positive' : 'text-amber-600'}
-          bg={clinicalStatus.adherenceLevel === 'critico' ? 'bg-red-50' : clinicalStatus.adherenceLevel === 'excelente' ? 'bg-emerald-50' : 'bg-amber-50'}
-        />
+      {/* Row 1: 8 compact KPI cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        {/* Peso atual */}
+        <div className="card-base p-3 flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Scale size={12} className="text-primary" />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide truncate">Peso Atual</p>
+          </div>
+          <p className="text-lg font-bold text-foreground tabular-nums leading-tight">{clinicalStatus.currentWeightKg} <span className="text-xs font-normal text-muted-foreground">kg</span></p>
+          <p className="text-[10px] text-muted-foreground leading-tight">↓ {clinicalStatus.weightLostKg} kg perdidos</p>
+        </div>
+
+        {/* Meta de peso */}
+        <div className="card-base p-3 flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <div className="w-6 h-6 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+              <Target size={12} className="text-indigo-600" />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide truncate">Meta Peso</p>
+          </div>
+          <p className="text-lg font-bold text-foreground tabular-nums leading-tight">{clinicalStatus.goalWeightKg} <span className="text-xs font-normal text-muted-foreground">kg</span></p>
+          <p className="text-[10px] text-muted-foreground leading-tight">Faltam {clinicalStatus.weightToGoKg} kg</p>
+        </div>
+
+        {/* Evolução no programa */}
+        <div className="card-base p-3 flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <div className="w-6 h-6 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0">
+              <TrendingUp size={12} className="text-teal-600" />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide truncate">Evolução</p>
+          </div>
+          <p className="text-lg font-bold text-foreground tabular-nums leading-tight">{clinicalStatus.progressPercent}<span className="text-xs font-normal text-muted-foreground">%</span></p>
+          <p className="text-[10px] text-muted-foreground leading-tight">{programProgressLabel} do programa</p>
+        </div>
+
+        {/* IMC */}
+        <div className="card-base p-3 flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <div className="w-6 h-6 rounded-lg bg-violet-50 flex items-center justify-center flex-shrink-0">
+              <Activity size={12} className="text-violet-600" />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide truncate">IMC</p>
+          </div>
+          <p className="text-lg font-bold text-foreground tabular-nums leading-tight">{clinicalStatus.currentBmi}</p>
+          <p className="text-[10px] text-muted-foreground leading-tight">{bmiCategory}</p>
+        </div>
+
+        {/* Adesão semanal */}
+        <div className="card-base p-3 flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <div className={['w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0', adherenceBg].join(' ')}>
+              <CheckSquare size={12} className={adherenceColor} />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide truncate">Adesão</p>
+          </div>
+          <p className={['text-lg font-bold tabular-nums leading-tight', adherenceColor].join(' ')}>{clinicalStatus.weeklyAdherencePercent}<span className="text-xs font-normal text-muted-foreground">%</span></p>
+          <p className="text-[10px] text-muted-foreground leading-tight capitalize">{clinicalStatus.adherenceLevel} · meta 80%</p>
+        </div>
+
+        {/* Consultas realizadas */}
+        <div className="card-base p-3 flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <div className="w-6 h-6 rounded-lg bg-sky-50 flex items-center justify-center flex-shrink-0">
+              <Stethoscope size={12} className="text-sky-600" />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide truncate">Consultas</p>
+          </div>
+          <p className="text-lg font-bold text-foreground tabular-nums leading-tight">{activePackage.usedConsultations}<span className="text-xs font-normal text-muted-foreground">/{activePackage.totalConsultations}</span></p>
+          <p className="text-[10px] text-muted-foreground leading-tight">{activePackage.totalConsultations - activePackage.usedConsultations} restantes</p>
+        </div>
+
+        {/* Documentos pendentes */}
+        <div className="card-base p-3 flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <div className={['w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0', pendingDocs > 0 ? 'bg-amber-50' : 'bg-slate-50'].join(' ')}>
+              <FileText size={12} className={pendingDocs > 0 ? 'text-amber-600' : 'text-slate-500'} />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide truncate">Documentos</p>
+          </div>
+          <p className={['text-lg font-bold tabular-nums leading-tight', pendingDocs > 0 ? 'text-amber-600' : 'text-foreground'].join(' ')}>{pendingDocs}</p>
+          <p className="text-[10px] text-muted-foreground leading-tight">{pendingDocs > 0 ? 'Aguardando ação' : 'Nenhum pendente'}</p>
+        </div>
+
+        {/* Saldo em aberto */}
+        <div className="card-base p-3 flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <div className={['w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0', financialBg].join(' ')}>
+              <DollarSign size={12} className={financialColor} />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide truncate">Saldo Aberto</p>
+          </div>
+          <p className={['text-lg font-bold tabular-nums leading-tight', financialColor].join(' ')}>
+            R$ {saldoAberto.toLocaleString('pt-BR')}
+          </p>
+          <p className="text-[10px] text-muted-foreground leading-tight">{financialLabel}</p>
+        </div>
       </div>
 
       {/* Row 2: Weight chart + Adherence chart */}
