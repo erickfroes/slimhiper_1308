@@ -174,7 +174,13 @@ export interface EncounterSummary {
 }
 
 export type TimelineEventType =
-  | 'consulta' |'nutricao' |'medicamento' |'medida' |'documento' |'pagamento' |'alerta' |'mensagem' |'inicio_programa' |'meta_atingida';
+  | 'consulta' |'nutricao' |'medicamento' |'medida' |'documento' |'pagamento' |'alerta' |'mensagem' |'inicio_programa' |'meta_atingida'
+  // Paciente 360 expanded types
+  | 'lead_criado'
+  | 'lead_convertido' |'pacote_vendido' |'contrato_assinado' |'paciente_cadastrado' |'consulta_agendada' |'checkin_realizado' |'atendimento_iniciado' |'atendimento_concluido' |'anamnese_preenchida' |'soap_atualizado' |'medida_registrada' |'plano_alimentar_publicado' |'prescricao_emitida' |'documento_gerado' |'documento_assinado' |'pagamento_recebido' |'pagamento_atrasado' |'mensagem_enviada' |'checkin_semanal_enviado';
+
+export type TimelineEventCategory =
+  | 'clinical' |'financial' |'documents' |'agenda' |'communication' |'patient_app' |'commercial';
 
 export interface PatientTimelineEvent {
   id: string;
@@ -185,6 +191,12 @@ export interface PatientTimelineEvent {
   date: string;
   professional?: string;
   metadata?: Record<string, string | number | boolean>;
+  // Paciente 360 expanded fields
+  category?: TimelineEventCategory;
+  actorName?: string;
+  statusLabel?: string;
+  actionLabel?: string;
+  detailsHref?: string;
 }
 
 export type AlertSeverity = 'critico' | 'alto' | 'medio' | 'baixo';
