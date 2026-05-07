@@ -27,6 +27,7 @@ export const mockPatientJuliana: PatientProfile = {
   id: 'patient-001',
   tenantId: 'tenant-001',
   name: 'Juliana Pereira',
+  preferredName: 'Ju',
   age: 34,
   birthDate: '1990-03-15',
   cpfMasked: '***. 456.789-**',
@@ -436,6 +437,10 @@ export const mockPatient360Juliana: Patient360Summary = {
   prescriptions: mockPrescriptionsJuliana,
   nutritionPlan: mockNutritionPlanJuliana,
   chat: mockChatJuliana,
+  mainUnit: 'Unidade Centro — SP',
+  responsibleProfessional: 'Dra. Fernanda Lima',
+  clinicalRisk: 'moderado',
+  lastUpdate: '2026-05-07T10:22:00',
 };
 
 // ─── PATIENT LIST MOCK DATA ───────────────────────────────────────────────────

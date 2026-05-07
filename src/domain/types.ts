@@ -51,6 +51,7 @@ export interface PatientProfile {
   id: string;
   tenantId: string;
   name: string;
+  preferredName?: string;
   age: number;
   birthDate: string;
   cpfMasked: string;
@@ -277,6 +278,10 @@ export interface Patient360Summary {
   prescriptions: PatientPrescriptionSummary[];
   nutritionPlan: PatientNutritionPlanSummary;
   chat: PatientChatSummary;
+  mainUnit?: string;
+  responsibleProfessional?: string;
+  clinicalRisk?: 'baixo' | 'moderado' | 'alto' | 'critico';
+  lastUpdate?: string;
 }
 
 // Dashboard types
