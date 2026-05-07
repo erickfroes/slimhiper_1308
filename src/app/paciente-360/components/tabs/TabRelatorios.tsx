@@ -15,92 +15,30 @@ import {
   Printer,
   X,
 } from 'lucide-react';
+import type { PatientReportDefinition } from '@/domain/types';
+import { mockReportDefinitions } from '@/data/mockData';
 
-interface ReportCard {
-  key: string;
-  label: string;
-  description: string;
-  icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
-  badge?: string;
-  badgeColor?: string;
-  exportImplemented: boolean;
-}
+// Map iconKey strings to Lucide components
+const iconMap: Record<string, React.ElementType> = {
+  FileText,
+  DollarSign,
+  ShoppingBag,
+  FileCheck,
+  Target,
+  Clock,
+  Bell,
+};
 
-const reportCards: ReportCard[] = [
-  {
-    key: 'resumo-clinico',
-    label: 'Resumo Clínico',
-    description: 'Visão geral do histórico clínico, diagnósticos, evoluções e indicadores de saúde do paciente.',
-    icon: FileText,
-    iconBg: 'bg-blue-50',
-    iconColor: 'text-blue-600',
-    badge: 'Atualizado',
-    badgeColor: 'bg-green-100 text-green-700',
-    exportImplemented: false,
-  },
-  {
-    key: 'resumo-financeiro',
-    label: 'Resumo Financeiro',
-    description: 'Consolidado de valores contratados, pagos, em aberto e parcelas futuras do paciente.',
-    icon: DollarSign,
-    iconBg: 'bg-emerald-50',
-    iconColor: 'text-emerald-600',
-    badge: 'Disponível',
-    badgeColor: 'bg-blue-100 text-blue-700',
-    exportImplemented: false,
-  },
-  {
-    key: 'servicos-consumidos',
-    label: 'Serviços Consumidos',
-    description: 'Lista detalhada de todos os serviços utilizados, datas, profissionais e status de cada atendimento.',
-    icon: ShoppingBag,
-    iconBg: 'bg-violet-50',
-    iconColor: 'text-violet-600',
-    exportImplemented: false,
-  },
-  {
-    key: 'documentos-emitidos',
-    label: 'Documentos Emitidos',
-    description: 'Relação de prescrições, atestados, laudos e demais documentos gerados para o paciente.',
-    icon: FileCheck,
-    iconBg: 'bg-orange-50',
-    iconColor: 'text-orange-600',
-    exportImplemented: false,
-  },
-  {
-    key: 'adesao-plano',
-    label: 'Adesão ao Plano',
-    description: 'Índice de adesão ao plano alimentar, check-ins realizados, metas atingidas e tendências.',
-    icon: Target,
-    iconBg: 'bg-pink-50',
-    iconColor: 'text-pink-600',
-    badge: 'Novo',
-    badgeColor: 'bg-pink-100 text-pink-700',
-    exportImplemented: false,
-  },
-  {
-    key: 'timeline-consolidada',
-    label: 'Timeline Consolidada',
-    description: 'Linha do tempo completa com todos os eventos clínicos, financeiros e de comunicação do paciente.',
-    icon: Clock,
-    iconBg: 'bg-cyan-50',
-    iconColor: 'text-cyan-600',
-    exportImplemented: false,
-  },
-  {
-    key: 'alertas',
-    label: 'Alertas',
-    description: 'Resumo de alertas ativos, pendências clínicas, vencimentos e notificações relevantes do paciente.',
-    icon: Bell,
-    iconBg: 'bg-red-50',
-    iconColor: 'text-red-600',
-    badge: '3 ativos',
-    badgeColor: 'bg-red-100 text-red-700',
-    exportImplemented: false,
-  },
-];
+// Derive icon styling from iconKey
+const iconStyleMap: Record<string, { iconBg: string; iconColor: string }> = {
+  FileText:    { iconBg: 'bg-blue-50',    iconColor: 'text-blue-600' },
+  DollarSign:  { iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+  ShoppingBag: { iconBg: 'bg-violet-50',  iconColor: 'text-violet-600' },
+  FileCheck:   { iconBg: 'bg-orange-50',  iconColor: 'text-orange-600' },
+  Target:      { iconBg: 'bg-pink-50',    iconColor: 'text-pink-600' },
+  Clock:       { iconBg: 'bg-cyan-50',    iconColor: 'text-cyan-600' },
+  Bell:        { iconBg: 'bg-red-50',     iconColor: 'text-red-600' },
+};
 
 interface TabRelatoriosProps {
   patientName: string;
@@ -119,19 +57,19 @@ export default function TabRelatorios({ patientName }: TabRelatoriosProps) {
     setViewingReport(label);
   };
 
-  const handleExportPDF = (card: ReportCard) => {
+  const handleExportPDF = (card: PatientReportDefinition) => {
     if (!card.exportImplemented) {
       showToast('Exportação em breve');
     }
   };
 
-  const handleExportExcel = (card: ReportCard) => {
+  const handleExportExcel = (card: PatientReportDefinition) => {
     if (!card.exportImplemented) {
       showToast('Exportação em breve');
     }
   };
 
-  const handleImprimir = (card: ReportCard) => {
+  const handleImprimir = (card: PatientReportDefinition) => {
     if (!card.exportImplemented) {
       showToast('Exportação em breve');
     }
@@ -146,20 +84,21 @@ export default function TabRelatorios({ patientName }: TabRelatoriosProps) {
           <p className="text-xs text-muted-foreground mt-0.5">Selecione um relatório para visualizar ou exportar</p>
         </div>
         <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
-          {reportCards.length} relatórios disponíveis
+          {mockReportDefinitions.length} relatórios disponíveis
         </span>
       </div>
 
       {/* Report Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {reportCards.map((card) => {
-          const IconComp = card.icon;
+        {mockReportDefinitions.map((card) => {
+          const IconComp = iconMap[card.iconKey] ?? FileText;
+          const { iconBg, iconColor } = iconStyleMap[card.iconKey] ?? { iconBg: 'bg-gray-50', iconColor: 'text-gray-600' };
           return (
             <div key={card.key} className="card-base p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
               {/* Card Header */}
               <div className="flex items-start justify-between gap-2">
-                <div className={`w-10 h-10 rounded-xl ${card.iconBg} flex items-center justify-center flex-shrink-0`}>
-                  <IconComp size={18} className={card.iconColor} />
+                <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0`}>
+                  <IconComp size={18} className={iconColor} />
                 </div>
                 {card.badge && (
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${card.badgeColor}`}>
