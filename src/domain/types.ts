@@ -1,0 +1,327 @@
+// Central domain type definitions for SlimHiper Clinic OS
+// Backend integration point: replace mock implementations with Supabase/API calls
+
+export type UserRole =
+  | 'clinic_admin' |'physician' |'nutritionist' |'coordinator' |'receptionist' |'platform_admin' |'patient';
+
+export type TenantStatus = 'active' | 'trial' | 'suspended' | 'cancelled';
+export type TenantPlan = 'starter' | 'professional' | 'enterprise';
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  status: TenantStatus;
+  plan: TenantPlan;
+  ownerName: string;
+  ownerEmail: string;
+  phone: string;
+  city: string;
+  state: string;
+  activePatients: number;
+  mrr: number;
+  storageUsedGb: number;
+  trialEndsAt?: string;
+  createdAt: string;
+  lastActivityAt: string;
+  webhookErrors: number;
+  integrationErrors: number;
+}
+
+export interface UserProfile {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatarUrl?: string;
+  specialty?: string;
+  crmNumber?: string;
+  crnNumber?: string;
+  phone?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type PatientStatus = 'ativo' | 'inativo' | 'pausado' | 'concluido' | 'cancelado';
+export type FinancialStatus = 'em_dia' | 'pendente' | 'inadimplente' | 'isento';
+export type AdherenceLevel = 'excelente' | 'bom' | 'regular' | 'critico';
+
+export interface PatientProfile {
+  id: string;
+  tenantId: string;
+  name: string;
+  age: number;
+  birthDate: string;
+  cpfMasked: string;
+  phone: string;
+  email: string;
+  avatarUrl?: string;
+  status: PatientStatus;
+  careTeam: string[];
+  createdAt: string;
+  tags?: string[];
+}
+
+export type ProgramType =
+  | 'emagrecimento' |'hipertrofia' |'recomposicao' |'saude_metabolica' |'longevidade';
+
+export type PackageStatus = 'ativo' | 'pausado' | 'concluido' | 'cancelado' | 'aguardando';
+
+export interface PatientPackageSummary {
+  id: string;
+  patientId: string;
+  programName: string;
+  programType: ProgramType;
+  totalWeeks: number;
+  currentWeek: number;
+  startDate: string;
+  endDate: string;
+  status: PackageStatus;
+  totalConsultations: number;
+  usedConsultations: number;
+  totalNutritionSessions: number;
+  usedNutritionSessions: number;
+}
+
+export interface PatientMeasurementSummary {
+  id: string;
+  patientId: string;
+  measuredAt: string;
+  weightKg: number;
+  heightCm: number;
+  bmi: number;
+  bodyFatPercent?: number;
+  muscleMassKg?: number;
+  visceralFat?: number;
+  waistCm?: number;
+  hipCm?: number;
+  notes?: string;
+}
+
+export interface ClinicalStatusSummary {
+  currentWeightKg: number;
+  goalWeightKg: number;
+  startWeightKg: number;
+  currentBmi: number;
+  weeklyAdherencePercent: number;
+  adherenceLevel: AdherenceLevel;
+  weightLostKg: number;
+  weightToGoKg: number;
+  progressPercent: number;
+  lastMeasuredAt: string;
+  weightHistory: { week: number; weightKg: number; date: string }[];
+  adherenceHistory: { week: number; adherencePercent: number; label: string }[];
+}
+
+export interface PatientFinancialSummary {
+  status: FinancialStatus;
+  totalContractValue: number;
+  totalPaid: number;
+  totalPending: number;
+  totalOverdue: number;
+  nextDueDate?: string;
+  nextDueAmount?: number;
+  lastPaymentDate?: string;
+  lastPaymentAmount?: number;
+  invoices: InvoiceSummary[];
+}
+
+export interface InvoiceSummary {
+  id: string;
+  description: string;
+  amount: number;
+  dueDate: string;
+  paidAt?: string;
+  status: 'pago' | 'pendente' | 'vencido' | 'cancelado';
+}
+
+export type AppointmentStatus =
+  | 'agendado'
+  | 'chegou' |'triagem' |'medidas' |'bioimpedancia' |'aguardando_medico' |'em_consulta' |'checkout' |'concluido' |'falta' |'cancelado';
+
+export type AppointmentType =
+  | 'consulta_medica' |'retorno' |'nutricao' |'avaliacao_inicial' |'bioimpedancia' |'checkup';
+
+export interface AppointmentSummary {
+  id: string;
+  patientId: string;
+  patientName: string;
+  patientAvatarUrl?: string;
+  type: AppointmentType;
+  status: AppointmentStatus;
+  scheduledAt: string;
+  durationMinutes: number;
+  professionalName: string;
+  professionalRole: string;
+  roomName?: string;
+  notes?: string;
+}
+
+export interface EncounterSummary {
+  id: string;
+  patientId: string;
+  date: string;
+  professionalName: string;
+  professionalRole: string;
+  type: AppointmentType;
+  chiefComplaint?: string;
+  summary: string;
+  weightKg?: number;
+  bmi?: number;
+  nextSteps?: string;
+}
+
+export type TimelineEventType =
+  | 'consulta' |'nutricao' |'medicamento' |'medida' |'documento' |'pagamento' |'alerta' |'mensagem' |'inicio_programa' |'meta_atingida';
+
+export interface PatientTimelineEvent {
+  id: string;
+  patientId: string;
+  type: TimelineEventType;
+  title: string;
+  description: string;
+  date: string;
+  professional?: string;
+  metadata?: Record<string, string | number | boolean>;
+}
+
+export type AlertSeverity = 'critico' | 'alto' | 'medio' | 'baixo';
+
+export interface PatientAlert {
+  id: string;
+  patientId: string;
+  severity: AlertSeverity;
+  title: string;
+  description: string;
+  createdAt: string;
+  resolvedAt?: string;
+  isResolved: boolean;
+  category: 'clinico' | 'financeiro' | 'adesao' | 'documento' | 'protocolo';
+}
+
+export interface PatientTask {
+  id: string;
+  patientId: string;
+  title: string;
+  description?: string;
+  dueDate: string;
+  isCompleted: boolean;
+  completedAt?: string;
+  assignedTo?: string;
+  category: 'clinico' | 'financeiro' | 'documento' | 'comunicacao';
+  priority: 'alta' | 'media' | 'baixa';
+}
+
+export interface PatientDocumentSummary {
+  id: string;
+  patientId: string;
+  name: string;
+  type: 'contrato' | 'consentimento' | 'exame' | 'prescricao' | 'relatorio' | 'outros';
+  status: 'pendente_assinatura' | 'assinado' | 'vencido' | 'cancelado' | 'em_analise';
+  createdAt: string;
+  signedAt?: string;
+  expiresAt?: string;
+  uploadedBy: string;
+  fileSizeKb?: number;
+}
+
+export interface PatientPrescriptionSummary {
+  id: string;
+  patientId: string;
+  medicationName: string;
+  dosage: string;
+  frequency: string;
+  startDate: string;
+  endDate?: string;
+  prescribedBy: string;
+  isActive: boolean;
+  notes?: string;
+}
+
+export interface PatientNutritionPlanSummary {
+  id: string;
+  patientId: string;
+  planName: string;
+  targetCalories: number;
+  targetProteinG: number;
+  targetCarbsG: number;
+  targetFatG: number;
+  createdAt: string;
+  updatedAt: string;
+  nutritionistName: string;
+  isActive: boolean;
+  adherencePercent?: number;
+}
+
+export interface PatientChatSummary {
+  id: string;
+  patientId: string;
+  lastMessageAt: string;
+  lastMessagePreview: string;
+  lastMessageFrom: string;
+  unreadCount: number;
+  isOpen: boolean;
+}
+
+export interface Patient360Summary {
+  profile: PatientProfile;
+  activePackage: PatientPackageSummary;
+  clinicalStatus: ClinicalStatusSummary;
+  financial: PatientFinancialSummary;
+  alerts: PatientAlert[];
+  tasks: PatientTask[];
+  upcomingAppointments: AppointmentSummary[];
+  recentTimeline: PatientTimelineEvent[];
+  documents: PatientDocumentSummary[];
+  prescriptions: PatientPrescriptionSummary[];
+  nutritionPlan: PatientNutritionPlanSummary;
+  chat: PatientChatSummary;
+}
+
+// Dashboard types
+export interface DashboardStats {
+  consultasHoje: number;
+  consultasConcluidas: number;
+  filaEspera: number;
+  programasAtivos: number;
+  alertasClinicos: number;
+  mensagensNaoLidas: number;
+  documentosPendentes: number;
+  inadimplentes: number;
+  taxaOcupacao: number;
+}
+
+export interface WaitingQueueEntry {
+  id: string;
+  patientId: string;
+  patientName: string;
+  patientAvatarUrl?: string;
+  appointmentType: AppointmentType;
+  status: AppointmentStatus;
+  scheduledTime: string;
+  arrivedAt?: string;
+  waitingMinutes: number;
+  professionalName: string;
+  room?: string;
+}
+
+// Patient list row
+export interface PatientListRow {
+  id: string;
+  name: string;
+  age: number;
+  phone: string;
+  activePackage: string;
+  programType: ProgramType;
+  currentWeek: number;
+  totalWeeks: number;
+  weeklyAdherence: number;
+  adherenceLevel: AdherenceLevel;
+  nextAppointment?: string;
+  careTeam: string[];
+  alertCount: number;
+  financialStatus: FinancialStatus;
+  status: PatientStatus;
+  avatarUrl?: string;
+}
