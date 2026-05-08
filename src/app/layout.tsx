@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import { Toaster } from 'sonner';
 import '../styles/tailwind.css';
+import AuthStateButton from '@/components/auth/AuthStateButton';
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -32,6 +33,7 @@ export default function RootLayout({
     <html lang="pt-BR" className={plusJakartaSans.variable}>
       <body className={plusJakartaSans.className}>
         {children}
+        <AuthStateButton />
         <Toaster
           position="bottom-right"
           toastOptions={{
