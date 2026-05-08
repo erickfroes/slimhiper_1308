@@ -32,7 +32,7 @@ for (const key of required) {
 }
 
 const base = SUPABASE_URL.replace(/\/$/, '');
-const VALID_PACKAGE_STATUSES = new Set(['active', 'trialing', 'paused', 'canceled', 'expired', 'inactive']);
+const VALID_PACKAGE_STATUSES = new Set(['ativo', 'pausado', 'concluido', 'cancelado', 'aguardando']);
 
 function ok(condition, message) {
   if (!condition) throw new Error(message);
@@ -89,7 +89,7 @@ async function run() {
   ok(isSafeFallbackString(activePackage?.programName), '4) data.activePackage.programName must exist or be a safe fallback string');
   ok(
     typeof activePackage?.status === 'string' && VALID_PACKAGE_STATUSES.has(activePackage.status),
-    '5) data.activePackage.status must be a valid frontend PackageStatus',
+    '5) data.activePackage.status must be a valid frontend PackageStatus from SlimHiper domain',
   );
 
   const clinicalStatus = summary.json?.data?.clinicalStatus;
