@@ -14,10 +14,16 @@ import {
 import type { PatientTimelineEvent, TimelineEventType } from '@/domain/types';
 import Icon from '@/components/ui/AppIcon';
 
-const eventConfig: Record<
+const defaultEventConfig = {
+  icon: Stethoscope,
+  color: "text-teal-600",
+  bg: "bg-teal-50",
+};
+
+const eventConfig: Partial<Record<
   TimelineEventType,
   { icon: React.ElementType; color: string; bg: string }
-> = {
+>> = {
   consulta: { icon: Stethoscope, color: 'text-teal-600', bg: 'bg-teal-50' },
   nutricao: { icon: Apple, color: 'text-emerald-600', bg: 'bg-emerald-50' },
   medicamento: { icon: Pill, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -36,7 +42,7 @@ interface TimelineEventCardProps {
 }
 
 export default function TimelineEventCard({ event, isLast = false }: TimelineEventCardProps) {
-  const { icon: Icon, color, bg } = eventConfig[event.type] ?? eventConfig.consulta;
+  const { icon: Icon, color, bg } = eventConfig[event.type] ?? defaultEventConfig;
 
   return (
     <div className="flex gap-3 group">
