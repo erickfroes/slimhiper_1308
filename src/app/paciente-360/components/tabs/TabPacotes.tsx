@@ -30,9 +30,10 @@ import {
   BarChart3,
   Activity,
 } from 'lucide-react';
+import EmptyState from '@/components/EmptyState';
 
 interface TabPacotesProps {
-  pkg: PatientPackageSummary;
+  pkg?: PatientPackageSummary | null;
 }
 
 function StatusBadge({
@@ -95,6 +96,14 @@ const ENTITLEMENT_ICONS: Record<string, React.ReactNode> = {
 };
 
 export default function TabPacotes({ pkg }: TabPacotesProps) {
+  if (!pkg) {
+    return (
+      <div className="card-base p-5">
+        <EmptyState icon={Package} title="Pacote indisponível" description="Sem pacote ativo" />
+      </div>
+    );
+  }
+
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const progressPercent = Math.round((pkg.currentWeek / pkg.totalWeeks) * 100);

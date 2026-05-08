@@ -174,6 +174,14 @@ export default function TabResumo({ data }: TabResumoProps) {
   const completedTasks = tasks.filter((t) => t.isCompleted);
 
   // KPI derived values
+  if (!clinicalStatus) {
+    return (
+      <div className="card-base p-5">
+        <p className="text-sm text-muted-foreground">Status clínico não disponível.</p>
+      </div>
+    );
+  }
+
   const pendingDocs = documents.filter(
     (d) => d.status === 'pendente_assinatura' || d.status === 'em_analise'
   ).length;
@@ -202,26 +210,31 @@ export default function TabResumo({ data }: TabResumoProps) {
         : clinicalStatus.adherenceLevel === 'bom'
           ? 'bg-teal-50'
           : 'bg-amber-50';
+  const financialStatus = financial?.status;
   const financialColor =
-    financial.status === 'em_dia'
+    financialStatus === 'em_dia'
       ? 'text-positive'
-      : financial.status === 'inadimplente'
+      : financialStatus === 'inadimplente'
         ? 'text-negative'
         : 'text-amber-600';
   const financialBg =
-    financial.status === 'em_dia'
+    financialStatus === 'em_dia'
       ? 'bg-emerald-50'
-      : financial.status === 'inadimplente'
+      : financialStatus === 'inadimplente'
         ? 'bg-red-50'
         : 'bg-amber-50';
   const financialLabel =
-    financial.status === 'em_dia'
+    !financial
+      ? 'Não disponível'
+      : financialStatus === 'em_dia'
       ? 'Em dia'
-      : financial.status === 'inadimplente'
+      : financialStatus === 'inadimplente'
         ? 'Inadimplente'
         : 'Pendente';
-  const saldoAberto = financial.totalPending + financial.totalOverdue;
-  const programProgressLabel = `Sem. ${activePackage.currentWeek} / ${activePackage.totalWeeks}`;
+  const saldoAberto = financial ? financial.totalPending + financial.totalOverdue : 0;
+  const programProgressLabel = activePackage
+    ? `Sem. ${activePackage.currentWeek} / ${activePackage.totalWeeks}`
+    : 'Sem pacote ativo';
 
   const nextAppointments = upcomingAppointments.filter((a) => a.status === 'agendado');
   const recentAppointments = upcomingAppointments.filter((a) => a.status === 'concluido');

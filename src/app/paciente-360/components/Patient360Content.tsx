@@ -112,7 +112,7 @@ export default function Patient360Content({ patientId, userContext }: Patient360
         title="Paciente 360°"
         breadcrumb={[
           { label: 'Pacientes', href: '/clinic/patients' },
-          { label: data.profile.name },
+          { label: data.profile.name?.trim() || 'Paciente sem nome' },
         ]}
       />
       <PatientHeaderCard data={data} patientId={patientId} />
