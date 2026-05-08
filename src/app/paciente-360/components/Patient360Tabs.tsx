@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { Patient360Summary, PatientDocument360Item } from '@/domain/types';
+import type { Patient360Summary } from '@/domain/types';
 import TabResumo from './tabs/TabResumo';
 import TabTimeline from './tabs/TabTimeline';
 import TabConsultas from './tabs/TabConsultas';
@@ -29,11 +29,11 @@ const TABS = [
 
 interface Patient360TabsProps {
   data: Patient360Summary;
-  documents360: PatientDocument360Item[];
+  patientId: string;
   userContext: UserContext | null;
 }
 
-export default function Patient360Tabs({ data, documents360, userContext }: Patient360TabsProps) {
+export default function Patient360Tabs({ data, patientId, userContext }: Patient360TabsProps) {
   const [activeTab, setActiveTab] = useState('resumo');
 
   return (
@@ -74,7 +74,7 @@ export default function Patient360Tabs({ data, documents360, userContext }: Pati
             currentRole={userContext?.activeTenantRole ?? null}
           />
         )}
-        {activeTab === 'documentos' && <TabDocumentos documents360={documents360} />}
+        {activeTab === 'documentos' && <TabDocumentos patientId={patientId} />}
         {activeTab === 'financeiro' && (
           <TabFinanceiro
             financial={data.financial}
