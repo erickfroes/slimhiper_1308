@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import type { PatientFinancialSummary } from '@/domain/types';
-import { canViewFinancial } from '@/services/mockSession';
 import {
   ShieldOff,
   CheckCircle2,
@@ -49,6 +48,7 @@ const CHARGE_TYPE_LABELS: Record<string, string> = {
 
 interface TabFinanceiroProps {
   financial: PatientFinancialSummary;
+  canViewFinancial: boolean;
 }
 
 // ── No-permission state ───────────────────────────────────────────────────────
@@ -175,9 +175,9 @@ function StatusPill({ status }: { status: string }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function TabFinanceiro({ financial }: TabFinanceiroProps) {
+export default function TabFinanceiro({ financial, canViewFinancial }: TabFinanceiroProps) {
   // Permission gate
-  if (!canViewFinancial()) {
+  if (!canViewFinancial) {
     return <SemPermissaoFinanceira />;
   }
 

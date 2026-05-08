@@ -12,7 +12,7 @@ import TabFinanceiro from './tabs/TabFinanceiro';
 import TabPacotes from './tabs/TabPacotes';
 import TabChat from './tabs/TabChat';
 import TabRelatorios from './tabs/TabRelatorios';
-import { mockSession } from '@/services/mockSession';
+import type { UserContext } from '@/lib/auth/getCurrentUserContext';
 
 const TABS = [
   { key: 'tab-resumo', label: 'Resumo', id: 'resumo' },
@@ -30,9 +30,10 @@ const TABS = [
 interface Patient360TabsProps {
   data: Patient360Summary;
   documents360: PatientDocument360Item[];
+  userContext: UserContext | null;
 }
 
-export default function Patient360Tabs({ data, documents360 }: Patient360TabsProps) {
+export default function Patient360Tabs({ data, documents360, userContext }: Patient360TabsProps) {
   const [activeTab, setActiveTab] = useState('resumo');
 
   return (
@@ -69,11 +70,17 @@ export default function Patient360Tabs({ data, documents360 }: Patient360TabsPro
         {activeTab === 'prescricoes' && (
           <TabPrescricoes
             prescriptions={data.prescriptions}
-            currentRole={mockSession.currentRole}
+            canViewMedicalPrescriptions={userContext?.canViewMedicalPrescriptions ?? false}
+            activeTenantRole={userContext?.activeTenantRole ?? null}
           />
         )}
         {activeTab === 'documentos' && <TabDocumentos documents360={documents360} />}
-        {activeTab === 'financeiro' && <TabFinanceiro financial={data.financial} />}
+        {activeTab === 'financeiro' && (
+          <TabFinanceiro
+            financial={data.financial}
+            canViewFinancial={userContext?.canViewFinancial ?? false}
+          />
+        )}
         {activeTab === 'pacotes' && <TabPacotes pkg={data.activePackage} />}
         {activeTab === 'chat' && <TabChat chat={data.chat} patientName={data.profile.name} />}
         {activeTab === 'relatorios' && <TabRelatorios patientName={data.profile.name} />}

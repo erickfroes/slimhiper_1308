@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { PatientPrescriptionSummary, UserRole } from '@/domain/types';
+import type { PatientPrescriptionSummary } from '@/domain/types';
 import {
   Plus,
   FileText,
@@ -21,11 +21,11 @@ import {
   FileSignature,
 } from 'lucide-react';
 import Icon from '@/components/ui/AppIcon';
-import { canViewMedicalPrescriptions, mockSession } from '@/services/mockSession';
 
 interface TabPrescricoesProps {
   prescriptions: PatientPrescriptionSummary[];
-  currentRole?: UserRole;
+  canViewMedicalPrescriptions: boolean;
+  activeTenantRole: string | null;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -306,10 +306,12 @@ function CategorySection({
 
 export default function TabPrescricoes({
   prescriptions,
-  currentRole = mockSession.currentRole,
+  canViewMedicalPrescriptions,
+  activeTenantRole,
 }: TabPrescricoesProps) {
-  const isNutritionist = currentRole === 'nutritionist';
-  const canViewMedical = canViewMedicalPrescriptions(currentRole);
+  const normalizedRole = activeTenantRole?.trim().toLowerCase() ?? null;
+  const isNutritionist = normalizedRole === 'nutritionist';
+  const canViewMedical = canViewMedicalPrescriptions;
 
   const byCategory = (cat: PrescCategory) =>
     prescriptions.filter((p) => (p.category ?? 'prescricao_medica') === cat);
