@@ -200,3 +200,51 @@ Notes:
 - This file is intentionally **manual/commented** and does not depend on hard-coded real UUIDs.
 - It focuses only on core RBAC behavior and metadata access checks.
 - It does **not** create UI changes or new clinical tables.
+
+## 🧪 Paciente 360 contract checks
+
+You can validate Paciente 360 Edge Function response contracts and authorization behavior using:
+
+- `supabase/tests/patient360_contract_checks.md` (manual checklist)
+- `scripts/supabase/test-patient360-contract.mjs` (scripted smoke checks)
+
+### What is validated
+
+1. `patient-360-summary` returns `{ ok:true, data, meta }`
+2. `data.profile.name` exists
+3. `data.profile.id` exists
+4. `data.activePackage.status` exists
+5. `data.clinicalStatus.currentWeightKg` or safe fallback exists
+6. `data.financial.status` exists
+7. `data.upcomingAppointments` is an array
+8. `data.recentTimeline` is an array
+9. `patient-timeline` returns `{ ok:true, data:{events,page,page_size,total}, meta }`
+10. `category` filter does not error
+11. user without `patients.read` receives 403
+12. tenant A user cannot fetch tenant B patient
+
+### Environment variables
+
+Required:
+
+```bash
+SUPABASE_URL=https://<project-ref>.supabase.co
+TOKEN_WITH_PATIENTS_READ=<jwt-of-tenant-a-user-with-patients.read>
+PATIENT_ID_TENANT_A=<tenant-a-patient-id>
+```
+
+Optional (for checks 11 and 12):
+
+```bash
+TOKEN_WITHOUT_PATIENTS_READ=<jwt-of-user-without-patients.read>
+TOKEN_TENANT_B=<jwt-of-tenant-b-user>
+PATIENT_ID_TENANT_B=<tenant-b-patient-id>
+```
+
+### Run
+
+```bash
+node scripts/supabase/test-patient360-contract.mjs
+```
+
+If optional vars are not provided, checks 11 and/or 12 are reported as skipped.
