@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import NextLink from 'next/link';
 import {
   Building2,
   User,
@@ -798,13 +799,13 @@ export default function TenantDetailContent() {
         {/* Topbar */}
         <header className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border flex-shrink-0">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <a href="/admin" className="hover:text-primary transition-colors">
+            <NextLink href="/admin" className="hover:text-primary transition-colors">
               Admin
-            </a>
+            </NextLink>
             <ChevronRight size={12} />
-            <a href="/admin/tenants" className="hover:text-primary transition-colors">
+            <NextLink href="/admin/tenants" className="hover:text-primary transition-colors">
               Gestão de Tenants
-            </a>
+            </NextLink>
             <ChevronRight size={12} />
             <span className="text-foreground font-medium">{tenant.clinicName}</span>
           </div>
@@ -825,12 +826,12 @@ export default function TenantDetailContent() {
           <div className="px-6 pt-6 pb-4 border-b border-border bg-card">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-4">
-                <a
+                <NextLink
                   href="/admin/tenants"
                   className="mt-1 p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft size={16} />
-                </a>
+                </NextLink>
                 <div>
                   <div className="flex items-center gap-3 mb-1.5">
                     <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
