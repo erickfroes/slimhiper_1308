@@ -64,7 +64,7 @@ export default function Patient360Tabs({ data, documents360, userContext }: Pati
       {/* Tab content */}
       <div className="fade-in">
         {activeTab === 'resumo' && <TabResumo data={data} />}
-        {activeTab === 'timeline' && <TabTimeline events={data.recentTimeline} />}
+        {activeTab === 'timeline' && <TabTimeline events={data.recentTimeline} patientId={data.profile.id} />}
         {activeTab === 'consultas' && <TabConsultas appointments={data.upcomingAppointments} />}
         {activeTab === 'nutricao' && <TabNutricao plan={data.nutritionPlan} />}
         {activeTab === 'prescricoes' && (
