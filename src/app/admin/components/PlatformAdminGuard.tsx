@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { Shield } from 'lucide-react';
 import Link from 'next/link';
-import { canAccessPlatformAdmin } from '@/services/mockSession';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 export default function PlatformAdminGuard({
   children,
@@ -14,11 +15,45 @@ export default function PlatformAdminGuard({
   backHref?: string;
   backLabel?: string;
 }) {
+  const router = useRouter();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setAuthorized(canAccessPlatformAdmin());
-  }, []);
+    let mounted = true;
+
+    const resolveAuthorization = async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!mounted) return;
+
+      if (!user) {
+        router.replace('/auth/login');
+        return;
+      }
+
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('platform_role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!mounted) return;
+
+      const platformRole =
+        profileRow && typeof profileRow.platform_role === 'string' ? profileRow.platform_role : null;
+
+      setAuthorized(platformRole === 'platform_admin' || platformRole === 'platform_support');
+    };
+
+    void resolveAuthorization();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
   if (authorized === null) {
     return (
