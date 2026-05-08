@@ -13,6 +13,8 @@ export interface PatientTimelineFilters {
   fromDate?: string;
   toDate?: string;
   limit?: number;
+  page?: number;
+  pageSize?: number;
 }
 
 interface SafeServiceError {
@@ -95,7 +97,7 @@ export async function getPatient360Summary(patientId: string): Promise<{ data: P
 
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase.functions.invoke('patient-360-summary', {
-      body: { patientId },
+      body: { patient_id: patientId },
     });
 
     if (error) {
@@ -121,7 +123,14 @@ export async function getPatientTimeline(
 
     const supabase = await getSupabaseClient();
     const { data, error } = await supabase.functions.invoke('patient-timeline', {
-      body: { patientId, filters: filters ?? {} },
+      body: {
+        patient_id: patientId,
+        category: filters?.category ?? 'all',
+        page: filters?.page ?? 1,
+        page_size: filters?.pageSize ?? filters?.limit ?? 20,
+        date_start: filters?.fromDate,
+        date_end: filters?.toDate,
+      },
     });
 
     if (error) {
