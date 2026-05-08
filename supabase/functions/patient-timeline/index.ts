@@ -22,7 +22,6 @@ const ALLOWED_CATEGORIES: TimelineCategory[] = [
   'commercial',
 ];
 
-const RESTRICTED_FIELDS = new Set(['payload', 'internal_metadata', 'sensitive_metadata']);
 
 const corsHeaders = {
   'Content-Type': 'application/json',
@@ -40,12 +39,6 @@ function safeDate(input: unknown): string | null {
   const dt = new Date(input);
   if (Number.isNaN(dt.getTime())) return null;
   return dt.toISOString();
-}
-
-function sanitizeEvent(event: Record<string, unknown>, includeSensitive: boolean) {
-  if (includeSensitive) return event;
-
-  return Object.fromEntries(Object.entries(event).filter(([key]) => !RESTRICTED_FIELDS.has(key)));
 }
 
 Deno.serve(async (req) => {
@@ -193,9 +186,28 @@ Deno.serve(async (req) => {
     const from = (normalizedPage - 1) * normalizedPageSize;
     const to = from + normalizedPageSize - 1;
 
+    const includeSensitive = tenantPermissions.has('timeline.sensitive.read');
+    const selectColumns = [
+      'id',
+      'tenant_id',
+      'patient_id',
+      'event_type',
+      'category',
+      'status',
+      'title',
+      'description',
+      'actor_name',
+      'status_label',
+      'action_label',
+      'details_href',
+      'event_at',
+      'created_at',
+      ...(includeSensitive ? ['payload'] : []),
+    ].join(',');
+
     let query = supabase
       .from('patient_timeline_events')
-      .select('*', { count: 'exact' })
+      .select(selectColumns, { count: 'exact' })
       .eq('patient_id', patientId)
       .eq('tenant_id', patient.tenant_id)
       .order('created_at', { ascending: false })
@@ -208,8 +220,23 @@ Deno.serve(async (req) => {
     const { data: eventsData, error: eventsError, count } = await query;
     if (eventsError) throw eventsError;
 
-    const includeSensitive = tenantPermissions.has('timeline.sensitive.read');
-    const events = (eventsData ?? []).map((event) => sanitizeEvent(event as Record<string, unknown>, includeSensitive));
+    const events = (eventsData ?? []).map((event) => {
+      const row = event as Record<string, unknown>;
+      return {
+        id: row.id,
+        patientId: row.patient_id,
+        type: row.event_type,
+        title: row.title,
+        description: row.description,
+        date: row.event_at,
+        category: row.category,
+        actorName: row.actor_name,
+        statusLabel: row.status_label,
+        actionLabel: row.action_label,
+        detailsHref: row.details_href,
+        ...(includeSensitive ? { metadata: row.payload } : {}),
+      };
+    });
 
     return jsonResponse(200, {
       ok: true,
