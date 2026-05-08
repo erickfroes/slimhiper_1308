@@ -134,6 +134,14 @@ supabase db push
 node scripts/supabase/bootstrap-core-auth.mjs
 ```
 
+### 3b) Run the Paciente 360 demo data bootstrap
+
+```bash
+node scripts/supabase/bootstrap-patient360-demo.mjs
+```
+
+This script seeds development-safe Paciente 360 clinical data for tenant `demo-clinic`, including Juliana Pereira demo records across patients, appointments, encounters, SOAP notes, measurements, bioimpedance, labs, prescriptions placeholder, alerts, tasks, and timeline events.
+
 The script will create or upsert:
 - 1 platform admin profile (`platform_role = platform_admin`)
 - 1 demo tenant
