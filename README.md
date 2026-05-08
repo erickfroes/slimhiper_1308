@@ -142,6 +142,14 @@ node scripts/supabase/bootstrap-patient360-demo.mjs
 
 This script seeds development-safe Paciente 360 clinical data for tenant `demo-clinic`, including Juliana Pereira demo records across patients, appointments, encounters, SOAP notes, measurements, bioimpedance, labs, prescriptions placeholder, alerts, tasks, and timeline events.
 
+### 3c) Run the document templates demo bootstrap
+
+```bash
+node scripts/supabase/bootstrap-document-templates-demo.mjs
+```
+
+This script seeds six development-safe `document_templates` rows for tenant `demo-clinic` using only placeholder variables (`{{patient_name}}`, `{{clinic_name}}`, `{{program_name}}`, `{{date}}`, `{{professional_name}}`). It does not call D4Sign and does not upload files.
+
 The script will create or upsert:
 - 1 platform admin profile (`platform_role = platform_admin`)
 - 1 demo tenant
@@ -261,7 +269,13 @@ node scripts/supabase/bootstrap-core-auth.mjs
 node scripts/supabase/bootstrap-patient360-demo.mjs
 ```
 
-4. Obtain a test access token (`TOKEN_WITH_PATIENTS_READ`) for a seeded user.
+4. Bootstrap document templates demo records:
+
+```bash
+node scripts/supabase/bootstrap-document-templates-demo.mjs
+```
+
+5. Obtain a test access token (`TOKEN_WITH_PATIENTS_READ`) for a seeded user.
 
 Example using Supabase Auth password sign-in API:
 
@@ -274,7 +288,7 @@ curl -s "$SUPABASE_URL/auth/v1/token?grant_type=password"   -H "apikey: $SUPABAS
 
 From the JSON response, copy `access_token`.
 
-5. Run the Paciente 360 contract script:
+6. Run the Paciente 360 contract script:
 
 ```bash
 SUPABASE_URL=https://<project-ref>.supabase.co TOKEN_WITH_PATIENTS_READ=<access_token> PATIENT_ID_TENANT_A=<tenant-a-patient-id> node scripts/supabase/test-patient360-contract.mjs
@@ -291,6 +305,7 @@ Before continuing implementation work for D4Sign/Storage integration, ensure thi
 - `supabase db push`
 - `node scripts/supabase/bootstrap-core-auth.mjs`
 - `node scripts/supabase/bootstrap-patient360-demo.mjs`
+- `node scripts/supabase/bootstrap-document-templates-demo.mjs`
 - `node scripts/supabase/test-patient360-contract.mjs`
 
 Recommended checkpoint label:
