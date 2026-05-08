@@ -1,7 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+import { updateSession } from '@/lib/supabase/middleware';
 
 const ADMIN_ROLES = new Set(['platform_admin', 'platform_support']);
 const CLINIC_ROLES = new Set([
@@ -22,24 +20,14 @@ function getTargetRoute(role: string | null) {
   return '/clinic/dashboard';
 }
 
-async function getUser(accessToken?: string) {
-  if (!accessToken) return null;
-
-  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  if (!response.ok) return null;
-  return response.json();
-}
-
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  const token = request.cookies.get('sb-access-token')?.value;
-  const user = await getUser(token);
+  const { supabase, response } = updateSession(request);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const role = (user?.app_metadata?.role as string | undefined) ?? null;
 
   if (
@@ -71,7 +59,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(getTargetRoute(role), request.url));
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

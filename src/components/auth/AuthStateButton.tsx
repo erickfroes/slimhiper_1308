@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 export default function AuthStateButton() {
   const pathname = usePathname();
@@ -11,24 +12,8 @@ export default function AuthStateButton() {
   }
 
   async function handleLogout() {
-    const refreshToken = document.cookie
-      .split('; ')
-      .find((part) => part.startsWith('sb-refresh-token='))
-      ?.split('=')[1];
-
-    if (refreshToken) {
-      await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/logout`, {
-        method: 'POST',
-        headers: {
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
-    }
-
-    document.cookie = 'sb-access-token=; Path=/; Max-Age=0; SameSite=Lax';
-    document.cookie = 'sb-refresh-token=; Path=/; Max-Age=0; SameSite=Lax';
+    const supabase = createClient();
+    await supabase.auth.signOut();
 
     router.push('/auth/login');
     router.refresh();
