@@ -135,13 +135,13 @@ node scripts/supabase/bootstrap-core-auth.mjs
 ```
 
 The script will create or upsert:
-- 1 platform admin
+- 1 platform admin profile (`platform_role = platform_admin`)
 - 1 demo tenant
-- 1 clinic admin
-- 1 physician
-- 1 nutritionist
-- 1 financial user
-- 1 patient
+- 1 clinic admin tenant membership (`clinic_admin`)
+- 1 physician tenant membership (`physician`)
+- 1 nutritionist tenant membership (`nutritionist`)
+- 1 financial user tenant membership (`financial_user`)
+- 1 patient auth user + profile only (no tenant membership yet)
 
 Using placeholder emails:
 - `platform.admin@example.com`
@@ -155,8 +155,9 @@ Using placeholder emails:
 
 1. **Creates users in Supabase Auth** (`auth.users`) using the Admin API.
 2. **Links `auth.users` to `public.profiles`** by upserting profile rows with matching `id`.
-3. **Creates `tenant_memberships`** for all non-platform users in the demo tenant.
-4. **Assigns roles/permissions** by upserting tenant-scoped `roles`, `permissions`, and `role_permissions`.
+3. **Creates `tenant_memberships`** only for clinic roles supported by the current migration (`clinic_admin`, `physician`, `nutritionist`, `financial_user`), with `tenant_memberships.role` mirroring `role_code`.
+4. **Skips patient tenant membership** for now, seeding only auth + profile for a future patient-profile linking flow.
+5. **Assigns roles/permissions** by upserting tenant-scoped `roles`, `permissions`, and `role_permissions` for clinic roles above.
 
 ### 5) Manual flow (alternative to script)
 
@@ -165,7 +166,8 @@ If you prefer manual setup in Supabase Dashboard:
 1. Go to **Authentication → Users** and create each user with placeholder email + temporary password.
 2. In SQL Editor, insert/update `public.profiles` where `profiles.id = auth.users.id`.
 3. Insert a demo row in `public.tenants`.
-4. Insert rows in `public.tenant_memberships` for clinic users and patient.
-5. Insert role/permission rows in `public.roles`, `public.permissions`, then relation rows in `public.role_permissions`.
+4. Insert rows in `public.tenant_memberships` for clinic users only (using valid constrained role values).
+5. Seed patient as auth user + `public.profiles` row only until a valid patient membership schema exists.
+6. Insert role/permission rows in `public.roles`, `public.permissions`, then relation rows in `public.role_permissions` for clinic roles.
 
 The bootstrap script automates this exact flow for local development/testing.
