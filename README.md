@@ -241,10 +241,43 @@ TOKEN_TENANT_B=<jwt-of-tenant-b-user>
 PATIENT_ID_TENANT_B=<tenant-b-patient-id>
 ```
 
-### Run
+### Setup and run (end-to-end)
+
+1. Run migrations:
 
 ```bash
-node scripts/supabase/test-patient360-contract.mjs
+supabase db push
 ```
 
-If optional vars are not provided, checks 11 and/or 12 are reported as skipped.
+2. Bootstrap core auth and tenant RBAC seed:
+
+```bash
+node scripts/supabase/bootstrap-core-auth.mjs
+```
+
+3. Bootstrap Paciente 360 demo records:
+
+```bash
+node scripts/supabase/bootstrap-patient360-demo.mjs
+```
+
+4. Obtain a test access token (`TOKEN_WITH_PATIENTS_READ`) for a seeded user.
+
+Example using Supabase Auth password sign-in API:
+
+```bash
+export SUPABASE_URL=https://<project-ref>.supabase.co
+export SUPABASE_PUBLISHABLE_KEY=<your-publishable-or-anon-key>
+
+curl -s "$SUPABASE_URL/auth/v1/token?grant_type=password"   -H "apikey: $SUPABASE_PUBLISHABLE_KEY"   -H "Content-Type: application/json"   -d '{"email":"clinic.admin@example.com","password":"<bootstrap-password>"}'
+```
+
+From the JSON response, copy `access_token`.
+
+5. Run the Paciente 360 contract script:
+
+```bash
+SUPABASE_URL=https://<project-ref>.supabase.co TOKEN_WITH_PATIENTS_READ=<access_token> PATIENT_ID_TENANT_A=<tenant-a-patient-id> node scripts/supabase/test-patient360-contract.mjs
+```
+
+If optional vars are not provided, checks 14 and/or 15 are reported as skipped.
