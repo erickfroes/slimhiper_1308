@@ -2,7 +2,6 @@ import React from 'react';
 import { LucideIcon } from 'lucide-react';
 import Icon from '@/components/ui/AppIcon';
 
-
 interface EmptyStateProps {
   icon: LucideIcon;
   title: string;

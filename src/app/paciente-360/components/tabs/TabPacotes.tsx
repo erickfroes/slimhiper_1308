@@ -1,7 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { PatientPackageSummary, PatientPackageHistoryItem, PatientPackageEntitlement, PatientPackageServiceUsage, PatientPackageLimit } from '@/domain/types';
+import type {
+  PatientPackageSummary,
+  PatientPackageHistoryItem,
+  PatientPackageEntitlement,
+  PatientPackageServiceUsage,
+  PatientPackageLimit,
+} from '@/domain/types';
 import {
   Package,
   Calendar,
@@ -29,7 +35,11 @@ interface TabPacotesProps {
   pkg: PatientPackageSummary;
 }
 
-function StatusBadge({ status }: { status: 'ativo' | 'concluido' | 'cancelado' | 'pausado' | 'aguardando' }) {
+function StatusBadge({
+  status,
+}: {
+  status: 'ativo' | 'concluido' | 'cancelado' | 'pausado' | 'aguardando';
+}) {
   const map: Record<string, { label: string; className: string }> = {
     ativo: { label: 'Ativo', className: 'bg-emerald-100 text-emerald-700' },
     concluido: { label: 'Concluído', className: 'bg-blue-100 text-blue-700' },
@@ -39,7 +49,9 @@ function StatusBadge({ status }: { status: 'ativo' | 'concluido' | 'cancelado' |
   };
   const { label, className } = map[status] ?? map['aguardando'];
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${className}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${className}`}
+    >
       {label}
     </span>
   );
@@ -262,7 +274,9 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
       {packageEntitlements.length > 0 && (
         <div className="card-base p-5">
           <p className="text-sm font-semibold text-foreground mb-1">Entitlements do App</p>
-          <p className="text-xs text-muted-foreground mb-3">Funcionalidades liberadas para o paciente</p>
+          <p className="text-xs text-muted-foreground mb-3">
+            Funcionalidades liberadas para o paciente
+          </p>
           <div>
             {packageEntitlements.map((ent) => (
               <EntitlementRow
@@ -310,7 +324,11 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
               {packageHistory.length}
             </span>
           </div>
-          {historyOpen ? <ChevronUp size={15} className="text-muted-foreground" /> : <ChevronDown size={15} className="text-muted-foreground" />}
+          {historyOpen ? (
+            <ChevronUp size={15} className="text-muted-foreground" />
+          ) : (
+            <ChevronDown size={15} className="text-muted-foreground" />
+          )}
         </button>
 
         {historyOpen && (
@@ -368,7 +386,8 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
             const variantClass = isPrimary
               ? 'bg-teal-600 hover:bg-teal-700 text-white'
               : isDanger
-              ? 'border border-red-300 text-red-600 hover:bg-red-50' :'border border-border text-foreground hover:bg-muted/60';
+                ? 'border border-red-300 text-red-600 hover:bg-red-50'
+                : 'border border-border text-foreground hover:bg-muted/60';
             return (
               <button key={action.key} className={`${baseClass} ${variantClass}`}>
                 {action.icon}

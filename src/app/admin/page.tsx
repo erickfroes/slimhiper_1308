@@ -38,10 +38,13 @@ export default function AdminPage() {
           <div>
             <h2 className="text-lg font-bold text-foreground mb-1">Acesso Negado</h2>
             <p className="text-sm text-muted-foreground">
-              Esta área é restrita ao proprietário da plataforma. Você não tem permissão para acessar este painel.
+              Esta área é restrita ao proprietário da plataforma. Você não tem permissão para
+              acessar este painel.
             </p>
           </div>
-          <a href="/" className="btn-primary">Voltar ao Dashboard</a>
+          <a href="/" className="btn-primary">
+            Voltar ao Dashboard
+          </a>
         </div>
       </div>
     );

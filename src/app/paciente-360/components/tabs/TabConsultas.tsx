@@ -36,7 +36,9 @@ interface TabConsultasProps {
 
 function formatDate(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '');
+  return d
+    .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+    .replace('.', '');
 }
 
 function formatTime(iso: string) {
@@ -128,21 +130,36 @@ export default function TabConsultas({ appointments }: TabConsultasProps) {
             <div className="flex items-start gap-4">
               {/* Date badge */}
               <div className="w-14 h-14 rounded-xl bg-primary/10 flex flex-col items-center justify-center flex-shrink-0">
-                <span className="text-lg font-bold text-primary leading-none">{formatDay(nextAppt.scheduledAt)}</span>
-                <span className="text-xs text-primary font-medium capitalize">{formatMonth(nextAppt.scheduledAt)}</span>
+                <span className="text-lg font-bold text-primary leading-none">
+                  {formatDay(nextAppt.scheduledAt)}
+                </span>
+                <span className="text-xs text-primary font-medium capitalize">
+                  {formatMonth(nextAppt.scheduledAt)}
+                </span>
               </div>
 
               {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="text-sm font-semibold text-foreground">{apptTypeLabel[nextAppt.type]}</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {apptTypeLabel[nextAppt.type]}
+                  </span>
                   <StatusBadge status={nextAppt.status} />
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><Clock size={12} />{formatTime(nextAppt.scheduledAt)} · {nextAppt.durationMinutes} min</span>
-                  <span className="flex items-center gap-1"><User size={12} />{nextAppt.professionalName} ({nextAppt.professionalRole})</span>
+                  <span className="flex items-center gap-1">
+                    <Clock size={12} />
+                    {formatTime(nextAppt.scheduledAt)} · {nextAppt.durationMinutes} min
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <User size={12} />
+                    {nextAppt.professionalName} ({nextAppt.professionalRole})
+                  </span>
                   {nextAppt.roomName && (
-                    <span className="flex items-center gap-1"><MapPin size={12} />{nextAppt.roomName}</span>
+                    <span className="flex items-center gap-1">
+                      <MapPin size={12} />
+                      {nextAppt.roomName}
+                    </span>
                   )}
                 </div>
                 {nextAppt.recommendedReturn && (
@@ -225,9 +242,13 @@ export default function TabConsultas({ appointments }: TabConsultasProps) {
                 className="mt-3 w-full text-xs text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 transition-colors"
               >
                 {showAllPast ? (
-                  <><ChevronUp size={14} /> Mostrar menos</>
+                  <>
+                    <ChevronUp size={14} /> Mostrar menos
+                  </>
                 ) : (
-                  <><ChevronDown size={14} /> Ver todas ({past.length - 3} mais)</>
+                  <>
+                    <ChevronDown size={14} /> Ver todas ({past.length - 3} mais)
+                  </>
                 )}
               </button>
             )}
@@ -254,9 +275,14 @@ export default function TabConsultas({ appointments }: TabConsultasProps) {
           {noShows.length > 0 && (
             <div className="mt-2 space-y-1">
               {noShows.map((a) => (
-                <div key={a.id} className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+                <div
+                  key={a.id}
+                  className="flex items-center gap-2 text-xs text-muted-foreground px-1"
+                >
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                  <span>{formatDate(a.scheduledAt)} — {apptTypeLabel[a.type]} com {a.professionalName}</span>
+                  <span>
+                    {formatDate(a.scheduledAt)} — {apptTypeLabel[a.type]} com {a.professionalName}
+                  </span>
                   {a.notes && <span className="italic truncate">· {a.notes}</span>}
                 </div>
               ))}
@@ -275,7 +301,9 @@ function UpcomingCard({ appt }: { appt: AppointmentSummary }) {
     <div className="card-base p-4 flex items-center gap-4">
       <div className="w-12 h-12 rounded-xl bg-primary/10 flex flex-col items-center justify-center flex-shrink-0">
         <span className="text-sm font-bold text-primary">{formatDay(appt.scheduledAt)}</span>
-        <span className="text-xs text-primary font-medium capitalize">{formatMonth(appt.scheduledAt)}</span>
+        <span className="text-xs text-primary font-medium capitalize">
+          {formatMonth(appt.scheduledAt)}
+        </span>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
@@ -283,22 +311,41 @@ function UpcomingCard({ appt }: { appt: AppointmentSummary }) {
           <StatusBadge status={appt.status} />
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          <Clock size={11} className="inline mr-1" />{formatTime(appt.scheduledAt)}
-          {' · '}<User size={11} className="inline mr-1" />{appt.professionalName}
-          {appt.roomName && <><MapPin size={11} className="inline mx-1" />{appt.roomName}</>}
+          <Clock size={11} className="inline mr-1" />
+          {formatTime(appt.scheduledAt)}
+          {' · '}
+          <User size={11} className="inline mr-1" />
+          {appt.professionalName}
+          {appt.roomName && (
+            <>
+              <MapPin size={11} className="inline mx-1" />
+              {appt.roomName}
+            </>
+          )}
         </p>
       </div>
       <div className="flex gap-1.5 flex-shrink-0">
         {appt.attendanceLink && (
-          <a href={appt.attendanceLink} target="_blank" rel="noopener noreferrer"
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Link para atendimento">
+          <a
+            href={appt.attendanceLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+            title="Link para atendimento"
+          >
             <Video size={14} />
           </a>
         )}
-        <button className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors" title="Reagendar">
+        <button
+          className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+          title="Reagendar"
+        >
           <RefreshCw size={14} />
         </button>
-        <button className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors" title="Cancelar">
+        <button
+          className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors"
+          title="Cancelar"
+        >
           <XCircle size={14} />
         </button>
       </div>
@@ -311,16 +358,40 @@ function PastCard({ appt }: { appt: AppointmentSummary }) {
   const isNoShow = appt.status === 'falta';
 
   return (
-    <div className={`card-base p-4 flex items-start gap-4 ${isCancelled || isNoShow ? 'opacity-75' : 'opacity-90'}`}>
-      <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
-        isCancelled ? 'bg-amber-100 dark:bg-amber-900/30' : isNoShow ?'bg-red-100 dark:bg-red-900/30': 'bg-muted'
-      }`}>
-        <span className={`text-sm font-bold ${
-          isCancelled ? 'text-amber-600 dark:text-amber-400' : isNoShow ?'text-red-600 dark:text-red-400': 'text-muted-foreground'
-        }`}>{formatDay(appt.scheduledAt)}</span>
-        <span className={`text-xs font-medium capitalize ${
-          isCancelled ? 'text-amber-500 dark:text-amber-400' : isNoShow ?'text-red-500 dark:text-red-400': 'text-muted-foreground'
-        }`}>{formatMonth(appt.scheduledAt)}</span>
+    <div
+      className={`card-base p-4 flex items-start gap-4 ${isCancelled || isNoShow ? 'opacity-75' : 'opacity-90'}`}
+    >
+      <div
+        className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
+          isCancelled
+            ? 'bg-amber-100 dark:bg-amber-900/30'
+            : isNoShow
+              ? 'bg-red-100 dark:bg-red-900/30'
+              : 'bg-muted'
+        }`}
+      >
+        <span
+          className={`text-sm font-bold ${
+            isCancelled
+              ? 'text-amber-600 dark:text-amber-400'
+              : isNoShow
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-muted-foreground'
+          }`}
+        >
+          {formatDay(appt.scheduledAt)}
+        </span>
+        <span
+          className={`text-xs font-medium capitalize ${
+            isCancelled
+              ? 'text-amber-500 dark:text-amber-400'
+              : isNoShow
+                ? 'text-red-500 dark:text-red-400'
+                : 'text-muted-foreground'
+          }`}
+        >
+          {formatMonth(appt.scheduledAt)}
+        </span>
       </div>
 
       <div className="flex-1 min-w-0">
@@ -334,15 +405,24 @@ function PastCard({ appt }: { appt: AppointmentSummary }) {
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          <User size={11} className="inline mr-1" />{appt.professionalName} ({appt.professionalRole})
-          {appt.roomName && <><MapPin size={11} className="inline mx-1" />{appt.roomName}</>}
+          <User size={11} className="inline mr-1" />
+          {appt.professionalName} ({appt.professionalRole})
+          {appt.roomName && (
+            <>
+              <MapPin size={11} className="inline mx-1" />
+              {appt.roomName}
+            </>
+          )}
         </p>
         {appt.notes && <p className="text-xs text-muted-foreground mt-1 italic">{appt.notes}</p>}
         {appt.recommendedReturn && (
-          <p className={`text-xs mt-1 flex items-center gap-1 ${
-            isOverdueReturn(appt.recommendedReturn)
-              ? 'text-amber-600 dark:text-amber-400 font-medium' :'text-muted-foreground'
-          }`}>
+          <p
+            className={`text-xs mt-1 flex items-center gap-1 ${
+              isOverdueReturn(appt.recommendedReturn)
+                ? 'text-amber-600 dark:text-amber-400 font-medium'
+                : 'text-muted-foreground'
+            }`}
+          >
             <RotateCcw size={11} />
             Retorno recomendado: {formatDate(appt.recommendedReturn)}
             {isOverdueReturn(appt.recommendedReturn) && ' · Em atraso'}
@@ -351,10 +431,16 @@ function PastCard({ appt }: { appt: AppointmentSummary }) {
       </div>
 
       <div className="flex gap-1.5 flex-shrink-0">
-        <button className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors" title="Ver atendimento">
+        <button
+          className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+          title="Ver atendimento"
+        >
           <Eye size={14} />
         </button>
-        <button className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors" title="Criar retorno">
+        <button
+          className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+          title="Criar retorno"
+        >
           <RotateCcw size={14} />
         </button>
       </div>

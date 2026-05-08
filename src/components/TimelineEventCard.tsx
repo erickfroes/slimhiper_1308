@@ -14,8 +14,10 @@ import {
 import type { PatientTimelineEvent, TimelineEventType } from '@/domain/types';
 import Icon from '@/components/ui/AppIcon';
 
-
-const eventConfig: Record<TimelineEventType, { icon: React.ElementType; color: string; bg: string }> = {
+const eventConfig: Record<
+  TimelineEventType,
+  { icon: React.ElementType; color: string; bg: string }
+> = {
   consulta: { icon: Stethoscope, color: 'text-teal-600', bg: 'bg-teal-50' },
   nutricao: { icon: Apple, color: 'text-emerald-600', bg: 'bg-emerald-50' },
   medicamento: { icon: Pill, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -40,7 +42,11 @@ export default function TimelineEventCard({ event, isLast = false }: TimelineEve
     <div className="flex gap-3 group">
       {/* Timeline line */}
       <div className="flex flex-col items-center flex-shrink-0">
-        <div className={['w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0', bg].join(' ')}>
+        <div
+          className={['w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0', bg].join(
+            ' '
+          )}
+        >
           <Icon size={15} className={color} />
         </div>
         {!isLast && <div className="w-px flex-1 bg-border mt-2 min-h-4" />}
@@ -50,7 +56,9 @@ export default function TimelineEventCard({ event, isLast = false }: TimelineEve
       <div className="flex-1 pb-4 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm font-semibold text-foreground leading-snug">{event.title}</p>
-          <span className="text-xs text-muted-foreground flex-shrink-0 font-medium">{event.date}</span>
+          <span className="text-xs text-muted-foreground flex-shrink-0 font-medium">
+            {event.date}
+          </span>
         </div>
         <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{event.description}</p>
         {event.professional && (

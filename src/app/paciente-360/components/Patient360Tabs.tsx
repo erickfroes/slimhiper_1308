@@ -45,7 +45,8 @@ export default function Patient360Tabs({ data, documents360 }: Patient360TabsPro
             className={[
               'flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-all duration-150 border-b-2 -mb-px',
               activeTab === tab.id
-                ? 'border-primary text-primary bg-primary/5' :'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted',
+                ? 'border-primary text-primary bg-primary/5'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted',
             ].join(' ')}
           >
             {tab.label}
@@ -64,9 +65,13 @@ export default function Patient360Tabs({ data, documents360 }: Patient360TabsPro
         {activeTab === 'timeline' && <TabTimeline events={data.recentTimeline} />}
         {activeTab === 'consultas' && <TabConsultas appointments={data.upcomingAppointments} />}
         {activeTab === 'nutricao' && <TabNutricao plan={data.nutritionPlan} />}
-        {activeTab === 'prescricoes' && <TabPrescricoes prescriptions={data.prescriptions} currentRole="physician" />}
+        {activeTab === 'prescricoes' && (
+          <TabPrescricoes prescriptions={data.prescriptions} currentRole="physician" />
+        )}
         {activeTab === 'documentos' && <TabDocumentos documents360={documents360} />}
-        {activeTab === 'financeiro' && <TabFinanceiro financial={data.financial} currentRole="coordinator" />}
+        {activeTab === 'financeiro' && (
+          <TabFinanceiro financial={data.financial} currentRole="coordinator" />
+        )}
         {activeTab === 'pacotes' && <TabPacotes pkg={data.activePackage} />}
         {activeTab === 'chat' && <TabChat chat={data.chat} patientName={data.profile.name} />}
         {activeTab === 'relatorios' && <TabRelatorios patientName={data.profile.name} />}

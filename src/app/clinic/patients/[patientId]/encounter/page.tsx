@@ -5,7 +5,25 @@ import { useParams, useRouter } from 'next/navigation';
 import DashboardShell from '@/components/DashboardShell';
 import { getPatient360 } from '@/services/mockApi';
 import type { Patient360Summary } from '@/domain/types';
-import { ArrowLeft, Save, CheckCircle, FlaskConical, Pill, ClipboardList, UserPlus, RefreshCw, AlertTriangle, Activity, ChevronDown, ChevronUp, Clock, User, Stethoscope, FileText, Zap,  } from 'lucide-react';
+import {
+  ArrowLeft,
+  Save,
+  CheckCircle,
+  FlaskConical,
+  Pill,
+  ClipboardList,
+  UserPlus,
+  RefreshCw,
+  AlertTriangle,
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  User,
+  Stethoscope,
+  FileText,
+  Zap,
+} from 'lucide-react';
 
 // ─── Mock encounter-specific data ────────────────────────────────────────────
 
@@ -20,9 +38,19 @@ const mockBioimpedancia = {
 
 const mockExames = [
   { nome: 'Hemograma Completo', solicitadoEm: '2026-04-23', status: 'pendente' },
-  { nome: 'Glicemia em Jejum', solicitadoEm: '2026-04-10', resultado: '98 mg/dL', status: 'concluido' },
+  {
+    nome: 'Glicemia em Jejum',
+    solicitadoEm: '2026-04-10',
+    resultado: '98 mg/dL',
+    status: 'concluido',
+  },
   { nome: 'TSH', solicitadoEm: '2026-04-10', resultado: '2.1 mUI/L', status: 'concluido' },
-  { nome: 'Colesterol Total', solicitadoEm: '2026-04-10', resultado: '187 mg/dL', status: 'concluido' },
+  {
+    nome: 'Colesterol Total',
+    solicitadoEm: '2026-04-10',
+    resultado: '187 mg/dL',
+    status: 'concluido',
+  },
 ];
 
 const mockSintomasRecentes = [
@@ -60,7 +88,15 @@ const mockUltimosAtendimentos = [
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SectionCard({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+function SectionCard({
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -68,8 +104,14 @@ function SectionCard({ title, children, defaultOpen = true }: { title: string; c
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors"
       >
-        <span className="text-xs font-semibold text-foreground uppercase tracking-wide">{title}</span>
-        {open ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+        <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
+          {title}
+        </span>
+        {open ? (
+          <ChevronUp size={14} className="text-muted-foreground" />
+        ) : (
+          <ChevronDown size={14} className="text-muted-foreground" />
+        )}
       </button>
       {open && <div className="px-4 pb-4">{children}</div>}
     </div>
@@ -85,19 +127,30 @@ function RiskBadge({ risk }: { risk: string }) {
   };
   const r = map[risk] ?? { label: risk, cls: 'bg-muted text-muted-foreground' };
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${r.cls}`}>
+    <span
+      className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${r.cls}`}
+    >
       <AlertTriangle size={10} />
       {r.label}
     </span>
   );
 }
 
-function MetricPill({ label, value, unit }: { label: string; value: string | number; unit?: string }) {
+function MetricPill({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: string | number;
+  unit?: string;
+}) {
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-border last:border-0">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-xs font-semibold text-foreground">
-        {value}{unit ? <span className="font-normal text-muted-foreground ml-0.5">{unit}</span> : null}
+        {value}
+        {unit ? <span className="font-normal text-muted-foreground ml-0.5">{unit}</span> : null}
       </span>
     </div>
   );
@@ -118,7 +171,9 @@ function SOAPField({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-semibold text-foreground uppercase tracking-wide">{label}</label>
+      <label className="text-xs font-semibold text-foreground uppercase tracking-wide">
+        {label}
+      </label>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -234,7 +289,8 @@ export default function EncounterPage() {
               onClick={handleSaveDraft}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
                 saved
-                  ? 'bg-green-50 border-green-300 text-green-700' :'border-primary/40 text-primary hover:bg-primary/5'
+                  ? 'bg-green-50 border-green-300 text-green-700'
+                  : 'border-primary/40 text-primary hover:bg-primary/5'
               }`}
             >
               <Save size={13} />
@@ -245,7 +301,8 @@ export default function EncounterPage() {
               disabled={finalized}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
                 finalized
-                  ? 'bg-green-600 text-white cursor-default' :'bg-primary text-primary-foreground hover:bg-primary/90'
+                  ? 'bg-green-600 text-white cursor-default'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
               }`}
             >
               <CheckCircle size={13} />
@@ -256,10 +313,8 @@ export default function EncounterPage() {
 
         {/* ── Three-column body ── */}
         <div className="flex-1 overflow-hidden grid grid-cols-[280px_1fr_280px] gap-0 min-h-0">
-
           {/* ── LEFT COLUMN ── */}
           <div className="border-r border-border overflow-y-auto scrollbar-thin p-4 space-y-3 bg-muted/20">
-
             {/* Patient summary */}
             <SectionCard title="Paciente">
               <div className="flex items-center gap-3 mb-3">
@@ -268,19 +323,22 @@ export default function EncounterPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-foreground">{profile.name}</p>
-                  <p className="text-xs text-muted-foreground">{profile.age} anos · {profile.preferredName ? `"${profile.preferredName}"` : ''}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {profile.age} anos · {profile.preferredName ? `"${profile.preferredName}"` : ''}
+                  </p>
                 </div>
               </div>
               <div className="space-y-0">
                 <MetricPill label="CPF" value={profile.cpfMasked} />
                 <MetricPill label="Telefone" value={profile.phone} />
-                <MetricPill label="Status" value={profile.status === 'ativo' ? 'Ativo' : profile.status} />
+                <MetricPill
+                  label="Status"
+                  value={profile.status === 'ativo' ? 'Ativo' : profile.status}
+                />
                 {data.responsibleProfessional && (
                   <MetricPill label="Responsável" value={data.responsibleProfessional} />
                 )}
-                {data.mainUnit && (
-                  <MetricPill label="Unidade" value={data.mainUnit} />
-                )}
+                {data.mainUnit && <MetricPill label="Unidade" value={data.mainUnit} />}
               </div>
               {data.clinicalRisk && (
                 <div className="mt-3">
@@ -291,18 +349,24 @@ export default function EncounterPage() {
 
             {/* Active package */}
             <SectionCard title="Pacote Ativo">
-              <p className="text-sm font-semibold text-foreground mb-1">{activePackage.programName}</p>
+              <p className="text-sm font-semibold text-foreground mb-1">
+                {activePackage.programName}
+              </p>
               <p className="text-xs text-muted-foreground mb-3">
-                Semana {activePackage.currentWeek} de {activePackage.totalWeeks} · Início {activePackage.startDate}
+                Semana {activePackage.currentWeek} de {activePackage.totalWeeks} · Início{' '}
+                {activePackage.startDate}
               </p>
               <div className="w-full bg-muted rounded-full h-1.5 mb-1">
                 <div
                   className="bg-primary h-1.5 rounded-full"
-                  style={{ width: `${Math.round((activePackage.currentWeek / activePackage.totalWeeks) * 100)}%` }}
+                  style={{
+                    width: `${Math.round((activePackage.currentWeek / activePackage.totalWeeks) * 100)}%`,
+                  }}
                 />
               </div>
               <p className="text-xs text-muted-foreground text-right">
-                {Math.round((activePackage.currentWeek / activePackage.totalWeeks) * 100)}% concluído
+                {Math.round((activePackage.currentWeek / activePackage.totalWeeks) * 100)}%
+                concluído
               </p>
               <div className="mt-3 space-y-0">
                 <MetricPill
@@ -325,24 +389,34 @@ export default function EncounterPage() {
                 <MetricPill label="Meta" value={clinicalStatus.goalWeightKg} unit=" kg" />
                 <MetricPill label="Perdido" value={clinicalStatus.weightLostKg} unit=" kg" />
                 <MetricPill label="IMC" value={clinicalStatus.currentBmi} />
-                <MetricPill label="Adesão semanal" value={`${clinicalStatus.weeklyAdherencePercent}%`} />
+                <MetricPill
+                  label="Adesão semanal"
+                  value={`${clinicalStatus.weeklyAdherencePercent}%`}
+                />
                 <MetricPill label="Última medição" value={clinicalStatus.lastMeasuredAt} />
               </div>
             </SectionCard>
 
             {/* Alerts */}
-            {alerts && alerts.filter(a => !a.isResolved).length > 0 && (
+            {alerts && alerts.filter((a) => !a.isResolved).length > 0 && (
               <SectionCard title="Alertas Ativos">
                 <div className="space-y-2">
-                  {alerts.filter(a => !a.isResolved).map((alert) => (
-                    <div key={alert.id} className="flex items-start gap-2 p-2 rounded-lg bg-amber-50 border border-amber-100">
-                      <AlertTriangle size={12} className="text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-xs font-semibold text-amber-800">{alert.title}</p>
-                        <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">{alert.description}</p>
+                  {alerts
+                    .filter((a) => !a.isResolved)
+                    .map((alert) => (
+                      <div
+                        key={alert.id}
+                        className="flex items-start gap-2 p-2 rounded-lg bg-amber-50 border border-amber-100"
+                      >
+                        <AlertTriangle size={12} className="text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-amber-800">{alert.title}</p>
+                          <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+                            {alert.description}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </SectionCard>
             )}
@@ -401,7 +475,8 @@ export default function EncounterPage() {
                 onClick={handleSaveDraft}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl border transition-colors ${
                   saved
-                    ? 'bg-green-50 border-green-300 text-green-700' :'border-primary/40 text-primary hover:bg-primary/5'
+                    ? 'bg-green-50 border-green-300 text-green-700'
+                    : 'border-primary/40 text-primary hover:bg-primary/5'
                 }`}
               >
                 <Save size={14} />
@@ -412,7 +487,8 @@ export default function EncounterPage() {
                 disabled={finalized}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${
                   finalized
-                    ? 'bg-green-600 text-white cursor-default' :'bg-primary text-primary-foreground hover:bg-primary/90'
+                    ? 'bg-green-600 text-white cursor-default'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
                 }`}
               >
                 <CheckCircle size={14} />
@@ -423,16 +499,19 @@ export default function EncounterPage() {
 
           {/* ── RIGHT COLUMN — Clinical context ── */}
           <div className="border-l border-border overflow-y-auto scrollbar-thin p-4 space-y-3 bg-muted/20">
-
             {/* Programa ativo */}
             <SectionCard title="Programa Ativo">
               <div className="flex items-center gap-2 mb-2">
                 <Zap size={13} className="text-primary" />
-                <span className="text-sm font-semibold text-foreground">{activePackage.programName}</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {activePackage.programName}
+                </span>
               </div>
               <p className="text-xs text-muted-foreground">
                 Semana {activePackage.currentWeek}/{activePackage.totalWeeks} · Status:{' '}
-                <span className="font-medium text-green-700 capitalize">{activePackage.status}</span>
+                <span className="font-medium text-green-700 capitalize">
+                  {activePackage.status}
+                </span>
               </p>
             </SectionCard>
 
@@ -440,7 +519,9 @@ export default function EncounterPage() {
             <SectionCard title="Alergias">
               <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/60 border border-dashed border-border">
                 <AlertTriangle size={12} className="text-muted-foreground" />
-                <span className="text-xs text-muted-foreground italic">Nenhuma alergia registrada</span>
+                <span className="text-xs text-muted-foreground italic">
+                  Nenhuma alergia registrada
+                </span>
               </div>
             </SectionCard>
 
@@ -451,11 +532,16 @@ export default function EncounterPage() {
               ) : (
                 <div className="space-y-2">
                   {activePrescriptions.slice(0, 4).map((p) => (
-                    <div key={p.id} className="flex items-start gap-2 p-2 rounded-lg bg-blue-50 border border-blue-100">
+                    <div
+                      key={p.id}
+                      className="flex items-start gap-2 p-2 rounded-lg bg-blue-50 border border-blue-100"
+                    >
                       <Pill size={11} className="text-blue-600 mt-0.5 flex-shrink-0" />
                       <div>
                         <p className="text-xs font-semibold text-blue-800">{p.medicationName}</p>
-                        <p className="text-xs text-blue-700">{p.dosage} · {p.frequency}</p>
+                        <p className="text-xs text-blue-700">
+                          {p.dosage} · {p.frequency}
+                        </p>
                         <p className="text-xs text-blue-600 mt-0.5">{p.prescribedBy}</p>
                       </div>
                     </div>
@@ -498,7 +584,8 @@ export default function EncounterPage() {
                     <span
                       className={`text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
                         e.status === 'concluido'
-                          ? 'bg-green-100 text-green-700' :'bg-amber-100 text-amber-700'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-amber-100 text-amber-700'
                       }`}
                     >
                       {e.status === 'concluido' ? e.resultado : 'Pendente'}
@@ -529,16 +616,24 @@ export default function EncounterPage() {
                 {openTasks.length > 0
                   ? openTasks.map((t) => (
                       <div key={t.id} className="flex items-start gap-2">
-                        <ClipboardList size={11} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <ClipboardList
+                          size={11}
+                          className="text-muted-foreground mt-0.5 flex-shrink-0"
+                        />
                         <div>
                           <p className="text-xs font-medium text-foreground">{t.title}</p>
-                          <p className="text-xs text-muted-foreground">Prazo: {t.dueDate} · {t.assignedTo}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Prazo: {t.dueDate} · {t.assignedTo}
+                          </p>
                         </div>
                       </div>
                     ))
                   : mockPendencias.map((p, i) => (
                       <div key={i} className="flex items-start gap-2">
-                        <ClipboardList size={11} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <ClipboardList
+                          size={11}
+                          className="text-muted-foreground mt-0.5 flex-shrink-0"
+                        />
                         <div>
                           <p className="text-xs font-medium text-foreground">{p.titulo}</p>
                           <p className="text-xs text-muted-foreground">Prazo: {p.prazo}</p>

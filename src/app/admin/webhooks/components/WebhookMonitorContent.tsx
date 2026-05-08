@@ -2,15 +2,38 @@
 
 import React, { useState } from 'react';
 import {
-  Webhook, Search, Filter, RefreshCw, Eye, EyeOff, ChevronRight,
-  LogOut, User, Bell, CheckCircle, XCircle, Clock, AlertTriangle,
-  AlertCircle, RotateCcw, ChevronDown, ChevronUp, Copy, X,
-  Activity, Building2, TrendingUp, HardDrive, Link2, Shield,
-  Headphones, ClipboardList, LayoutDashboard
+  Webhook,
+  Search,
+  Filter,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  ChevronRight,
+  LogOut,
+  User,
+  Bell,
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  AlertCircle,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  X,
+  Activity,
+  Building2,
+  TrendingUp,
+  HardDrive,
+  Link2,
+  Shield,
+  Headphones,
+  ClipboardList,
+  LayoutDashboard,
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
 import Icon from '@/components/ui/AppIcon';
-
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -56,7 +79,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 0,
     errorSummary: null,
     sensitivePayload: {
-      rawBody: '{"event":"PAYMENT_CONFIRMED","payment":{"id":"pay_8f3a2c1d9e4b","value":350.00,"customer":"cus_xxx"}}',
+      rawBody:
+        '{"event":"PAYMENT_CONFIRMED","payment":{"id":"pay_8f3a2c1d9e4b","value":350.00,"customer":"cus_xxx"}}',
       headers: { 'asaas-access-token': 'sk_live_***', 'content-type': 'application/json' },
       signature: 'sha256=a1b2c3d4e5f6...',
     },
@@ -76,7 +100,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 0,
     errorSummary: null,
     sensitivePayload: {
-      rawBody: '{"event":"DOCUMENT_SIGNED","document":{"uuid":"doc_d4s_7c9e1a3f","signatories":["email@example.com"]}}',
+      rawBody:
+        '{"event":"DOCUMENT_SIGNED","document":{"uuid":"doc_d4s_7c9e1a3f","signatories":["email@example.com"]}}',
       headers: { 'x-d4sign-token': 'tok_live_***', 'content-type': 'application/json' },
       signature: 'hmac_sha256=b2c3d4e5f6a1...',
     },
@@ -96,7 +121,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 3,
     errorSummary: 'HTTP 502 Bad Gateway — endpoint do tenant não respondeu',
     sensitivePayload: {
-      rawBody: '{"event":"PAYMENT_OVERDUE","payment":{"id":"pay_2b4d6f8a0c2e","value":290.00,"dueDate":"2026-05-07"}}',
+      rawBody:
+        '{"event":"PAYMENT_OVERDUE","payment":{"id":"pay_2b4d6f8a0c2e","value":290.00,"dueDate":"2026-05-07"}}',
       headers: { 'asaas-access-token': 'sk_live_***', 'content-type': 'application/json' },
       signature: 'sha256=c3d4e5f6a1b2...',
     },
@@ -116,7 +142,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 5,
     errorSummary: 'Máximo de tentativas atingido — autenticação falhou (401 Unauthorized)',
     sensitivePayload: {
-      rawBody: '{"event":"DOCUMENT_CANCELLED","document":{"uuid":"doc_d4s_1a3c5e7g","reason":"expired"}}',
+      rawBody:
+        '{"event":"DOCUMENT_CANCELLED","document":{"uuid":"doc_d4s_1a3c5e7g","reason":"expired"}}',
       headers: { 'x-d4sign-token': 'tok_live_***', 'content-type': 'application/json' },
       signature: 'hmac_sha256=d4e5f6a1b2c3...',
     },
@@ -136,7 +163,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 0,
     errorSummary: null,
     sensitivePayload: {
-      rawBody: '{"event":"SUBSCRIPTION_CREATED","subscription":{"id":"sub_9e1c3a5b7d9f","value":490.00,"cycle":"MONTHLY"}}',
+      rawBody:
+        '{"event":"SUBSCRIPTION_CREATED","subscription":{"id":"sub_9e1c3a5b7d9f","value":490.00,"cycle":"MONTHLY"}}',
       headers: { 'asaas-access-token': 'sk_live_***', 'content-type': 'application/json' },
       signature: 'sha256=e5f6a1b2c3d4...',
     },
@@ -156,7 +184,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 0,
     errorSummary: null,
     sensitivePayload: {
-      rawBody: '{"event":"DOCUMENT_VIEWED","document":{"uuid":"doc_d4s_2b4d6f8h","viewedBy":"email@example.com"}}',
+      rawBody:
+        '{"event":"DOCUMENT_VIEWED","document":{"uuid":"doc_d4s_2b4d6f8h","viewedBy":"email@example.com"}}',
       headers: { 'x-d4sign-token': 'tok_live_***', 'content-type': 'application/json' },
       signature: 'hmac_sha256=f6a1b2c3d4e5...',
     },
@@ -176,7 +205,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 2,
     errorSummary: 'Connection timeout após 30s — tentativa 2/5',
     sensitivePayload: {
-      rawBody: '{"event":"PAYMENT_REFUNDED","payment":{"id":"pay_3c5e7g9i1k3m","value":150.00,"refundedAt":"2026-05-07"}}',
+      rawBody:
+        '{"event":"PAYMENT_REFUNDED","payment":{"id":"pay_3c5e7g9i1k3m","value":150.00,"refundedAt":"2026-05-07"}}',
       headers: { 'asaas-access-token': 'sk_live_***', 'content-type': 'application/json' },
       signature: 'sha256=a1b2c3d4e5f6...',
     },
@@ -196,7 +226,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 0,
     errorSummary: null,
     sensitivePayload: {
-      rawBody: '{"event":"DOCUMENT_SIGNED","document":{"uuid":"doc_d4s_3c5e7g9i","signatories":["patient@email.com"]}}',
+      rawBody:
+        '{"event":"DOCUMENT_SIGNED","document":{"uuid":"doc_d4s_3c5e7g9i","signatories":["patient@email.com"]}}',
       headers: { 'x-d4sign-token': 'tok_live_***', 'content-type': 'application/json' },
       signature: 'hmac_sha256=b2c3d4e5f6a1...',
     },
@@ -216,7 +247,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 0,
     errorSummary: null,
     sensitivePayload: {
-      rawBody: '{"event":"INVOICE_CREATED","invoice":{"id":"inv_4d6f8h0j2l4n","value":890.00,"dueDate":"2026-05-15"}}',
+      rawBody:
+        '{"event":"INVOICE_CREATED","invoice":{"id":"inv_4d6f8h0j2l4n","value":890.00,"dueDate":"2026-05-15"}}',
       headers: { 'asaas-access-token': 'sk_live_***', 'content-type': 'application/json' },
       signature: 'sha256=c3d4e5f6a1b2...',
     },
@@ -236,7 +268,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 0,
     errorSummary: null,
     sensitivePayload: {
-      rawBody: '{"event":"DOCUMENT_EXPIRED","document":{"uuid":"doc_d4s_4d6f8h0j","expiredAt":"2026-05-07"}}',
+      rawBody:
+        '{"event":"DOCUMENT_EXPIRED","document":{"uuid":"doc_d4s_4d6f8h0j","expiredAt":"2026-05-07"}}',
       headers: { 'x-d4sign-token': 'tok_live_***', 'content-type': 'application/json' },
       signature: 'hmac_sha256=d4e5f6a1b2c3...',
     },
@@ -256,7 +289,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 3,
     errorSummary: 'DNS resolution failed — host do tenant inacessível',
     sensitivePayload: {
-      rawBody: '{"event":"PAYMENT_RECEIVED","payment":{"id":"pay_5e7g9i1k3m5o","value":290.00,"billingType":"PIX"}}',
+      rawBody:
+        '{"event":"PAYMENT_RECEIVED","payment":{"id":"pay_5e7g9i1k3m5o","value":290.00,"billingType":"PIX"}}',
       headers: { 'asaas-access-token': 'sk_live_***', 'content-type': 'application/json' },
       signature: 'sha256=e5f6a1b2c3d4...',
     },
@@ -276,7 +310,8 @@ const mockWebhookEvents: WebhookEvent[] = [
     retryCount: 0,
     errorSummary: null,
     sensitivePayload: {
-      rawBody: '{"event":"DOCUMENT_SIGNED","document":{"uuid":"doc_d4s_5e7g9i1k","signatories":["patient2@email.com"]}}',
+      rawBody:
+        '{"event":"DOCUMENT_SIGNED","document":{"uuid":"doc_d4s_5e7g9i1k","signatories":["patient2@email.com"]}}',
       headers: { 'x-d4sign-token': 'tok_live_***', 'content-type': 'application/json' },
       signature: 'hmac_sha256=f6a1b2c3d4e5...',
     },
@@ -286,17 +321,36 @@ const mockWebhookEvents: WebhookEvent[] = [
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: WebhookStatus }) {
-  const config: Record<WebhookStatus, { label: string; classes: string; icon: React.ElementType }> = {
-    processed: { label: 'Processado', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle },
-    pending: { label: 'Pendente', classes: 'bg-blue-50 text-blue-700 border-blue-200', icon: Clock },
-    failed: { label: 'Falhou', classes: 'bg-red-50 text-red-700 border-red-200', icon: XCircle },
-    dead_letter: { label: 'Dead Letter', classes: 'bg-slate-100 text-slate-600 border-slate-300', icon: AlertCircle },
-    retrying: { label: 'Reprocessando', classes: 'bg-amber-50 text-amber-700 border-amber-200', icon: RotateCcw },
-  };
+  const config: Record<WebhookStatus, { label: string; classes: string; icon: React.ElementType }> =
+    {
+      processed: {
+        label: 'Processado',
+        classes: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        icon: CheckCircle,
+      },
+      pending: {
+        label: 'Pendente',
+        classes: 'bg-blue-50 text-blue-700 border-blue-200',
+        icon: Clock,
+      },
+      failed: { label: 'Falhou', classes: 'bg-red-50 text-red-700 border-red-200', icon: XCircle },
+      dead_letter: {
+        label: 'Dead Letter',
+        classes: 'bg-slate-100 text-slate-600 border-slate-300',
+        icon: AlertCircle,
+      },
+      retrying: {
+        label: 'Reprocessando',
+        classes: 'bg-amber-50 text-amber-700 border-amber-200',
+        icon: RotateCcw,
+      },
+    };
   const c = config[status];
   const Icon = c.icon;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}
+    >
       <Icon size={10} />
       {c.label}
     </span>
@@ -309,14 +363,24 @@ function ProviderBadge({ provider }: { provider: WebhookProvider }) {
     D4Sign: { classes: 'bg-purple-50 text-purple-700 border-purple-200' },
   };
   return (
-    <span className={`inline-flex items-center rounded-full border text-xs font-semibold px-2 py-0.5 ${config[provider].classes}`}>
+    <span
+      className={`inline-flex items-center rounded-full border text-xs font-semibold px-2 py-0.5 ${config[provider].classes}`}
+    >
       {provider}
     </span>
   );
 }
 
-function KpiCard({ icon: Icon, label, value, color = 'teal' }: {
-  icon: React.ElementType; label: string; value: string | number; color?: string;
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  color = 'teal',
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  color?: string;
 }) {
   const colorMap: Record<string, string> = {
     teal: 'bg-teal-50 text-teal-600',
@@ -328,7 +392,9 @@ function KpiCard({ icon: Icon, label, value, color = 'teal' }: {
   };
   return (
     <div className="stat-card flex flex-col gap-3">
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${colorMap[color] ?? colorMap.teal}`}>
+      <div
+        className={`w-9 h-9 rounded-xl flex items-center justify-center ${colorMap[color] ?? colorMap.teal}`}
+      >
         <Icon size={18} />
       </div>
       <div>
@@ -371,7 +437,10 @@ function PayloadDrawer({ event, onClose }: { event: WebhookEvent; onClose: () =>
             <span className="text-sm font-bold text-foreground">{event.id}</span>
             <ProviderBadge provider={event.provider} />
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
             <X size={16} />
           </button>
         </div>
@@ -398,7 +467,9 @@ function PayloadDrawer({ event, onClose }: { event: WebhookEvent; onClose: () =>
 
           {/* IDs */}
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Identificadores</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Identificadores
+            </p>
             <div className="bg-muted/50 rounded-xl p-3 space-y-2">
               <div>
                 <p className="text-xs text-muted-foreground">External ID</p>
@@ -406,7 +477,9 @@ function PayloadDrawer({ event, onClose }: { event: WebhookEvent; onClose: () =>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Idempotency Key</p>
-                <p className="text-xs font-mono text-foreground mt-0.5 break-all">{event.idempotencyKey}</p>
+                <p className="text-xs font-mono text-foreground mt-0.5 break-all">
+                  {event.idempotencyKey}
+                </p>
               </div>
             </div>
           </div>
@@ -425,7 +498,9 @@ function PayloadDrawer({ event, onClose }: { event: WebhookEvent; onClose: () =>
           {/* Sensitive Payload */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Payload Sensível</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Payload Sensível
+              </p>
               <button
                 onClick={() => setShowSensitive(!showSensitive)}
                 className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
@@ -463,14 +538,17 @@ function PayloadDrawer({ event, onClose }: { event: WebhookEvent; onClose: () =>
                 </div>
                 <div className="bg-slate-900 rounded-xl p-3">
                   <p className="text-xs text-slate-400 font-medium mb-1">Assinatura</p>
-                  <p className="text-xs font-mono text-purple-400 break-all">{event.sensitivePayload.signature}</p>
+                  <p className="text-xs font-mono text-purple-400 break-all">
+                    {event.sensitivePayload.signature}
+                  </p>
                 </div>
               </div>
             ) : (
               <div className="bg-muted/50 border border-border rounded-xl p-4 flex flex-col items-center gap-2">
                 <EyeOff size={20} className="text-muted-foreground" />
                 <p className="text-xs text-muted-foreground text-center">
-                  Payload oculto por padrão para proteger dados sensíveis.<br />
+                  Payload oculto por padrão para proteger dados sensíveis.
+                  <br />
                   Clique em <strong>Revelar</strong> para visualizar.
                 </p>
               </div>
@@ -507,8 +585,9 @@ export default function WebhookMonitorContent() {
   const [selectedEvent, setSelectedEvent] = useState<WebhookEvent | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const filtered = mockWebhookEvents.filter(e => {
-    const matchSearch = !search ||
+  const filtered = mockWebhookEvents.filter((e) => {
+    const matchSearch =
+      !search ||
       e.id.toLowerCase().includes(search.toLowerCase()) ||
       e.eventType.toLowerCase().includes(search.toLowerCase()) ||
       e.tenant.toLowerCase().includes(search.toLowerCase()) ||
@@ -520,14 +599,18 @@ export default function WebhookMonitorContent() {
   });
 
   const total = mockWebhookEvents.length;
-  const processed = mockWebhookEvents.filter(e => e.status === 'processed').length;
-  const failed = mockWebhookEvents.filter(e => e.status === 'failed' || e.status === 'dead_letter').length;
-  const pending = mockWebhookEvents.filter(e => e.status === 'pending' || e.status === 'retrying').length;
-  const asaasCount = mockWebhookEvents.filter(e => e.provider === 'Asaas').length;
-  const d4signCount = mockWebhookEvents.filter(e => e.provider === 'D4Sign').length;
+  const processed = mockWebhookEvents.filter((e) => e.status === 'processed').length;
+  const failed = mockWebhookEvents.filter(
+    (e) => e.status === 'failed' || e.status === 'dead_letter'
+  ).length;
+  const pending = mockWebhookEvents.filter(
+    (e) => e.status === 'pending' || e.status === 'retrying'
+  ).length;
+  const asaasCount = mockWebhookEvents.filter((e) => e.provider === 'Asaas').length;
+  const d4signCount = mockWebhookEvents.filter((e) => e.provider === 'D4Sign').length;
 
   function toggleRow(id: string) {
-    setExpandedRows(prev => {
+    setExpandedRows((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -537,8 +620,12 @@ export default function WebhookMonitorContent() {
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
-      <aside className={`flex flex-col bg-card border-r border-border flex-shrink-0 sidebar-transition ${sidebarCollapsed ? 'w-16' : 'w-56'}`}>
-        <div className={`flex items-center border-b border-border py-4 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-4'}`}>
+      <aside
+        className={`flex flex-col bg-card border-r border-border flex-shrink-0 sidebar-transition ${sidebarCollapsed ? 'w-16' : 'w-56'}`}
+      >
+        <div
+          className={`flex items-center border-b border-border py-4 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-4'}`}
+        >
           <AppLogo size={28} />
           {!sidebarCollapsed && (
             <div className="flex flex-col leading-none">
@@ -548,14 +635,18 @@ export default function WebhookMonitorContent() {
           )}
         </div>
         <nav className="flex-1 overflow-y-auto scrollbar-thin py-3 px-2 space-y-0.5">
-          {navItems.map(item => {
+          {navItems.map((item) => {
             const ItemIcon = item.icon;
             const active = item.key === 'webhooks';
             const sharedClass = `relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/8 hover:text-primary'}`;
             return (
               <a key={item.key} href={item.href} className={sharedClass}>
                 <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
-                {!sidebarCollapsed && <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>}
+                {!sidebarCollapsed && (
+                  <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>
+                    {item.label}
+                  </span>
+                )}
                 {sidebarCollapsed && (
                   <span className="absolute left-full ml-2 px-2 py-1 bg-foreground text-background text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                     {item.label}
@@ -582,7 +673,13 @@ export default function WebhookMonitorContent() {
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="flex items-center justify-center w-full py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all text-xs font-medium gap-1"
           >
-            {sidebarCollapsed ? <ChevronRight size={14} /> : <><ChevronRight size={14} className="rotate-180" /> Recolher</>}
+            {sidebarCollapsed ? (
+              <ChevronRight size={14} />
+            ) : (
+              <>
+                <ChevronRight size={14} className="rotate-180" /> Recolher
+              </>
+            )}
           </button>
         </div>
       </aside>
@@ -592,7 +689,9 @@ export default function WebhookMonitorContent() {
         {/* Topbar */}
         <header className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border flex-shrink-0">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <a href="/admin" className="hover:text-primary transition-colors">Admin</a>
+            <a href="/admin" className="hover:text-primary transition-colors">
+              Admin
+            </a>
             <ChevronRight size={12} />
             <span className="text-foreground font-semibold">Monitor de Webhooks</span>
           </div>
@@ -616,7 +715,9 @@ export default function WebhookMonitorContent() {
           {/* Page Title */}
           <div>
             <h1 className="text-lg font-bold text-foreground">Monitor de Webhooks</h1>
-            <p className="text-sm text-muted-foreground">Eventos recebidos de Asaas e D4Sign em todos os tenants</p>
+            <p className="text-sm text-muted-foreground">
+              Eventos recebidos de Asaas e D4Sign em todos os tenants
+            </p>
           </div>
 
           {/* KPI Row */}
@@ -632,12 +733,15 @@ export default function WebhookMonitorContent() {
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-48">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
               <input
                 type="text"
                 placeholder="Buscar por ID, evento, tenant, paciente..."
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 text-xs bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               />
             </div>
@@ -645,7 +749,7 @@ export default function WebhookMonitorContent() {
               <Filter size={13} className="text-muted-foreground" />
               <select
                 value={providerFilter}
-                onChange={e => setProviderFilter(e.target.value as typeof providerFilter)}
+                onChange={(e) => setProviderFilter(e.target.value as typeof providerFilter)}
                 className="text-xs bg-card border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               >
                 <option value="all">Todos os provedores</option>
@@ -655,7 +759,7 @@ export default function WebhookMonitorContent() {
             </div>
             <select
               value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
               className="text-xs bg-card border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
             >
               <option value="all">Todos os status</option>
@@ -677,18 +781,42 @@ export default function WebhookMonitorContent() {
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-8"></th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Provedor</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tipo de Evento</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tenant</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Ref. Paciente</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">External ID</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Idempotency Key</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Recebido em</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Processado em</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Status</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tentativas</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Resumo do Erro</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Payload</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Provedor
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Tipo de Evento
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Tenant
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Ref. Paciente
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      External ID
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Idempotency Key
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Recebido em
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Processado em
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Status
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Tentativas
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Resumo do Erro
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Payload
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -701,11 +829,13 @@ export default function WebhookMonitorContent() {
                       </td>
                     </tr>
                   ) : (
-                    filtered.map(event => {
+                    filtered.map((event) => {
                       const expanded = expandedRows.has(event.id);
                       return (
                         <React.Fragment key={event.id}>
-                          <tr className={`hover:bg-muted/30 transition-colors ${expanded ? 'bg-muted/20' : ''}`}>
+                          <tr
+                            className={`hover:bg-muted/30 transition-colors ${expanded ? 'bg-muted/20' : ''}`}
+                          >
                             {/* Expand toggle */}
                             <td className="px-4 py-3">
                               <button
@@ -721,36 +851,48 @@ export default function WebhookMonitorContent() {
                             </td>
                             {/* Event Type */}
                             <td className="px-4 py-3">
-                              <span className="font-mono font-medium text-foreground whitespace-nowrap">{event.eventType}</span>
+                              <span className="font-mono font-medium text-foreground whitespace-nowrap">
+                                {event.eventType}
+                              </span>
                             </td>
                             {/* Tenant */}
                             <td className="px-4 py-3">
                               <div className="flex flex-col">
-                                <span className="font-medium text-foreground whitespace-nowrap">{event.tenant}</span>
+                                <span className="font-medium text-foreground whitespace-nowrap">
+                                  {event.tenant}
+                                </span>
                                 <span className="text-muted-foreground">{event.tenantId}</span>
                               </div>
                             </td>
                             {/* Patient Ref */}
                             <td className="px-4 py-3">
                               {event.patientRef ? (
-                                <span className="font-mono text-foreground">{event.patientRef}</span>
+                                <span className="font-mono text-foreground">
+                                  {event.patientRef}
+                                </span>
                               ) : (
                                 <span className="text-muted-foreground">—</span>
                               )}
                             </td>
                             {/* External ID */}
                             <td className="px-4 py-3">
-                              <span className="font-mono text-foreground whitespace-nowrap">{event.externalId}</span>
+                              <span className="font-mono text-foreground whitespace-nowrap">
+                                {event.externalId}
+                              </span>
                             </td>
                             {/* Idempotency Key */}
                             <td className="px-4 py-3 max-w-[160px]">
                               <MaskedText value={event.idempotencyKey} />
                             </td>
                             {/* Received At */}
-                            <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{event.receivedAt}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                              {event.receivedAt}
+                            </td>
                             {/* Processed At */}
                             <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                              {event.processedAt ?? <span className="text-muted-foreground/50">—</span>}
+                              {event.processedAt ?? (
+                                <span className="text-muted-foreground/50">—</span>
+                              )}
                             </td>
                             {/* Status */}
                             <td className="px-4 py-3">
@@ -758,14 +900,18 @@ export default function WebhookMonitorContent() {
                             </td>
                             {/* Retry Count */}
                             <td className="px-4 py-3 text-center">
-                              <span className={`font-semibold tabular-nums ${event.retryCount > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                              <span
+                                className={`font-semibold tabular-nums ${event.retryCount > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}
+                              >
                                 {event.retryCount}
                               </span>
                             </td>
                             {/* Error Summary */}
                             <td className="px-4 py-3 max-w-[200px]">
                               {event.errorSummary ? (
-                                <span className="text-red-600 line-clamp-2 leading-relaxed">{event.errorSummary}</span>
+                                <span className="text-red-600 line-clamp-2 leading-relaxed">
+                                  {event.errorSummary}
+                                </span>
                               ) : (
                                 <span className="text-muted-foreground/50">—</span>
                               )}
@@ -787,18 +933,30 @@ export default function WebhookMonitorContent() {
                               <td colSpan={13} className="px-6 py-4">
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                   <div>
-                                    <p className="text-xs text-muted-foreground mb-1">ID do Evento</p>
-                                    <p className="text-xs font-mono font-semibold text-foreground">{event.id}</p>
+                                    <p className="text-xs text-muted-foreground mb-1">
+                                      ID do Evento
+                                    </p>
+                                    <p className="text-xs font-mono font-semibold text-foreground">
+                                      {event.id}
+                                    </p>
                                   </div>
                                   <div>
-                                    <p className="text-xs text-muted-foreground mb-1">Idempotency Key (completa)</p>
-                                    <p className="text-xs font-mono text-foreground break-all">{event.idempotencyKey}</p>
+                                    <p className="text-xs text-muted-foreground mb-1">
+                                      Idempotency Key (completa)
+                                    </p>
+                                    <p className="text-xs font-mono text-foreground break-all">
+                                      {event.idempotencyKey}
+                                    </p>
                                   </div>
                                   <div>
-                                    <p className="text-xs text-muted-foreground mb-1">Payload Sensível</p>
+                                    <p className="text-xs text-muted-foreground mb-1">
+                                      Payload Sensível
+                                    </p>
                                     <div className="flex items-center gap-2">
                                       <EyeOff size={12} className="text-muted-foreground" />
-                                      <span className="text-xs text-muted-foreground">Oculto por padrão</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        Oculto por padrão
+                                      </span>
                                       <button
                                         onClick={() => setSelectedEvent(event)}
                                         className="text-xs font-medium text-primary hover:underline"

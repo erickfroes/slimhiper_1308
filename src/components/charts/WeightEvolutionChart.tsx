@@ -75,7 +75,12 @@ export default function WeightEvolutionChart({ data, goalWeightKg }: WeightEvolu
           stroke="var(--accent)"
           strokeDasharray="4 4"
           strokeWidth={1.5}
-          label={{ value: `Meta: ${goalWeightKg}kg`, position: 'right', fontSize: 10, fill: 'var(--accent)' }}
+          label={{
+            value: `Meta: ${goalWeightKg}kg`,
+            position: 'right',
+            fontSize: 10,
+            fill: 'var(--accent)',
+          }}
         />
         <Line
           type="monotone"

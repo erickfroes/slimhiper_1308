@@ -35,10 +35,13 @@ export default function TenantDetailPage() {
           <div>
             <h2 className="text-lg font-bold text-foreground mb-1">Acesso Negado</h2>
             <p className="text-sm text-muted-foreground">
-              Esta área é restrita ao proprietário da plataforma. Você não tem permissão para acessar este painel.
+              Esta área é restrita ao proprietário da plataforma. Você não tem permissão para
+              acessar este painel.
             </p>
           </div>
-          <a href="/admin/tenants" className="btn-primary">Voltar aos Tenants</a>
+          <a href="/admin/tenants" className="btn-primary">
+            Voltar aos Tenants
+          </a>
         </div>
       </div>
     );

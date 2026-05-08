@@ -9,18 +9,18 @@ interface Props {
 }
 
 const programTypes: { value: ProgramType; label: string }[] = [
-  { value: 'emagrecimento',    label: 'Emagrecimento' },
-  { value: 'hipertrofia',      label: 'Hipertrofia' },
-  { value: 'recomposicao',     label: 'Recomposição Corporal' },
+  { value: 'emagrecimento', label: 'Emagrecimento' },
+  { value: 'hipertrofia', label: 'Hipertrofia' },
+  { value: 'recomposicao', label: 'Recomposição Corporal' },
   { value: 'saude_metabolica', label: 'Saúde Metabólica' },
-  { value: 'longevidade',      label: 'Longevidade Preventiva' },
+  { value: 'longevidade', label: 'Longevidade Preventiva' },
 ];
 
 const colorOptions = [
-  { value: 'teal',    label: 'Teal',    cls: 'bg-teal-500' },
-  { value: 'violet',  label: 'Violeta', cls: 'bg-violet-500' },
-  { value: 'amber',   label: 'Âmbar',   cls: 'bg-amber-500' },
-  { value: 'blue',    label: 'Azul',    cls: 'bg-blue-500' },
+  { value: 'teal', label: 'Teal', cls: 'bg-teal-500' },
+  { value: 'violet', label: 'Violeta', cls: 'bg-violet-500' },
+  { value: 'amber', label: 'Âmbar', cls: 'bg-amber-500' },
+  { value: 'blue', label: 'Azul', cls: 'bg-blue-500' },
   { value: 'emerald', label: 'Esmeralda', cls: 'bg-emerald-500' },
 ];
 
@@ -65,7 +65,9 @@ export default function StepDadosGerais({ draft, onChange }: Props) {
             >
               <option value="">Selecione...</option>
               {programTypes.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
               ))}
             </select>
           </div>
@@ -93,7 +95,10 @@ export default function StepDadosGerais({ draft, onChange }: Props) {
                 className={[
                   'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
                   draft.status === s
-                    ? s === 'ativo' ?'bg-emerald-50 text-emerald-700 border-emerald-300' :'bg-amber-50 text-amber-700 border-amber-300' :'bg-muted text-muted-foreground border-border hover:bg-muted/80',
+                    ? s === 'ativo'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                      : 'bg-amber-50 text-amber-700 border-amber-300'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-muted/80',
                 ].join(' ')}
               >
                 {s === 'rascunho' ? 'Rascunho' : 'Ativo'}
@@ -115,7 +120,9 @@ export default function StepDadosGerais({ draft, onChange }: Props) {
               className={[
                 'w-8 h-8 rounded-full transition-all',
                 c.cls,
-                draft.color === c.value ? 'ring-2 ring-offset-2 ring-primary scale-110' : 'opacity-70 hover:opacity-100',
+                draft.color === c.value
+                  ? 'ring-2 ring-offset-2 ring-primary scale-110'
+                  : 'opacity-70 hover:opacity-100',
               ].join(' ')}
             />
           ))}

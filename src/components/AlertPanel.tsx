@@ -3,12 +3,27 @@ import { AlertTriangle, AlertCircle, Info, CheckCircle, X } from 'lucide-react';
 import type { PatientAlert } from '@/domain/types';
 import Icon from '@/components/ui/AppIcon';
 
-
 const severityConfig = {
-  critico: { icon: AlertCircle, classes: 'bg-red-50 border-red-200 text-red-700', iconClass: 'text-red-500' },
-  alto: { icon: AlertTriangle, classes: 'bg-orange-50 border-orange-200 text-orange-700', iconClass: 'text-orange-500' },
-  medio: { icon: AlertTriangle, classes: 'bg-amber-50 border-amber-200 text-amber-700', iconClass: 'text-amber-500' },
-  baixo: { icon: Info, classes: 'bg-blue-50 border-blue-200 text-blue-700', iconClass: 'text-blue-500' },
+  critico: {
+    icon: AlertCircle,
+    classes: 'bg-red-50 border-red-200 text-red-700',
+    iconClass: 'text-red-500',
+  },
+  alto: {
+    icon: AlertTriangle,
+    classes: 'bg-orange-50 border-orange-200 text-orange-700',
+    iconClass: 'text-orange-500',
+  },
+  medio: {
+    icon: AlertTriangle,
+    classes: 'bg-amber-50 border-amber-200 text-amber-700',
+    iconClass: 'text-amber-500',
+  },
+  baixo: {
+    icon: Info,
+    classes: 'bg-blue-50 border-blue-200 text-blue-700',
+    iconClass: 'text-blue-500',
+  },
 };
 
 interface AlertPanelProps {
@@ -34,11 +49,16 @@ export default function AlertPanel({ alerts, onResolve, compact = false }: Alert
       {activeAlerts.map((alert) => {
         const { icon: Icon, classes, iconClass } = severityConfig[alert.severity];
         return (
-          <div key={alert.id} className={['flex items-start gap-3 p-3 rounded-xl border', classes].join(' ')}>
+          <div
+            key={alert.id}
+            className={['flex items-start gap-3 p-3 rounded-xl border', classes].join(' ')}
+          >
             <Icon size={15} className={['flex-shrink-0 mt-0.5', iconClass].join(' ')} />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold leading-snug">{alert.title}</p>
-              {!compact && <p className="text-xs mt-0.5 opacity-80 leading-relaxed">{alert.description}</p>}
+              {!compact && (
+                <p className="text-xs mt-0.5 opacity-80 leading-relaxed">{alert.description}</p>
+              )}
             </div>
             {onResolve && (
               <button

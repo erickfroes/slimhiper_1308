@@ -6,7 +6,19 @@ import { supabaseAnonKey, supabaseUrl, type SupabaseSession } from '@/lib/supaba
 
 function getRouteForRole(role: string | null) {
   if (role === 'platform_admin' || role === 'platform_support') return '/admin';
-  if (role && ['tenant_owner', 'clinic_admin', 'receptionist', 'physician', 'nutritionist', 'fitness_professional', 'financial_user'].includes(role)) return '/clinic/dashboard';
+  if (
+    role &&
+    [
+      'tenant_owner',
+      'clinic_admin',
+      'receptionist',
+      'physician',
+      'nutritionist',
+      'fitness_professional',
+      'financial_user',
+    ].includes(role)
+  )
+    return '/clinic/dashboard';
   if (role === 'patient' || role === 'guardian') return '/patient';
   return '/clinic/dashboard';
 }
@@ -44,5 +56,35 @@ export default function AuthForm() {
     router.refresh();
   }
 
-  return <form onSubmit={onSubmit} className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 space-y-4"><h1 className="text-xl font-semibold text-foreground">Entrar</h1><input type="email" required value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="E-mail" className="w-full rounded-xl border border-border bg-background p-3 outline-none"/><input type="password" required value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Senha" className="w-full rounded-xl border border-border bg-background p-3 outline-none"/>{error ? <p className="text-sm text-red-500">{error}</p> : null}<button type="submit" className="w-full rounded-xl bg-primary text-primary-foreground py-3 font-medium">Entrar</button></form>;
+  return (
+    <form
+      onSubmit={onSubmit}
+      className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 space-y-4"
+    >
+      <h1 className="text-xl font-semibold text-foreground">Entrar</h1>
+      <input
+        type="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="E-mail"
+        className="w-full rounded-xl border border-border bg-background p-3 outline-none"
+      />
+      <input
+        type="password"
+        required
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Senha"
+        className="w-full rounded-xl border border-border bg-background p-3 outline-none"
+      />
+      {error ? <p className="text-sm text-red-500">{error}</p> : null}
+      <button
+        type="submit"
+        className="w-full rounded-xl bg-primary text-primary-foreground py-3 font-medium"
+      >
+        Entrar
+      </button>
+    </form>
+  );
 }

@@ -4,7 +4,15 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 const ADMIN_ROLES = new Set(['platform_admin', 'platform_support']);
-const CLINIC_ROLES = new Set(['tenant_owner', 'clinic_admin', 'receptionist', 'physician', 'nutritionist', 'fitness_professional', 'financial_user']);
+const CLINIC_ROLES = new Set([
+  'tenant_owner',
+  'clinic_admin',
+  'receptionist',
+  'physician',
+  'nutritionist',
+  'fitness_professional',
+  'financial_user',
+]);
 const PATIENT_ROLES = new Set(['patient', 'guardian']);
 
 function getTargetRoute(role: string | null) {
@@ -34,7 +42,12 @@ export async function middleware(request: NextRequest) {
   const user = await getUser(token);
   const role = (user?.app_metadata?.role as string | undefined) ?? null;
 
-  if (!user && (pathname.startsWith('/admin') || pathname.startsWith('/clinic') || pathname.startsWith('/patient'))) {
+  if (
+    !user &&
+    (pathname.startsWith('/admin') ||
+      pathname.startsWith('/clinic') ||
+      pathname.startsWith('/patient'))
+  ) {
     return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 

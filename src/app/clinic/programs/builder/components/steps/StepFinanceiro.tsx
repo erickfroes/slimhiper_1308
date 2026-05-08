@@ -10,10 +10,10 @@ interface Props {
 }
 
 const paymentModels: { value: ProgramPaymentModel; label: string; description: string }[] = [
-  { value: 'avista',     label: 'À Vista',     description: 'Pagamento único no início do programa.' },
-  { value: 'parcelado',  label: 'Parcelado',   description: 'Dividido em parcelas mensais fixas.' },
-  { value: 'assinatura', label: 'Assinatura',  description: 'Cobrança recorrente mensal ou anual.' },
-  { value: 'hibrido',    label: 'Híbrido',     description: 'Entrada + parcelamento ou combinações.' },
+  { value: 'avista', label: 'À Vista', description: 'Pagamento único no início do programa.' },
+  { value: 'parcelado', label: 'Parcelado', description: 'Dividido em parcelas mensais fixas.' },
+  { value: 'assinatura', label: 'Assinatura', description: 'Cobrança recorrente mensal ou anual.' },
+  { value: 'hibrido', label: 'Híbrido', description: 'Entrada + parcelamento ou combinações.' },
 ];
 
 export default function StepFinanceiro({ draft, onChange }: Props) {
@@ -41,10 +41,16 @@ export default function StepFinanceiro({ draft, onChange }: Props) {
               className={[
                 'p-3 rounded-xl border text-left transition-all',
                 financial.paymentModel === m.value
-                  ? 'border-primary bg-primary/5' :'border-border hover:border-border/80 hover:bg-muted/40',
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-border/80 hover:bg-muted/40',
               ].join(' ')}
             >
-              <p className={['text-sm font-semibold', financial.paymentModel === m.value ? 'text-primary' : 'text-foreground'].join(' ')}>
+              <p
+                className={[
+                  'text-sm font-semibold',
+                  financial.paymentModel === m.value ? 'text-primary' : 'text-foreground',
+                ].join(' ')}
+              >
                 {m.label}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">{m.description}</p>
@@ -60,7 +66,10 @@ export default function StepFinanceiro({ draft, onChange }: Props) {
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Valor base (R$)</label>
             <div className="relative">
-              <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <DollarSign
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
               <input
                 type="number"
                 min={0}
@@ -86,7 +95,9 @@ export default function StepFinanceiro({ draft, onChange }: Props) {
           ) : null}
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Desconto à vista (%)</label>
+            <label className="text-xs font-medium text-muted-foreground">
+              Desconto à vista (%)
+            </label>
             <input
               type="number"
               min={0}
@@ -116,14 +127,18 @@ export default function StepFinanceiro({ draft, onChange }: Props) {
                 </span>
               </div>
             )}
-            {(financial.paymentModel === 'parcelado' || financial.paymentModel === 'hibrido') && financial.installments && (
-              <div>
-                <span className="text-muted-foreground">Parcela: </span>
-                <span className="font-semibold text-foreground">
-                  R$ {(financial.basePrice / financial.installments).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            )}
+            {(financial.paymentModel === 'parcelado' || financial.paymentModel === 'hibrido') &&
+              financial.installments && (
+                <div>
+                  <span className="text-muted-foreground">Parcela: </span>
+                  <span className="font-semibold text-foreground">
+                    R${' '}
+                    {(financial.basePrice / financial.installments).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+              )}
           </div>
         </div>
       </div>

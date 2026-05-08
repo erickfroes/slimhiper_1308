@@ -2,14 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  Save,
-  Send,
-  ChevronRight,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Save, Send, ChevronRight } from 'lucide-react';
 import { BUILDER_STEPS, initialBuilderDraft } from '@/data/mockBuilderData';
 import type { ProgramBuilderDraft, BuilderStepKey } from '@/domain/types';
 import StepDadosGerais from './steps/StepDadosGerais';
@@ -30,16 +23,26 @@ function renderStep(
   onChange: (patch: Partial<ProgramBuilderDraft>) => void
 ) {
   switch (stepKey) {
-    case 'dados_gerais':  return <StepDadosGerais draft={draft} onChange={onChange} />;
-    case 'fases':         return <StepFases draft={draft} onChange={onChange} />;
-    case 'servicos':      return <StepServicos draft={draft} onChange={onChange} />;
-    case 'entitlements':  return <StepEntitlements draft={draft} onChange={onChange} />;
-    case 'checkins':      return <StepCheckins draft={draft} onChange={onChange} />;
-    case 'documentos':    return <StepDocumentos draft={draft} onChange={onChange} />;
-    case 'financeiro':    return <StepFinanceiro draft={draft} onChange={onChange} />;
-    case 'equipe':        return <StepEquipe draft={draft} onChange={onChange} />;
-    case 'revisao':       return <StepRevisao draft={draft} />;
-    default:              return null;
+    case 'dados_gerais':
+      return <StepDadosGerais draft={draft} onChange={onChange} />;
+    case 'fases':
+      return <StepFases draft={draft} onChange={onChange} />;
+    case 'servicos':
+      return <StepServicos draft={draft} onChange={onChange} />;
+    case 'entitlements':
+      return <StepEntitlements draft={draft} onChange={onChange} />;
+    case 'checkins':
+      return <StepCheckins draft={draft} onChange={onChange} />;
+    case 'documentos':
+      return <StepDocumentos draft={draft} onChange={onChange} />;
+    case 'financeiro':
+      return <StepFinanceiro draft={draft} onChange={onChange} />;
+    case 'equipe':
+      return <StepEquipe draft={draft} onChange={onChange} />;
+    case 'revisao':
+      return <StepRevisao draft={draft} />;
+    default:
+      return null;
   }
 }
 
@@ -116,8 +119,8 @@ export default function ProgramBuilderContent() {
                       isActive
                         ? 'bg-primary/10 text-primary'
                         : isCompleted
-                        ? 'text-foreground hover:bg-muted'
-                        : 'text-muted-foreground hover:bg-muted/60',
+                          ? 'text-foreground hover:bg-muted'
+                          : 'text-muted-foreground hover:bg-muted/60',
                     ].join(' ')}
                   >
                     {/* Step indicator */}
@@ -127,13 +130,19 @@ export default function ProgramBuilderContent() {
                         isActive
                           ? 'bg-primary text-primary-foreground'
                           : isCompleted
-                          ? 'bg-emerald-500 text-white' :'bg-muted text-muted-foreground',
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-muted text-muted-foreground',
                       ].join(' ')}
                     >
                       {isCompleted ? <Check size={12} strokeWidth={3} /> : idx + 1}
                     </span>
                     <span className="flex flex-col min-w-0">
-                      <span className={['text-sm leading-tight', isActive ? 'font-semibold' : 'font-medium'].join(' ')}>
+                      <span
+                        className={[
+                          'text-sm leading-tight',
+                          isActive ? 'font-semibold' : 'font-medium',
+                        ].join(' ')}
+                      >
                         {s.label}
                       </span>
                       <span className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">
@@ -178,9 +187,7 @@ export default function ProgramBuilderContent() {
             </div>
 
             {/* Step body */}
-            <div className="space-y-6">
-              {renderStep(step.key, draft, handleChange)}
-            </div>
+            <div className="space-y-6">{renderStep(step.key, draft, handleChange)}</div>
 
             {/* Navigation */}
             <div className="flex items-center justify-between mt-10 pt-6 border-t border-border">

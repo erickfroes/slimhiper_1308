@@ -1,7 +1,16 @@
 'use client';
 
 import React from 'react';
-import { Smartphone, MessageSquare, BarChart2, BookOpen, Users, Bell, Video, Utensils } from 'lucide-react';
+import {
+  Smartphone,
+  MessageSquare,
+  BarChart2,
+  BookOpen,
+  Users,
+  Bell,
+  Video,
+  Utensils,
+} from 'lucide-react';
 import type { ProgramBuilderDraft } from '@/domain/types';
 
 interface Props {
@@ -10,14 +19,14 @@ interface Props {
 }
 
 const entitlementIcons: Record<string, React.ElementType> = {
-  chat:            MessageSquare,
+  chat: MessageSquare,
   plano_alimentar: Utensils,
-  checkin:         BarChart2,
-  comunidade:      Users,
-  receitas:        BookOpen,
-  progresso:       BarChart2,
-  notificacoes:    Bell,
-  telemedicina:    Video,
+  checkin: BarChart2,
+  comunidade: Users,
+  receitas: BookOpen,
+  progresso: BarChart2,
+  notificacoes: Bell,
+  telemedicina: Video,
 };
 
 export default function StepEntitlements({ draft, onChange }: Props) {
@@ -25,9 +34,7 @@ export default function StepEntitlements({ draft, onChange }: Props) {
 
   const toggle = (key: string) => {
     onChange({
-      appEntitlements: entitlements.map((e) =>
-        e.key === key ? { ...e, enabled: !e.enabled } : e
-      ),
+      appEntitlements: entitlements.map((e) => (e.key === key ? { ...e, enabled: !e.enabled } : e)),
     });
   };
 
@@ -54,13 +61,23 @@ export default function StepEntitlements({ draft, onChange }: Props) {
           const IconComp = entitlementIcons[ent.key] ?? Smartphone;
           return (
             <div key={ent.key} className="flex items-center gap-4 px-5 py-3.5">
-              <div className={[
-                'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
-                ent.enabled ? 'bg-primary/10' : 'bg-muted',
-              ].join(' ')}>
-                <IconComp size={16} className={ent.enabled ? 'text-primary' : 'text-muted-foreground'} />
+              <div
+                className={[
+                  'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                  ent.enabled ? 'bg-primary/10' : 'bg-muted',
+                ].join(' ')}
+              >
+                <IconComp
+                  size={16}
+                  className={ent.enabled ? 'text-primary' : 'text-muted-foreground'}
+                />
               </div>
-              <span className={['text-sm font-medium flex-1', ent.enabled ? 'text-foreground' : 'text-muted-foreground'].join(' ')}>
+              <span
+                className={[
+                  'text-sm font-medium flex-1',
+                  ent.enabled ? 'text-foreground' : 'text-muted-foreground',
+                ].join(' ')}
+              >
                 {ent.label}
               </span>
               {/* Toggle */}

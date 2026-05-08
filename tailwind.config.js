@@ -1,8 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: [
-    './src/**/*.{js,ts,jsx,tsx,mdx}',
-  ],
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   darkMode: 'class',
   theme: {
     container: {
@@ -53,8 +51,8 @@ module.exports = {
         mono: ['var(--font-jetbrains-mono)', 'monospace'],
       },
       spacing: {
-        '18': '4.5rem',
-        '22': '5.5rem',
+        18: '4.5rem',
+        22: '5.5rem',
       },
     },
   },
