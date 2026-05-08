@@ -15,13 +15,26 @@ import {
   AlertCircle,
   Zap,
 } from 'lucide-react';
+import EmptyState from '@/components/EmptyState';
 
 interface TabChatProps {
-  chat: PatientChatSummary;
+  chat?: PatientChatSummary | null;
   patientName: string;
 }
 
 export default function TabChat({ chat, patientName }: TabChatProps) {
+  if (!chat) {
+    return (
+      <div className="card-base p-5">
+        <EmptyState
+          icon={MessageCircle}
+          title="Chat indisponível"
+          description="Nenhuma conversa iniciada"
+        />
+      </div>
+    );
+  }
+
   const [quickMessage, setQuickMessage] = useState('');
   const [sent, setSent] = useState(false);
   const [markedAnswered, setMarkedAnswered] = useState(false);

@@ -158,15 +158,21 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
     { label: 'Relatório', icon: <BarChart2 size={14} /> },
   ];
 
-  const initials = profile.name
+  const patientName = profile.name?.trim() || 'Paciente sem nome';
+
+  const initials = patientName
     .split(' ')
     .slice(0, 2)
     .map((n) => n[0])
     .join('')
     .toUpperCase();
 
-  const pkgStatus = packageStatusConfig[activePackage.status] ?? packageStatusConfig.ativo;
-  const finStatus = financialStatusConfig[financial.status] ?? financialStatusConfig.em_dia;
+  const pkgStatus = activePackage
+    ? packageStatusConfig[activePackage.status] ?? packageStatusConfig.ativo
+    : null;
+  const finStatus = financial
+    ? financialStatusConfig[financial.status] ?? financialStatusConfig.em_dia
+    : null;
   const riskConfig = clinicalRisk ? clinicalRiskConfig[clinicalRisk] : null;
 
   return (
@@ -182,7 +188,7 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
             {profile.avatarUrl ? (
               <img
                 src={profile.avatarUrl}
-                alt={`Foto de ${profile.name}`}
+                alt={`Foto de ${patientName}`}
                 className="w-16 h-16 rounded-2xl object-cover ring-2 ring-primary/20"
               />
             ) : (
@@ -195,7 +201,7 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
           {/* Identity block */}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1">
-              <h2 className="text-xl font-bold text-foreground leading-tight">{profile.name}</h2>
+              <h2 className="text-xl font-bold text-foreground leading-tight">{patientName}</h2>
               {profile.preferredName && (
                 <span className="text-sm text-muted-foreground font-normal">
                   ({profile.preferredName})
@@ -297,8 +303,16 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
 
         {/* Row 3: Status badges */}
         <div className="flex flex-wrap items-center gap-2 mt-4">
-          <BadgePill label={pkgStatus.label} className={pkgStatus.className} />
-          <BadgePill label={finStatus.label} className={finStatus.className} />
+          {pkgStatus ? (
+                  <BadgePill label={pkgStatus.label} className={pkgStatus.className} />
+                ) : (
+                  <span className="text-sm text-muted-foreground">Sem pacote ativo</span>
+                )}
+          {finStatus ? (
+                  <BadgePill label={finStatus.label} className={finStatus.className} />
+                ) : (
+                  <span className="text-sm text-muted-foreground">Financeiro não disponível</span>
+                )}
           {riskConfig && <BadgePill label={riskConfig.label} className={riskConfig.className} />}
         </div>
       </div>

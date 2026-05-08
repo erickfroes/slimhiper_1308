@@ -34,11 +34,13 @@ import {
   Lock,
   History,
   BarChart2,
+  Utensils,
 } from 'lucide-react';
 import Icon from '@/components/ui/AppIcon';
+import EmptyState from '@/components/EmptyState';
 
 interface TabNutricaoProps {
-  plan: PatientNutritionPlanSummary;
+  plan?: PatientNutritionPlanSummary | null;
 }
 
 // ─── Food group icon + color map ─────────────────────────────────────────────
@@ -312,6 +314,18 @@ function TeamNoteCard({ note }: { note: NutritionTeamNote }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function TabNutricao({ plan }: TabNutricaoProps) {
+  if (!plan) {
+    return (
+      <div className="card-base p-5">
+        <EmptyState
+          icon={Utensils}
+          title="Nutrição indisponível"
+          description="Nenhum plano alimentar publicado"
+        />
+      </div>
+    );
+  }
+
   const [showAllPhotos, setShowAllPhotos] = useState(false);
   const visiblePhotos = showAllPhotos
     ? (plan.mealPhotos ?? [])

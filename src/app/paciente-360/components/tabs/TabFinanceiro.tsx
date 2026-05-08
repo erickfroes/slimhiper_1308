@@ -20,6 +20,7 @@ import {
   Eye,
   Download,
 } from 'lucide-react';
+import EmptyState from '@/components/EmptyState';
 
 function formatBRL(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -47,7 +48,7 @@ const CHARGE_TYPE_LABELS: Record<string, string> = {
 };
 
 interface TabFinanceiroProps {
-  financial: PatientFinancialSummary;
+  financial?: PatientFinancialSummary | null;
   canViewFinancial: boolean;
   currentRole: string | null;
 }
@@ -180,6 +181,18 @@ export default function TabFinanceiro({ financial, canViewFinancial }: TabFinanc
   // Permission gate
   if (!canViewFinancial) {
     return <SemPermissaoFinanceira />;
+  }
+
+  if (!financial) {
+    return (
+      <div className="card-base p-5">
+        <EmptyState
+          icon={CreditCard}
+          title="Financeiro indisponível"
+          description="Financeiro não disponível"
+        />
+      </div>
+    );
   }
 
   const paymentHistory = financial.paymentHistory ?? [];

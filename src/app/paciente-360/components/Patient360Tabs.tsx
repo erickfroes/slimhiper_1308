@@ -83,7 +83,7 @@ export default function Patient360Tabs({ data, documents360, userContext }: Pati
           />
         )}
         {activeTab === 'pacotes' && <TabPacotes pkg={data.activePackage} />}
-        {activeTab === 'chat' && <TabChat chat={data.chat} patientName={data.profile.name} />}
+        {activeTab === 'chat' && <TabChat chat={data.chat} patientName={data.profile.name?.trim() || 'Paciente sem nome'} />}
         {activeTab === 'relatorios' && <TabRelatorios patientName={data.profile.name} />}
       </div>
     </div>
