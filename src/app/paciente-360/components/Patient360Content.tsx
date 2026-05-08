@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { getPatientDocuments360 } from '@/services/mockApi';
 import { getPatient360Summary } from '@/services/patient360Api';
-import type { Patient360Summary, PatientDocument360Item } from '@/domain/types';
+import type { Patient360Summary } from '@/domain/types';
 import type { UserContext } from '@/lib/auth/getCurrentUserContext';
 import PatientHeaderCard from '@/components/PatientHeaderCard';
 import Patient360Tabs from './Patient360Tabs';
@@ -18,7 +17,6 @@ interface Patient360ContentProps {
 
 export default function Patient360Content({ patientId, userContext }: Patient360ContentProps) {
   const [data, setData] = useState<Patient360Summary | null>(null);
-  const [documents360, setDocuments360] = useState<PatientDocument360Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,17 +25,13 @@ export default function Patient360Content({ patientId, userContext }: Patient360
     setError(null);
 
     try {
-      const [{ data: summary, error: summaryError }, docs] = await Promise.all([
-        getPatient360Summary(patientId),
-        getPatientDocuments360(patientId),
-      ]);
+      const { data: summary, error: summaryError } = await getPatient360Summary(patientId);
 
       if (summaryError) {
         throw new Error(summaryError.message);
       }
 
       setData(summary);
-      setDocuments360(docs);
     } catch (loadError) {
       const message = 'Falha ao carregar dados do paciente. Tente novamente.';
       setError(message);
@@ -116,7 +110,7 @@ export default function Patient360Content({ patientId, userContext }: Patient360
         ]}
       />
       <PatientHeaderCard data={data} patientId={patientId} />
-      <Patient360Tabs data={data} documents360={documents360} userContext={userContext} />
+      <Patient360Tabs data={data} patientId={patientId} userContext={userContext} />
     </div>
   );
 }

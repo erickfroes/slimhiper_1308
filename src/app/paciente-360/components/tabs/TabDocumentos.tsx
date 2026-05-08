@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { PatientDocument360Item, PatientDocumentCategory } from '@/domain/types';
 import EmptyState from '@/components/EmptyState';
+import { getPatientDocuments } from '@/services/documentsApi';
 import {
   FileText,
   Download,
@@ -170,12 +171,32 @@ function RowActions({ doc }: RowActionsProps) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface TabDocumentosProps {
-  documents360: PatientDocument360Item[];
+  patientId: string;
 }
 
-export default function TabDocumentos({ documents360 }: TabDocumentosProps) {
+export default function TabDocumentos({ patientId }: TabDocumentosProps) {
+  const [documents360, setDocuments360] = useState<PatientDocument360Item[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<DocFilterKey>('todos');
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    const loadDocuments = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      const { data, error } = await getPatientDocuments(patientId);
+      if (error) {
+        setLoadError(error.message);
+        setDocuments360([]);
+      } else {
+        setDocuments360(data);
+      }
+      setIsLoading(false);
+    };
+
+    void loadDocuments();
+  }, [patientId]);
 
   const filtered = documents360.filter((doc) => {
     const matchesCategory =
@@ -267,7 +288,14 @@ export default function TabDocumentos({ documents360 }: TabDocumentosProps) {
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="card-base p-8 text-sm text-muted-foreground">Carregando documentos...</div>
+      ) : loadError ? (
+        <div className="card-base p-8 text-center">
+          <p className="text-sm font-semibold text-foreground mb-2">Falha ao carregar documentos</p>
+          <p className="text-xs text-muted-foreground">{loadError}</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={FileText}
           title="Nenhum documento encontrado"
