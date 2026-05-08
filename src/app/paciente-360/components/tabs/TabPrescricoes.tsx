@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { PatientPrescriptionSummary } from '@/domain/types';
+import type { PatientPrescriptionSummary, UserRole } from '@/domain/types';
 import {
   Plus,
   FileText,
@@ -21,10 +21,11 @@ import {
   FileSignature,
 } from 'lucide-react';
 import Icon from '@/components/ui/AppIcon';
+import { canViewMedicalPrescriptions, mockSession } from '@/services/mockSession';
 
 interface TabPrescricoesProps {
   prescriptions: PatientPrescriptionSummary[];
-  currentRole?: string;
+  currentRole?: UserRole;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -305,9 +306,10 @@ function CategorySection({
 
 export default function TabPrescricoes({
   prescriptions,
-  currentRole = 'physician',
+  currentRole = mockSession.currentRole,
 }: TabPrescricoesProps) {
   const isNutritionist = currentRole === 'nutritionist';
+  const canViewMedical = canViewMedicalPrescriptions(currentRole);
 
   const byCategory = (cat: PrescCategory) =>
     prescriptions.filter((p) => (p.category ?? 'prescricao_medica') === cat);
@@ -341,8 +343,12 @@ export default function TabPrescricoes({
         <CategorySection
           key={cat.key}
           config={cat}
-          items={cat.key === 'prescricao_medica' && isNutritionist ? [] : byCategory(cat.key)}
-          isRestricted={cat.key === 'prescricao_medica' && isNutritionist}
+          items={
+            cat.key === 'prescricao_medica' && (!canViewMedical || isNutritionist)
+              ? []
+              : byCategory(cat.key)
+          }
+          isRestricted={cat.key === 'prescricao_medica' && (!canViewMedical || isNutritionist)}
         />
       ))}
     </div>
