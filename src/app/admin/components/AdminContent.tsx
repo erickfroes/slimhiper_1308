@@ -227,7 +227,7 @@ export default function AdminContent() {
     { key: 'usage', label: 'Uso & Métricas', icon: Activity },
     { key: 'storage', label: 'Armazenamento', icon: HardDrive },
     { key: 'integrations', label: 'Integrações', icon: Link2 },
-    { key: 'webhooks', label: 'Webhooks', icon: Webhook },
+    { key: 'webhooks', label: 'Webhooks', icon: Webhook, href: '/admin/webhooks' },
     { key: 'security', label: 'Segurança', icon: Shield },
     { key: 'support', label: 'Suporte', icon: Headphones },
     { key: 'audit', label: 'Auditoria', icon: ClipboardList },
