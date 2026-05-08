@@ -13,6 +13,43 @@ function jsonResponse(status: number, payload: Json) {
   return new Response(JSON.stringify(payload), { status, headers: corsHeaders });
 }
 
+function calculateAge(birthDate: string | null | undefined): number | null {
+  if (!birthDate) return null;
+  const birth = new Date(birthDate);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getUTCFullYear() - birth.getUTCFullYear();
+  const monthDiff = today.getUTCMonth() - birth.getUTCMonth();
+  const dayDiff = today.getUTCDate() - birth.getUTCDate();
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) age -= 1;
+  return age >= 0 ? age : null;
+}
+
+function safeTimelinePayload(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const source = payload as Record<string, unknown>;
+  const allowedKeys = [
+    'title',
+    'description',
+    'summary',
+    'status',
+    'type',
+    'category',
+    'scheduledAt',
+    'location',
+    'channel',
+    'professionalName',
+    'referenceId',
+  ];
+
+  const sanitized: Record<string, unknown> = {};
+  for (const key of allowedKeys) {
+    if (source[key] !== undefined) sanitized[key] = source[key];
+  }
+  return Object.keys(sanitized).length ? sanitized : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -236,29 +273,81 @@ async function buildAndReturnSummary({
       id: patient.id,
       tenantId: patient.tenant_id,
       status: patient.status,
+      name: piiRes.data?.full_name ?? patient.preferred_name ?? null,
       preferredName: patient.preferred_name,
-      fullName: piiRes.data?.full_name ?? null,
+      age: calculateAge(piiRes.data?.birth_date),
       birthDate: piiRes.data?.birth_date ?? null,
       sexGender: piiRes.data?.sex_gender ?? null,
-      contact: {
-        email: piiRes.data?.email ?? null,
-        phone: piiRes.data?.phone ?? null,
-      },
+      phone: piiRes.data?.phone ?? null,
+      email: piiRes.data?.email ?? null,
       cpfMasked: piiRes.data?.cpf_masked ?? null,
     },
-    activePackage: { status: 'placeholder', meta: 'Not implemented yet' },
+    activePackage: {
+      id: null,
+      name: null,
+      status: 'inactive',
+      startedAt: null,
+      endsAt: null,
+      sessionsCompleted: 0,
+      sessionsTotal: 0,
+    },
     clinicalStatus: {
+      status: 'stable',
+      lastUpdatedAt: lastUpdate,
       latestSoap: tenantPermissions.has('soap.read') ? latestSoapRes.data : null,
     },
-    financial: null,
+    financial: {
+      status: 'em_dia',
+      outstandingAmount: 0,
+      overdueAmount: 0,
+      paidAmount: 0,
+      currency: 'BRL',
+      lastPaymentAt: null,
+      nextDueAt: null,
+    },
     alerts: alertsRes.data ?? [],
     tasks: tasksRes.data ?? [],
-    upcomingAppointments: appointmentsRes.data ?? [],
-    recentTimeline: timelineRes.data ?? [],
+    upcomingAppointments: (appointmentsRes.data ?? []).map((appointment) => ({
+      id: appointment.id,
+      scheduledAt: appointment.scheduled_at,
+      durationMinutes: appointment.duration_minutes,
+      status: appointment.status,
+      location: appointment.location,
+      practitionerId: appointment.practitioner_id,
+      notes: appointment.notes,
+    })),
+    recentTimeline: (timelineRes.data ?? []).map((event) => ({
+      id: event.id,
+      type: event.event_type,
+      status: event.status,
+      eventAt: event.event_at,
+      payload: safeTimelinePayload(event.payload),
+      updatedAt: event.updated_at,
+    })),
     documents: [],
-    prescriptions: tenantPermissions.has('prescriptions.read') ? prescriptionsRes.data ?? [] : null,
-    nutritionPlan: null,
-    chat: null,
+    prescriptions: tenantPermissions.has('prescriptions.read')
+      ? (prescriptionsRes.data ?? []).map((prescription) => ({
+          id: prescription.id,
+          status: prescription.status,
+          text: prescription.prescription_text,
+          createdBy: prescription.created_by,
+          createdAt: prescription.created_at,
+          updatedAt: prescription.updated_at,
+        }))
+      : null,
+    nutritionPlan: {
+      status: 'not_started',
+      goal: null,
+      kcalTarget: null,
+      meals: [],
+      updatedAt: null,
+    },
+    chat: {
+      status: 'unavailable',
+      unreadCount: 0,
+      lastMessageAt: null,
+      lastMessagePreview: null,
+    },
     mainUnit: null,
     responsibleProfessional: null,
     clinicalRisk: null,
