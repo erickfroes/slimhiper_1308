@@ -1,7 +1,6 @@
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import AuthForm from '@/components/auth/AuthForm';
-import { getSupabaseUser } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/server';
 
 function getRouteForRole(role: string | null) {
   if (role === 'platform_admin' || role === 'platform_support') return '/admin';
@@ -23,13 +22,13 @@ function getRouteForRole(role: string | null) {
 }
 
 export default async function LoginPage() {
-  const token = (await cookies()).get('sb-access-token')?.value;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (token) {
-    const user = await getSupabaseUser(token);
-    if (user) {
-      redirect(getRouteForRole((user.app_metadata?.role as string | undefined) ?? null));
-    }
+  if (user) {
+    redirect(getRouteForRole((user.app_metadata?.role as string | undefined) ?? null));
   }
 
   return (

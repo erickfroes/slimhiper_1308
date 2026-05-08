@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabaseAnonKey, supabaseUrl, type SupabaseSession } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 
 function getRouteForRole(role: string | null) {
   if (role === 'platform_admin' || role === 'platform_support') return '/admin';
@@ -33,26 +33,18 @@ export default function AuthForm() {
     event.preventDefault();
     setError(null);
 
-    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: {
-        apikey: supabaseAnonKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
+    const supabase = createClient();
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
 
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      setError(payload?.msg ?? 'Falha no login.');
+    if (signInError) {
+      setError(signInError.message ?? 'Falha no login.');
       return;
     }
 
-    const session = (await response.json()) as SupabaseSession;
-    document.cookie = `sb-access-token=${session.access_token}; Path=/; Max-Age=${session.expires_in}; SameSite=Lax`;
-    document.cookie = `sb-refresh-token=${session.refresh_token}; Path=/; Max-Age=${session.expires_in}; SameSite=Lax`;
-
-    router.push(getRouteForRole(session.user?.app_metadata?.role ?? null));
+    router.push(getRouteForRole((data.user?.app_metadata?.role as string | undefined) ?? null));
     router.refresh();
   }
 
