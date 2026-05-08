@@ -71,7 +71,7 @@ export default function Patient360Tabs({ data, documents360, userContext }: Pati
           <TabPrescricoes
             prescriptions={data.prescriptions}
             canViewMedicalPrescriptions={userContext?.canViewMedicalPrescriptions ?? false}
-            activeTenantRole={userContext?.activeTenantRole ?? null}
+            currentRole={userContext?.activeTenantRole ?? null}
           />
         )}
         {activeTab === 'documentos' && <TabDocumentos documents360={documents360} />}
@@ -79,6 +79,7 @@ export default function Patient360Tabs({ data, documents360, userContext }: Pati
           <TabFinanceiro
             financial={data.financial}
             canViewFinancial={userContext?.canViewFinancial ?? false}
+            currentRole={userContext?.activeTenantRole ?? null}
           />
         )}
         {activeTab === 'pacotes' && <TabPacotes pkg={data.activePackage} />}
