@@ -25,7 +25,7 @@ import Icon from '@/components/ui/AppIcon';
 interface TabPrescricoesProps {
   prescriptions: PatientPrescriptionSummary[];
   canViewMedicalPrescriptions: boolean;
-  activeTenantRole: string | null;
+  currentRole: string | null;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -307,9 +307,9 @@ function CategorySection({
 export default function TabPrescricoes({
   prescriptions,
   canViewMedicalPrescriptions,
-  activeTenantRole,
+  currentRole,
 }: TabPrescricoesProps) {
-  const normalizedRole = activeTenantRole?.trim().toLowerCase() ?? null;
+  const normalizedRole = currentRole?.trim().toLowerCase() ?? null;
   const isNutritionist = normalizedRole === 'nutritionist';
   const canViewMedical = canViewMedicalPrescriptions;
 

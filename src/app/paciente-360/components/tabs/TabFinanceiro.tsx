@@ -49,6 +49,7 @@ const CHARGE_TYPE_LABELS: Record<string, string> = {
 interface TabFinanceiroProps {
   financial: PatientFinancialSummary;
   canViewFinancial: boolean;
+  currentRole: string | null;
 }
 
 // ── No-permission state ───────────────────────────────────────────────────────

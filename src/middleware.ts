@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
+import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 
 type MiddlewareUserContext = {
   canAccessPlatformAdmin: boolean;
@@ -10,31 +11,10 @@ type MiddlewareUserContext = {
 
 function getTargetRoute(context: MiddlewareUserContext) {
   if (context.canAccessPlatformAdmin) return '/admin';
-  if (context.canAccessClinicWorkspace && context.hasActiveTenantMembership) return '/clinic/dashboard';
+  if (context.canAccessClinicWorkspace && context.hasActiveTenantMembership)
+    return '/clinic/dashboard';
   if (context.canAccessPatientPortal) return '/patient';
   return '/clinic/dashboard';
-}
-
-async function getMiddlewareUserContext(
-  supabase: ReturnType<typeof updateSession>['supabase'],
-  userId: string,
-): Promise<MiddlewareUserContext> {
-  const [{ data: profileRow }, { data: membershipRows }] = await Promise.all([
-    supabase.from('profiles').select('platform_role').eq('id', userId).maybeSingle(),
-    supabase.from('tenant_memberships').select('status').eq('user_id', userId),
-  ]);
-
-  const platformRole = profileRow && typeof profileRow.platform_role === 'string' ? profileRow.platform_role : null;
-  const memberships = (membershipRows ?? []) as Array<{ status: string | null }>;
-  const hasAnyMembership = memberships.length > 0;
-  const hasActiveTenantMembership = memberships.some((membership) => membership.status === 'active');
-
-  return {
-    canAccessPlatformAdmin: platformRole === 'platform_admin' || platformRole === 'platform_support',
-    canAccessClinicWorkspace: hasAnyMembership,
-    hasActiveTenantMembership,
-    canAccessPatientPortal: !hasAnyMembership,
-  };
 }
 
 export async function middleware(request: NextRequest) {
@@ -58,10 +38,17 @@ export async function middleware(request: NextRequest) {
 
   let context: MiddlewareUserContext;
   try {
-    context = await getMiddlewareUserContext(supabase, user.id);
+    const appSession = await getCurrentAppSession(supabase);
+    const hasActiveTenantMembership =
+      appSession?.tenantMemberships.some((membership) => membership.status === 'active') ?? false;
+
+    context = {
+      canAccessPlatformAdmin: appSession?.canAccessPlatformAdmin() ?? false,
+      canAccessClinicWorkspace: appSession?.canAccessClinicWorkspace() ?? false,
+      hasActiveTenantMembership,
+      canAccessPatientPortal: appSession?.isPatient() ?? false,
+    };
   } catch {
-    // Fallback for middleware safety: require only authenticated session,
-    // while detailed authorization is enforced in server-side guards.
     context = {
       canAccessPlatformAdmin: false,
       canAccessClinicWorkspace: false,
@@ -70,11 +57,7 @@ export async function middleware(request: NextRequest) {
     };
   }
 
-  if (pathname === '/') {
-    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
-  }
-
-  if (pathname.startsWith('/auth/login')) {
+  if (pathname === '/' || pathname.startsWith('/auth/login')) {
     return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
   }
 
@@ -82,7 +65,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
   }
 
-  if (pathname.startsWith('/clinic') && !(context.canAccessClinicWorkspace && context.hasActiveTenantMembership)) {
+  if (
+    pathname.startsWith('/clinic') &&
+    !(context.canAccessClinicWorkspace && context.hasActiveTenantMembership)
+  ) {
     return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
   }
 
