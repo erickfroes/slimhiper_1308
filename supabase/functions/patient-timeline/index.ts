@@ -22,6 +22,112 @@ const ALLOWED_CATEGORIES: TimelineCategory[] = [
   'commercial',
 ];
 
+type TimelineEventType =
+  | 'consulta'
+  | 'nutricao'
+  | 'medicamento'
+  | 'medida'
+  | 'documento'
+  | 'pagamento'
+  | 'alerta'
+  | 'mensagem'
+  | 'inicio_programa'
+  | 'meta_atingida'
+  | 'lead_criado'
+  | 'lead_convertido'
+  | 'pacote_vendido'
+  | 'contrato_assinado'
+  | 'paciente_cadastrado'
+  | 'consulta_agendada'
+  | 'checkin_realizado'
+  | 'atendimento_iniciado'
+  | 'atendimento_concluido'
+  | 'anamnese_preenchida'
+  | 'soap_atualizado'
+  | 'medida_registrada'
+  | 'plano_alimentar_publicado'
+  | 'prescricao_emitida'
+  | 'documento_gerado'
+  | 'documento_assinado'
+  | 'pagamento_recebido'
+  | 'pagamento_atrasado'
+  | 'mensagem_enviada'
+  | 'checkin_semanal_enviado';
+
+type TimelineEventCategory =
+  | 'clinical'
+  | 'financial'
+  | 'documents'
+  | 'agenda'
+  | 'communication'
+  | 'patient_app'
+  | 'commercial';
+
+const VALID_EVENT_TYPES: Set<TimelineEventType> = new Set([
+  'consulta',
+  'nutricao',
+  'medicamento',
+  'medida',
+  'documento',
+  'pagamento',
+  'alerta',
+  'mensagem',
+  'inicio_programa',
+  'meta_atingida',
+  'lead_criado',
+  'lead_convertido',
+  'pacote_vendido',
+  'contrato_assinado',
+  'paciente_cadastrado',
+  'consulta_agendada',
+  'checkin_realizado',
+  'atendimento_iniciado',
+  'atendimento_concluido',
+  'anamnese_preenchida',
+  'soap_atualizado',
+  'medida_registrada',
+  'plano_alimentar_publicado',
+  'prescricao_emitida',
+  'documento_gerado',
+  'documento_assinado',
+  'pagamento_recebido',
+  'pagamento_atrasado',
+  'mensagem_enviada',
+  'checkin_semanal_enviado',
+]);
+
+const VALID_EVENT_CATEGORIES: Set<TimelineEventCategory> = new Set([
+  'clinical',
+  'financial',
+  'documents',
+  'agenda',
+  'communication',
+  'patient_app',
+  'commercial',
+]);
+
+function mapEventType(value: unknown): TimelineEventType {
+  if (typeof value === 'string' && VALID_EVENT_TYPES.has(value as TimelineEventType)) {
+    return value as TimelineEventType;
+  }
+  return 'mensagem';
+}
+
+function mapEventCategory(value: unknown): TimelineEventCategory {
+  if (typeof value === 'string' && VALID_EVENT_CATEGORIES.has(value as TimelineEventCategory)) {
+    return value as TimelineEventCategory;
+  }
+  return 'clinical';
+}
+
+function mapEventDate(eventAt: unknown, createdAt: unknown): string {
+  const eventDate = safeDate(eventAt);
+  if (eventDate) return eventDate;
+  const createdDate = safeDate(createdAt);
+  if (createdDate) return createdDate;
+  return new Date(0).toISOString();
+}
+
 
 const corsHeaders = {
   'Content-Type': 'application/json',
@@ -225,11 +331,11 @@ Deno.serve(async (req) => {
       return {
         id: row.id,
         patientId: row.patient_id,
-        type: row.event_type,
+        type: mapEventType(row.event_type),
         title: row.title,
         description: row.description,
-        date: row.event_at,
-        category: row.category,
+        date: mapEventDate(row.event_at, row.created_at),
+        category: mapEventCategory(row.category),
         actorName: row.actor_name,
         statusLabel: row.status_label,
         actionLabel: row.action_label,
