@@ -171,3 +171,24 @@ If you prefer manual setup in Supabase Dashboard:
 6. Insert role/permission rows in `public.roles`, `public.permissions`, then relation rows in `public.role_permissions` for clinic roles.
 
 The bootstrap script automates this exact flow for local development/testing.
+
+### 6) Manual RBAC smoke tests (after bootstrap)
+
+A lightweight manual SQL test checklist is available at:
+
+- `supabase/tests/core_rbac_smoke_tests.sql`
+
+How to run:
+
+1. Run migrations and bootstrap first:
+   - `supabase db push`
+   - `node scripts/supabase/bootstrap-core-auth.mjs`
+2. Open **Supabase Dashboard → SQL Editor**.
+3. Open/copy `supabase/tests/core_rbac_smoke_tests.sql`.
+4. Replace all placeholder IDs (`USER_*_UUID`, `TENANT_*_UUID`) with values from your own seeded environment.
+5. Run each numbered test block and verify the expected result comments.
+
+Notes:
+- This file is intentionally **manual/commented** and does not depend on hard-coded real UUIDs.
+- It focuses only on core RBAC behavior and metadata access checks.
+- It does **not** create UI changes or new clinical tables.
