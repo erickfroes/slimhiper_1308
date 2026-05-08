@@ -4,25 +4,6 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-function getRouteForRole(role: string | null) {
-  if (role === 'platform_admin' || role === 'platform_support') return '/admin';
-  if (
-    role &&
-    [
-      'tenant_owner',
-      'clinic_admin',
-      'receptionist',
-      'physician',
-      'nutritionist',
-      'fitness_professional',
-      'financial_user',
-    ].includes(role)
-  )
-    return '/clinic/dashboard';
-  if (role === 'patient' || role === 'guardian') return '/patient';
-  return '/clinic/dashboard';
-}
-
 export default function AuthForm() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -44,7 +25,7 @@ export default function AuthForm() {
       return;
     }
 
-    router.push(getRouteForRole((data.user?.app_metadata?.role as string | undefined) ?? null));
+    router.push('/');
     router.refresh();
   }
 
