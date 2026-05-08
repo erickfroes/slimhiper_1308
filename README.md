@@ -98,20 +98,29 @@ Built with ❤️ on Rocket.new
 
 This project includes a development bootstrap script for **core auth + multi-tenant role testing** only (no UI changes, no clinical table creation).
 
-### 1) Required environment variables
+### 1) Environment variables
 
 Create a local env file (for example `.env.local`) and set:
 
 ```bash
+# Public web client vars (safe for frontend)
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+# Preferred public key variable
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<your-publishable-key>
+# Backward compatibility fallback
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
+
+# Service-role vars (bootstrap script only; NEVER expose to frontend)
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 SUPABASE_BOOTSTRAP_PASSWORD=<temporary-dev-password>
-# Optional overrides
+
+# Optional bootstrap overrides
 SUPABASE_BOOTSTRAP_TENANT_SLUG=demo-clinic
 SUPABASE_BOOTSTRAP_TENANT_NAME=Demo Clinic
 ```
 
-> Do not commit real secrets. Use throwaway development credentials only.
+> Use service-role credentials only in trusted server-side scripts such as `scripts/supabase/bootstrap-core-auth.mjs`. Never expose service-role keys in browser code or any `NEXT_PUBLIC_*` variable.
 
 ### 2) Run migrations first
 
