@@ -222,7 +222,7 @@ export default function AdminContent() {
 
   const navItems = [
     { key: 'overview', label: 'Visão Geral', icon: LayoutDashboardIcon },
-    { key: 'tenants', label: 'Tenants', icon: Building2 },
+    { key: 'tenants', label: 'Tenants', icon: Building2, href: '/admin/tenants' },
     { key: 'financial', label: 'Financeiro', icon: TrendingUp },
     { key: 'usage', label: 'Uso & Métricas', icon: Activity },
     { key: 'storage', label: 'Armazenamento', icon: HardDrive },
@@ -265,13 +265,10 @@ export default function AdminContent() {
           {navItems.map(item => {
             const ItemIcon = item.icon;
             const active = activeSection === item.key;
-            return (
-              <button
-                key={item.key}
-                onClick={() => setActiveSection(item.key)}
-                title={sidebarCollapsed ? item.label : undefined}
-                className={`relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/8 hover:text-primary'}`}
-              >
+            const itemHref = (item as { href?: string }).href;
+            const sharedClass = `relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/8 hover:text-primary'}`;
+            const inner = (
+              <>
                 <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
                 {!sidebarCollapsed && <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>}
                 {sidebarCollapsed && (
@@ -279,6 +276,15 @@ export default function AdminContent() {
                     {item.label}
                   </span>
                 )}
+              </>
+            );
+            return itemHref ? (
+              <a key={item.key} href={itemHref} title={sidebarCollapsed ? item.label : undefined} className={sharedClass}>
+                {inner}
+              </a>
+            ) : (
+              <button key={item.key} onClick={() => setActiveSection(item.key)} title={sidebarCollapsed ? item.label : undefined} className={sharedClass}>
+                {inner}
               </button>
             );
           })}
