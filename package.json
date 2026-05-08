@@ -46,7 +46,8 @@
     "lint:fix": "next lint --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,md,json}\"",
     "serve": "next start",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "supabase:bootstrap:core-auth": "node scripts/supabase/bootstrap-core-auth.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
