@@ -323,7 +323,7 @@ function FeatureFlagsCell({ flags }: { flags: TenantRow['featureFlags'] }) {
 
 function ActionMenu({ tenant, onClose }: { tenant: TenantRow; onClose: () => void }) {
   const actions = [
-    { label: 'Abrir', icon: ExternalLink, color: 'text-foreground', onClick: () => { alert(`Abrindo tenant ${tenant.clinicName}`); onClose(); } },
+    { label: 'Abrir', icon: ExternalLink, color: 'text-foreground', onClick: () => { window.location.href = `/admin/tenants/${tenant.id}`; onClose(); } },
     { label: 'Suspender', icon: Ban, color: 'text-red-600', disabled: tenant.status === 'suspended' || tenant.status === 'cancelled', onClick: () => { alert(`Suspendendo ${tenant.clinicName}`); onClose(); } },
     { label: 'Reativar', icon: Play, color: 'text-emerald-600', disabled: tenant.status === 'active' || tenant.status === 'trial', onClick: () => { alert(`Reativando ${tenant.clinicName}`); onClose(); } },
     { label: 'Gerenciar plano', icon: CreditCard, color: 'text-violet-600', onClick: () => { alert(`Gerenciando plano de ${tenant.clinicName}`); onClose(); } },
@@ -580,10 +580,10 @@ export default function TenantsManagementContent() {
                       >
                         {/* Clinic + ID */}
                         <td className="px-4 py-3">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-semibold text-foreground">{tenant.clinicName}</span>
+                          <a href={`/admin/tenants/${tenant.id}`} className="flex flex-col gap-0.5 group">
+                            <span className="font-semibold text-foreground group-hover:text-primary transition-colors">{tenant.clinicName}</span>
                             <span className="text-muted-foreground font-mono text-xs">{tenant.id}</span>
-                          </div>
+                          </a>
                         </td>
                         {/* Owner */}
                         <td className="px-4 py-3">
