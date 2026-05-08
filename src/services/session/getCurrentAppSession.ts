@@ -3,6 +3,7 @@ import { PERMISSIONS, hasAnyPermission } from './permissions';
 import {
   isPatientRole,
   isPlatformAdminRole,
+  isPlatformOwnerRole,
   isPlatformSupportRole,
   type PlatformRole,
 } from './roles';
@@ -199,6 +200,7 @@ export async function getCurrentAppSession(
     isClinicUser: () => tenantMemberships.length > 0,
     isPatient: () => isPatientRole(platformRole) || tenantMemberships.length === 0,
     canAccessPlatformAdmin: () =>
+      isPlatformOwnerRole(platformRole) ||
       isPlatformAdminRole(platformRole) ||
       isPlatformSupportRole(platformRole) ||
       hasAnyPermission(permissionSet, PERMISSIONS.PLATFORM_ADMIN_ACCESS),
