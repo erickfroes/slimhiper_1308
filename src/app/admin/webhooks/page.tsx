@@ -1,5 +1,4 @@
 import WebhookMonitorContent from './components/WebhookMonitorContent';
-import PlatformAdminGuard from '../components/PlatformAdminGuard';
 
 export const metadata = {
   title: 'Monitor de Webhooks | Admin',
@@ -8,8 +7,6 @@ export const metadata = {
 
 export default function WebhooksPage() {
   return (
-    <PlatformAdminGuard>
       <WebhookMonitorContent />
-    </PlatformAdminGuard>
   );
 }
