@@ -61,7 +61,7 @@ export async function getCurrentAppSession(
 
   const [{ data: profileRow }, { data: membershipRows }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
-    supabase.from('tenant_memberships').select('*').eq('user_id', user.id),
+    supabase.from('tenant_memberships').select('id, tenant_id, user_id, role, role_code, status, unit_id').eq('user_id', user.id),
   ]);
 
   const profile = asRecord(profileRow);
@@ -100,18 +100,6 @@ export async function getCurrentAppSession(
     null;
   const activeTenant = activeTenantId ? { id: activeTenantId } : null;
 
-  const activeMemberships = memberships.filter((membership) => membership.status === 'active');
-  const membershipRolePairs = Array.from(
-    new Set(
-      activeMemberships
-        .map((membership) => {
-          const roleKey = membership.roleCode ?? membership.legacyRole;
-          return membership.tenantId && roleKey ? `${membership.tenantId}::${roleKey}` : null;
-        })
-        .filter((value): value is string => Boolean(value))
-    )
-  );
-
   const tenantMemberships: AppTenantMembership[] = memberships;
 
   const activeMembership = activeTenantId
@@ -119,47 +107,50 @@ export async function getCurrentAppSession(
     : null;
   const activeTenantRole = activeMembership?.roleKey ?? null;
 
+  const activeMemberships = tenantMemberships.filter((membership) => membership.status === 'active');
+  const prioritizedMemberships = [
+    ...(activeMembership ? [activeMembership] : []),
+    ...activeMemberships.filter((membership) => membership.id !== activeMembership?.id),
+  ];
+
   let permissions: string[] = [];
-  if (membershipRolePairs.length > 0) {
-    const orFilter = membershipRolePairs
-      .map((pair) => {
-        const [tenantId, roleName] = pair.split('::');
-        return `and(tenant_id.eq.${tenantId},name.eq.${roleName})`;
-      })
-      .join(',');
+  for (const membership of prioritizedMemberships) {
+    const roleName = membership.roleCode ?? membership.legacyRole;
+    if (!membership.tenantId || !roleName) continue;
 
-    const { data: roleRows } = await supabase
+    const { data: roleRow } = await supabase
       .from('roles')
-      .select('id, tenant_id, name')
-      .or(orFilter);
+      .select('id')
+      .eq('tenant_id', membership.tenantId)
+      .eq('name', roleName)
+      .maybeSingle();
 
-    const roleIds = Array.from(
-      new Set((roleRows ?? []).map((row: { id: unknown }) => String(row.id ?? '')).filter(Boolean))
+    const roleId = normalizeString(asRecord(roleRow).id);
+    if (!roleId) continue;
+
+    const { data: rolePermissionRows } = await supabase
+      .from('role_permissions')
+      .select('permissions!inner(id, key, code, slug, name)')
+      .eq('role_id', roleId);
+
+    permissions = Array.from(
+      new Set(
+        (rolePermissionRows ?? [])
+          .map((row: unknown) => {
+            const raw = asRecord(row);
+            const permission = asRecord(raw.permissions);
+            return (
+              normalizeString(permission.key) ??
+              normalizeString(permission.code) ??
+              normalizeString(permission.slug) ??
+              normalizeString(permission.name)
+            );
+          })
+          .filter((permission): permission is string => Boolean(permission))
+      )
     );
 
-    if (roleIds.length > 0) {
-      const { data: rolePermissionRows } = await supabase
-        .from('role_permissions')
-        .select('role_id, permissions!inner(id, key, code, slug, name)')
-        .in('role_id', roleIds);
-
-      permissions = Array.from(
-        new Set(
-          (rolePermissionRows ?? [])
-            .map((row: unknown) => {
-              const raw = asRecord(row);
-              const permission = asRecord(raw.permissions);
-              return (
-                normalizeString(permission.key) ??
-                normalizeString(permission.code) ??
-                normalizeString(permission.slug) ??
-                normalizeString(permission.name)
-              );
-            })
-            .filter((permission): permission is string => Boolean(permission))
-        )
-      );
-    }
+    if (permissions.length > 0) break;
   }
 
   const { data: featureFlagRows } = activeTenantId
@@ -206,18 +197,13 @@ export async function getCurrentAppSession(
       hasAnyPermission(permissionSet, PERMISSIONS.PLATFORM_ADMIN_ACCESS),
     canAccessClinicWorkspace: () =>
       activeMembership?.status === 'active' && isActiveClinicRole,
-    canViewFinancial: () =>
-      hasAnyPermission(permissionSet, [...PERMISSIONS.FINANCIAL_VIEW, 'financial.read', 'financial.write']),
+    canViewFinancial: () => hasAnyPermission(permissionSet, ['financial.read', 'financial.write']),
     canViewMedicalPrescriptions: () =>
       canViewRxByRole &&
-      hasAnyPermission(permissionSet, [
-        ...PERMISSIONS.MEDICAL_PRESCRIPTIONS_VIEW,
-        'prescriptions.read',
-        'prescriptions.write',
-      ]),
+      hasAnyPermission(permissionSet, ['prescriptions.read', 'prescriptions.write']),
     canManageTenantUsers: () =>
-      hasAnyPermission(permissionSet, [...PERMISSIONS.TENANT_USERS_MANAGE, 'settings.write']) ||
-      canManageByRole,
+      canManageByRole ||
+      hasAnyPermission(permissionSet, ['tenant.users.manage', 'settings.write']),
   };
 
   return session;
