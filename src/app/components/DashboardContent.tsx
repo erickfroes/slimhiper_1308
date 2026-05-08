@@ -290,8 +290,9 @@ export default function DashboardContent() {
           </div>
           <div className="space-y-2">
             {queue.map((entry) => (
-              <div
+              <Link
                 key={entry.id}
+                href={`/clinic/patients/${entry.patientId}/encounter`}
                 className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted transition-colors cursor-pointer group"
               >
                 <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
@@ -315,7 +316,7 @@ export default function DashboardContent() {
                     </span>
                   )}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -338,8 +339,9 @@ export default function DashboardContent() {
           </div>
           <div className="space-y-1.5 max-h-72 overflow-y-auto scrollbar-thin pr-1">
             {appointments.map((appt) => (
-              <div
+              <Link
                 key={appt.id}
+                href={`/clinic/patients/${appt.patientId}`}
                 className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-muted transition-colors group"
               >
                 <span className="text-xs font-mono font-semibold text-muted-foreground w-10 flex-shrink-0">
@@ -357,7 +359,7 @@ export default function DashboardContent() {
                   </p>
                 </div>
                 <StatusBadge status={appt.status} size="xs" />
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -417,7 +419,11 @@ export default function DashboardContent() {
               {clinicAlerts.length}
             </span>
           </div>
-          <AlertPanel alerts={clinicAlerts} compact />
+          <AlertPanel
+            alerts={clinicAlerts}
+            compact
+            getAlertHref={(alert) => `/clinic/patients/${alert.patientId}`}
+          />
         </div>
 
         {/* Quick Actions */}

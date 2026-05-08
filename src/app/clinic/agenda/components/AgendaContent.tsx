@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import {
   ChevronLeft,
   ChevronRight,
@@ -302,8 +303,9 @@ function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
           </div>
         ) : (
           items.map((appt) => (
-            <div
+            <Link
               key={appt.id}
+              href={`/clinic/patients/${appt.patientId}/encounter`}
               className="bg-card rounded-xl border border-border p-3 shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-150 cursor-pointer group"
             >
               {/* Patient name */}
@@ -340,7 +342,7 @@ function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
                   {appt.roomName}
                 </div>
               )}
-            </div>
+            </Link>
           ))
         )}
       </div>
@@ -376,8 +378,9 @@ function DaySchedule({ appointments }: DayScheduleProps) {
             minute: '2-digit',
           });
           return (
-            <div
+            <Link
               key={appt.id}
+              href={`/clinic/patients/${appt.patientId}`}
               className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer group"
             >
               {/* Time */}
@@ -400,7 +403,7 @@ function DaySchedule({ appointments }: DayScheduleProps) {
 
               {/* Status badge */}
               <StatusBadge status={appt.status} size="xs" />
-            </div>
+            </Link>
           );
         })}
       </div>
@@ -449,8 +452,9 @@ function WaitingQueuePanel() {
           </p>
           <div className="flex flex-col gap-2">
             {activeQueue.map((entry) => (
-              <div
+              <Link
                 key={entry.id}
+                href={`/clinic/patients/${entry.patientId}/encounter`}
                 className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/40 border border-border hover:border-primary/30 transition-colors cursor-pointer"
               >
                 {/* Avatar placeholder */}
@@ -477,7 +481,7 @@ function WaitingQueuePanel() {
                     </span>
                   )}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -491,8 +495,9 @@ function WaitingQueuePanel() {
           </p>
           <div className="flex flex-col gap-2">
             {waiting.map((entry) => (
-              <div
+              <Link
                 key={entry.id}
+                href={`/clinic/patients/${entry.patientId}`}
                 className="flex items-center gap-3 p-2.5 rounded-xl border border-dashed border-border hover:border-primary/30 transition-colors cursor-pointer"
               >
                 <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
@@ -511,7 +516,7 @@ function WaitingQueuePanel() {
                   <p className="text-xs text-muted-foreground">{entry.scheduledTime}</p>
                 </div>
                 <StatusBadge status={entry.status as AppointmentStatus} size="xs" />
-              </div>
+              </Link>
             ))}
           </div>
         </div>
