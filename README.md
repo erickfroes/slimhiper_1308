@@ -93,3 +93,70 @@ You can check out the [Next.js GitHub repository](https://github.com/vercel/next
 - Styled with Tailwind CSS
 
 Built with ❤️ on Rocket.new
+
+## 🔐 Supabase Core Auth Dev Bootstrap
+
+This project includes a development bootstrap script for **core auth + multi-tenant role testing** only (no UI changes, no clinical table creation).
+
+### 1) Required environment variables
+
+Create a local env file (for example `.env.local`) and set:
+
+```bash
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+SUPABASE_BOOTSTRAP_PASSWORD=<temporary-dev-password>
+# Optional overrides
+SUPABASE_BOOTSTRAP_TENANT_SLUG=demo-clinic
+SUPABASE_BOOTSTRAP_TENANT_NAME=Demo Clinic
+```
+
+> Do not commit real secrets. Use throwaway development credentials only.
+
+### 2) Run migrations first
+
+```bash
+supabase db push
+```
+
+### 3) Run the bootstrap script
+
+```bash
+node scripts/supabase/bootstrap-core-auth.mjs
+```
+
+The script will create or upsert:
+- 1 platform admin
+- 1 demo tenant
+- 1 clinic admin
+- 1 physician
+- 1 nutritionist
+- 1 financial user
+- 1 patient
+
+Using placeholder emails:
+- `platform.admin@example.com`
+- `clinic.admin@example.com`
+- `physician.demo@example.com`
+- `nutritionist.demo@example.com`
+- `finance.demo@example.com`
+- `patient.demo@example.com`
+
+### 4) What the script does (mapping to Supabase core auth model)
+
+1. **Creates users in Supabase Auth** (`auth.users`) using the Admin API.
+2. **Links `auth.users` to `public.profiles`** by upserting profile rows with matching `id`.
+3. **Creates `tenant_memberships`** for all non-platform users in the demo tenant.
+4. **Assigns roles/permissions** by upserting tenant-scoped `roles`, `permissions`, and `role_permissions`.
+
+### 5) Manual flow (alternative to script)
+
+If you prefer manual setup in Supabase Dashboard:
+
+1. Go to **Authentication → Users** and create each user with placeholder email + temporary password.
+2. In SQL Editor, insert/update `public.profiles` where `profiles.id = auth.users.id`.
+3. Insert a demo row in `public.tenants`.
+4. Insert rows in `public.tenant_memberships` for clinic users and patient.
+5. Insert role/permission rows in `public.roles`, `public.permissions`, then relation rows in `public.role_permissions`.
+
+The bootstrap script automates this exact flow for local development/testing.
