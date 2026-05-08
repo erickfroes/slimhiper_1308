@@ -23,6 +23,38 @@ interface SafeServiceError {
   details?: string;
 }
 
+
+type EdgeResponseEnvelope<T> = {
+  ok: boolean;
+  data?: T;
+  error?: {
+    message?: string;
+    code?: string;
+  };
+  meta?: Record<string, unknown>;
+};
+
+function unwrapEdgeResponse<T>(response: unknown): { data: T | null; error: SafeServiceError | null } {
+  if (response && typeof response === 'object' && 'ok' in response) {
+    const envelope = response as EdgeResponseEnvelope<T>;
+
+    if (envelope.ok === true) {
+      return { data: (envelope.data ?? null) as T | null, error: null };
+    }
+
+    const edgeError = envelope.error;
+    return {
+      data: null,
+      error: {
+        message: edgeError?.message ?? edgeError?.code ?? 'Edge function request failed.',
+        code: edgeError?.code,
+      },
+    };
+  }
+
+  return { data: response as T, error: null };
+}
+
 function isMockEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 }
@@ -104,7 +136,10 @@ export async function getPatient360Summary(patientId: string): Promise<{ data: P
       return { data: null, error: { message: 'Failed to fetch patient summary.', code: error.name, details: error.message } };
     }
 
-    return { data: normalizeSummary(data), error: null };
+    const unwrapped = unwrapEdgeResponse<Patient360Summary>(data);
+    if (unwrapped.error) return { data: null, error: unwrapped.error };
+
+    return { data: normalizeSummary(unwrapped.data), error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Unable to load patient summary right now.') };
   }
@@ -137,7 +172,13 @@ export async function getPatientTimeline(
       return { data: [], error: { message: 'Failed to fetch patient timeline.', code: error.name, details: error.message } };
     }
 
-    const list = Array.isArray(data) ? data : (data?.events as unknown[] | undefined) ?? [];
+    const unwrapped = unwrapEdgeResponse<{ events?: unknown[] } | unknown[]>(data);
+    if (unwrapped.error) return { data: [], error: unwrapped.error };
+
+    const timelineData = unwrapped.data;
+    const list = Array.isArray(timelineData)
+      ? timelineData
+      : ((timelineData as { events?: unknown[] } | null)?.events ?? []);
     const normalized = list.map(normalizeTimelineEvent).filter((item): item is PatientTimelineEvent => Boolean(item));
 
     return { data: applyTimelineFilters(normalized, filters), error: null };
