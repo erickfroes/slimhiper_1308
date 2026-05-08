@@ -5,7 +5,6 @@ import type {
   TimelineEventType,
 } from '@/domain/types';
 import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
-import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 import { getPatient360 } from '@/services/mockApi';
 
 export interface PatientTimelineFilters {
@@ -72,10 +71,7 @@ function safeError(error: unknown, fallback: string): SafeServiceError {
   return { message: fallback };
 }
 
-async function getSupabaseClient() {
-  if (typeof window === 'undefined') {
-    return createServerSupabaseClient();
-  }
+function getSupabaseClient() {
   return createBrowserSupabaseClient();
 }
 

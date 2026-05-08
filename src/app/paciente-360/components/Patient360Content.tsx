@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { getPatient360, getPatientDocuments360 } from '@/services/mockApi';
+import { getPatientDocuments360 } from '@/services/mockApi';
+import { getPatient360Summary } from '@/services/patient360Api';
 import type { Patient360Summary, PatientDocument360Item } from '@/domain/types';
 import type { UserContext } from '@/lib/auth/getCurrentUserContext';
 import PatientHeaderCard from '@/components/PatientHeaderCard';
@@ -19,16 +20,38 @@ export default function Patient360Content({ patientId, userContext }: Patient360
   const [data, setData] = useState<Patient360Summary | null>(null);
   const [documents360, setDocuments360] = useState<PatientDocument360Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPatient360 = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [{ data: summary, error: summaryError }, docs] = await Promise.all([
+        getPatient360Summary(patientId),
+        getPatientDocuments360(patientId),
+      ]);
+
+      if (summaryError) {
+        throw new Error(summaryError.message);
+      }
+
+      setData(summary);
+      setDocuments360(docs);
+    } catch (loadError) {
+      const message = 'Falha ao carregar dados do paciente. Tente novamente.';
+      setError(message);
+      toast.error(message);
+      if (loadError instanceof Error) {
+        console.error('[Patient360Content] load error:', loadError.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Backend integration point: replace with getPatient360(patientId) Supabase call
-    Promise.all([getPatient360(patientId), getPatientDocuments360(patientId)])
-      .then(([patient, docs]) => {
-        setData(patient);
-        setDocuments360(docs);
-      })
-      .catch(() => toast.error('Falha ao carregar dados do paciente. Tente novamente.'))
-      .finally(() => setLoading(false));
+    void loadPatient360();
   }, [patientId]);
 
   if (loading) {
@@ -63,10 +86,21 @@ export default function Patient360Content({ patientId, userContext }: Patient360
     return (
       <div className="p-6 xl:p-8 max-w-screen-2xl mx-auto">
         <div className="card-base p-8 text-center">
-          <p className="text-base font-semibold text-foreground mb-1">Paciente não encontrado</p>
-          <p className="text-sm text-muted-foreground">
-            Verifique o ID do paciente e tente novamente.
+          <p className="text-base font-semibold text-foreground mb-1">
+            {error ? 'Falha ao carregar paciente' : 'Paciente não encontrado'}
           </p>
+          <p className="text-sm text-muted-foreground">
+            {error ? 'Não foi possível carregar os dados. Tente novamente.' : 'Verifique o ID do paciente e tente novamente.'}
+          </p>
+          {error && (
+            <button
+              type="button"
+              onClick={() => void loadPatient360()}
+              className="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Tentar novamente
+            </button>
+          )}
         </div>
       </div>
     );
