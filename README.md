@@ -281,3 +281,18 @@ SUPABASE_URL=https://<project-ref>.supabase.co TOKEN_WITH_PATIENTS_READ=<access_
 ```
 
 If optional vars are not provided, checks 14 and/or 15 are reported as skipped.
+
+## Paciente 360 baseline checkpoint
+
+Before continuing implementation work for D4Sign/Storage integration, ensure this repository baseline is green by running:
+
+- `npm run type-check`
+- `npm run build`
+- `supabase db push`
+- `node scripts/supabase/bootstrap-core-auth.mjs`
+- `node scripts/supabase/bootstrap-patient360-demo.mjs`
+- `node scripts/supabase/test-patient360-contract.mjs`
+
+Recommended checkpoint label:
+
+- `baseline-patient360-contract-green`
