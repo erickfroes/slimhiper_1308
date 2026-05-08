@@ -617,9 +617,9 @@ const auditActionConfig: Record<string, { label: string; icon: React.ElementType
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function AdminContent() {
+export default function AdminContent({ initialSection = 'overview' }: { initialSection?: string }) {
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState('overview');
+  const [activeSection, setActiveSection] = useState(initialSection);
   const [tenantSearch, setTenantSearch] = useState('');
   const [tenantStatusFilter, setTenantStatusFilter] = useState('all');
   const [tenantPlanFilter, setTenantPlanFilter] = useState('all');
@@ -651,14 +651,14 @@ export default function AdminContent() {
   const navItems = [
     { key: 'overview', label: 'Visão Geral', icon: LayoutDashboardIcon },
     { key: 'tenants', label: 'Tenants', icon: Building2, href: '/admin/tenants' },
-    { key: 'financial', label: 'Financeiro', icon: TrendingUp },
+    { key: 'financial', label: 'Financeiro', icon: TrendingUp, href: '/admin/billing' },
     { key: 'usage', label: 'Uso & Métricas', icon: Activity },
     { key: 'storage', label: 'Armazenamento', icon: HardDrive },
-    { key: 'integrations', label: 'Integrações', icon: Link2 },
+    { key: 'integrations', label: 'Integrações', icon: Link2, href: '/admin/integrations' },
     { key: 'webhooks', label: 'Webhooks', icon: Webhook, href: '/admin/webhooks' },
-    { key: 'security', label: 'Segurança', icon: Shield },
-    { key: 'support', label: 'Suporte', icon: Headphones },
-    { key: 'audit', label: 'Auditoria', icon: ClipboardList },
+    { key: 'security', label: 'Segurança', icon: Shield, href: '/admin/security' },
+    { key: 'support', label: 'Suporte', icon: Headphones, href: '/admin/support' },
+    { key: 'audit', label: 'Auditoria', icon: ClipboardList, href: '/admin/audit' },
   ];
 
   if (loading) {
