@@ -2,6 +2,81 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 type Json = Record<string, unknown>;
 
+type TimelineEventType =
+  | 'consulta'
+  | 'nutricao'
+  | 'medicamento'
+  | 'medida'
+  | 'documento'
+  | 'pagamento'
+  | 'alerta'
+  | 'mensagem'
+  | 'inicio_programa'
+  | 'meta_atingida'
+  | 'lead_criado'
+  | 'lead_convertido'
+  | 'pacote_vendido'
+  | 'contrato_assinado'
+  | 'paciente_cadastrado'
+  | 'consulta_agendada'
+  | 'checkin_realizado'
+  | 'atendimento_iniciado'
+  | 'atendimento_concluido'
+  | 'anamnese_preenchida'
+  | 'soap_atualizado'
+  | 'medida_registrada'
+  | 'plano_alimentar_publicado'
+  | 'prescricao_emitida'
+  | 'documento_gerado'
+  | 'documento_assinado'
+  | 'pagamento_recebido'
+  | 'pagamento_atrasado'
+  | 'mensagem_enviada'
+  | 'checkin_semanal_enviado';
+
+type TimelineEventCategory =
+  | 'clinical'
+  | 'financial'
+  | 'documents'
+  | 'agenda'
+  | 'communication'
+  | 'patient_app'
+  | 'commercial';
+
+const VALID_EVENT_TYPES: Set<TimelineEventType> = new Set([
+  'consulta', 'nutricao', 'medicamento', 'medida', 'documento', 'pagamento', 'alerta', 'mensagem',
+  'inicio_programa', 'meta_atingida', 'lead_criado', 'lead_convertido', 'pacote_vendido', 'contrato_assinado',
+  'paciente_cadastrado', 'consulta_agendada', 'checkin_realizado', 'atendimento_iniciado', 'atendimento_concluido',
+  'anamnese_preenchida', 'soap_atualizado', 'medida_registrada', 'plano_alimentar_publicado', 'prescricao_emitida',
+  'documento_gerado', 'documento_assinado', 'pagamento_recebido', 'pagamento_atrasado', 'mensagem_enviada', 'checkin_semanal_enviado',
+]);
+
+const VALID_EVENT_CATEGORIES: Set<TimelineEventCategory> = new Set([
+  'clinical', 'financial', 'documents', 'agenda', 'communication', 'patient_app', 'commercial',
+]);
+
+function mapEventType(value: unknown): TimelineEventType {
+  if (typeof value === 'string' && VALID_EVENT_TYPES.has(value as TimelineEventType)) return value as TimelineEventType;
+  return 'mensagem';
+}
+
+function mapEventCategory(value: unknown): TimelineEventCategory {
+  if (typeof value === 'string' && VALID_EVENT_CATEGORIES.has(value as TimelineEventCategory)) return value as TimelineEventCategory;
+  return 'clinical';
+}
+
+function safeDate(input: unknown): string | null {
+  if (typeof input !== 'string' || !input.trim()) return null;
+  const dt = new Date(input);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt.toISOString();
+}
+
+function mapEventDate(eventAt: unknown, createdAt: unknown): string {
+  return safeDate(eventAt) ?? safeDate(createdAt) ?? new Date(0).toISOString();
+}
+
+
 const corsHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
@@ -226,7 +301,7 @@ async function buildAndReturnSummary({
       .limit(10),
     supabase
       .from('patient_timeline_events')
-      .select('id, event_type, status, event_at, payload, updated_at')
+      .select('id, patient_id, event_type, category, title, description, actor_name, status, status_label, action_label, details_href, event_at, created_at, payload, updated_at')
       .eq('patient_id', patientId)
       .eq('tenant_id', patient.tenant_id)
       .order('event_at', { ascending: false })
@@ -284,16 +359,17 @@ async function buildAndReturnSummary({
     const payload = safeTimelinePayload(event.payload);
     return {
       id: event.id,
-      patientId,
-      type: 'consulta',
-      title: String(payload?.title ?? 'Atualização clínica'),
-      description: String(payload?.description ?? payload?.summary ?? 'Evento registrado no prontuário do paciente.'),
-      date: event.event_at,
-      category: 'clinical',
-      actorName: String(payload?.professionalName ?? 'Equipe clínica'),
-      statusLabel: String(payload?.status ?? event.status ?? 'Registrado'),
-      actionLabel: 'Ver detalhes',
-      detailsHref: `/patients/${patientId}`,
+      patientId: event.patient_id ?? patientId,
+      type: mapEventType(event.event_type),
+      title: String(event.title ?? payload?.title ?? 'Atualização do paciente'),
+      description: String(event.description ?? payload?.description ?? payload?.summary ?? 'Evento registrado no prontuário do paciente.'),
+      date: mapEventDate(event.event_at, event.created_at),
+      category: mapEventCategory(event.category ?? payload?.category),
+      actorName: event.actor_name ?? payload?.professionalName ?? 'Equipe clínica',
+      statusLabel: String(event.status_label ?? payload?.status ?? event.status ?? 'Registrado'),
+      actionLabel: event.action_label ?? undefined,
+      detailsHref: event.details_href ?? undefined,
+      metadata: payload ?? undefined,
     };
   });
 
