@@ -12,7 +12,10 @@ type SupabaseLike = Awaited<ReturnType<typeof createClient>>;
 export interface AppTenantMembership {
   id: string;
   tenantId: string;
-  roleId: string;
+  userId: string;
+  unitId: string | null;
+  roleCode: string | null;
+  legacyRole: string | null;
   roleKey: string | null;
   status: string | null;
 }
@@ -68,14 +71,24 @@ export async function getCurrentAppSession(
   const memberships: Array<{
     id: string;
     tenantId: string;
-    roleId: string;
+    userId: string;
+    unitId: string | null;
+    roleCode: string | null;
+    legacyRole: string | null;
+    roleKey: string | null;
     status: string | null;
   }> = (membershipRows ?? []).map((row: unknown) => {
     const raw = asRecord(row);
+    const roleCode = normalizeString(raw.role_code);
+    const legacyRole = normalizeString(raw.role);
     return {
       id: String(raw.id ?? ''),
       tenantId: String(raw.tenant_id ?? ''),
-      roleId: String(raw.role_id ?? ''),
+      userId: String(raw.user_id ?? ''),
+      unitId: normalizeString(raw.unit_id),
+      roleCode,
+      legacyRole,
+      roleKey: roleCode ?? legacyRole,
       status: normalizeString(raw.status),
     };
   });
@@ -86,69 +99,66 @@ export async function getCurrentAppSession(
     null;
   const activeTenant = activeTenantId ? { id: activeTenantId } : null;
 
-  const roleIds = Array.from(
-    new Set(memberships.map((membership) => membership.roleId).filter(Boolean))
+  const activeMemberships = memberships.filter((membership) => membership.status === 'active');
+  const membershipRolePairs = Array.from(
+    new Set(
+      activeMemberships
+        .map((membership) => {
+          const roleKey = membership.roleCode ?? membership.legacyRole;
+          return membership.tenantId && roleKey ? `${membership.tenantId}::${roleKey}` : null;
+        })
+        .filter((value): value is string => Boolean(value))
+    )
   );
-  const roleKeyById = new Map<string, string>();
-  let permissionIds: string[] = [];
 
-  if (roleIds.length > 0) {
-    const [{ data: roleRows }, { data: rolePermissionRows }] = await Promise.all([
-      supabase.from('roles').select('*').in('id', roleIds),
-      supabase.from('role_permissions').select('role_id, permission_id').in('role_id', roleIds),
-    ]);
-
-    for (const row of roleRows ?? []) {
-      const raw = asRecord(row);
-      const roleId = String(raw.id ?? '');
-      const roleKey =
-        normalizeString(raw.key) ??
-        normalizeString(raw.code) ??
-        normalizeString(raw.slug) ??
-        normalizeString(raw.name);
-      if (roleId) roleKeyById.set(roleId, roleKey ?? roleId);
-    }
-
-    permissionIds = Array.from(
-      new Set(
-        (rolePermissionRows ?? [])
-          .map((row: { permission_id: unknown }) => String(row.permission_id ?? ''))
-          .filter(Boolean)
-      )
-    );
-  }
-
-  const tenantMemberships: AppTenantMembership[] = memberships.map((membership) => ({
-    ...membership,
-    roleKey: roleKeyById.get(membership.roleId) ?? null,
-  }));
+  const tenantMemberships: AppTenantMembership[] = memberships;
 
   const activeMembership = activeTenantId
     ? (tenantMemberships.find((membership) => membership.tenantId === activeTenantId) ?? null)
     : null;
-  const activeTenantRole = activeMembership?.roleKey ?? activeMembership?.roleId ?? null;
+  const activeTenantRole = activeMembership?.roleKey ?? null;
 
   let permissions: string[] = [];
-  if (permissionIds.length > 0) {
-    const { data: permissionRows } = await supabase
-      .from('permissions')
-      .select('*')
-      .in('id', permissionIds);
-    permissions = Array.from(
-      new Set(
-        (permissionRows ?? [])
-          .map((row: unknown) => {
-            const raw = asRecord(row);
-            return (
-              normalizeString(raw.key) ??
-              normalizeString(raw.code) ??
-              normalizeString(raw.slug) ??
-              normalizeString(raw.name)
-            );
-          })
-          .filter((permission): permission is string => Boolean(permission))
-      )
+  if (membershipRolePairs.length > 0) {
+    const orFilter = membershipRolePairs
+      .map((pair) => {
+        const [tenantId, roleName] = pair.split('::');
+        return `and(tenant_id.eq.${tenantId},name.eq.${roleName})`;
+      })
+      .join(',');
+
+    const { data: roleRows } = await supabase
+      .from('roles')
+      .select('id, tenant_id, name')
+      .or(orFilter);
+
+    const roleIds = Array.from(
+      new Set((roleRows ?? []).map((row: { id: unknown }) => String(row.id ?? '')).filter(Boolean))
     );
+
+    if (roleIds.length > 0) {
+      const { data: rolePermissionRows } = await supabase
+        .from('role_permissions')
+        .select('role_id, permissions!inner(id, key, code, slug, name)')
+        .in('role_id', roleIds);
+
+      permissions = Array.from(
+        new Set(
+          (rolePermissionRows ?? [])
+            .map((row: unknown) => {
+              const raw = asRecord(row);
+              const permission = asRecord(raw.permissions);
+              return (
+                normalizeString(permission.key) ??
+                normalizeString(permission.code) ??
+                normalizeString(permission.slug) ??
+                normalizeString(permission.name)
+              );
+            })
+            .filter((permission): permission is string => Boolean(permission))
+        )
+      );
+    }
   }
 
   const { data: featureFlagRows } = activeTenantId
@@ -168,6 +178,11 @@ export async function getCurrentAppSession(
   );
 
   const permissionSet = new Set(permissions);
+  const normalizedActiveRole = (activeTenantRole ?? '').toLowerCase();
+  const isActiveClinicRole =
+    normalizedActiveRole.length > 0 && !['patient', 'guardian'].includes(normalizedActiveRole);
+  const canManageByRole = ['tenant_owner', 'clinic_admin'].includes(normalizedActiveRole);
+  const canViewRxByRole = ['physician', 'clinic_admin', 'tenant_owner'].includes(normalizedActiveRole);
 
   const session: AppSession = {
     userId: user.id,
@@ -187,11 +202,20 @@ export async function getCurrentAppSession(
       isPlatformAdminRole(platformRole) ||
       isPlatformSupportRole(platformRole) ||
       hasAnyPermission(permissionSet, PERMISSIONS.PLATFORM_ADMIN_ACCESS),
-    canAccessClinicWorkspace: () => tenantMemberships.length > 0,
-    canViewFinancial: () => hasAnyPermission(permissionSet, PERMISSIONS.FINANCIAL_VIEW),
+    canAccessClinicWorkspace: () =>
+      activeMembership?.status === 'active' && isActiveClinicRole,
+    canViewFinancial: () =>
+      hasAnyPermission(permissionSet, [...PERMISSIONS.FINANCIAL_VIEW, 'financial.read', 'financial.write']),
     canViewMedicalPrescriptions: () =>
-      hasAnyPermission(permissionSet, PERMISSIONS.MEDICAL_PRESCRIPTIONS_VIEW),
-    canManageTenantUsers: () => hasAnyPermission(permissionSet, PERMISSIONS.TENANT_USERS_MANAGE),
+      canViewRxByRole &&
+      hasAnyPermission(permissionSet, [
+        ...PERMISSIONS.MEDICAL_PRESCRIPTIONS_VIEW,
+        'prescriptions.read',
+        'prescriptions.write',
+      ]),
+    canManageTenantUsers: () =>
+      hasAnyPermission(permissionSet, [...PERMISSIONS.TENANT_USERS_MANAGE, 'settings.write']) ||
+      canManageByRole,
   };
 
   return session;
