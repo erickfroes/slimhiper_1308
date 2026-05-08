@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useState } from 'react';
 import {
   Plus,
@@ -173,9 +174,12 @@ function ProgramCard({ program }: ProgramCardProps) {
           </div>
           <div className="flex items-center gap-1.5">
             <Users size={13} className="text-muted-foreground flex-shrink-0" />
-            <span className="text-xs font-medium text-foreground">
+            <Link
+              href="/clinic/patients"
+              className="text-xs font-medium text-foreground hover:underline"
+            >
               {program.activePatients} pacientes
-            </span>
+            </Link>
           </div>
         </div>
 

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Search,
@@ -126,6 +127,7 @@ function SortableHeader({
 const PAGE_SIZES = [10, 20, 50];
 
 export default function PatientListContent() {
+  const router = useRouter();
   const [patients, setPatients] = useState<PatientListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -448,12 +450,14 @@ export default function PatientListContent() {
                       rowIndex % 2 === 0 ? '' : 'bg-muted/20',
                       selectedIds.has(patient.id) ? 'bg-primary/5' : '',
                     ].join(' ')}
+                    onClick={() => router.push(`/clinic/patients/${patient.id}`)}
                   >
                     <td className="px-4 py-3">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(patient.id)}
                         onChange={() => toggleSelect(patient.id)}
+                        onClick={(e) => e.stopPropagation()}
                         className="rounded border-input accent-primary cursor-pointer"
                       />
                     </td>
@@ -559,6 +563,7 @@ export default function PatientListContent() {
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Link
                           href={`/clinic/patients/${patient.id}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
                           title="Abrir Paciente 360"
                         >
@@ -567,14 +572,20 @@ export default function PatientListContent() {
                         <button
                           className="p-1.5 rounded-lg hover:bg-sky-50 text-muted-foreground hover:text-sky-600 transition-colors"
                           title="Enviar mensagem"
-                          onClick={() => toast.success(`Abrindo chat com ${patient.name}`)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast.success(`Abrindo chat com ${patient.name}`);
+                          }}
                         >
                           <MessageSquare size={14} />
                         </button>
                         <button
                           className="p-1.5 rounded-lg hover:bg-amber-50 text-muted-foreground hover:text-amber-600 transition-colors"
                           title="Marcar para revisão"
-                          onClick={() => toast.info(`${patient.name} marcado para revisão`)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast.info(`${patient.name} marcado para revisão`);
+                          }}
                         >
                           <Flag size={14} />
                         </button>

@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import {
   FileText,
   LayoutTemplate,
@@ -21,6 +22,7 @@ interface ClinicDocumentRow {
   id: string;
   documento: string;
   paciente: string;
+  patientId?: string;
   tipo: string;
   status: DocumentStatus;
   assinatura: SignatureStatus;
@@ -34,6 +36,7 @@ const clinicDocuments: ClinicDocumentRow[] = [
     id: 'DOC-1209',
     documento: 'Termo de Consentimento Nutricional',
     paciente: 'Ana Pereira',
+    patientId: 'patient-005',
     tipo: 'Consentimento',
     status: 'Pendente assinatura',
     assinatura: 'Pendente',
@@ -45,6 +48,7 @@ const clinicDocuments: ClinicDocumentRow[] = [
     id: 'DOC-1182',
     documento: 'Plano Terapêutico Integrado',
     paciente: 'Carlos Souza',
+    patientId: 'patient-004',
     tipo: 'Plano de cuidado',
     status: 'Gerado',
     assinatura: 'Dispensado',
@@ -56,6 +60,7 @@ const clinicDocuments: ClinicDocumentRow[] = [
     id: 'DOC-1150',
     documento: 'Contrato de Programa Metabólico',
     paciente: 'Juliana Ramos',
+    patientId: 'patient-001',
     tipo: 'Contrato',
     status: 'Assinado',
     assinatura: 'Assinado',
@@ -195,7 +200,15 @@ function DocumentsContent() {
                       {row.id} · link temporário auditado
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-foreground">{row.paciente}</td>
+                  <td className="px-4 py-3 text-foreground">
+                    {row.patientId ? (
+                      <Link href={`/clinic/patients/${row.patientId}`} className="hover:underline">
+                        {row.paciente}
+                      </Link>
+                    ) : (
+                      row.paciente
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-foreground">{row.tipo}</td>
                   <td className="px-4 py-3">{statusBadge(row.status)}</td>
                   <td className="px-4 py-3">{signatureBadge(row.assinatura)}</td>
@@ -204,7 +217,7 @@ function DocumentsContent() {
                   <td className="px-4 py-3 text-foreground">{row.responsavel}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {['Reenviar', 'Baixar assinado', 'Ver Paciente 360'].map((action) => (
+                      {['Reenviar', 'Baixar assinado'].map((action) => (
                         <button
                           key={action}
                           className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-muted"
@@ -212,6 +225,14 @@ function DocumentsContent() {
                           {action}
                         </button>
                       ))}
+                      {row.patientId && (
+                        <Link
+                          href={`/clinic/patients/${row.patientId}`}
+                          className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-muted"
+                        >
+                          Ver Paciente 360
+                        </Link>
+                      )}
                     </div>
                   </td>
                 </tr>
