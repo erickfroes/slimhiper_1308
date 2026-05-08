@@ -3,8 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Shield } from 'lucide-react';
 import Link from 'next/link';
-
-const MOCK_USER_ROLE = 'platform_admin';
+import { canAccessPlatformAdmin } from '@/services/mockSession';
 
 export default function PlatformAdminGuard({
   children,
@@ -18,8 +17,7 @@ export default function PlatformAdminGuard({
   const [authorized, setAuthorized] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const role = MOCK_USER_ROLE;
-    setAuthorized(role === 'platform_admin');
+    setAuthorized(canAccessPlatformAdmin());
   }, []);
 
   if (authorized === null) {

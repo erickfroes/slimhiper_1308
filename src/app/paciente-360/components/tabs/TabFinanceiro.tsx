@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { PatientFinancialSummary, UserRole } from '@/domain/types';
+import type { PatientFinancialSummary } from '@/domain/types';
+import { canViewFinancial } from '@/services/mockSession';
 import {
   ShieldOff,
   CheckCircle2,
@@ -20,14 +21,6 @@ import {
   Eye,
   Download,
 } from 'lucide-react';
-
-// Roles that have access to patient financial data
-const FINANCIAL_ALLOWED_ROLES: UserRole[] = [
-  'clinic_admin',
-  'coordinator',
-  'receptionist',
-  'physician',
-];
 
 function formatBRL(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -56,7 +49,6 @@ const CHARGE_TYPE_LABELS: Record<string, string> = {
 
 interface TabFinanceiroProps {
   financial: PatientFinancialSummary;
-  currentRole?: UserRole;
 }
 
 // ── No-permission state ───────────────────────────────────────────────────────
@@ -183,12 +175,9 @@ function StatusPill({ status }: { status: string }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function TabFinanceiro({
-  financial,
-  currentRole = 'coordinator',
-}: TabFinanceiroProps) {
+export default function TabFinanceiro({ financial }: TabFinanceiroProps) {
   // Permission gate
-  if (!FINANCIAL_ALLOWED_ROLES.includes(currentRole)) {
+  if (!canViewFinancial()) {
     return <SemPermissaoFinanceira />;
   }
 

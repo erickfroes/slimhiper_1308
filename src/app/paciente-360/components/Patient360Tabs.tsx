@@ -12,6 +12,7 @@ import TabFinanceiro from './tabs/TabFinanceiro';
 import TabPacotes from './tabs/TabPacotes';
 import TabChat from './tabs/TabChat';
 import TabRelatorios from './tabs/TabRelatorios';
+import { mockSession } from '@/services/mockSession';
 
 const TABS = [
   { key: 'tab-resumo', label: 'Resumo', id: 'resumo' },
@@ -66,12 +67,13 @@ export default function Patient360Tabs({ data, documents360 }: Patient360TabsPro
         {activeTab === 'consultas' && <TabConsultas appointments={data.upcomingAppointments} />}
         {activeTab === 'nutricao' && <TabNutricao plan={data.nutritionPlan} />}
         {activeTab === 'prescricoes' && (
-          <TabPrescricoes prescriptions={data.prescriptions} currentRole="physician" />
+          <TabPrescricoes
+            prescriptions={data.prescriptions}
+            currentRole={mockSession.currentRole}
+          />
         )}
         {activeTab === 'documentos' && <TabDocumentos documents360={documents360} />}
-        {activeTab === 'financeiro' && (
-          <TabFinanceiro financial={data.financial} currentRole="coordinator" />
-        )}
+        {activeTab === 'financeiro' && <TabFinanceiro financial={data.financial} />}
         {activeTab === 'pacotes' && <TabPacotes pkg={data.activePackage} />}
         {activeTab === 'chat' && <TabChat chat={data.chat} patientName={data.profile.name} />}
         {activeTab === 'relatorios' && <TabRelatorios patientName={data.profile.name} />}
