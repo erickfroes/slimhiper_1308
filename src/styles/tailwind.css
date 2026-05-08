@@ -61,7 +61,13 @@
     scroll-behavior: smooth;
   }
 
-  h1, h2, h3, h4, h5, h6, p {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p {
     margin: 0;
   }
 }
@@ -76,19 +82,27 @@
   }
 
   .card-shadow {
-    box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.04);
+    box-shadow:
+      0 1px 3px 0 rgba(0, 0, 0, 0.06),
+      0 1px 2px -1px rgba(0, 0, 0, 0.04);
   }
 
   .card-shadow-md {
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.07),
+      0 2px 4px -2px rgba(0, 0, 0, 0.05);
   }
 
   .card-shadow-lg {
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+    box-shadow:
+      0 10px 15px -3px rgba(0, 0, 0, 0.08),
+      0 4px 6px -4px rgba(0, 0, 0, 0.04);
   }
 
   .sidebar-transition {
-    transition: width 300ms ease, transform 300ms ease;
+    transition:
+      width 300ms ease,
+      transform 300ms ease;
   }
 
   .fade-in {
@@ -143,10 +157,10 @@
   .input-base {
     @apply w-full px-3 py-2 rounded-xl border border-input bg-card text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-150;
   }
-.nav-item  {
+  .nav-item {
     @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground transition-all duration-150 hover:text-primary cursor-pointer;
   }
-.nav-item-active  {
+  .nav-item-active {
     @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-primary cursor-pointer;
   }
 
@@ -160,17 +174,33 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes pulseHighlight {
-  0% { background-color: transparent; }
-  30% { background-color: rgba(13, 148, 136, 0.08); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: transparent;
+  }
+  30% {
+    background-color: rgba(13, 148, 136, 0.08);
+  }
+  100% {
+    background-color: transparent;
+  }
 }

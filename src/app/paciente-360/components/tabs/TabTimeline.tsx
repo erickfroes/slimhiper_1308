@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { PatientTimelineEvent, TimelineEventCategory, TimelineEventType } from '@/domain/types';
+import type {
+  PatientTimelineEvent,
+  TimelineEventCategory,
+  TimelineEventType,
+} from '@/domain/types';
 import {
   Stethoscope,
   Apple,
@@ -62,62 +66,240 @@ interface EventConfig {
 
 const eventTypeConfig: Record<TimelineEventType, EventConfig> = {
   // Legacy types
-  consulta:               { icon: Stethoscope,    iconColor: 'text-teal-600',    iconBg: 'bg-teal-50',    label: 'Consulta' },
-  nutricao:               { icon: Apple,           iconColor: 'text-emerald-600', iconBg: 'bg-emerald-50', label: 'Nutrição' },
-  medicamento:            { icon: Pill,            iconColor: 'text-indigo-600',  iconBg: 'bg-indigo-50',  label: 'Medicamento' },
-  medida:                 { icon: Ruler,           iconColor: 'text-blue-600',    iconBg: 'bg-blue-50',    label: 'Medida' },
-  documento:              { icon: FileText,        iconColor: 'text-slate-600',   iconBg: 'bg-slate-50',   label: 'Documento' },
-  pagamento:              { icon: CreditCard,      iconColor: 'text-violet-600',  iconBg: 'bg-violet-50',  label: 'Pagamento' },
-  alerta:                 { icon: AlertTriangle,   iconColor: 'text-amber-600',   iconBg: 'bg-amber-50',   label: 'Alerta' },
-  mensagem:               { icon: MessageSquare,   iconColor: 'text-sky-600',     iconBg: 'bg-sky-50',     label: 'Mensagem' },
-  inicio_programa:        { icon: PlayCircle,      iconColor: 'text-primary',     iconBg: 'bg-primary/10', label: 'Início de programa' },
-  meta_atingida:          { icon: Trophy,          iconColor: 'text-amber-600',   iconBg: 'bg-amber-50',   label: 'Meta atingida' },
+  consulta: {
+    icon: Stethoscope,
+    iconColor: 'text-teal-600',
+    iconBg: 'bg-teal-50',
+    label: 'Consulta',
+  },
+  nutricao: {
+    icon: Apple,
+    iconColor: 'text-emerald-600',
+    iconBg: 'bg-emerald-50',
+    label: 'Nutrição',
+  },
+  medicamento: {
+    icon: Pill,
+    iconColor: 'text-indigo-600',
+    iconBg: 'bg-indigo-50',
+    label: 'Medicamento',
+  },
+  medida: { icon: Ruler, iconColor: 'text-blue-600', iconBg: 'bg-blue-50', label: 'Medida' },
+  documento: {
+    icon: FileText,
+    iconColor: 'text-slate-600',
+    iconBg: 'bg-slate-50',
+    label: 'Documento',
+  },
+  pagamento: {
+    icon: CreditCard,
+    iconColor: 'text-violet-600',
+    iconBg: 'bg-violet-50',
+    label: 'Pagamento',
+  },
+  alerta: {
+    icon: AlertTriangle,
+    iconColor: 'text-amber-600',
+    iconBg: 'bg-amber-50',
+    label: 'Alerta',
+  },
+  mensagem: {
+    icon: MessageSquare,
+    iconColor: 'text-sky-600',
+    iconBg: 'bg-sky-50',
+    label: 'Mensagem',
+  },
+  inicio_programa: {
+    icon: PlayCircle,
+    iconColor: 'text-primary',
+    iconBg: 'bg-primary/10',
+    label: 'Início de programa',
+  },
+  meta_atingida: {
+    icon: Trophy,
+    iconColor: 'text-amber-600',
+    iconBg: 'bg-amber-50',
+    label: 'Meta atingida',
+  },
   // Expanded types
-  lead_criado:            { icon: UserPlus,        iconColor: 'text-orange-600',  iconBg: 'bg-orange-50',  label: 'Lead criado' },
-  lead_convertido:        { icon: UserCheck,       iconColor: 'text-green-600',   iconBg: 'bg-green-50',   label: 'Lead convertido' },
-  pacote_vendido:         { icon: ShoppingBag,     iconColor: 'text-violet-600',  iconBg: 'bg-violet-50',  label: 'Pacote vendido' },
-  contrato_assinado:      { icon: FileSignature,   iconColor: 'text-indigo-600',  iconBg: 'bg-indigo-50',  label: 'Contrato assinado' },
-  paciente_cadastrado:    { icon: ClipboardList,   iconColor: 'text-teal-600',    iconBg: 'bg-teal-50',    label: 'Paciente cadastrado' },
-  consulta_agendada:      { icon: CalendarPlus,    iconColor: 'text-blue-600',    iconBg: 'bg-blue-50',    label: 'Consulta agendada' },
-  checkin_realizado:      { icon: LogIn,           iconColor: 'text-cyan-600',    iconBg: 'bg-cyan-50',    label: 'Check-in realizado' },
-  atendimento_iniciado:   { icon: Activity,        iconColor: 'text-emerald-600', iconBg: 'bg-emerald-50', label: 'Atendimento iniciado' },
-  atendimento_concluido:  { icon: CheckCircle2,    iconColor: 'text-green-600',   iconBg: 'bg-green-50',   label: 'Atendimento concluído' },
-  anamnese_preenchida:    { icon: ClipboardEdit,   iconColor: 'text-sky-600',     iconBg: 'bg-sky-50',     label: 'Anamnese preenchida' },
-  soap_atualizado:        { icon: NotebookPen,     iconColor: 'text-teal-600',    iconBg: 'bg-teal-50',    label: 'SOAP atualizado' },
-  medida_registrada:      { icon: Scale,           iconColor: 'text-blue-600',    iconBg: 'bg-blue-50',    label: 'Medida registrada' },
-  plano_alimentar_publicado: { icon: Utensils,     iconColor: 'text-emerald-600', iconBg: 'bg-emerald-50', label: 'Plano alimentar publicado' },
-  prescricao_emitida:     { icon: FilePlus,        iconColor: 'text-indigo-600',  iconBg: 'bg-indigo-50',  label: 'Prescrição emitida' },
-  documento_gerado:       { icon: FileText,        iconColor: 'text-slate-600',   iconBg: 'bg-slate-50',   label: 'Documento gerado' },
-  documento_assinado:     { icon: PenLine,         iconColor: 'text-violet-600',  iconBg: 'bg-violet-50',  label: 'Documento assinado' },
-  pagamento_recebido:     { icon: Banknote,        iconColor: 'text-green-600',   iconBg: 'bg-green-50',   label: 'Pagamento recebido' },
-  pagamento_atrasado:     { icon: Clock,           iconColor: 'text-red-600',     iconBg: 'bg-red-50',     label: 'Pagamento atrasado' },
-  mensagem_enviada:       { icon: Send,            iconColor: 'text-sky-600',     iconBg: 'bg-sky-50',     label: 'Mensagem enviada' },
-  checkin_semanal_enviado:{ icon: Smartphone,      iconColor: 'text-purple-600',  iconBg: 'bg-purple-50',  label: 'Check-in semanal' },
+  lead_criado: {
+    icon: UserPlus,
+    iconColor: 'text-orange-600',
+    iconBg: 'bg-orange-50',
+    label: 'Lead criado',
+  },
+  lead_convertido: {
+    icon: UserCheck,
+    iconColor: 'text-green-600',
+    iconBg: 'bg-green-50',
+    label: 'Lead convertido',
+  },
+  pacote_vendido: {
+    icon: ShoppingBag,
+    iconColor: 'text-violet-600',
+    iconBg: 'bg-violet-50',
+    label: 'Pacote vendido',
+  },
+  contrato_assinado: {
+    icon: FileSignature,
+    iconColor: 'text-indigo-600',
+    iconBg: 'bg-indigo-50',
+    label: 'Contrato assinado',
+  },
+  paciente_cadastrado: {
+    icon: ClipboardList,
+    iconColor: 'text-teal-600',
+    iconBg: 'bg-teal-50',
+    label: 'Paciente cadastrado',
+  },
+  consulta_agendada: {
+    icon: CalendarPlus,
+    iconColor: 'text-blue-600',
+    iconBg: 'bg-blue-50',
+    label: 'Consulta agendada',
+  },
+  checkin_realizado: {
+    icon: LogIn,
+    iconColor: 'text-cyan-600',
+    iconBg: 'bg-cyan-50',
+    label: 'Check-in realizado',
+  },
+  atendimento_iniciado: {
+    icon: Activity,
+    iconColor: 'text-emerald-600',
+    iconBg: 'bg-emerald-50',
+    label: 'Atendimento iniciado',
+  },
+  atendimento_concluido: {
+    icon: CheckCircle2,
+    iconColor: 'text-green-600',
+    iconBg: 'bg-green-50',
+    label: 'Atendimento concluído',
+  },
+  anamnese_preenchida: {
+    icon: ClipboardEdit,
+    iconColor: 'text-sky-600',
+    iconBg: 'bg-sky-50',
+    label: 'Anamnese preenchida',
+  },
+  soap_atualizado: {
+    icon: NotebookPen,
+    iconColor: 'text-teal-600',
+    iconBg: 'bg-teal-50',
+    label: 'SOAP atualizado',
+  },
+  medida_registrada: {
+    icon: Scale,
+    iconColor: 'text-blue-600',
+    iconBg: 'bg-blue-50',
+    label: 'Medida registrada',
+  },
+  plano_alimentar_publicado: {
+    icon: Utensils,
+    iconColor: 'text-emerald-600',
+    iconBg: 'bg-emerald-50',
+    label: 'Plano alimentar publicado',
+  },
+  prescricao_emitida: {
+    icon: FilePlus,
+    iconColor: 'text-indigo-600',
+    iconBg: 'bg-indigo-50',
+    label: 'Prescrição emitida',
+  },
+  documento_gerado: {
+    icon: FileText,
+    iconColor: 'text-slate-600',
+    iconBg: 'bg-slate-50',
+    label: 'Documento gerado',
+  },
+  documento_assinado: {
+    icon: PenLine,
+    iconColor: 'text-violet-600',
+    iconBg: 'bg-violet-50',
+    label: 'Documento assinado',
+  },
+  pagamento_recebido: {
+    icon: Banknote,
+    iconColor: 'text-green-600',
+    iconBg: 'bg-green-50',
+    label: 'Pagamento recebido',
+  },
+  pagamento_atrasado: {
+    icon: Clock,
+    iconColor: 'text-red-600',
+    iconBg: 'bg-red-50',
+    label: 'Pagamento atrasado',
+  },
+  mensagem_enviada: {
+    icon: Send,
+    iconColor: 'text-sky-600',
+    iconBg: 'bg-sky-50',
+    label: 'Mensagem enviada',
+  },
+  checkin_semanal_enviado: {
+    icon: Smartphone,
+    iconColor: 'text-purple-600',
+    iconBg: 'bg-purple-50',
+    label: 'Check-in semanal',
+  },
 };
 
 // ─── Category badge config ────────────────────────────────────────────────────
 
 const categoryBadgeConfig: Record<TimelineEventCategory, { label: string; className: string }> = {
-  clinical:      { label: 'Clínico',          className: 'bg-teal-50 text-teal-700 border border-teal-200' },
-  financial:     { label: 'Financeiro',       className: 'bg-violet-50 text-violet-700 border border-violet-200' },
-  documents:     { label: 'Documentos',       className: 'bg-slate-100 text-slate-700 border border-slate-200' },
-  agenda:        { label: 'Agenda',           className: 'bg-blue-50 text-blue-700 border border-blue-200' },
-  communication: { label: 'Comunicação',      className: 'bg-sky-50 text-sky-700 border border-sky-200' },
-  patient_app:   { label: 'App do paciente',  className: 'bg-purple-50 text-purple-700 border border-purple-200' },
-  commercial:    { label: 'Comercial',        className: 'bg-orange-50 text-orange-700 border border-orange-200' },
+  clinical: { label: 'Clínico', className: 'bg-teal-50 text-teal-700 border border-teal-200' },
+  financial: {
+    label: 'Financeiro',
+    className: 'bg-violet-50 text-violet-700 border border-violet-200',
+  },
+  documents: {
+    label: 'Documentos',
+    className: 'bg-slate-100 text-slate-700 border border-slate-200',
+  },
+  agenda: { label: 'Agenda', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
+  communication: {
+    label: 'Comunicação',
+    className: 'bg-sky-50 text-sky-700 border border-sky-200',
+  },
+  patient_app: {
+    label: 'App do paciente',
+    className: 'bg-purple-50 text-purple-700 border border-purple-200',
+  },
+  commercial: {
+    label: 'Comercial',
+    className: 'bg-orange-50 text-orange-700 border border-orange-200',
+  },
 };
 
 // ─── Status badge config ──────────────────────────────────────────────────────
 
 function getStatusBadgeClass(status: string): string {
   const s = status.toLowerCase();
-  if (['concluído', 'concluido', 'pago', 'assinado', 'confirmado', 'convertido', 'registrado', 'preenchida', 'publicado', 'emitida', 'gerado', 'respondido', 'cadastrado', 'vendido', 'criado'].some(k => s.includes(k))) {
+  if (
+    [
+      'concluído',
+      'concluido',
+      'pago',
+      'assinado',
+      'confirmado',
+      'convertido',
+      'registrado',
+      'preenchida',
+      'publicado',
+      'emitida',
+      'gerado',
+      'respondido',
+      'cadastrado',
+      'vendido',
+      'criado',
+    ].some((k) => s.includes(k))
+  ) {
     return 'bg-green-50 text-green-700 border border-green-200';
   }
-  if (['pendente', 'atrasado', 'não respondida', 'nao respondida'].some(k => s.includes(k))) {
+  if (['pendente', 'atrasado', 'não respondida', 'nao respondida'].some((k) => s.includes(k))) {
     return 'bg-red-50 text-red-700 border border-red-200';
   }
-  if (['em andamento', 'ativo', 'agendado'].some(k => s.includes(k))) {
+  if (['em andamento', 'ativo', 'agendado'].some((k) => s.includes(k))) {
     return 'bg-blue-50 text-blue-700 border border-blue-200';
   }
   return 'bg-slate-100 text-slate-600 border border-slate-200';
@@ -146,7 +328,9 @@ function resolveDetailsHref(event: PatientTimelineEvent): string | undefined {
   return event.detailsHref;
 }
 
-function groupByDate(events: PatientTimelineEvent[]): { label: string; events: PatientTimelineEvent[] }[] {
+function groupByDate(
+  events: PatientTimelineEvent[]
+): { label: string; events: PatientTimelineEvent[] }[] {
   // Sort descending by date before grouping
   const sorted = [...events].sort((a, b) => b.date.localeCompare(a.date));
   const map = new Map<string, PatientTimelineEvent[]>();
@@ -161,7 +345,20 @@ function groupByDate(events: PatientTimelineEvent[]): { label: string; events: P
 function formatDateLabel(dateStr: string): string {
   const parts = dateStr.split('-');
   if (parts.length !== 3) return dateStr;
-  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const months = [
+    'Jan',
+    'Fev',
+    'Mar',
+    'Abr',
+    'Mai',
+    'Jun',
+    'Jul',
+    'Ago',
+    'Set',
+    'Out',
+    'Nov',
+    'Dez',
+  ];
   const d = parseInt(parts[2], 10);
   const m = parseInt(parts[1], 10) - 1;
   const y = parts[0];
@@ -185,7 +382,12 @@ function EventCard({ event, isLast }: EventCardProps) {
     <div className="flex gap-3 group">
       {/* Vertical line + icon */}
       <div className="flex flex-col items-center flex-shrink-0">
-        <div className={['w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm', cfg.iconBg].join(' ')}>
+        <div
+          className={[
+            'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm',
+            cfg.iconBg,
+          ].join(' ')}
+        >
           <IconComp size={16} className={cfg.iconColor} />
         </div>
         {!isLast && <div className="w-px flex-1 bg-border mt-2 min-h-[20px]" />}
@@ -205,9 +407,7 @@ function EventCard({ event, isLast }: EventCardProps) {
           </div>
 
           {/* Title */}
-          <p className="text-sm font-semibold text-foreground leading-snug mb-1.5">
-            {event.title}
-          </p>
+          <p className="text-sm font-semibold text-foreground leading-snug mb-1.5">{event.title}</p>
 
           {/* Summary */}
           <p className="text-xs text-muted-foreground leading-relaxed mb-2.5 line-clamp-2">
@@ -217,12 +417,22 @@ function EventCard({ event, isLast }: EventCardProps) {
           {/* Badges + actor row */}
           <div className="flex items-center flex-wrap gap-1.5 mb-2.5">
             {catCfg && (
-              <span className={['text-[10px] font-medium px-2 py-0.5 rounded-full', catCfg.className].join(' ')}>
+              <span
+                className={[
+                  'text-[10px] font-medium px-2 py-0.5 rounded-full',
+                  catCfg.className,
+                ].join(' ')}
+              >
                 {catCfg.label}
               </span>
             )}
             {event.statusLabel && (
-              <span className={['text-[10px] font-medium px-2 py-0.5 rounded-full', getStatusBadgeClass(event.statusLabel)].join(' ')}>
+              <span
+                className={[
+                  'text-[10px] font-medium px-2 py-0.5 rounded-full',
+                  getStatusBadgeClass(event.statusLabel),
+                ].join(' ')}
+              >
                 {event.statusLabel}
               </span>
             )}
@@ -258,9 +468,8 @@ interface TabTimelineProps {
 export default function TabTimeline({ events }: TabTimelineProps) {
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
 
-  const filtered = activeCategory === 'all'
-    ? events
-    : events.filter((e) => e.category === activeCategory);
+  const filtered =
+    activeCategory === 'all' ? events : events.filter((e) => e.category === activeCategory);
 
   const groups = groupByDate(filtered);
 
@@ -287,7 +496,8 @@ export default function TabTimeline({ events }: TabTimelineProps) {
       {/* Count */}
       {filtered.length > 0 && (
         <p className="text-xs text-muted-foreground mb-4 font-medium">
-          {filtered.length} evento{filtered.length !== 1 ? 's' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
+          {filtered.length} evento{filtered.length !== 1 ? 's' : ''} encontrado
+          {filtered.length !== 1 ? 's' : ''}
         </p>
       )}
 

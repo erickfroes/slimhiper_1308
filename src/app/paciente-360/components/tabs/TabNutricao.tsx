@@ -10,9 +10,32 @@ import type {
   MealPhoto,
   NutritionTeamNote,
 } from '@/domain/types';
-import { Flame, Beef, Wheat, Droplets, UtensilsCrossed, Leaf, Apple, Fish, Clock, ChevronDown, ChevronUp, Plus, Pencil, Copy, Send, Archive, Smartphone, XCircle, Camera, MessageSquare, Lock, History, BarChart2,  } from 'lucide-react';
+import {
+  Flame,
+  Beef,
+  Wheat,
+  Droplets,
+  UtensilsCrossed,
+  Leaf,
+  Apple,
+  Fish,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Pencil,
+  Copy,
+  Send,
+  Archive,
+  Smartphone,
+  XCircle,
+  Camera,
+  MessageSquare,
+  Lock,
+  History,
+  BarChart2,
+} from 'lucide-react';
 import Icon from '@/components/ui/AppIcon';
-
 
 interface TabNutricaoProps {
   plan: PatientNutritionPlanSummary;
@@ -24,9 +47,24 @@ const foodGroupConfig: Record<
   { icon: React.ElementType; color: string; bg: string; border: string }
 > = {
   fonte_proteica: { icon: Beef, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
-  carboidrato: { icon: Wheat, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
-  vegetais: { icon: Leaf, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-  gorduras_boas: { icon: Fish, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
+  carboidrato: {
+    icon: Wheat,
+    color: 'text-amber-600',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+  },
+  vegetais: {
+    icon: Leaf,
+    color: 'text-emerald-600',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+  },
+  gorduras_boas: {
+    icon: Fish,
+    color: 'text-blue-600',
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+  },
   frutas: { icon: Apple, color: 'text-pink-600', bg: 'bg-pink-50', border: 'border-pink-200' },
   liquidos: { icon: Droplets, color: 'text-cyan-600', bg: 'bg-cyan-50', border: 'border-cyan-200' },
 };
@@ -61,7 +99,10 @@ function MacroBar({
         <span className={`ml-auto text-sm font-bold tabular-nums ${color}`}>{value}g</span>
       </div>
       <div className="w-full bg-muted rounded-full h-2">
-        <div className={`rounded-full h-2 transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`rounded-full h-2 transition-all ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );
@@ -149,15 +190,16 @@ function FoodGroupCard({ group }: { group: NutritionFoodGroup }) {
 // ─── Adherence bar ────────────────────────────────────────────────────────────
 function AdherenceBar({ entry }: { entry: MealAdherenceEntry }) {
   const pct = entry.adherencePercent;
-  const color =
-    pct >= 80 ? 'bg-emerald-500' : pct >= 65 ? 'bg-amber-500' : 'bg-red-500';
-  const textColor =
-    pct >= 80 ? 'text-emerald-700' : pct >= 65 ? 'text-amber-700' : 'text-red-700';
+  const color = pct >= 80 ? 'bg-emerald-500' : pct >= 65 ? 'bg-amber-500' : 'bg-red-500';
+  const textColor = pct >= 80 ? 'text-emerald-700' : pct >= 65 ? 'text-amber-700' : 'text-red-700';
   return (
     <div className="flex items-center gap-3">
       <span className="text-xs text-muted-foreground w-10 flex-shrink-0">{entry.label}</span>
       <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`h-full rounded-full transition-all ${color}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
       <span className={`text-xs font-semibold tabular-nums w-10 text-right ${textColor}`}>
         {pct}%
@@ -188,9 +230,13 @@ function PlanHistoryRow({ entry }: { entry: NutritionPlanHistory }) {
           {entry.nutritionistName} · {entry.targetCalories} kcal · Criado em {entry.createdAt}
           {entry.archivedAt && ` · Arquivado em ${entry.archivedAt}`}
         </p>
-        {entry.notes && <p className="text-xs text-muted-foreground mt-0.5 italic">{entry.notes}</p>}
+        {entry.notes && (
+          <p className="text-xs text-muted-foreground mt-0.5 italic">{entry.notes}</p>
+        )}
       </div>
-      <span className={`text-xs border px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${s.cls}`}>
+      <span
+        className={`text-xs border px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${s.cls}`}
+      >
         {s.label}
       </span>
     </div>
@@ -267,7 +313,9 @@ function TeamNoteCard({ note }: { note: NutritionTeamNote }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function TabNutricao({ plan }: TabNutricaoProps) {
   const [showAllPhotos, setShowAllPhotos] = useState(false);
-  const visiblePhotos = showAllPhotos ? plan.mealPhotos ?? [] : (plan.mealPhotos ?? []).slice(0, 3);
+  const visiblePhotos = showAllPhotos
+    ? (plan.mealPhotos ?? [])
+    : (plan.mealPhotos ?? []).slice(0, 3);
 
   const proteinPct = Math.round(((plan.targetProteinG * 4) / plan.targetCalories) * 100);
   const carbsPct = Math.round(((plan.targetCarbsG * 4) / plan.targetCalories) * 100);
@@ -287,13 +335,14 @@ export default function TabNutricao({ plan }: TabNutricaoProps) {
       {/* ── Actions ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2">
         {actions.map(({ label, icon: ActionIcon, variant }) => {
-          const base = 'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors';
+          const base =
+            'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors';
           const cls =
             variant === 'primary'
               ? `${base} bg-violet-600 text-white hover:bg-violet-700`
               : variant === 'secondary'
-              ? `${base} bg-card border border-border text-foreground hover:bg-muted`
-              : `${base} text-muted-foreground hover:text-foreground hover:bg-muted`;
+                ? `${base} bg-card border border-border text-foreground hover:bg-muted`
+                : `${base} text-muted-foreground hover:text-foreground hover:bg-muted`;
           const Icon = ActionIcon as React.ElementType;
           return (
             <button key={label} className={cls} type="button">
@@ -341,9 +390,27 @@ export default function TabNutricao({ plan }: TabNutricaoProps) {
 
         {/* Macros */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-          <MacroBar label="Proteína" value={plan.targetProteinG} max={200} color="text-red-600" icon={Beef} />
-          <MacroBar label="Carboidratos" value={plan.targetCarbsG} max={300} color="text-amber-600" icon={Wheat} />
-          <MacroBar label="Gorduras" value={plan.targetFatG} max={100} color="text-blue-600" icon={Droplets} />
+          <MacroBar
+            label="Proteína"
+            value={plan.targetProteinG}
+            max={200}
+            color="text-red-600"
+            icon={Beef}
+          />
+          <MacroBar
+            label="Carboidratos"
+            value={plan.targetCarbsG}
+            max={300}
+            color="text-amber-600"
+            icon={Wheat}
+          />
+          <MacroBar
+            label="Gorduras"
+            value={plan.targetFatG}
+            max={100}
+            color="text-blue-600"
+            icon={Droplets}
+          />
         </div>
 
         {/* Macro distribution */}
@@ -423,8 +490,8 @@ export default function TabNutricao({ plan }: TabNutricaoProps) {
           </div>
           <div className="flex items-center gap-4 mt-4 pt-3 border-t border-border text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-              ≥ 80% — Boa adesão
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />≥ 80% — Boa
+              adesão
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />

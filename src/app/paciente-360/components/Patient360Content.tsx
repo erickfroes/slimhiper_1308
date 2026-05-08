@@ -20,10 +20,7 @@ export default function Patient360Content({ patientId }: Patient360ContentProps)
 
   useEffect(() => {
     // Backend integration point: replace with getPatient360(patientId) Supabase call
-    Promise.all([
-      getPatient360(patientId),
-      getPatientDocuments360(patientId),
-    ])
+    Promise.all([getPatient360(patientId), getPatientDocuments360(patientId)])
       .then(([patient, docs]) => {
         setData(patient);
         setDocuments360(docs);
@@ -52,7 +49,9 @@ export default function Patient360Content({ patientId }: Patient360ContentProps)
           ))}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={`p360-skel-${i}`} />)}
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={`p360-skel-${i}`} />
+          ))}
         </div>
       </div>
     );
@@ -63,7 +62,9 @@ export default function Patient360Content({ patientId }: Patient360ContentProps)
       <div className="p-6 xl:p-8 max-w-screen-2xl mx-auto">
         <div className="card-base p-8 text-center">
           <p className="text-base font-semibold text-foreground mb-1">Paciente não encontrado</p>
-          <p className="text-sm text-muted-foreground">Verifique o ID do paciente e tente novamente.</p>
+          <p className="text-sm text-muted-foreground">
+            Verifique o ID do paciente e tente novamente.
+          </p>
         </div>
       </div>
     );

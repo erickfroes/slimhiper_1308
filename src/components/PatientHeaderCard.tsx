@@ -2,7 +2,23 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Phone, Mail, User, MapPin, UserCheck, Package, CalendarClock, Clock, Play, CalendarPlus, FileText, MessageSquare, CreditCard, BarChart2, Pencil,  } from 'lucide-react';
+import {
+  Phone,
+  Mail,
+  User,
+  MapPin,
+  UserCheck,
+  Package,
+  CalendarClock,
+  Clock,
+  Play,
+  CalendarPlus,
+  FileText,
+  MessageSquare,
+  CreditCard,
+  BarChart2,
+  Pencil,
+} from 'lucide-react';
 import type { Patient360Summary } from '@/domain/types';
 import StatusBadge from './StatusBadge';
 
@@ -19,8 +35,14 @@ const clinicalRiskConfig = {
 };
 
 const financialStatusConfig = {
-  em_dia: { label: 'Financeiro em Dia', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  pendente: { label: 'Pagamento Pendente', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  em_dia: {
+    label: 'Financeiro em Dia',
+    className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  pendente: {
+    label: 'Pagamento Pendente',
+    className: 'bg-amber-50 text-amber-700 border-amber-200',
+  },
   inadimplente: { label: 'Inadimplente', className: 'bg-red-50 text-red-700 border-red-200' },
   isento: { label: 'Isento', className: 'bg-slate-50 text-slate-600 border-slate-200' },
 };
@@ -74,8 +96,16 @@ function InfoItem({ icon, label, value, mono }: InfoItemProps) {
     <div className="flex items-start gap-2 min-w-0">
       <span className="mt-0.5 text-muted-foreground flex-shrink-0">{icon}</span>
       <div className="min-w-0">
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide leading-none mb-0.5">{label}</p>
-        <p className={['text-sm font-medium text-foreground truncate', mono ? 'font-mono' : ''].join(' ')}>{value}</p>
+        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide leading-none mb-0.5">
+          {label}
+        </p>
+        <p
+          className={['text-sm font-medium text-foreground truncate', mono ? 'font-mono' : ''].join(
+            ' '
+          )}
+        >
+          {value}
+        </p>
       </div>
     </div>
   );
@@ -88,17 +118,33 @@ interface BadgePillProps {
 
 function BadgePill({ label, className }: BadgePillProps) {
   return (
-    <span className={['inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full border', className].join(' ')}>
+    <span
+      className={[
+        'inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full border',
+        className,
+      ].join(' ')}
+    >
       {label}
     </span>
   );
 }
 
 export default function PatientHeaderCard({ data, patientId }: PatientHeaderCardProps) {
-  const { profile, activePackage, financial, clinicalRisk, mainUnit, responsibleProfessional, lastUpdate, upcomingAppointments } = data;
+  const {
+    profile,
+    activePackage,
+    financial,
+    clinicalRisk,
+    mainUnit,
+    responsibleProfessional,
+    lastUpdate,
+    upcomingAppointments,
+  } = data;
 
-  const nextAppointment = upcomingAppointments?.find(a => a.status === 'agendado');
-  const hasTodayAppointment = upcomingAppointments?.some(a => isToday(a.scheduledAt) && a.status === 'agendado');
+  const nextAppointment = upcomingAppointments?.find((a) => a.status === 'agendado');
+  const hasTodayAppointment = upcomingAppointments?.some(
+    (a) => isToday(a.scheduledAt) && a.status === 'agendado'
+  );
 
   const primaryAction = hasTodayAppointment
     ? { label: 'Iniciar atendimento', icon: <Play size={15} /> }
@@ -220,13 +266,7 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
 
         {/* Row 2: Info grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-6 gap-y-4">
-          {mainUnit && (
-            <InfoItem
-              icon={<MapPin size={14} />}
-              label="Unidade"
-              value={mainUnit}
-            />
-          )}
+          {mainUnit && <InfoItem icon={<MapPin size={14} />} label="Unidade" value={mainUnit} />}
           {responsibleProfessional && (
             <InfoItem
               icon={<UserCheck size={14} />}

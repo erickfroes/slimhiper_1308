@@ -70,9 +70,14 @@ function AdherenceBar({ value, level }: { value: number; level: AdherenceLevel }
   return (
     <div className="flex items-center gap-2">
       <div className="w-16 bg-muted rounded-full h-1.5 flex-shrink-0">
-        <div className={['rounded-full h-1.5 transition-all', color].join(' ')} style={{ width: `${value}%` }} />
+        <div
+          className={['rounded-full h-1.5 transition-all', color].join(' ')}
+          style={{ width: `${value}%` }}
+        />
       </div>
-      <span className={['text-xs font-semibold tabular-nums', adherenceBg(level)].join(' ')}>{value}%</span>
+      <span className={['text-xs font-semibold tabular-nums', adherenceBg(level)].join(' ')}>
+        {value}%
+      </span>
     </div>
   );
 }
@@ -100,9 +105,16 @@ function SortableHeader({
     >
       <span className="flex items-center gap-1">
         {label}
-        <span className={['flex flex-col', active ? 'text-primary' : 'text-muted-foreground/40'].join(' ')}>
+        <span
+          className={['flex flex-col', active ? 'text-primary' : 'text-muted-foreground/40'].join(
+            ' '
+          )}
+        >
           <ChevronUp size={10} className={active && currentDir === 'asc' ? 'text-primary' : ''} />
-          <ChevronDown size={10} className={active && currentDir === 'desc' ? 'text-primary' : ''} />
+          <ChevronDown
+            size={10}
+            className={active && currentDir === 'desc' ? 'text-primary' : ''}
+          />
         </span>
       </span>
     </th>
@@ -137,7 +149,10 @@ export default function PatientListContent() {
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else { setSortKey(key); setSortDir('asc'); }
+    else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
   };
 
   const filtered = useMemo(() => {
@@ -145,7 +160,10 @@ export default function PatientListContent() {
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
-        (p) => p.name.toLowerCase().includes(q) || p.phone.includes(q) || p.activePackage.toLowerCase().includes(q)
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.phone.includes(q) ||
+          p.activePackage.toLowerCase().includes(q)
       );
     }
     if (filterProgram) result = result.filter((p) => p.programType === filterProgram);
@@ -155,8 +173,10 @@ export default function PatientListContent() {
       result.sort((a, b) => {
         const av = a[sortKey];
         const bv = b[sortKey];
-        if (typeof av === 'number' && typeof bv === 'number') return sortDir === 'asc' ? av - bv : bv - av;
-        return sortDir === 'asc' ? String(av).localeCompare(String(bv),'pt-BR')
+        if (typeof av === 'number' && typeof bv === 'number')
+          return sortDir === 'asc' ? av - bv : bv - av;
+        return sortDir === 'asc'
+          ? String(av).localeCompare(String(bv), 'pt-BR')
           : String(bv).localeCompare(String(av), 'pt-BR');
       });
     }
@@ -205,19 +225,28 @@ export default function PatientListContent() {
       {/* Search + Filter bar */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="relative flex-1 max-w-sm">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search
+            size={15}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
           <input
             type="text"
             placeholder="Buscar por nome, telefone, programa..."
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             className="input-base pl-9"
           />
         </div>
 
         <button
           onClick={() => setFilterOpen(!filterOpen)}
-          className={['btn-secondary gap-2 text-sm', filterOpen || activeFilters > 0 ? 'border-primary text-primary' : ''].join(' ')}
+          className={[
+            'btn-secondary gap-2 text-sm',
+            filterOpen || activeFilters > 0 ? 'border-primary text-primary' : '',
+          ].join(' ')}
         >
           <SlidersHorizontal size={15} />
           Filtros
@@ -245,12 +274,17 @@ export default function PatientListContent() {
             </label>
             <select
               value={filterProgram}
-              onChange={(e) => { setFilterProgram(e.target.value as ProgramType | ''); setPage(1); }}
+              onChange={(e) => {
+                setFilterProgram(e.target.value as ProgramType | '');
+                setPage(1);
+              }}
               className="input-base text-sm"
             >
               <option value="">Todos os programas</option>
               {(Object.keys(programTypeLabel) as ProgramType[]).map((k) => (
-                <option key={`prog-filter-${k}`} value={k}>{programTypeLabel[k]}</option>
+                <option key={`prog-filter-${k}`} value={k}>
+                  {programTypeLabel[k]}
+                </option>
               ))}
             </select>
           </div>
@@ -260,7 +294,10 @@ export default function PatientListContent() {
             </label>
             <select
               value={filterFinancial}
-              onChange={(e) => { setFilterFinancial(e.target.value as FinancialStatus | ''); setPage(1); }}
+              onChange={(e) => {
+                setFilterFinancial(e.target.value as FinancialStatus | '');
+                setPage(1);
+              }}
               className="input-base text-sm"
             >
               <option value="">Todos</option>
@@ -275,7 +312,10 @@ export default function PatientListContent() {
             </label>
             <select
               value={filterAdherence}
-              onChange={(e) => { setFilterAdherence(e.target.value as AdherenceLevel | ''); setPage(1); }}
+              onChange={(e) => {
+                setFilterAdherence(e.target.value as AdherenceLevel | '');
+                setPage(1);
+              }}
               className="input-base text-sm"
             >
               <option value="">Todas</option>
@@ -291,7 +331,9 @@ export default function PatientListContent() {
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5 mb-4 slide-up">
-          <span className="text-sm font-semibold text-primary">{selectedIds.size} selecionado(s)</span>
+          <span className="text-sm font-semibold text-primary">
+            {selectedIds.size} selecionado(s)
+          </span>
           <div className="flex items-center gap-2 ml-auto">
             <button className="btn-secondary text-xs gap-1.5">
               <MessageSquare size={13} />
@@ -322,16 +364,60 @@ export default function PatientListContent() {
                     className="rounded border-input accent-primary cursor-pointer"
                   />
                 </th>
-                <SortableHeader label="Paciente" sortKey="name" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                <SortableHeader label="Idade" sortKey="age" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Telefone</th>
-                <SortableHeader label="Programa" sortKey="activePackage" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                <SortableHeader label="Semana" sortKey="currentWeek" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                <SortableHeader label="Adesão" sortKey="weeklyAdherence" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Próx. Consulta</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Alertas</th>
-                <SortableHeader label="Financeiro" sortKey="financialStatus" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">Ações</th>
+                <SortableHeader
+                  label="Paciente"
+                  sortKey="name"
+                  currentKey={sortKey}
+                  currentDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Idade"
+                  sortKey="age"
+                  currentKey={sortKey}
+                  currentDir={sortDir}
+                  onSort={handleSort}
+                />
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                  Telefone
+                </th>
+                <SortableHeader
+                  label="Programa"
+                  sortKey="activePackage"
+                  currentKey={sortKey}
+                  currentDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Semana"
+                  sortKey="currentWeek"
+                  currentKey={sortKey}
+                  currentDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Adesão"
+                  sortKey="weeklyAdherence"
+                  currentKey={sortKey}
+                  currentDir={sortDir}
+                  onSort={handleSort}
+                />
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                  Próx. Consulta
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                  Alertas
+                </th>
+                <SortableHeader
+                  label="Financeiro"
+                  sortKey="financialStatus"
+                  currentKey={sortKey}
+                  currentDir={sortDir}
+                  onSort={handleSort}
+                />
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                  Ações
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -375,17 +461,25 @@ export default function PatientListContent() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
-                          {patient.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                          {patient.name
+                            .split(' ')
+                            .map((n) => n[0])
+                            .slice(0, 2)
+                            .join('')}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground truncate max-w-[140px]">{patient.name}</p>
+                          <p className="text-sm font-semibold text-foreground truncate max-w-[140px]">
+                            {patient.name}
+                          </p>
                           <StatusBadge status={patient.status} size="xs" />
                         </div>
                       </div>
                     </td>
 
                     {/* Age */}
-                    <td className="px-4 py-3 text-sm text-foreground tabular-nums">{patient.age} anos</td>
+                    <td className="px-4 py-3 text-sm text-foreground tabular-nums">
+                      {patient.age} anos
+                    </td>
 
                     {/* Phone */}
                     <td className="px-4 py-3">
@@ -397,7 +491,12 @@ export default function PatientListContent() {
 
                     {/* Program */}
                     <td className="px-4 py-3">
-                      <span className={['text-xs font-medium px-2 py-0.5 rounded-full', programTypeColor[patient.programType]].join(' ')}>
+                      <span
+                        className={[
+                          'text-xs font-medium px-2 py-0.5 rounded-full',
+                          programTypeColor[patient.programType],
+                        ].join(' ')}
+                      >
                         {programTypeLabel[patient.programType]}
                       </span>
                     </td>
@@ -408,7 +507,9 @@ export default function PatientListContent() {
                         <div className="w-12 bg-muted rounded-full h-1.5">
                           <div
                             className="bg-primary rounded-full h-1.5"
-                            style={{ width: `${(patient.currentWeek / patient.totalWeeks) * 100}%` }}
+                            style={{
+                              width: `${(patient.currentWeek / patient.totalWeeks) * 100}%`,
+                            }}
                           />
                         </div>
                         <span className="text-xs font-semibold text-foreground tabular-nums">
@@ -419,7 +520,10 @@ export default function PatientListContent() {
 
                     {/* Adherence */}
                     <td className="px-4 py-3">
-                      <AdherenceBar value={patient.weeklyAdherence} level={patient.adherenceLevel} />
+                      <AdherenceBar
+                        value={patient.weeklyAdherence}
+                        level={patient.adherenceLevel}
+                      />
                     </td>
 
                     {/* Next appointment */}
@@ -486,14 +590,22 @@ export default function PatientListContent() {
         {!loading && filtered.length > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Exibindo {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, filtered.length)} de {filtered.length} pacientes</span>
+              <span>
+                Exibindo {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} de{' '}
+                {filtered.length} pacientes
+              </span>
               <select
                 value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
                 className="ml-2 text-xs border border-input rounded-lg px-2 py-1 bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               >
                 {PAGE_SIZES.map((s) => (
-                  <option key={`pagesize-${s}`} value={s}>{s} por página</option>
+                  <option key={`pagesize-${s}`} value={s}>
+                    {s} por página
+                  </option>
                 ))}
               </select>
             </div>

@@ -39,10 +39,15 @@ export default function PackageProgressCard({ pkg }: PackageProgressCardProps) {
       <div className="mb-3">
         <div className="flex justify-between text-xs mb-1">
           <span className="text-muted-foreground">Progresso semanal</span>
-          <span className="font-semibold text-primary">Sem {pkg.currentWeek}/{pkg.totalWeeks}</span>
+          <span className="font-semibold text-primary">
+            Sem {pkg.currentWeek}/{pkg.totalWeeks}
+          </span>
         </div>
         <div className="w-full bg-muted rounded-full h-2">
-          <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${weekPercent}%` }} />
+          <div
+            className="bg-primary rounded-full h-2 transition-all"
+            style={{ width: `${weekPercent}%` }}
+          />
         </div>
       </div>
 
@@ -50,7 +55,9 @@ export default function PackageProgressCard({ pkg }: PackageProgressCardProps) {
       <div className="mb-3">
         <div className="flex justify-between text-xs mb-1">
           <span className="text-muted-foreground">Consultas médicas</span>
-          <span className="font-medium text-foreground">{pkg.usedConsultations}/{pkg.totalConsultations}</span>
+          <span className="font-medium text-foreground">
+            {pkg.usedConsultations}/{pkg.totalConsultations}
+          </span>
         </div>
         <div className="w-full bg-muted rounded-full h-1.5">
           <div className="bg-teal-400 rounded-full h-1.5" style={{ width: `${consultPercent}%` }} />
@@ -61,17 +68,24 @@ export default function PackageProgressCard({ pkg }: PackageProgressCardProps) {
       <div>
         <div className="flex justify-between text-xs mb-1">
           <span className="text-muted-foreground">Sessões de nutrição</span>
-          <span className="font-medium text-foreground">{pkg.usedNutritionSessions}/{pkg.totalNutritionSessions}</span>
+          <span className="font-medium text-foreground">
+            {pkg.usedNutritionSessions}/{pkg.totalNutritionSessions}
+          </span>
         </div>
         <div className="w-full bg-muted rounded-full h-1.5">
-          <div className="bg-emerald-400 rounded-full h-1.5" style={{ width: `${nutriPercent}%` }} />
+          <div
+            className="bg-emerald-400 rounded-full h-1.5"
+            style={{ width: `${nutriPercent}%` }}
+          />
         </div>
       </div>
 
       {/* Dates */}
       <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border text-xs text-muted-foreground">
         <Calendar size={12} />
-        <span>{pkg.startDate} → {pkg.endDate}</span>
+        <span>
+          {pkg.startDate} → {pkg.endDate}
+        </span>
       </div>
     </div>
   );

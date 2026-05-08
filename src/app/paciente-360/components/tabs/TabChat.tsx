@@ -106,7 +106,12 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
                 Todas lidas
               </span>
             )}
-            <div className={['w-2 h-2 rounded-full flex-shrink-0', chat.isOpen ? 'bg-positive' : 'bg-muted-foreground'].join(' ')} />
+            <div
+              className={[
+                'w-2 h-2 rounded-full flex-shrink-0',
+                chat.isOpen ? 'bg-positive' : 'bg-muted-foreground',
+              ].join(' ')}
+            />
           </div>
         </div>
 
@@ -116,7 +121,9 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
               <div
                 className={[
                   'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5',
-                  msg.from === 'staff' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+                  msg.from === 'staff'
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-muted text-muted-foreground',
                 ].join(' ')}
               >
                 {msg.from === 'staff' ? (responsible?.name?.[0] ?? 'A') : patientName[0]}
@@ -148,7 +155,8 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
           <div className="px-4 py-2 bg-muted/20 border-t border-border flex items-center gap-2">
             <Clock size={12} className="text-muted-foreground" />
             <span className="text-xs text-muted-foreground">
-              Última mensagem: {lastMessage.time} — {lastMessage.from === 'patient' ? patientName : (responsible?.name ?? 'Equipe')}
+              Última mensagem: {lastMessage.time} —{' '}
+              {lastMessage.from === 'patient' ? patientName : (responsible?.name ?? 'Equipe')}
             </span>
           </div>
         )}
@@ -168,7 +176,10 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
                 onClick={() => setQuickMessage(sc.text)}
                 className="flex items-center gap-2 text-left px-3 py-2 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors group"
               >
-                <ChevronRight size={13} className="text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
+                <ChevronRight
+                  size={13}
+                  className="text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0"
+                />
                 <span className="text-xs text-foreground truncate">{sc.text}</span>
               </button>
             ))}
@@ -217,7 +228,8 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
           className={[
             'flex items-center justify-center gap-2 py-2.5 text-sm rounded-lg border font-medium transition-colors',
             markedAnswered
-              ? 'bg-positive/10 border-positive/30 text-positive cursor-default' :'btn-secondary',
+              ? 'bg-positive/10 border-positive/30 text-positive cursor-default'
+              : 'btn-secondary',
           ].join(' ')}
         >
           <CheckCheck size={15} />
@@ -247,14 +259,27 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
           </p>
           <div className="space-y-2">
             {[
-              { date: '28/04/2025', summary: 'Dúvida sobre Metformina — respondida por Dra. Ana Lima', msgs: 6 },
-              { date: '15/04/2025', summary: 'Confirmação de consulta e ajuste de horário', msgs: 4 },
+              {
+                date: '28/04/2025',
+                summary: 'Dúvida sobre Metformina — respondida por Dra. Ana Lima',
+                msgs: 6,
+              },
+              {
+                date: '15/04/2025',
+                summary: 'Confirmação de consulta e ajuste de horário',
+                msgs: 4,
+              },
               { date: '02/04/2025', summary: 'Orientações pós-consulta enviadas', msgs: 3 },
             ].map((h, i) => (
-              <div key={i} className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/30 border border-border">
+              <div
+                key={i}
+                className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/30 border border-border"
+              >
                 <div>
                   <p className="text-xs font-medium text-foreground">{h.summary}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{h.date} · {h.msgs} mensagens</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {h.date} · {h.msgs} mensagens
+                  </p>
                 </div>
                 <ChevronRight size={14} className="text-muted-foreground flex-shrink-0" />
               </div>

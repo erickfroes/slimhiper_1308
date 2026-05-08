@@ -2,7 +2,13 @@
 // Backend integration point: replace mock implementations with Supabase/API calls
 
 export type UserRole =
-  | 'clinic_admin' |'physician' |'nutritionist' |'coordinator' |'receptionist' |'platform_admin' |'patient';
+  | 'clinic_admin'
+  | 'physician'
+  | 'nutritionist'
+  | 'coordinator'
+  | 'receptionist'
+  | 'platform_admin'
+  | 'patient';
 
 export type TenantStatus = 'active' | 'trial' | 'suspended' | 'cancelled';
 export type TenantPlan = 'starter' | 'professional' | 'enterprise';
@@ -65,7 +71,11 @@ export interface PatientProfile {
 }
 
 export type ProgramType =
-  | 'emagrecimento' |'hipertrofia' |'recomposicao' |'saude_metabolica' |'longevidade';
+  | 'emagrecimento'
+  | 'hipertrofia'
+  | 'recomposicao'
+  | 'saude_metabolica'
+  | 'longevidade';
 
 export type PackageStatus = 'ativo' | 'pausado' | 'concluido' | 'cancelado' | 'aguardando';
 
@@ -194,10 +204,24 @@ export interface PatientNegotiation {
 
 export type AppointmentStatus =
   | 'agendado'
-  | 'chegou' |'triagem' |'medidas' |'bioimpedancia' |'aguardando_medico' |'em_consulta' |'checkout' |'concluido' |'falta' |'cancelado';
+  | 'chegou'
+  | 'triagem'
+  | 'medidas'
+  | 'bioimpedancia'
+  | 'aguardando_medico'
+  | 'em_consulta'
+  | 'checkout'
+  | 'concluido'
+  | 'falta'
+  | 'cancelado';
 
 export type AppointmentType =
-  | 'consulta_medica' |'retorno' |'nutricao' |'avaliacao_inicial' |'bioimpedancia' |'checkup';
+  | 'consulta_medica'
+  | 'retorno'
+  | 'nutricao'
+  | 'avaliacao_inicial'
+  | 'bioimpedancia'
+  | 'checkup';
 
 export interface AppointmentSummary {
   id: string;
@@ -231,13 +255,46 @@ export interface EncounterSummary {
 }
 
 export type TimelineEventType =
-  | 'consulta' |'nutricao' |'medicamento' |'medida' |'documento' |'pagamento' |'alerta' |'mensagem' |'inicio_programa' |'meta_atingida'
+  | 'consulta'
+  | 'nutricao'
+  | 'medicamento'
+  | 'medida'
+  | 'documento'
+  | 'pagamento'
+  | 'alerta'
+  | 'mensagem'
+  | 'inicio_programa'
+  | 'meta_atingida'
   // Paciente 360 expanded types
   | 'lead_criado'
-  | 'lead_convertido' |'pacote_vendido' |'contrato_assinado' |'paciente_cadastrado' |'consulta_agendada' |'checkin_realizado' |'atendimento_iniciado' |'atendimento_concluido' |'anamnese_preenchida' |'soap_atualizado' |'medida_registrada' |'plano_alimentar_publicado' |'prescricao_emitida' |'documento_gerado' |'documento_assinado' |'pagamento_recebido' |'pagamento_atrasado' |'mensagem_enviada' |'checkin_semanal_enviado';
+  | 'lead_convertido'
+  | 'pacote_vendido'
+  | 'contrato_assinado'
+  | 'paciente_cadastrado'
+  | 'consulta_agendada'
+  | 'checkin_realizado'
+  | 'atendimento_iniciado'
+  | 'atendimento_concluido'
+  | 'anamnese_preenchida'
+  | 'soap_atualizado'
+  | 'medida_registrada'
+  | 'plano_alimentar_publicado'
+  | 'prescricao_emitida'
+  | 'documento_gerado'
+  | 'documento_assinado'
+  | 'pagamento_recebido'
+  | 'pagamento_atrasado'
+  | 'mensagem_enviada'
+  | 'checkin_semanal_enviado';
 
 export type TimelineEventCategory =
-  | 'clinical' |'financial' |'documents' |'agenda' |'communication' |'patient_app' |'commercial';
+  | 'clinical'
+  | 'financial'
+  | 'documents'
+  | 'agenda'
+  | 'communication'
+  | 'patient_app'
+  | 'commercial';
 
 export interface PatientTimelineEvent {
   id: string;
@@ -308,7 +365,11 @@ export interface PatientPrescriptionSummary {
   isActive: boolean;
   notes?: string;
   // Extended fields
-  category?: 'prescricao_medica' | 'suplementacao' | 'orientacoes_nutricionais' | 'orientacoes_gerais';
+  category?:
+    | 'prescricao_medica'
+    | 'suplementacao'
+    | 'orientacoes_nutricionais'
+    | 'orientacoes_gerais';
   status?: 'ativo' | 'expirado' | 'cancelado' | 'pendente_assinatura' | 'rascunho';
   issueDate?: string;
   validity?: string;
@@ -451,7 +512,13 @@ export interface PatientChatSla {
 // ─── Document 360 types ───────────────────────────────────────────────────────
 
 export type PatientDocumentCategory =
-  | 'relatorio' |'prescricao' |'termo' |'contrato' |'consentimento' |'orientacao' |'pacote_evidencia';
+  | 'relatorio'
+  | 'prescricao'
+  | 'termo'
+  | 'contrato'
+  | 'consentimento'
+  | 'orientacao'
+  | 'pacote_evidencia';
 
 export type PatientDocumentSignatureStatus = 'assinado' | 'pendente' | 'nao_requerido';
 
@@ -461,7 +528,13 @@ export interface PatientDocument360Item {
   name: string;
   category: PatientDocumentCategory;
   tipo: string;
-  status: 'assinado' | 'pendente_assinatura' | 'em_analise' | 'vencido' | 'cancelado' | 'disponivel';
+  status:
+    | 'assinado'
+    | 'pendente_assinatura'
+    | 'em_analise'
+    | 'vencido'
+    | 'cancelado'
+    | 'disponivel';
   assinatura: PatientDocumentSignatureStatus;
   emitidoEm: string;
   ultimoAcesso?: string;
@@ -649,7 +722,14 @@ export interface ClinicProgram {
 
 export type BuilderStepKey =
   | 'dados_gerais'
-  | 'fases' |'servicos' |'entitlements' |'checkins' |'documentos' |'financeiro' |'equipe' |'revisao';
+  | 'fases'
+  | 'servicos'
+  | 'entitlements'
+  | 'checkins'
+  | 'documentos'
+  | 'financeiro'
+  | 'equipe'
+  | 'revisao';
 
 export interface BuilderStep {
   key: BuilderStepKey;

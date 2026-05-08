@@ -30,7 +30,10 @@ export default function FinancialStatusCard({ financial }: FinancialStatusCardPr
       <div className="mb-4">
         <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
           <span>Pago</span>
-          <span>{paidPercent}% — {formatBRL(financial.totalPaid)} de {formatBRL(financial.totalContractValue)}</span>
+          <span>
+            {paidPercent}% — {formatBRL(financial.totalPaid)} de{' '}
+            {formatBRL(financial.totalContractValue)}
+          </span>
         </div>
         <div className="w-full bg-muted rounded-full h-2">
           <div
@@ -44,11 +47,15 @@ export default function FinancialStatusCard({ financial }: FinancialStatusCardPr
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-muted rounded-xl p-3">
           <p className="text-xs text-muted-foreground mb-0.5">Valor total</p>
-          <p className="text-base font-bold text-foreground tabular-nums">{formatBRL(financial.totalContractValue)}</p>
+          <p className="text-base font-bold text-foreground tabular-nums">
+            {formatBRL(financial.totalContractValue)}
+          </p>
         </div>
         <div className="bg-muted rounded-xl p-3">
           <p className="text-xs text-muted-foreground mb-0.5">Pendente</p>
-          <p className="text-base font-bold text-foreground tabular-nums">{formatBRL(financial.totalPending)}</p>
+          <p className="text-base font-bold text-foreground tabular-nums">
+            {formatBRL(financial.totalPending)}
+          </p>
         </div>
       </div>
 
@@ -56,7 +63,10 @@ export default function FinancialStatusCard({ financial }: FinancialStatusCardPr
       {financial.nextDueDate && (
         <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
           <AlertCircle size={13} />
-          <span>Próx. vencimento: <strong>{financial.nextDueDate}</strong> — {formatBRL(financial.nextDueAmount ?? 0)}</span>
+          <span>
+            Próx. vencimento: <strong>{financial.nextDueDate}</strong> —{' '}
+            {formatBRL(financial.nextDueAmount ?? 0)}
+          </span>
         </div>
       )}
 
@@ -64,7 +74,10 @@ export default function FinancialStatusCard({ financial }: FinancialStatusCardPr
       {financial.lastPaymentDate && (
         <div className="flex items-center gap-2 mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700">
           <CheckCircle size={13} />
-          <span>Último pagamento: <strong>{financial.lastPaymentDate}</strong> — {formatBRL(financial.lastPaymentAmount ?? 0)}</span>
+          <span>
+            Último pagamento: <strong>{financial.lastPaymentDate}</strong> —{' '}
+            {formatBRL(financial.lastPaymentAmount ?? 0)}
+          </span>
         </div>
       )}
     </div>

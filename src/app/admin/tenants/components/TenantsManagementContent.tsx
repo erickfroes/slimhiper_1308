@@ -1,7 +1,28 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Building2, Users, Search, Filter, MoreHorizontal, Ban, Play, CreditCard, FileText, Link2, ChevronRight, LogOut, User, Bell, CheckCircle, XCircle, Clock, X, ExternalLink, Activity } from 'lucide-react';
+import {
+  Building2,
+  Users,
+  Search,
+  Filter,
+  MoreHorizontal,
+  Ban,
+  Play,
+  CreditCard,
+  FileText,
+  Link2,
+  ChevronRight,
+  LogOut,
+  User,
+  Bell,
+  CheckCircle,
+  XCircle,
+  Clock,
+  X,
+  ExternalLink,
+  Activity,
+} from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
@@ -51,7 +72,14 @@ const mockTenantRows: TenantRow[] = [
     saasSubscriptionStatus: 'active',
     asaasSubaccountStatus: 'active',
     d4signStatus: 'active',
-    featureFlags: { programs: true, builder: true, whatsapp: true, aiAssistant: true, customDomain: true, advancedReports: true },
+    featureFlags: {
+      programs: true,
+      builder: true,
+      whatsapp: true,
+      aiAssistant: true,
+      customDomain: true,
+      advancedReports: true,
+    },
     createdAt: '2025-01-15',
     lastActivityAt: '2026-05-07',
   },
@@ -71,7 +99,14 @@ const mockTenantRows: TenantRow[] = [
     saasSubscriptionStatus: 'active',
     asaasSubaccountStatus: 'active',
     d4signStatus: 'quota_exceeded',
-    featureFlags: { programs: true, builder: false, whatsapp: true, aiAssistant: false, customDomain: false, advancedReports: true },
+    featureFlags: {
+      programs: true,
+      builder: false,
+      whatsapp: true,
+      aiAssistant: false,
+      customDomain: false,
+      advancedReports: true,
+    },
     createdAt: '2025-03-20',
     lastActivityAt: '2026-05-07',
   },
@@ -91,7 +126,14 @@ const mockTenantRows: TenantRow[] = [
     saasSubscriptionStatus: 'trial',
     asaasSubaccountStatus: 'pending',
     d4signStatus: 'not_configured',
-    featureFlags: { programs: true, builder: false, whatsapp: false, aiAssistant: false, customDomain: false, advancedReports: false },
+    featureFlags: {
+      programs: true,
+      builder: false,
+      whatsapp: false,
+      aiAssistant: false,
+      customDomain: false,
+      advancedReports: false,
+    },
     createdAt: '2026-04-22',
     lastActivityAt: '2026-05-06',
   },
@@ -111,7 +153,14 @@ const mockTenantRows: TenantRow[] = [
     saasSubscriptionStatus: 'past_due',
     asaasSubaccountStatus: 'blocked',
     d4signStatus: 'error',
-    featureFlags: { programs: false, builder: false, whatsapp: false, aiAssistant: false, customDomain: false, advancedReports: false },
+    featureFlags: {
+      programs: false,
+      builder: false,
+      whatsapp: false,
+      aiAssistant: false,
+      customDomain: false,
+      advancedReports: false,
+    },
     createdAt: '2025-06-10',
     lastActivityAt: '2026-05-05',
   },
@@ -131,7 +180,14 @@ const mockTenantRows: TenantRow[] = [
     saasSubscriptionStatus: 'active',
     asaasSubaccountStatus: 'active',
     d4signStatus: 'active',
-    featureFlags: { programs: true, builder: true, whatsapp: true, aiAssistant: true, customDomain: true, advancedReports: true },
+    featureFlags: {
+      programs: true,
+      builder: true,
+      whatsapp: true,
+      aiAssistant: true,
+      customDomain: true,
+      advancedReports: true,
+    },
     createdAt: '2024-11-05',
     lastActivityAt: '2026-05-07',
   },
@@ -151,7 +207,14 @@ const mockTenantRows: TenantRow[] = [
     saasSubscriptionStatus: 'paused',
     asaasSubaccountStatus: 'blocked',
     d4signStatus: 'not_configured',
-    featureFlags: { programs: false, builder: false, whatsapp: false, aiAssistant: false, customDomain: false, advancedReports: false },
+    featureFlags: {
+      programs: false,
+      builder: false,
+      whatsapp: false,
+      aiAssistant: false,
+      customDomain: false,
+      advancedReports: false,
+    },
     createdAt: '2025-09-01',
     lastActivityAt: '2026-04-15',
   },
@@ -171,7 +234,14 @@ const mockTenantRows: TenantRow[] = [
     saasSubscriptionStatus: 'trial',
     asaasSubaccountStatus: 'pending',
     d4signStatus: 'not_configured',
-    featureFlags: { programs: true, builder: false, whatsapp: true, aiAssistant: false, customDomain: false, advancedReports: false },
+    featureFlags: {
+      programs: true,
+      builder: false,
+      whatsapp: true,
+      aiAssistant: false,
+      customDomain: false,
+      advancedReports: false,
+    },
     createdAt: '2026-04-28',
     lastActivityAt: '2026-05-04',
   },
@@ -191,7 +261,14 @@ const mockTenantRows: TenantRow[] = [
     saasSubscriptionStatus: 'cancelled',
     asaasSubaccountStatus: 'not_configured',
     d4signStatus: 'not_configured',
-    featureFlags: { programs: false, builder: false, whatsapp: false, aiAssistant: false, customDomain: false, advancedReports: false },
+    featureFlags: {
+      programs: false,
+      builder: false,
+      whatsapp: false,
+      aiAssistant: false,
+      customDomain: false,
+      advancedReports: false,
+    },
     createdAt: '2025-02-14',
     lastActivityAt: '2026-03-01',
   },
@@ -201,15 +278,25 @@ const mockTenantRows: TenantRow[] = [
 
 function TenantStatusBadge({ status }: { status: TenantRow['status'] }) {
   const config: Record<string, { label: string; classes: string; icon: React.ElementType }> = {
-    active: { label: 'Ativo', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle },
+    active: {
+      label: 'Ativo',
+      classes: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      icon: CheckCircle,
+    },
     trial: { label: 'Trial', classes: 'bg-blue-50 text-blue-700 border-blue-200', icon: Clock },
     suspended: { label: 'Suspenso', classes: 'bg-red-50 text-red-700 border-red-200', icon: Ban },
-    cancelled: { label: 'Cancelado', classes: 'bg-slate-100 text-slate-600 border-slate-200', icon: XCircle },
+    cancelled: {
+      label: 'Cancelado',
+      classes: 'bg-slate-100 text-slate-600 border-slate-200',
+      icon: XCircle,
+    },
   };
   const c = config[status] ?? config.active;
   const IconComp = c.icon;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}
+    >
       <IconComp size={10} />
       {c.label}
     </span>
@@ -219,12 +306,19 @@ function TenantStatusBadge({ status }: { status: TenantRow['status'] }) {
 function PlanBadge({ plan }: { plan: TenantRow['plan'] }) {
   const config: Record<string, { label: string; classes: string }> = {
     starter: { label: 'Starter', classes: 'bg-slate-100 text-slate-600 border-slate-200' },
-    professional: { label: 'Professional', classes: 'bg-violet-50 text-violet-700 border-violet-200' },
+    professional: {
+      label: 'Professional',
+      classes: 'bg-violet-50 text-violet-700 border-violet-200',
+    },
     enterprise: { label: 'Enterprise', classes: 'bg-amber-50 text-amber-700 border-amber-200' },
   };
   const c = config[plan] ?? config.starter;
   return (
-    <span className={`inline-flex items-center rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}>{c.label}</span>
+    <span
+      className={`inline-flex items-center rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}
+    >
+      {c.label}
+    </span>
   );
 }
 
@@ -237,7 +331,13 @@ function SaasSubBadge({ status }: { status: TenantRow['saasSubscriptionStatus'] 
     paused: { label: 'Pausado', classes: 'bg-amber-50 text-amber-700 border-amber-200' },
   };
   const c = config[status] ?? config.active;
-  return <span className={`inline-flex items-center rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}>{c.label}</span>;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}
+    >
+      {c.label}
+    </span>
+  );
 }
 
 function IntegrationStatusDot({ status, label }: { status: string; label: string }) {
@@ -277,7 +377,7 @@ function StorageBar({ used, capacity }: { used: number; capacity: number }) {
 function ApiUsageBar({ used, limit }: { used: number; limit: number }) {
   const pct = Math.min((used / limit) * 100, 100);
   const color = pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-amber-400' : 'bg-blue-500';
-  const formatK = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(0)}k` : String(n);
+  const formatK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(0)}k` : String(n));
   return (
     <div className="flex flex-col gap-1 min-w-[80px]">
       <div className="flex items-center justify-between">
@@ -323,12 +423,62 @@ function FeatureFlagsCell({ flags }: { flags: TenantRow['featureFlags'] }) {
 
 function ActionMenu({ tenant, onClose }: { tenant: TenantRow; onClose: () => void }) {
   const actions = [
-    { label: 'Abrir', icon: ExternalLink, color: 'text-foreground', onClick: () => { window.location.href = `/admin/tenants/${tenant.id}`; onClose(); } },
-    { label: 'Suspender', icon: Ban, color: 'text-red-600', disabled: tenant.status === 'suspended' || tenant.status === 'cancelled', onClick: () => { alert(`Suspendendo ${tenant.clinicName}`); onClose(); } },
-    { label: 'Reativar', icon: Play, color: 'text-emerald-600', disabled: tenant.status === 'active' || tenant.status === 'trial', onClick: () => { alert(`Reativando ${tenant.clinicName}`); onClose(); } },
-    { label: 'Gerenciar plano', icon: CreditCard, color: 'text-violet-600', onClick: () => { alert(`Gerenciando plano de ${tenant.clinicName}`); onClose(); } },
-    { label: 'Ver logs', icon: FileText, color: 'text-blue-600', onClick: () => { alert(`Logs de ${tenant.clinicName}`); onClose(); } },
-    { label: 'Ver integrações', icon: Link2, color: 'text-teal-600', onClick: () => { alert(`Integrações de ${tenant.clinicName}`); onClose(); } },
+    {
+      label: 'Abrir',
+      icon: ExternalLink,
+      color: 'text-foreground',
+      onClick: () => {
+        window.location.href = `/admin/tenants/${tenant.id}`;
+        onClose();
+      },
+    },
+    {
+      label: 'Suspender',
+      icon: Ban,
+      color: 'text-red-600',
+      disabled: tenant.status === 'suspended' || tenant.status === 'cancelled',
+      onClick: () => {
+        alert(`Suspendendo ${tenant.clinicName}`);
+        onClose();
+      },
+    },
+    {
+      label: 'Reativar',
+      icon: Play,
+      color: 'text-emerald-600',
+      disabled: tenant.status === 'active' || tenant.status === 'trial',
+      onClick: () => {
+        alert(`Reativando ${tenant.clinicName}`);
+        onClose();
+      },
+    },
+    {
+      label: 'Gerenciar plano',
+      icon: CreditCard,
+      color: 'text-violet-600',
+      onClick: () => {
+        alert(`Gerenciando plano de ${tenant.clinicName}`);
+        onClose();
+      },
+    },
+    {
+      label: 'Ver logs',
+      icon: FileText,
+      color: 'text-blue-600',
+      onClick: () => {
+        alert(`Logs de ${tenant.clinicName}`);
+        onClose();
+      },
+    },
+    {
+      label: 'Ver integrações',
+      icon: Link2,
+      color: 'text-teal-600',
+      onClick: () => {
+        alert(`Integrações de ${tenant.clinicName}`);
+        onClose();
+      },
+    },
   ];
 
   return (
@@ -365,8 +515,9 @@ export default function TenantsManagementContent() {
     { key: 'tenants', label: 'Gestão de Tenants', href: '/admin/tenants', icon: Building2 },
   ];
 
-  const filtered = mockTenantRows.filter(t => {
-    const matchSearch = !search ||
+  const filtered = mockTenantRows.filter((t) => {
+    const matchSearch =
+      !search ||
       t.clinicName.toLowerCase().includes(search.toLowerCase()) ||
       t.owner.toLowerCase().includes(search.toLowerCase()) ||
       t.id.toLowerCase().includes(search.toLowerCase()) ||
@@ -378,17 +529,21 @@ export default function TenantsManagementContent() {
 
   const stats = {
     total: mockTenantRows.length,
-    active: mockTenantRows.filter(t => t.status === 'active').length,
-    trial: mockTenantRows.filter(t => t.status === 'trial').length,
-    suspended: mockTenantRows.filter(t => t.status === 'suspended').length,
+    active: mockTenantRows.filter((t) => t.status === 'active').length,
+    trial: mockTenantRows.filter((t) => t.status === 'trial').length,
+    suspended: mockTenantRows.filter((t) => t.status === 'suspended').length,
     totalUsers: mockTenantRows.reduce((s, t) => s + t.users, 0),
   };
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
-      <aside className={`flex flex-col bg-card border-r border-border flex-shrink-0 sidebar-transition ${sidebarCollapsed ? 'w-16' : 'w-56'}`}>
-        <div className={`flex items-center border-b border-border py-4 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-4'}`}>
+      <aside
+        className={`flex flex-col bg-card border-r border-border flex-shrink-0 sidebar-transition ${sidebarCollapsed ? 'w-16' : 'w-56'}`}
+      >
+        <div
+          className={`flex items-center border-b border-border py-4 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-4'}`}
+        >
           <AppLogo size={28} />
           {!sidebarCollapsed && (
             <div className="flex flex-col leading-none">
@@ -398,7 +553,7 @@ export default function TenantsManagementContent() {
           )}
         </div>
         <nav className="flex-1 overflow-y-auto scrollbar-thin py-3 px-2 space-y-0.5">
-          {navItems.map(item => {
+          {navItems.map((item) => {
             const ItemIcon = item.icon;
             const active = item.key === 'tenants';
             return (
@@ -409,7 +564,11 @@ export default function TenantsManagementContent() {
                 className={`relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/8 hover:text-primary'}`}
               >
                 <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
-                {!sidebarCollapsed && <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>}
+                {!sidebarCollapsed && (
+                  <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>
+                    {item.label}
+                  </span>
+                )}
                 {sidebarCollapsed && (
                   <span className="absolute left-full ml-2 px-2 py-1 bg-foreground text-background text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                     {item.label}
@@ -436,7 +595,13 @@ export default function TenantsManagementContent() {
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="flex items-center justify-center w-full py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all text-xs font-medium gap-1"
           >
-            {sidebarCollapsed ? <ChevronRight size={14} /> : <><ChevronRight size={14} className="rotate-180" /> Recolher</>}
+            {sidebarCollapsed ? (
+              <ChevronRight size={14} />
+            ) : (
+              <>
+                <ChevronRight size={14} className="rotate-180" /> Recolher
+              </>
+            )}
           </button>
         </div>
       </aside>
@@ -446,7 +611,9 @@ export default function TenantsManagementContent() {
         {/* Topbar */}
         <header className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border flex-shrink-0">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <a href="/admin" className="hover:text-primary transition-colors">Admin</a>
+            <a href="/admin" className="hover:text-primary transition-colors">
+              Admin
+            </a>
             <ChevronRight size={12} />
             <span className="text-foreground font-medium">Gestão de Tenants</span>
           </div>
@@ -469,22 +636,51 @@ export default function TenantsManagementContent() {
               <Building2 size={20} className="text-primary" />
               <h1 className="text-xl font-bold text-foreground">Gestão de Tenants</h1>
             </div>
-            <p className="text-sm text-muted-foreground">Gerencie todas as clínicas cadastradas na plataforma</p>
+            <p className="text-sm text-muted-foreground">
+              Gerencie todas as clínicas cadastradas na plataforma
+            </p>
           </div>
 
           {/* KPI Row */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
             {[
-              { label: 'Total de Tenants', value: stats.total, icon: Building2, color: 'bg-teal-50 text-teal-600' },
-              { label: 'Ativos', value: stats.active, icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
-              { label: 'Em Trial', value: stats.trial, icon: Clock, color: 'bg-blue-50 text-blue-600' },
-              { label: 'Suspensos', value: stats.suspended, icon: Ban, color: 'bg-red-50 text-red-600' },
-              { label: 'Total de Usuários', value: stats.totalUsers, icon: Users, color: 'bg-violet-50 text-violet-600' },
-            ].map(kpi => {
+              {
+                label: 'Total de Tenants',
+                value: stats.total,
+                icon: Building2,
+                color: 'bg-teal-50 text-teal-600',
+              },
+              {
+                label: 'Ativos',
+                value: stats.active,
+                icon: CheckCircle,
+                color: 'bg-emerald-50 text-emerald-600',
+              },
+              {
+                label: 'Em Trial',
+                value: stats.trial,
+                icon: Clock,
+                color: 'bg-blue-50 text-blue-600',
+              },
+              {
+                label: 'Suspensos',
+                value: stats.suspended,
+                icon: Ban,
+                color: 'bg-red-50 text-red-600',
+              },
+              {
+                label: 'Total de Usuários',
+                value: stats.totalUsers,
+                icon: Users,
+                color: 'bg-violet-50 text-violet-600',
+              },
+            ].map((kpi) => {
               const KpiIcon = kpi.icon;
               return (
                 <div key={kpi.label} className="stat-card flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${kpi.color}`}>
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${kpi.color}`}
+                  >
                     <KpiIcon size={16} />
                   </div>
                   <div>
@@ -500,16 +696,22 @@ export default function TenantsManagementContent() {
           <div className="card-base p-4 mb-4">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative flex-1 min-w-[200px]">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Search
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
                 <input
                   type="text"
                   placeholder="Buscar por clínica, owner, ID ou e-mail..."
                   value={search}
-                  onChange={e => setSearch(e.target.value)}
+                  onChange={(e) => setSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-2 text-sm bg-muted border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                 />
                 {search && (
-                  <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
                     <X size={13} />
                   </button>
                 )}
@@ -518,7 +720,7 @@ export default function TenantsManagementContent() {
                 <Filter size={13} className="text-muted-foreground" />
                 <select
                   value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
+                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
                   className="text-xs bg-muted border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary text-foreground"
                 >
                   <option value="all">Todos os status</option>
@@ -529,7 +731,7 @@ export default function TenantsManagementContent() {
                 </select>
                 <select
                   value={planFilter}
-                  onChange={e => setPlanFilter(e.target.value as typeof planFilter)}
+                  onChange={(e) => setPlanFilter(e.target.value as typeof planFilter)}
                   className="text-xs bg-muted border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary text-foreground"
                 >
                   <option value="all">Todos os planos</option>
@@ -538,7 +740,9 @@ export default function TenantsManagementContent() {
                   <option value="enterprise">Enterprise</option>
                 </select>
               </div>
-              <span className="text-xs text-muted-foreground ml-auto">{filtered.length} tenant{filtered.length !== 1 ? 's' : ''}</span>
+              <span className="text-xs text-muted-foreground ml-auto">
+                {filtered.length} tenant{filtered.length !== 1 ? 's' : ''}
+              </span>
             </div>
           </div>
 
@@ -548,19 +752,45 @@ export default function TenantsManagementContent() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Clínica / Tenant ID</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Owner</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Plano</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Status</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Usuários</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Pacientes</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Armazenamento</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">API (mês)</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Assinatura SaaS</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Asaas</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">D4Sign</th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Feature Flags</th>
-                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Ações</th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Clínica / Tenant ID
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Owner
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Plano
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Status
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Usuários
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Pacientes
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Armazenamento
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      API (mês)
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Assinatura SaaS
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Asaas
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      D4Sign
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Feature Flags
+                    </th>
+                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                      Ações
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -580,16 +810,25 @@ export default function TenantsManagementContent() {
                       >
                         {/* Clinic + ID */}
                         <td className="px-4 py-3">
-                          <a href={`/admin/tenants/${tenant.id}`} className="flex flex-col gap-0.5 group">
-                            <span className="font-semibold text-foreground group-hover:text-primary transition-colors">{tenant.clinicName}</span>
-                            <span className="text-muted-foreground font-mono text-xs">{tenant.id}</span>
+                          <a
+                            href={`/admin/tenants/${tenant.id}`}
+                            className="flex flex-col gap-0.5 group"
+                          >
+                            <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                              {tenant.clinicName}
+                            </span>
+                            <span className="text-muted-foreground font-mono text-xs">
+                              {tenant.id}
+                            </span>
                           </a>
                         </td>
                         {/* Owner */}
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-0.5">
                             <span className="font-medium text-foreground">{tenant.owner}</span>
-                            <span className="text-muted-foreground truncate max-w-[140px]">{tenant.email}</span>
+                            <span className="text-muted-foreground truncate max-w-[140px]">
+                              {tenant.email}
+                            </span>
                           </div>
                         </td>
                         {/* Plan */}
@@ -616,11 +855,17 @@ export default function TenantsManagementContent() {
                         </td>
                         {/* Storage */}
                         <td className="px-4 py-3">
-                          <StorageBar used={tenant.storageUsedGb} capacity={tenant.storageCapacityGb} />
+                          <StorageBar
+                            used={tenant.storageUsedGb}
+                            capacity={tenant.storageCapacityGb}
+                          />
                         </td>
                         {/* API Usage */}
                         <td className="px-4 py-3">
-                          <ApiUsageBar used={tenant.apiCallsThisMonth} limit={tenant.apiLimitMonthly} />
+                          <ApiUsageBar
+                            used={tenant.apiCallsThisMonth}
+                            limit={tenant.apiLimitMonthly}
+                          />
                         </td>
                         {/* SaaS Subscription */}
                         <td className="px-4 py-3">
@@ -631,9 +876,13 @@ export default function TenantsManagementContent() {
                           <IntegrationStatusDot
                             status={tenant.asaasSubaccountStatus}
                             label={
-                              tenant.asaasSubaccountStatus === 'active' ? 'Ativo' :
-                              tenant.asaasSubaccountStatus === 'pending' ? 'Pendente' :
-                              tenant.asaasSubaccountStatus === 'blocked' ? 'Bloqueado' : 'N/C'
+                              tenant.asaasSubaccountStatus === 'active'
+                                ? 'Ativo'
+                                : tenant.asaasSubaccountStatus === 'pending'
+                                  ? 'Pendente'
+                                  : tenant.asaasSubaccountStatus === 'blocked'
+                                    ? 'Bloqueado'
+                                    : 'N/C'
                             }
                           />
                         </td>
@@ -642,9 +891,13 @@ export default function TenantsManagementContent() {
                           <IntegrationStatusDot
                             status={tenant.d4signStatus}
                             label={
-                              tenant.d4signStatus === 'active' ? 'Ativo' :
-                              tenant.d4signStatus === 'quota_exceeded' ? 'Cota' :
-                              tenant.d4signStatus === 'error' ? 'Erro' : 'N/C'
+                              tenant.d4signStatus === 'active'
+                                ? 'Ativo'
+                                : tenant.d4signStatus === 'quota_exceeded'
+                                  ? 'Cota'
+                                  : tenant.d4signStatus === 'error'
+                                    ? 'Erro'
+                                    : 'N/C'
                             }
                           />
                         </td>
@@ -656,14 +909,19 @@ export default function TenantsManagementContent() {
                         <td className="px-4 py-3 text-right">
                           <div className="relative inline-block">
                             <button
-                              onClick={() => setOpenMenuId(openMenuId === tenant.id ? null : tenant.id)}
+                              onClick={() =>
+                                setOpenMenuId(openMenuId === tenant.id ? null : tenant.id)
+                              }
                               className="btn-ghost p-1.5 rounded-lg"
                             >
                               <MoreHorizontal size={15} />
                             </button>
                             {openMenuId === tenant.id && (
                               <>
-                                <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+                                <div
+                                  className="fixed inset-0 z-40"
+                                  onClick={() => setOpenMenuId(null)}
+                                />
                                 <ActionMenu tenant={tenant} onClose={() => setOpenMenuId(null)} />
                               </>
                             )}
@@ -683,11 +941,26 @@ export default function TenantsManagementContent() {
 }
 
 // Placeholder icon
-function LayoutDashboardIcon(props: React.SVGProps<SVGSVGElement> & { size?: number; strokeWidth?: number }) {
+function LayoutDashboardIcon(
+  props: React.SVGProps<SVGSVGElement> & { size?: number; strokeWidth?: number }
+) {
   const { size = 16, strokeWidth = 2, ...rest } = props;
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...rest}>
-      <rect width="7" height="9" x="3" y="3" rx="1" /><rect width="7" height="5" x="14" y="3" rx="1" /><rect width="7" height="9" x="14" y="12" rx="1" /><rect width="7" height="5" x="3" y="16" rx="1" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...rest}
+    >
+      <rect width="7" height="9" x="3" y="3" rx="1" />
+      <rect width="7" height="5" x="14" y="3" rx="1" />
+      <rect width="7" height="9" x="14" y="12" rx="1" />
+      <rect width="7" height="5" x="3" y="16" rx="1" />
     </svg>
   );
 }

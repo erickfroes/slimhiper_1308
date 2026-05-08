@@ -29,33 +29,92 @@ interface WorkflowStage {
 }
 
 const workflowStages: WorkflowStage[] = [
-  { key: 'agendado',         label: 'Agendado',       color: 'text-blue-700',   bgColor: 'bg-blue-50',    borderColor: 'border-blue-200',   dotColor: 'bg-blue-500' },
-  { key: 'triagem',          label: 'Triagem',         color: 'text-amber-700',  bgColor: 'bg-amber-50',   borderColor: 'border-amber-200',  dotColor: 'bg-amber-500' },
-  { key: 'medidas',          label: 'Medidas',         color: 'text-orange-700', bgColor: 'bg-orange-50',  borderColor: 'border-orange-200', dotColor: 'bg-orange-500' },
-  { key: 'bioimpedancia',    label: 'Bioimpedância',   color: 'text-cyan-700',   bgColor: 'bg-cyan-50',    borderColor: 'border-cyan-200',   dotColor: 'bg-cyan-500' },
-  { key: 'em_consulta',      label: 'Consulta',        color: 'text-teal-700',   bgColor: 'bg-teal-50',    borderColor: 'border-teal-200',   dotColor: 'bg-teal-500' },
-  { key: 'checkout',         label: 'Checkout',        color: 'text-lime-700',   bgColor: 'bg-lime-50',    borderColor: 'border-lime-200',   dotColor: 'bg-lime-500' },
-  { key: 'concluido',        label: 'Concluído',       color: 'text-emerald-700',bgColor: 'bg-emerald-50', borderColor: 'border-emerald-200',dotColor: 'bg-emerald-500' },
+  {
+    key: 'agendado',
+    label: 'Agendado',
+    color: 'text-blue-700',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-200',
+    dotColor: 'bg-blue-500',
+  },
+  {
+    key: 'triagem',
+    label: 'Triagem',
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-50',
+    borderColor: 'border-amber-200',
+    dotColor: 'bg-amber-500',
+  },
+  {
+    key: 'medidas',
+    label: 'Medidas',
+    color: 'text-orange-700',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-200',
+    dotColor: 'bg-orange-500',
+  },
+  {
+    key: 'bioimpedancia',
+    label: 'Bioimpedância',
+    color: 'text-cyan-700',
+    bgColor: 'bg-cyan-50',
+    borderColor: 'border-cyan-200',
+    dotColor: 'bg-cyan-500',
+  },
+  {
+    key: 'em_consulta',
+    label: 'Consulta',
+    color: 'text-teal-700',
+    bgColor: 'bg-teal-50',
+    borderColor: 'border-teal-200',
+    dotColor: 'bg-teal-500',
+  },
+  {
+    key: 'checkout',
+    label: 'Checkout',
+    color: 'text-lime-700',
+    bgColor: 'bg-lime-50',
+    borderColor: 'border-lime-200',
+    dotColor: 'bg-lime-500',
+  },
+  {
+    key: 'concluido',
+    label: 'Concluído',
+    color: 'text-emerald-700',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-200',
+    dotColor: 'bg-emerald-500',
+  },
 ];
 
 // ─── APPOINTMENT TYPE LABELS ──────────────────────────────────────────────────
 
 const appointmentTypeLabel: Record<AppointmentType, string> = {
-  consulta_medica:  'Consulta Médica',
-  retorno:          'Retorno',
-  nutricao:         'Nutrição',
-  avaliacao_inicial:'Avaliação Inicial',
-  bioimpedancia:    'Bioimpedância',
-  checkup:          'Checkup',
+  consulta_medica: 'Consulta Médica',
+  retorno: 'Retorno',
+  nutricao: 'Nutrição',
+  avaliacao_inicial: 'Avaliação Inicial',
+  bioimpedancia: 'Bioimpedância',
+  checkup: 'Checkup',
 };
 
 // ─── CALENDAR HELPERS ─────────────────────────────────────────────────────────
 
 const MONTHS_PT = [
-  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
 ];
-const DAYS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const DAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -104,12 +163,16 @@ function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
   const today = '2026-05-07';
 
   const prevMonth = () => {
-    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
-    else setViewMonth(m => m - 1);
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else setViewMonth((m) => m - 1);
   };
   const nextMonth = () => {
-    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
-    else setViewMonth(m => m + 1);
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else setViewMonth((m) => m + 1);
   };
 
   const cells: (number | null)[] = [
@@ -121,20 +184,26 @@ function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
     <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <button onClick={prevMonth} className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+        <button
+          onClick={prevMonth}
+          className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        >
           <ChevronLeft size={16} />
         </button>
         <span className="text-sm font-semibold text-foreground">
           {MONTHS_PT[viewMonth]} {viewYear}
         </span>
-        <button onClick={nextMonth} className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+        <button
+          onClick={nextMonth}
+          className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        >
           <ChevronRight size={16} />
         </button>
       </div>
 
       {/* Day headers */}
       <div className="grid grid-cols-7 mb-1">
-        {DAYS_PT.map(d => (
+        {DAYS_PT.map((d) => (
           <div key={d} className="text-center text-xs font-medium text-muted-foreground py-1">
             {d}
           </div>
@@ -145,7 +214,7 @@ function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
       <div className="grid grid-cols-7 gap-y-0.5">
         {cells.map((day, idx) => {
           if (!day) return <div key={`empty-${idx}`} />;
-          const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+          const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const isToday = dateStr === today;
           const isSelected = dateStr === selectedDate;
           const hasEvents = !!calendarEvents[dateStr];
@@ -160,12 +229,18 @@ function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
                 isSelected
                   ? 'bg-primary text-primary-foreground'
                   : isToday
-                  ? 'bg-primary/10 text-primary font-semibold' :'text-foreground hover:bg-muted',
+                    ? 'bg-primary/10 text-primary font-semibold'
+                    : 'text-foreground hover:bg-muted',
               ].join(' ')}
             >
               {day}
               {hasEvents && !isSelected && (
-                <span className={['w-1 h-1 rounded-full mt-0.5', isToday ? 'bg-primary' : 'bg-muted-foreground/50'].join(' ')} />
+                <span
+                  className={[
+                    'w-1 h-1 rounded-full mt-0.5',
+                    isToday ? 'bg-primary' : 'bg-muted-foreground/50',
+                  ].join(' ')}
+                />
               )}
               {hasEvents && isSelected && (
                 <span className="w-1 h-1 rounded-full mt-0.5 bg-primary-foreground/60" />
@@ -177,8 +252,14 @@ function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
 
       {/* Legend */}
       <div className="mt-3 pt-3 border-t border-border flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary/20 inline-block" />Hoje</span>
-        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 inline-block" />Com consultas</span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-primary/20 inline-block" />
+          Hoje
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 inline-block" />
+          Com consultas
+        </span>
       </div>
     </div>
   );
@@ -192,15 +273,25 @@ interface KanbanColumnProps {
 }
 
 function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
-  const items = appointments.filter(a => a.status === stage.key);
+  const items = appointments.filter((a) => a.status === stage.key);
 
   return (
     <div className="flex flex-col min-w-[200px] flex-1">
       {/* Column header */}
-      <div className={['flex items-center gap-2 px-3 py-2 rounded-xl border mb-2', stage.bgColor, stage.borderColor].join(' ')}>
+      <div
+        className={[
+          'flex items-center gap-2 px-3 py-2 rounded-xl border mb-2',
+          stage.bgColor,
+          stage.borderColor,
+        ].join(' ')}
+      >
         <span className={['w-2 h-2 rounded-full flex-shrink-0', stage.dotColor].join(' ')} />
-        <span className={['text-xs font-semibold flex-1', stage.color].join(' ')}>{stage.label}</span>
-        <span className={['text-xs font-bold tabular-nums', stage.color].join(' ')}>{items.length}</span>
+        <span className={['text-xs font-semibold flex-1', stage.color].join(' ')}>
+          {stage.label}
+        </span>
+        <span className={['text-xs font-bold tabular-nums', stage.color].join(' ')}>
+          {items.length}
+        </span>
       </div>
 
       {/* Cards */}
@@ -210,7 +301,7 @@ function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
             <span className="text-xs text-muted-foreground">Nenhum paciente</span>
           </div>
         ) : (
-          items.map(appt => (
+          items.map((appt) => (
             <div
               key={appt.id}
               className="bg-card rounded-xl border border-border p-3 shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-150 cursor-pointer group"
@@ -220,7 +311,10 @@ function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
                 <span className="text-xs font-semibold text-foreground leading-tight line-clamp-2 group-hover:text-primary transition-colors">
                   {appt.patientName}
                 </span>
-                <ArrowRight size={12} className="text-muted-foreground flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <ArrowRight
+                  size={12}
+                  className="text-muted-foreground flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                />
               </div>
 
               {/* Type */}
@@ -231,13 +325,20 @@ function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
               {/* Time + professional */}
               <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
                 <Clock size={10} className="flex-shrink-0" />
-                <span>{new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                <span>
+                  {new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
               </div>
               <div className="text-xs text-muted-foreground truncate">{appt.professionalName}</div>
 
               {/* Room */}
               {appt.roomName && (
-                <div className="mt-1.5 text-xs text-muted-foreground/70 truncate">{appt.roomName}</div>
+                <div className="mt-1.5 text-xs text-muted-foreground/70 truncate">
+                  {appt.roomName}
+                </div>
               )}
             </div>
           ))
@@ -269,12 +370,20 @@ function DaySchedule({ appointments }: DayScheduleProps) {
       </div>
 
       <div className="divide-y divide-border">
-        {sorted.map(appt => {
-          const time = new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        {sorted.map((appt) => {
+          const time = new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
           return (
-            <div key={appt.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer group">
+            <div
+              key={appt.id}
+              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer group"
+            >
               {/* Time */}
-              <div className="w-12 flex-shrink-0 text-xs font-semibold text-muted-foreground tabular-nums">{time}</div>
+              <div className="w-12 flex-shrink-0 text-xs font-semibold text-muted-foreground tabular-nums">
+                {time}
+              </div>
 
               {/* Color bar */}
               <div className="w-0.5 h-8 rounded-full bg-primary/30 flex-shrink-0" />
@@ -284,7 +393,9 @@ function DaySchedule({ appointments }: DayScheduleProps) {
                 <p className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                   {appt.patientName}
                 </p>
-                <p className="text-xs text-muted-foreground truncate">{appointmentTypeLabel[appt.type]} · {appt.professionalName}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {appointmentTypeLabel[appt.type]} · {appt.professionalName}
+                </p>
               </div>
 
               {/* Status badge */}
@@ -300,9 +411,18 @@ function DaySchedule({ appointments }: DayScheduleProps) {
 // ─── WAITING QUEUE PANEL ──────────────────────────────────────────────────────
 
 function WaitingQueuePanel() {
-  const activeStatuses: AppointmentStatus[] = ['triagem','medidas','bioimpedancia','aguardando_medico','em_consulta','checkout'];
-  const activeQueue = mockWaitingQueue.filter(e => activeStatuses.includes(e.status as AppointmentStatus));
-  const waiting = mockWaitingQueue.filter(e => e.status === 'agendado');
+  const activeStatuses: AppointmentStatus[] = [
+    'triagem',
+    'medidas',
+    'bioimpedancia',
+    'aguardando_medico',
+    'em_consulta',
+    'checkout',
+  ];
+  const activeQueue = mockWaitingQueue.filter((e) =>
+    activeStatuses.includes(e.status as AppointmentStatus)
+  );
+  const waiting = mockWaitingQueue.filter((e) => e.status === 'agendado');
 
   return (
     <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
@@ -324,24 +444,37 @@ function WaitingQueuePanel() {
       {/* Active patients */}
       {activeQueue.length > 0 && (
         <div className="px-4 pt-3 pb-1">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Em atendimento</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            Em atendimento
+          </p>
           <div className="flex flex-col gap-2">
-            {activeQueue.map(entry => (
-              <div key={entry.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/40 border border-border hover:border-primary/30 transition-colors cursor-pointer">
+            {activeQueue.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/40 border border-border hover:border-primary/30 transition-colors cursor-pointer"
+              >
                 {/* Avatar placeholder */}
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-bold text-primary">
-                    {entry.patientName.split(' ').map(n => n[0]).slice(0,2).join('')}
+                    {entry.patientName
+                      .split(' ')
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join('')}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground truncate">{entry.patientName}</p>
+                  <p className="text-xs font-semibold text-foreground truncate">
+                    {entry.patientName}
+                  </p>
                   <p className="text-xs text-muted-foreground truncate">{entry.professionalName}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <StatusBadge status={entry.status as AppointmentStatus} size="xs" />
                   {entry.waitingMinutes > 0 && (
-                    <span className="text-xs text-muted-foreground tabular-nums">{entry.waitingMinutes}min</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {entry.waitingMinutes}min
+                    </span>
                   )}
                 </div>
               </div>
@@ -353,17 +486,28 @@ function WaitingQueuePanel() {
       {/* Waiting / scheduled */}
       {waiting.length > 0 && (
         <div className="px-4 pt-3 pb-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Aguardando chegada</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+            Aguardando chegada
+          </p>
           <div className="flex flex-col gap-2">
-            {waiting.map(entry => (
-              <div key={entry.id} className="flex items-center gap-3 p-2.5 rounded-xl border border-dashed border-border hover:border-primary/30 transition-colors cursor-pointer">
+            {waiting.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center gap-3 p-2.5 rounded-xl border border-dashed border-border hover:border-primary/30 transition-colors cursor-pointer"
+              >
                 <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                   <span className="text-xs font-bold text-muted-foreground">
-                    {entry.patientName.split(' ').map(n => n[0]).slice(0,2).join('')}
+                    {entry.patientName
+                      .split(' ')
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join('')}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground truncate">{entry.patientName}</p>
+                  <p className="text-xs font-semibold text-foreground truncate">
+                    {entry.patientName}
+                  </p>
                   <p className="text-xs text-muted-foreground">{entry.scheduledTime}</p>
                 </div>
                 <StatusBadge status={entry.status as AppointmentStatus} size="xs" />
@@ -380,33 +524,54 @@ function WaitingQueuePanel() {
 
 function WorkflowProgressBar({ appointments }: { appointments: typeof mockTodayAppointments }) {
   const total = appointments.length;
-  const concluded = appointments.filter(a => a.status === 'concluido').length;
-  const inProgress = appointments.filter(a =>
-    ['triagem','medidas','bioimpedancia','aguardando_medico','em_consulta','checkout'].includes(a.status)
+  const concluded = appointments.filter((a) => a.status === 'concluido').length;
+  const inProgress = appointments.filter((a) =>
+    [
+      'triagem',
+      'medidas',
+      'bioimpedancia',
+      'aguardando_medico',
+      'em_consulta',
+      'checkout',
+    ].includes(a.status)
   ).length;
-  const scheduled = appointments.filter(a => a.status === 'agendado').length;
-  const absent = appointments.filter(a => ['falta','cancelado'].includes(a.status)).length;
+  const scheduled = appointments.filter((a) => a.status === 'agendado').length;
+  const absent = appointments.filter((a) => ['falta', 'cancelado'].includes(a.status)).length;
 
   return (
     <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-semibold text-foreground">Progresso do Dia</span>
-        <span className="text-xs text-muted-foreground">{concluded}/{total} concluídas</span>
+        <span className="text-xs text-muted-foreground">
+          {concluded}/{total} concluídas
+        </span>
       </div>
 
       {/* Progress bar */}
       <div className="flex h-2.5 rounded-full overflow-hidden bg-muted gap-0.5 mb-3">
         {concluded > 0 && (
-          <div className="bg-emerald-500 rounded-full transition-all" style={{ width: `${(concluded/total)*100}%` }} />
+          <div
+            className="bg-emerald-500 rounded-full transition-all"
+            style={{ width: `${(concluded / total) * 100}%` }}
+          />
         )}
         {inProgress > 0 && (
-          <div className="bg-teal-400 rounded-full transition-all" style={{ width: `${(inProgress/total)*100}%` }} />
+          <div
+            className="bg-teal-400 rounded-full transition-all"
+            style={{ width: `${(inProgress / total) * 100}%` }}
+          />
         )}
         {scheduled > 0 && (
-          <div className="bg-blue-300 rounded-full transition-all" style={{ width: `${(scheduled/total)*100}%` }} />
+          <div
+            className="bg-blue-300 rounded-full transition-all"
+            style={{ width: `${(scheduled / total) * 100}%` }}
+          />
         )}
         {absent > 0 && (
-          <div className="bg-red-400 rounded-full transition-all" style={{ width: `${(absent/total)*100}%` }} />
+          <div
+            className="bg-red-400 rounded-full transition-all"
+            style={{ width: `${(absent / total) * 100}%` }}
+          />
         )}
       </div>
 
@@ -417,7 +582,7 @@ function WorkflowProgressBar({ appointments }: { appointments: typeof mockTodayA
           { label: 'Em andamento', value: inProgress, color: 'text-teal-600', bg: 'bg-teal-50' },
           { label: 'Agendadas', value: scheduled, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Faltas/Cancel.', value: absent, color: 'text-red-600', bg: 'bg-red-50' },
-        ].map(stat => (
+        ].map((stat) => (
           <div key={stat.label} className={['rounded-xl p-2 text-center', stat.bg].join(' ')}>
             <p className={['text-lg font-bold tabular-nums', stat.color].join(' ')}>{stat.value}</p>
             <p className="text-xs text-muted-foreground leading-tight">{stat.label}</p>
@@ -440,7 +605,12 @@ export default function AgendaContent() {
   const formattedDate = (() => {
     const [y, m, d] = selectedDate.split('-').map(Number);
     const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    return date.toLocaleDateString('pt-BR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
   })();
 
   return (
@@ -465,7 +635,6 @@ export default function AgendaContent() {
 
       {/* Main layout */}
       <div className="flex gap-5 items-start">
-
         {/* LEFT COLUMN: Calendar + Queue */}
         <div className="flex flex-col gap-4 w-64 flex-shrink-0">
           <MiniCalendar selectedDate={selectedDate} onSelectDate={setSelectedDate} />
@@ -474,7 +643,6 @@ export default function AgendaContent() {
 
         {/* RIGHT COLUMN: Workflow + Schedule */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
-
           {/* Progress bar */}
           <WorkflowProgressBar appointments={appointments} />
 
@@ -483,13 +651,23 @@ export default function AgendaContent() {
             <div className="flex items-center gap-1 bg-muted rounded-xl p-1">
               <button
                 onClick={() => setActiveView('kanban')}
-                className={['text-xs font-medium px-3 py-1.5 rounded-lg transition-all', activeView === 'kanban' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'].join(' ')}
+                className={[
+                  'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
+                  activeView === 'kanban'
+                    ? 'bg-card shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                ].join(' ')}
               >
                 Fluxo Clínico
               </button>
               <button
                 onClick={() => setActiveView('lista')}
-                className={['text-xs font-medium px-3 py-1.5 rounded-lg transition-all', activeView === 'lista' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'].join(' ')}
+                className={[
+                  'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
+                  activeView === 'lista'
+                    ? 'bg-card shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                ].join(' ')}
               >
                 Lista do Dia
               </button>
@@ -499,7 +677,14 @@ export default function AgendaContent() {
             <div className="hidden xl:flex items-center gap-2 flex-wrap">
               {workflowStages.map((stage, i) => (
                 <React.Fragment key={stage.key}>
-                  <span className={['flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border', stage.bgColor, stage.color, stage.borderColor].join(' ')}>
+                  <span
+                    className={[
+                      'flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border',
+                      stage.bgColor,
+                      stage.color,
+                      stage.borderColor,
+                    ].join(' ')}
+                  >
                     <span className={['w-1.5 h-1.5 rounded-full', stage.dotColor].join(' ')} />
                     {stage.label}
                   </span>
@@ -515,7 +700,7 @@ export default function AgendaContent() {
           {activeView === 'kanban' ? (
             <div className="overflow-x-auto pb-2">
               <div className="flex gap-3 min-w-max">
-                {workflowStages.map(stage => (
+                {workflowStages.map((stage) => (
                   <KanbanColumn key={stage.key} stage={stage} appointments={appointments} />
                 ))}
               </div>

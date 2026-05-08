@@ -17,7 +17,10 @@ export default function PageHeader({ title, subtitle, actions, breadcrumb }: Pag
               <React.Fragment key={`crumb-${i}`}>
                 {i > 0 && <span className="text-muted-foreground text-xs">/</span>}
                 {crumb.href ? (
-                  <a href={crumb.href} className="text-xs text-muted-foreground hover:text-primary transition-colors">
+                  <a
+                    href={crumb.href}
+                    className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                  >
                     {crumb.label}
                   </a>
                 ) : (

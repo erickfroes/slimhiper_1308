@@ -10,12 +10,12 @@ interface Props {
 }
 
 const servicePresets: ProgramService[] = [
-  { label: 'Consultas médicas',          quantity: 4,  unit: 'sessões' },
-  { label: 'Sessões de nutrição',         quantity: 4,  unit: 'sessões' },
-  { label: 'Bioimpedância',               quantity: 2,  unit: 'avaliações' },
-  { label: 'Painéis laboratoriais',       quantity: 2,  unit: 'painéis' },
-  { label: 'Avaliação de sono',           quantity: 1,  unit: 'avaliação' },
-  { label: 'Consulta de psicologia',      quantity: 2,  unit: 'sessões' },
+  { label: 'Consultas médicas', quantity: 4, unit: 'sessões' },
+  { label: 'Sessões de nutrição', quantity: 4, unit: 'sessões' },
+  { label: 'Bioimpedância', quantity: 2, unit: 'avaliações' },
+  { label: 'Painéis laboratoriais', quantity: 2, unit: 'painéis' },
+  { label: 'Avaliação de sono', quantity: 1, unit: 'avaliação' },
+  { label: 'Consulta de psicologia', quantity: 2, unit: 'sessões' },
 ];
 
 export default function StepServicos({ draft, onChange }: Props) {
@@ -54,10 +54,12 @@ export default function StepServicos({ draft, onChange }: Props) {
                 className={[
                   'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
                   added
-                    ? 'bg-primary/10 text-primary border-primary/30 cursor-default' :'bg-muted text-muted-foreground border-border hover:bg-primary/5 hover:text-primary hover:border-primary/30',
+                    ? 'bg-primary/10 text-primary border-primary/30 cursor-default'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-primary/5 hover:text-primary hover:border-primary/30',
                 ].join(' ')}
               >
-                {added ? '✓ ' : '+ '}{p.label}
+                {added ? '✓ ' : '+ '}
+                {p.label}
               </button>
             );
           })}

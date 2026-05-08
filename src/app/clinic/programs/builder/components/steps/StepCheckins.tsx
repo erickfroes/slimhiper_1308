@@ -11,9 +11,9 @@ interface Props {
 }
 
 const channelLabel: Record<string, string> = {
-  app:        'App',
-  whatsapp:   'WhatsApp',
-  email:      'E-mail',
+  app: 'App',
+  whatsapp: 'WhatsApp',
+  email: 'E-mail',
   presencial: 'Presencial',
 };
 
@@ -63,7 +63,9 @@ export default function StepCheckins({ draft, onChange }: Props) {
               className="input-base w-full"
             >
               {frequencyOptions.map((f) => (
-                <option key={f} value={f}>{f}</option>
+                <option key={f} value={f}>
+                  {f}
+                </option>
               ))}
             </select>
           </div>
@@ -91,11 +93,15 @@ export default function StepCheckins({ draft, onChange }: Props) {
               ].join(' ')}
             >
               <div className="flex items-start gap-3">
-                <div className={[
-                  'w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 border transition-all',
-                  selected ? 'bg-primary border-primary' : 'border-border',
-                ].join(' ')}>
-                  {selected && <CheckSquare size={12} className="text-primary-foreground" strokeWidth={3} />}
+                <div
+                  className={[
+                    'w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 border transition-all',
+                    selected ? 'bg-primary border-primary' : 'border-border',
+                  ].join(' ')}
+                >
+                  {selected && (
+                    <CheckSquare size={12} className="text-primary-foreground" strokeWidth={3} />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -109,7 +115,10 @@ export default function StepCheckins({ draft, onChange }: Props) {
                   </div>
                   <ul className="space-y-0.5">
                     {template.questions.map((q, i) => (
-                      <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                      <li
+                        key={i}
+                        className="text-xs text-muted-foreground flex items-start gap-1.5"
+                      >
                         <span className="text-primary/60 font-bold mt-0.5">·</span>
                         {q}
                       </li>

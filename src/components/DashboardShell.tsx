@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import Icon from '@/components/ui/AppIcon';
 
-
 interface NavItem {
   key: string;
   label: string;
@@ -36,8 +35,20 @@ const clinicNavItems: NavItem[] = [
   { key: 'nav-pacientes', label: 'Pacientes', href: '/clinic/patients', icon: Users, badge: 8 },
   { key: 'nav-agenda', label: 'Agenda', href: '/clinic/agenda', icon: CalendarDays, badge: 3 },
   { key: 'nav-programas', label: 'Programas', href: '/clinic/programs', icon: BookOpen },
-  { key: 'nav-documentos', label: 'Documentos', href: '/clinic/documents', icon: FileText, badge: 6 },
-  { key: 'nav-financeiro', label: 'Financeiro', href: '/clinic/financeiro', icon: CreditCard, badge: 4 },
+  {
+    key: 'nav-documentos',
+    label: 'Documentos',
+    href: '/clinic/documents',
+    icon: FileText,
+    badge: 6,
+  },
+  {
+    key: 'nav-financeiro',
+    label: 'Financeiro',
+    href: '/clinic/financeiro',
+    icon: CreditCard,
+    badge: 4,
+  },
   { key: 'nav-configuracoes', label: 'Configurações', href: '/clinic/settings', icon: Settings },
 ];
 
@@ -75,7 +86,12 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         ].join(' ')}
       >
         {/* Logo */}
-        <div className={['flex items-center border-b border-border flex-shrink-0', collapsed ? 'justify-center px-0 py-4' : 'gap-2 px-4 py-4'].join(' ')}>
+        <div
+          className={[
+            'flex items-center border-b border-border flex-shrink-0',
+            collapsed ? 'justify-center px-0 py-4' : 'gap-2 px-4 py-4',
+          ].join(' ')}
+        >
           <div className="flex items-center gap-2">
             <AppLogo size={32} />
             {!collapsed && (
@@ -101,7 +117,8 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                   'relative flex items-center rounded-xl transition-all duration-150 group',
                   collapsed ? 'justify-center px-0 py-2.5 mx-0' : 'gap-3 px-3 py-2.5',
                   active
-                    ? 'bg-primary/10 text-primary' :'text-muted-foreground hover:bg-primary/8 hover:text-primary',
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-primary/8 hover:text-primary',
                 ].join(' ')}
               >
                 <Icon size={18} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
@@ -138,7 +155,9 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 <User size={14} className="text-primary" />
               </div>
               <div className="flex flex-col leading-none min-w-0">
-                <span className="text-xs font-semibold text-foreground truncate">Coord. Ana Souza</span>
+                <span className="text-xs font-semibold text-foreground truncate">
+                  Coord. Ana Souza
+                </span>
                 <span className="text-xs text-muted-foreground">Coordenadora</span>
               </div>
               <LogOut size={14} className="ml-auto text-muted-foreground flex-shrink-0" />
@@ -149,7 +168,9 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             className="flex items-center justify-center w-full py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150"
             title={collapsed ? 'Expandir menu' : 'Recolher menu'}
           >
-            {collapsed ? <ChevronRight size={16} /> : (
+            {collapsed ? (
+              <ChevronRight size={16} />
+            ) : (
               <span className="flex items-center gap-2 text-xs font-medium">
                 <ChevronLeft size={16} />
                 Recolher
@@ -163,16 +184,16 @@ export default function DashboardShell({ children }: DashboardShellProps) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
         <header className="flex items-center gap-3 px-4 lg:px-6 py-3 bg-card border-b border-border flex-shrink-0">
-          <button
-            className="lg:hidden btn-ghost p-2"
-            onClick={() => setMobileOpen(true)}
-          >
+          <button className="lg:hidden btn-ghost p-2" onClick={() => setMobileOpen(true)}>
             <LayoutDashboard size={18} />
           </button>
 
           {/* Search */}
           <div className="relative flex-1 max-w-sm">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
             <input
               type="text"
               placeholder="Buscar paciente, consulta..."
@@ -196,9 +217,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto scrollbar-thin">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto scrollbar-thin">{children}</main>
       </div>
     </div>
   );

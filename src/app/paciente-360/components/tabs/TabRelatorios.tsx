@@ -31,13 +31,13 @@ const iconMap: Record<string, React.ElementType> = {
 
 // Derive icon styling from iconKey
 const iconStyleMap: Record<string, { iconBg: string; iconColor: string }> = {
-  FileText:    { iconBg: 'bg-blue-50',    iconColor: 'text-blue-600' },
-  DollarSign:  { iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-  ShoppingBag: { iconBg: 'bg-violet-50',  iconColor: 'text-violet-600' },
-  FileCheck:   { iconBg: 'bg-orange-50',  iconColor: 'text-orange-600' },
-  Target:      { iconBg: 'bg-pink-50',    iconColor: 'text-pink-600' },
-  Clock:       { iconBg: 'bg-cyan-50',    iconColor: 'text-cyan-600' },
-  Bell:        { iconBg: 'bg-red-50',     iconColor: 'text-red-600' },
+  FileText: { iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
+  DollarSign: { iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
+  ShoppingBag: { iconBg: 'bg-violet-50', iconColor: 'text-violet-600' },
+  FileCheck: { iconBg: 'bg-orange-50', iconColor: 'text-orange-600' },
+  Target: { iconBg: 'bg-pink-50', iconColor: 'text-pink-600' },
+  Clock: { iconBg: 'bg-cyan-50', iconColor: 'text-cyan-600' },
+  Bell: { iconBg: 'bg-red-50', iconColor: 'text-red-600' },
 };
 
 interface TabRelatoriosProps {
@@ -81,7 +81,9 @@ export default function TabRelatorios({ patientName }: TabRelatoriosProps) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">Relatórios — {patientName}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Selecione um relatório para visualizar ou exportar</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Selecione um relatório para visualizar ou exportar
+          </p>
         </div>
         <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
           {mockReportDefinitions.length} relatórios disponíveis
@@ -92,16 +94,26 @@ export default function TabRelatorios({ patientName }: TabRelatoriosProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {mockReportDefinitions.map((card) => {
           const IconComp = iconMap[card.iconKey] ?? FileText;
-          const { iconBg, iconColor } = iconStyleMap[card.iconKey] ?? { iconBg: 'bg-gray-50', iconColor: 'text-gray-600' };
+          const { iconBg, iconColor } = iconStyleMap[card.iconKey] ?? {
+            iconBg: 'bg-gray-50',
+            iconColor: 'text-gray-600',
+          };
           return (
-            <div key={card.key} className="card-base p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
+            <div
+              key={card.key}
+              className="card-base p-5 flex flex-col gap-3 hover:shadow-md transition-shadow"
+            >
               {/* Card Header */}
               <div className="flex items-start justify-between gap-2">
-                <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0`}>
+                <div
+                  className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0`}
+                >
                   <IconComp size={18} className={iconColor} />
                 </div>
                 {card.badge && (
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${card.badgeColor}`}>
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${card.badgeColor}`}
+                  >
                     {card.badge}
                   </span>
                 )}

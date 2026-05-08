@@ -1,7 +1,17 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, CalendarClock, CheckCircle2, CircleDollarSign, FileText, Link2, RefreshCw, UserRound, Wallet } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  CircleDollarSign,
+  FileText,
+  Link2,
+  RefreshCw,
+  UserRound,
+  Wallet,
+} from 'lucide-react';
 
 interface MetricCard {
   label: string;
@@ -71,7 +81,8 @@ export default function ClinicFinanceiroContent() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Financeiro da Clínica</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Operação financeira clínica: cobranças, recebimentos, assinaturas, pacotes, inadimplência e conciliação.
+              Operação financeira clínica: cobranças, recebimentos, assinaturas, pacotes,
+              inadimplência e conciliação.
             </p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 text-xs font-medium">
@@ -116,7 +127,10 @@ export default function ClinicFinanceiroContent() {
           <h2 className="text-base font-semibold text-foreground">Seções da tela</h2>
           <ul className="mt-3 space-y-2">
             {sections.map((section) => (
-              <li key={section} className="text-sm text-foreground bg-background border border-border rounded-lg px-3 py-2">
+              <li
+                key={section}
+                className="text-sm text-foreground bg-background border border-border rounded-lg px-3 py-2"
+              >
                 {section}
               </li>
             ))}
@@ -129,7 +143,10 @@ export default function ClinicFinanceiroContent() {
             {operationalItems.map((item) => {
               const Icon = item.icon;
               return (
-                <div key={item.title} className="flex items-start gap-3 bg-background border border-border rounded-lg px-3 py-2.5">
+                <div
+                  key={item.title}
+                  className="flex items-start gap-3 bg-background border border-border rounded-lg px-3 py-2.5"
+                >
                   <div className="mt-0.5 w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                     <Icon size={14} />
                   </div>
