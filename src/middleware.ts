@@ -1,23 +1,40 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 
-const ADMIN_ROLES = new Set(['platform_admin', 'platform_support']);
-const CLINIC_ROLES = new Set([
-  'tenant_owner',
-  'clinic_admin',
-  'receptionist',
-  'physician',
-  'nutritionist',
-  'fitness_professional',
-  'financial_user',
-]);
-const PATIENT_ROLES = new Set(['patient', 'guardian']);
+type MiddlewareUserContext = {
+  canAccessPlatformAdmin: boolean;
+  canAccessClinicWorkspace: boolean;
+  hasActiveTenantMembership: boolean;
+  canAccessPatientPortal: boolean;
+};
 
-function getTargetRoute(role: string | null) {
-  if (role && ADMIN_ROLES.has(role)) return '/admin';
-  if (role && CLINIC_ROLES.has(role)) return '/clinic/dashboard';
-  if (role && PATIENT_ROLES.has(role)) return '/patient';
+function getTargetRoute(context: MiddlewareUserContext) {
+  if (context.canAccessPlatformAdmin) return '/admin';
+  if (context.canAccessClinicWorkspace && context.hasActiveTenantMembership) return '/clinic/dashboard';
+  if (context.canAccessPatientPortal) return '/patient';
   return '/clinic/dashboard';
+}
+
+async function getMiddlewareUserContext(
+  supabase: ReturnType<typeof updateSession>['supabase'],
+  userId: string,
+): Promise<MiddlewareUserContext> {
+  const [{ data: profileRow }, { data: membershipRows }] = await Promise.all([
+    supabase.from('profiles').select('platform_role').eq('id', userId).maybeSingle(),
+    supabase.from('tenant_memberships').select('status').eq('user_id', userId),
+  ]);
+
+  const platformRole = profileRow && typeof profileRow.platform_role === 'string' ? profileRow.platform_role : null;
+  const memberships = (membershipRows ?? []) as Array<{ status: string | null }>;
+  const hasAnyMembership = memberships.length > 0;
+  const hasActiveTenantMembership = memberships.some((membership) => membership.status === 'active');
+
+  return {
+    canAccessPlatformAdmin: platformRole === 'platform_admin' || platformRole === 'platform_support',
+    canAccessClinicWorkspace: hasAnyMembership,
+    hasActiveTenantMembership,
+    canAccessPatientPortal: !hasAnyMembership,
+  };
 }
 
 export async function middleware(request: NextRequest) {
@@ -28,8 +45,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const role = (user?.app_metadata?.role as string | undefined) ?? null;
-
   if (
     !user &&
     (pathname.startsWith('/admin') ||
@@ -39,24 +54,40 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 
-  if (user && pathname === '/') {
-    return NextResponse.redirect(new URL(getTargetRoute(role), request.url));
+  if (!user) return response;
+
+  let context: MiddlewareUserContext;
+  try {
+    context = await getMiddlewareUserContext(supabase, user.id);
+  } catch {
+    // Fallback for middleware safety: require only authenticated session,
+    // while detailed authorization is enforced in server-side guards.
+    context = {
+      canAccessPlatformAdmin: false,
+      canAccessClinicWorkspace: false,
+      hasActiveTenantMembership: false,
+      canAccessPatientPortal: false,
+    };
   }
 
-  if (user && pathname.startsWith('/auth/login')) {
-    return NextResponse.redirect(new URL(getTargetRoute(role), request.url));
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
   }
 
-  if (user && pathname.startsWith('/admin') && !ADMIN_ROLES.has(role ?? '')) {
-    return NextResponse.redirect(new URL(getTargetRoute(role), request.url));
+  if (pathname.startsWith('/auth/login')) {
+    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
   }
 
-  if (user && pathname.startsWith('/clinic') && !CLINIC_ROLES.has(role ?? '')) {
-    return NextResponse.redirect(new URL(getTargetRoute(role), request.url));
+  if (pathname.startsWith('/admin') && !context.canAccessPlatformAdmin) {
+    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
   }
 
-  if (user && pathname.startsWith('/patient') && !PATIENT_ROLES.has(role ?? '')) {
-    return NextResponse.redirect(new URL(getTargetRoute(role), request.url));
+  if (pathname.startsWith('/clinic') && !(context.canAccessClinicWorkspace && context.hasActiveTenantMembership)) {
+    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
+  }
+
+  if (pathname.startsWith('/patient') && !context.canAccessPatientPortal) {
+    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
   }
 
   return response;

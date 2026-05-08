@@ -1,34 +1,17 @@
 import { redirect } from 'next/navigation';
 import AuthForm from '@/components/auth/AuthForm';
-import { createClient } from '@/lib/supabase/server';
-
-function getRouteForRole(role: string | null) {
-  if (role === 'platform_admin' || role === 'platform_support') return '/admin';
-  if (
-    role &&
-    [
-      'tenant_owner',
-      'clinic_admin',
-      'receptionist',
-      'physician',
-      'nutritionist',
-      'fitness_professional',
-      'financial_user',
-    ].includes(role)
-  )
-    return '/clinic/dashboard';
-  if (role === 'patient' || role === 'guardian') return '/patient';
-  return '/clinic/dashboard';
-}
+import { getCurrentUserContext } from '@/lib/auth/getCurrentUserContext';
 
 export default async function LoginPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const context = await getCurrentUserContext();
 
-  if (user) {
-    redirect(getRouteForRole((user.app_metadata?.role as string | undefined) ?? null));
+  if (context) {
+    if (context.canAccessPlatformAdmin) redirect('/admin');
+    if (context.canAccessClinicWorkspace && context.memberships.some((membership) => membership.status === 'active')) {
+      redirect('/clinic/dashboard');
+    }
+    if (context.canAccessPatientPortal) redirect('/patient');
+    redirect('/clinic/dashboard');
   }
 
   return (
