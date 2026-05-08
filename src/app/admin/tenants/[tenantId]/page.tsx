@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import TenantDetailContent from './components/TenantDetailContent';
 import { Shield } from 'lucide-react';
+import Link from 'next/link';
 
 const MOCK_USER_ROLE = 'platform_admin';
 
@@ -39,9 +40,9 @@ export default function TenantDetailPage() {
               acessar este painel.
             </p>
           </div>
-          <a href="/admin/tenants" className="btn-primary">
+          <Link href="/admin/tenants" className="btn-primary">
             Voltar aos Tenants
-          </a>
+          </Link>
         </div>
       </div>
     );

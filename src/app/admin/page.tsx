@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import AdminContent from './components/AdminContent';
 import { Shield } from 'lucide-react';
+import Link from 'next/link';
 
 // Route protection: only platform_admin role can access
 // In production, replace with real auth check from Supabase session
@@ -42,9 +43,9 @@ export default function AdminPage() {
               acessar este painel.
             </p>
           </div>
-          <a href="/" className="btn-primary">
+          <Link href="/" className="btn-primary">
             Voltar ao Dashboard
-          </a>
+          </Link>
         </div>
       </div>
     );

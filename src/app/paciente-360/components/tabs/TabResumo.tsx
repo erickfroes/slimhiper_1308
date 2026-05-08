@@ -730,7 +730,7 @@ export default function TabResumo({ data }: TabResumoProps) {
                   {chat.lastMessageFrom}
                 </p>
                 <p className="text-xs text-muted-foreground line-clamp-2 italic">
-                  "{chat.lastMessagePreview}"
+                  &quot;{chat.lastMessagePreview}&quot;
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-1.5">
                   {new Date(chat.lastMessageAt).toLocaleDateString('pt-BR', {
