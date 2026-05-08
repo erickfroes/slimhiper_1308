@@ -17,13 +17,17 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+const CLINIC_MEMBERSHIP_ROLE_CODES = ['clinic_admin', 'physician', 'nutritionist', 'financial_user'];
+
 const usersToSeed = [
   { email: 'platform.admin@example.com', full_name: 'Platform Admin', platform_role: 'platform_admin' },
   { email: 'clinic.admin@example.com', full_name: 'Clinic Admin', role_code: 'clinic_admin' },
   { email: 'physician.demo@example.com', full_name: 'Demo Physician', role_code: 'physician' },
   { email: 'nutritionist.demo@example.com', full_name: 'Demo Nutritionist', role_code: 'nutritionist' },
   { email: 'finance.demo@example.com', full_name: 'Demo Financial User', role_code: 'financial_user' },
-  { email: 'patient.demo@example.com', full_name: 'Demo Patient', role_code: 'patient' },
+  // Patient is seeded as auth + profile only for now.
+  // Do not create tenant_membership until schema supports a valid patient-facing membership role.
+  { email: 'patient.demo@example.com', full_name: 'Demo Patient', portal_role: 'patient_portal_future' },
 ];
 
 const permissionMatrix = {
@@ -31,7 +35,6 @@ const permissionMatrix = {
   physician: ['patients.read', 'encounters.read', 'encounters.write', 'soap.read', 'soap.write', 'prescriptions.read', 'prescriptions.write'],
   nutritionist: ['patients.read', 'nutrition.read', 'nutrition.write', 'reports.read'],
   financial_user: ['patients.read', 'financial.read', 'financial.write', 'reports.read'],
-  patient: ['chat.read', 'chat.write', 'documents.read', 'packages.read'],
 };
 
 async function ensureAuthUser(email, password) {
@@ -82,12 +85,13 @@ async function run() {
   if (profileError) throw profileError;
 
   const membershipsPayload = seededUsers
-    .filter((u) => u.role_code)
+    .filter((u) => CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code))
     .map((u) => ({
       tenant_id: tenant.id,
       user_id: u.id,
       role_code: u.role_code,
-      role: ['tenant_owner', 'clinic_admin'].includes(u.role_code) ? 'admin' : 'member',
+      // `tenant_memberships.role` is constrained by migration; mirror role_code for valid values.
+      role: u.role_code,
       status: 'active',
     }));
 
@@ -141,8 +145,23 @@ async function run() {
   }
 
   console.log('Bootstrap completed successfully.');
-  console.table(seededUsers.map((u) => ({ email: u.email, role_code: u.role_code ?? 'platform_admin' })));
+  console.table(seededUsers.map((u) => ({
+    email: u.email,
+    auth_seeded: 'yes',
+    profile_seeded: 'yes',
+    tenant_membership: CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code) ? u.role_code : 'not seeded',
+    area_access: u.platform_role === 'platform_admin'
+      ? 'Platform admin area'
+      : (CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code) ? `Clinic app (${u.role_code})` : 'Patient portal (future profile-link flow)'),
+  })));
   console.log(`Tenant: ${tenant.slug} (${tenant.id})`);
+  console.log('Access summary:');
+  console.log('- platform.admin@example.com → Platform admin area only (no tenant_membership).');
+  console.log('- clinic.admin@example.com → Clinic tenant app as clinic_admin.');
+  console.log('- physician.demo@example.com → Clinic tenant app as physician.');
+  console.log('- nutritionist.demo@example.com → Clinic tenant app as nutritionist.');
+  console.log('- finance.demo@example.com → Clinic tenant app as financial_user.');
+  console.log('- patient.demo@example.com → Auth + profile seeded; tenant_membership intentionally skipped until a valid patient membership schema exists.');
 }
 
 run().catch((error) => {
