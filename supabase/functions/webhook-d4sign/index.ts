@@ -60,6 +60,7 @@ async function hmacSha256Hex(secret: string, message: string): Promise<string> {
 async function isWebhookAuthentic(req: Request, rawBody: string) {
   const sharedToken = Deno.env.get('D4SIGN_WEBHOOK_TOKEN')?.trim() ?? '';
   const hmacSecret = Deno.env.get('D4SIGN_WEBHOOK_HMAC_SECRET')?.trim() ?? '';
+  if (!sharedToken && !hmacSecret) return { ok: false, reason: 'webhook_auth_not_configured' };
 
   const providedToken = getString(
     req.headers.get('x-d4sign-token'),
@@ -76,7 +77,7 @@ async function isWebhookAuthentic(req: Request, rawBody: string) {
     if (providedSignature.replace(/^sha256=/, '') !== expected) return { ok: false, reason: 'signature_mismatch' };
   }
 
-  return { ok: true, reason: 'verified_or_not_required' };
+  return { ok: true, reason: 'verified' };
 }
 
 Deno.serve(async (req) => {

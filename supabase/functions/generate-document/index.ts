@@ -34,6 +34,22 @@ function interpolateTemplate(templateBody: string, variables: Record<string, unk
   });
 }
 
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isValidStoragePath(path: string, tenantId: string, patientId: string, documentId: string) {
+  if (!path) return false;
+  const parts = path.split('/');
+  return (
+    parts.length === 4 &&
+    parts[0] === tenantId &&
+    parts[1] === patientId &&
+    parts[2] === documentId &&
+    parts[3].length > 0
+  );
+}
+
 Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
 
@@ -192,8 +208,22 @@ Deno.serve(async (req) => {
     const renderedContent = interpolateTemplate(templateBody, mergedVariables);
 
     const generatedDocumentId = crypto.randomUUID();
+    if (!isUuidLike(tenantId) || !isUuidLike(patientId) || !isUuidLike(generatedDocumentId)) {
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'internal_error', message: 'Invalid storage identifiers.' },
+        meta: { timestamp },
+      });
+    }
     const storageBucket = 'patient-documents';
     const storagePath = `${tenantId}/${patientId}/${generatedDocumentId}/document.html`;
+    if (!isValidStoragePath(storagePath, tenantId, patientId, generatedDocumentId)) {
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'internal_error', message: 'Invalid storage path format.' },
+        meta: { timestamp },
+      });
+    }
 
     const uploadContent = new Blob([renderedContent], { type: 'text/html; charset=utf-8' });
     const { error: uploadError } = await supabase.storage.from(storageBucket).upload(storagePath, uploadContent, { upsert: true, contentType: 'text/html; charset=utf-8' });

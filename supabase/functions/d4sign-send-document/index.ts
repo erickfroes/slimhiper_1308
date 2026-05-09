@@ -217,11 +217,12 @@ Deno.serve(async (req) => {
     });
 
     if (!providerResponse.ok) {
-      const providerBody = await providerResponse.text();
+      await providerResponse.text();
       return jsonResponse(502, {
         ok: false,
         error: { code: 'provider_error', message: 'Unable to send document to D4Sign.' },
-        meta: { timestamp, provider_status: providerResponse.status, provider_body: providerBody.slice(0, 500) },
+        // Intentionally omit provider raw payload to avoid leaking sensitive data.
+        meta: { timestamp, provider_status: providerResponse.status },
       });
     }
 
