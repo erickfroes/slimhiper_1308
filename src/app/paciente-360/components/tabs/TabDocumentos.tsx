@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import type { PatientDocument360Item, PatientDocumentCategory } from '@/domain/types';
 import EmptyState from '@/components/EmptyState';
-import { getPatientDocuments } from '@/services/documentsApi';
+import { getDocumentSignedUrl, getPatientDocuments, sendDocumentForSignature } from '@/services/documentsApi';
 import {
   FileText,
   Download,
@@ -20,6 +20,7 @@ import {
   XCircle,
   Search,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 // ─── Category filter type (adds virtual filter keys) ─────────────────────────
 
@@ -113,53 +114,57 @@ function AssinaturaBadge({ assinatura }: { assinatura: PatientDocument360Item['a
 
 interface RowActionsProps {
   doc: PatientDocument360Item;
+  patientId: string;
 }
 
-function RowActions({ doc }: RowActionsProps) {
+function RowActions({ doc, patientId }: RowActionsProps) {
   const [open, setOpen] = useState(false);
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
+  const handleAction = async (label: string) => {
+    if (label === 'Abrir' || label === 'Baixar') {
+      setLoadingAction(label);
+      const { data, error } = await getDocumentSignedUrl(doc.id, patientId);
+      setLoadingAction(null);
+      if (error || !data?.url) return toast.error(error?.message ?? 'Falha ao abrir link temporário auditado.');
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+      toast.success(`Link temporário auditado criado (${data.expiresInSeconds}s).`);
+      setOpen(false);
+      return;
+    }
+    if (label === 'Enviar para assinatura') {
+      setLoadingAction(label);
+      const { error } = await sendDocumentForSignature(doc.id, patientId, [{ name: 'Paciente', email: 'paciente@example.com' }]);
+      setLoadingAction(null);
+      if (error) return toast.error(error.message);
+      toast.success('Documento enviado para assinatura.');
+      setOpen(false);
+      return;
+    }
+    toast.info('Acesso via link temporário auditado.');
+    setOpen(false);
+  };
 
   const actions = [
     { label: 'Abrir', icon: <Eye size={13} />, always: true },
     { label: 'Baixar', icon: <Download size={13} />, always: true },
     { label: 'Ver detalhes', icon: <Info size={13} />, always: true },
     { label: 'Ver evidência', icon: <ShieldCheck size={13} />, always: true },
-    {
-      label: 'Baixar pacote de evidência',
-      icon: <Package size={13} />,
-      always: doc.hasEvidencePackage === true,
-    },
-    {
-      label: 'Enviar para assinatura',
-      icon: <Send size={13} />,
-      always: doc.assinatura === 'pendente' || doc.assinatura === 'nao_requerido',
-    },
+    { label: 'Baixar pacote de evidência', icon: <Package size={13} />, always: doc.hasEvidencePackage === true },
+    { label: 'Enviar para assinatura', icon: <Send size={13} />, always: doc.assinatura === 'pendente' || doc.assinatura === 'nao_requerido' },
   ].filter((a) => a.always);
 
   return (
     <div className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 text-foreground border border-border transition-colors"
-      >
+      <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 text-foreground border border-border transition-colors">
         Ações
         {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
-
       {open && (
         <div className="absolute right-0 top-full mt-1 z-20 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[200px]">
           {actions.map((action) => (
-            <button
-              key={action.label}
-              onClick={() => {
-                // Security: never expose storageObjectPath or raw file paths
-                // All file access goes through audited temporary links
-                alert(`Ação: ${action.label}\nAcesso via: link temporário auditado`);
-                setOpen(false);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-foreground hover:bg-muted/60 transition-colors text-left"
-            >
-              <span className="text-muted-foreground">{action.icon}</span>
-              {action.label}
+            <button key={action.label} disabled={loadingAction !== null} onClick={() => void handleAction(action.label)} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-foreground hover:bg-muted/60 transition-colors text-left disabled:opacity-60">
+              <span className="text-muted-foreground">{action.icon}</span>{loadingAction===action.label?'Processando...':action.label}
             </button>
           ))}
         </div>
@@ -378,7 +383,7 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
 
                     {/* Ações */}
                     <td className="px-4 py-3">
-                      <RowActions doc={doc} />
+                      <RowActions doc={doc} patientId={patientId} />
                     </td>
                   </tr>
                 ))}

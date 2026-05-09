@@ -311,3 +311,12 @@ Before continuing implementation work for D4Sign/Storage integration, ensure thi
 Recommended checkpoint label:
 
 - `baseline-patient360-contract-green`
+
+## Documents + D4Sign runbook
+
+1. Run migrations (project root): `supabase db push`
+2. Bootstrap auth core: `node scripts/supabase/bootstrap-core-auth.mjs`
+3. Bootstrap patient demo: `node scripts/supabase/bootstrap-patient360-demo.mjs`
+4. Bootstrap document templates: `node scripts/supabase/bootstrap-document-templates-demo.mjs`
+5. Obtain test access token and export envs: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_ACCESS_TOKEN`, `TEST_PATIENT_ID`, `TEST_TEMPLATE_ID`
+6. Run documents contract test: `node scripts/supabase/test-documents-contract.mjs`
