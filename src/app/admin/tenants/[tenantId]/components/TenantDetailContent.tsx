@@ -45,6 +45,7 @@ import {
 import AppLogo from '@/components/ui/AppLogo';
 import { useParams } from 'next/navigation';
 import Icon from '@/components/ui/AppIcon';
+import { getTenantDetail } from '@/services/adminApi';
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 
@@ -691,7 +692,21 @@ export default function TenantDetailContent() {
     'overview' | 'users' | 'units' | 'audit' | 'webhooks' | 'support' | 'breakglass'
   >('overview');
 
-  const tenant = mockTenantDetails[tenantId] ?? defaultTenant;
+  const [tenant, setTenant] = useState<TenantDetail>(mockTenantDetails[tenantId] ?? defaultTenant);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const fallback = (mockTenantDetails[tenantId] ?? defaultTenant) as TenantDetail;
+    getTenantDetail(tenantId, fallback as any).then(({ data, error }) => {
+      if (!mounted) return;
+      setTenant((data ?? fallback) as TenantDetail);
+      setLoadError(error?.message ?? null);
+      setIsLoading(false);
+    });
+    return () => { mounted = false; };
+  }, [tenantId]);
 
   const navItems = [
     { key: 'overview', label: 'Visão Geral', href: '/admin', icon: Building2 },
