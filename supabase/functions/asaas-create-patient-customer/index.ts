@@ -1,0 +1,15 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const h={'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS'};
+const j=(s:number,p:Record<string,unknown>)=>new Response(JSON.stringify(p),{status:s,headers:h});
+Deno.serve(async(req)=>{if(req.method==='OPTIONS')return new Response('ok',{headers:h});if(req.method!=='POST')return j(405,{ok:false});const token=(req.headers.get('Authorization')||'').replace('Bearer ','');if(!token)return j(401,{ok:false});
+const url=Deno.env.get('SUPABASE_URL');const anon=Deno.env.get('SUPABASE_ANON_KEY');const key=Deno.env.get('ASAAS_API_KEY');const base=Deno.env.get('ASAAS_BASE_URL')||'https://api.asaas.com/v3'; if(!url||!anon||!key)return j(500,{ok:false});
+const sb=createClient(url,anon,{global:{headers:{Authorization:`Bearer ${token}`}}}); const u=(await sb.auth.getUser()).data.user; if(!u)return j(401,{ok:false});
+const body=await req.json().catch(()=>null); const patientId=body?.patient_id; if(!patientId)return j(400,{ok:false,error:'patient_id_required'});
+const m=await sb.from('tenant_memberships').select('tenant_id').eq('user_id',u.id).eq('status','active').limit(1).single(); if(m.error)return j(403,{ok:false}); const tenantId=m.data.tenant_id;
+const p=await sb.rpc('has_permission',{p_tenant_id:tenantId,p_permission:'financial.write'}); if(p.data!==true)return j(403,{ok:false});
+const patient=await sb.from('patient_pii').select('full_name,cpf_masked,email,phone').eq('tenant_id',tenantId).eq('patient_id',patientId).maybeSingle(); if(patient.error||!patient.data)return j(404,{ok:false});
+const asaas=await fetch(`${base}/customers`,{method:'POST',headers:{'Content-Type':'application/json',access_token:key},body:JSON.stringify({name:patient.data.full_name,email:patient.data.email,mobilePhone:patient.data.phone,cpfCnpj:undefined,externalReference:patientId})});
+if(!asaas.ok)return j(502,{ok:false,error:'asaas_error'}); const d=await asaas.json();
+await sb.from('patient_customers').upsert({tenant_id:tenantId,patient_id:patientId,asaas_customer_id:d.id,status:'active',metadata:{name:patient.data.full_name,cpf_masked:patient.data.cpf_masked}},{onConflict:'tenant_id,patient_id'});
+return j(200,{ok:true,data:{patient_id:patientId,asaas_customer_id:d.id}});
+});

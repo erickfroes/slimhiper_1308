@@ -320,3 +320,26 @@ Recommended checkpoint label:
 4. Bootstrap document templates: `node scripts/supabase/bootstrap-document-templates-demo.mjs`
 5. Obtain test access token and export envs: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_ACCESS_TOKEN`, `TEST_PATIENT_ID`, `TEST_TEMPLATE_ID`
 6. Run documents contract test: `node scripts/supabase/test-documents-contract.mjs`
+
+## Billing + Asaas foundation runbook
+
+- Apply migration: `supabase db push`.
+- Required Edge Function secrets (server-side only):
+  - `ASAAS_API_KEY`
+  - `ASAAS_BASE_URL` (optional, default `https://api.asaas.com/v3`)
+  - `ASAAS_WEBHOOK_TOKEN`
+  - `SUPABASE_SERVICE_ROLE_KEY` (webhook only)
+- Deploy functions:
+  - `asaas-create-tenant-subaccount`
+  - `asaas-create-patient-customer`
+  - `asaas-create-patient-invoice`
+  - `asaas-create-patient-subscription`
+  - `webhook-asaas`
+- Webhook endpoint: `/functions/v1/webhook-asaas` with header `asaas-access-token`.
+- Idempotency: webhook events are deduplicated by SHA-256 hash in `billing_webhook_events`.
+- Seed/demo: `node scripts/supabase/bootstrap-billing-demo.mjs`.
+- Contract test: `node scripts/supabase/test-billing-contract.mjs`.
+- Security notes:
+  - Tenant is always resolved from active membership in JWT context, never from client payload.
+  - `financial.write` is required for customer/invoice/subscription creation.
+  - No Asaas API key is persisted in tables or returned by functions.
