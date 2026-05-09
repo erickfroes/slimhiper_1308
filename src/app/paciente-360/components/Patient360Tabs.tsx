@@ -77,9 +77,11 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
         {activeTab === 'documentos' && <TabDocumentos patientId={patientId} />}
         {activeTab === 'financeiro' && (
           <TabFinanceiro
+            patientId={patientId}
             financial={data.financial}
             canViewFinancial={userContext?.canViewFinancial ?? false}
             currentRole={userContext?.activeTenantRole ?? null}
+            permissions={userContext?.permissions ?? []}
           />
         )}
         {activeTab === 'pacotes' && <TabPacotes pkg={data.activePackage} />}
