@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { PatientFinancialSummary } from '@/domain/types';
 import {
   ShieldOff,
@@ -21,6 +21,11 @@ import {
   Download,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
+import {
+  createPatientInvoice,
+  createPatientSubscription,
+  getPatientFinancialSummary,
+} from '@/services/billingApi';
 
 function formatBRL(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -48,9 +53,11 @@ const CHARGE_TYPE_LABELS: Record<string, string> = {
 };
 
 interface TabFinanceiroProps {
+  patientId?: string;
   financial?: PatientFinancialSummary | null;
   canViewFinancial: boolean;
   currentRole: string | null;
+  permissions?: string[];
 }
 
 // ── No-permission state ───────────────────────────────────────────────────────
@@ -177,13 +184,37 @@ function StatusPill({ status }: { status: string }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function TabFinanceiro({ financial, canViewFinancial }: TabFinanceiroProps) {
+export default function TabFinanceiro({ patientId, financial, canViewFinancial, permissions = [] }: TabFinanceiroProps) {
+  const [liveFinancial, setLiveFinancial] = useState<PatientFinancialSummary | null>(financial ?? null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [paymentLink, setPaymentLink] = useState<string | null>(null);
+  const [invoiceModal, setInvoiceModal] = useState(false);
+  const [subModal, setSubModal] = useState(false);
+  const [amount, setAmount] = useState('400');
+  const [description, setDescription] = useState('Cobrança avulsa');
+  const [dueDate, setDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const canWriteFinancial = permissions.includes('financial.write');
+
+  useEffect(() => {
+    const load = async () => {
+      if (!patientId || !canViewFinancial) return;
+      setLoading(true);
+      const res = await getPatientFinancialSummary(patientId);
+      if (res.error) setError(res.error.message);
+      if (res.data) setLiveFinancial(res.data);
+      setLoading(false);
+    };
+    void load();
+  }, [patientId, canViewFinancial]);
   // Permission gate
   if (!canViewFinancial) {
     return <SemPermissaoFinanceira />;
   }
 
-  if (!financial) {
+  if (loading) return <div className="card-base p-5 text-sm text-muted-foreground">Carregando financeiro...</div>;
+  if (error) return <div className="card-base p-5 text-sm text-red-600">Erro ao carregar financeiro: {error}</div>;
+  if (!liveFinancial) {
     return (
       <div className="card-base p-5">
         <EmptyState
@@ -195,13 +226,13 @@ export default function TabFinanceiro({ financial, canViewFinancial }: TabFinanc
     );
   }
 
-  const paymentHistory = financial.paymentHistory ?? [];
-  const charges = financial.charges ?? [];
-  const receipts = financial.receipts ?? [];
-  const negotiations = financial.negotiations ?? [];
-  const futureParcelas = financial.futureParcelas ?? 0;
-  const futureParcelasAmount = financial.futureParcelasAmount ?? 0;
-  const overdueParcelasCount = financial.overdueParcelasCount ?? 0;
+  const paymentHistory = liveFinancial.paymentHistory ?? [];
+  const charges = liveFinancial.charges ?? [];
+  const receipts = liveFinancial.receipts ?? [];
+  const negotiations = liveFinancial.negotiations ?? [];
+  const futureParcelas = liveFinancial.futureParcelas ?? 0;
+  const futureParcelasAmount = liveFinancial.futureParcelasAmount ?? 0;
+  const overdueParcelasCount = liveFinancial.overdueParcelasCount ?? 0;
 
   return (
     <div className="space-y-5">
@@ -215,26 +246,26 @@ export default function TabFinanceiro({ financial, canViewFinancial }: TabFinanc
       </div>
 
       {/* Financial state banner */}
-      {financial.financialState && <FinancialStateBanner state={financial.financialState} />}
+      {liveFinancial.financialState && <FinancialStateBanner state={liveFinancial.financialState} />}
 
       {/* ── Summary cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {[
           {
             label: 'Total contratado',
-            value: formatBRL(financial.totalContractValue),
+            value: formatBRL(liveFinancial.totalContractValue),
             color: 'text-foreground',
             bg: 'bg-muted/40',
           },
           {
             label: 'Total pago',
-            value: formatBRL(financial.totalPaid),
+            value: formatBRL(liveFinancial.totalPaid),
             color: 'text-green-700',
             bg: 'bg-green-50',
           },
           {
             label: 'Em aberto',
-            value: formatBRL(financial.totalPending),
+            value: formatBRL(liveFinancial.totalPending),
             color: 'text-amber-700',
             bg: 'bg-amber-50',
           },
@@ -246,9 +277,9 @@ export default function TabFinanceiro({ financial, canViewFinancial }: TabFinanc
           },
           {
             label: `Parcelas em atraso (${overdueParcelasCount})`,
-            value: formatBRL(financial.totalOverdue),
-            color: financial.totalOverdue > 0 ? 'text-red-700' : 'text-muted-foreground',
-            bg: financial.totalOverdue > 0 ? 'bg-red-50' : 'bg-muted/40',
+            value: formatBRL(liveFinancial.totalOverdue),
+            color: liveFinancial.totalOverdue > 0 ? 'text-red-700' : 'text-muted-foreground',
+            bg: liveFinancial.totalOverdue > 0 ? 'bg-red-50' : 'bg-muted/40',
           },
         ].map((item) => (
           <div key={item.label} className={`rounded-lg p-3 ${item.bg} border border-border`}>
@@ -268,9 +299,13 @@ export default function TabFinanceiro({ financial, canViewFinancial }: TabFinanc
             <Plus size={13} />
             Registrar pagamento
           </button>
-          <button className="btn-secondary text-xs flex items-center gap-1.5">
+          <button className="btn-secondary text-xs flex items-center gap-1.5" disabled={!canWriteFinancial} onClick={() => setInvoiceModal(true)}>
             <CreditCard size={13} />
             Gerar cobrança
+          </button>
+          <button className="btn-secondary text-xs flex items-center gap-1.5" disabled={!canWriteFinancial} onClick={() => setSubModal(true)}>
+            <RefreshCw size={13} />
+            Criar assinatura
           </button>
           <button className="btn-secondary text-xs flex items-center gap-1.5">
             <Bell size={13} />
@@ -290,6 +325,21 @@ export default function TabFinanceiro({ financial, canViewFinancial }: TabFinanc
           </button>
         </div>
       </div>
+      {!canWriteFinancial && <p className="text-xs text-amber-700">Sem permissão financial.write para criar cobranças/assinaturas.</p>}
+      {paymentLink && <p className="text-xs text-green-700">Link de pagamento: <a className="underline" href={paymentLink} target="_blank">abrir</a></p>}
+      {invoiceModal && (
+        <div className="card-base p-3 text-sm space-y-2">
+          <input className="border rounded px-2 py-1 w-full" value={description} onChange={(e) => setDescription(e.target.value)} />
+          <input className="border rounded px-2 py-1 w-full" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input type="date" className="border rounded px-2 py-1 w-full" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          <button className="btn-primary text-xs" onClick={async () => { if (!patientId) return; const r = await createPatientInvoice(patientId, Number(amount), description, dueDate); if (r.data?.paymentLink) setPaymentLink(r.data.paymentLink); setInvoiceModal(false); }}>Confirmar cobrança</button>
+        </div>
+      )}
+      {subModal && (
+        <div className="card-base p-3 text-sm space-y-2">
+          <button className="btn-primary text-xs" onClick={async () => { if (!patientId) return; const r = await createPatientSubscription(patientId, 'default-package', Number(amount), 'monthly'); if (r.data?.paymentLink) setPaymentLink(r.data.paymentLink); setSubModal(false); }}>Confirmar assinatura</button>
+        </div>
+      )}
 
       {/* ── Histórico de pagamentos ── */}
       <Section
