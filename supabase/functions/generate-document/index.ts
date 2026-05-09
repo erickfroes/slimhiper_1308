@@ -191,21 +191,26 @@ Deno.serve(async (req) => {
     const templateBody = typeof template.template_body === 'string' ? template.template_body : '';
     const renderedContent = interpolateTemplate(templateBody, mergedVariables);
 
-    const placeholderDocumentId = crypto.randomUUID();
-    const placeholderStoragePath = `${tenantId}/${patientId}/${placeholderDocumentId}/generated.txt`;
+    const generatedDocumentId = crypto.randomUUID();
+    const storageBucket = 'patient-documents';
+    const storagePath = `${tenantId}/${patientId}/${generatedDocumentId}/document.html`;
+
+    const uploadContent = new Blob([renderedContent], { type: 'text/html; charset=utf-8' });
+    const { error: uploadError } = await supabase.storage.from(storageBucket).upload(storagePath, uploadContent, { upsert: true, contentType: 'text/html; charset=utf-8' });
+    if (uploadError) throw uploadError;
 
     const { data: generatedDocument, error: generatedDocumentError } = await supabase
       .from('generated_documents')
       .insert({
-        id: placeholderDocumentId,
+        id: generatedDocumentId,
         tenant_id: tenantId,
         patient_id: patientId,
         template_id: template.id,
         name: template.name,
         category: template.category,
         status: 'draft',
-        storage_bucket: 'patient-documents',
-        storage_path: placeholderStoragePath,
+        storage_bucket: storageBucket,
+        storage_path: storagePath,
         generated_by: authData.user.id,
       })
       .select('id, tenant_id, patient_id, template_id, name, category, status, generated_by, generated_at, created_at, updated_at')
@@ -241,9 +246,12 @@ Deno.serve(async (req) => {
       ok: true,
       data: {
         generatedDocument: {
-          ...generatedDocument,
-          rendered_content: renderedContent,
-          variables: mergedVariables,
+          id: generatedDocument.id,
+          status: generatedDocument.status,
+          name: generatedDocument.name,
+          category: generatedDocument.category,
+          generated_at: generatedDocument.generated_at,
+          created_at: generatedDocument.created_at,
         },
       },
       meta: {
