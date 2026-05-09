@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Webhook,
   Search,
@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
 import Icon from '@/components/ui/AppIcon';
+import { listWebhookSummaries } from '@/services/adminApi';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -585,7 +586,22 @@ export default function WebhookMonitorContent() {
   const [selectedEvent, setSelectedEvent] = useState<WebhookEvent | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const filtered = mockWebhookEvents.filter((e) => {
+  const [events, setEvents] = useState<WebhookEvent[]>(mockWebhookEvents);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    listWebhookSummaries(mockWebhookEvents as any).then(({ data, error }) => {
+      if (!mounted) return;
+      setEvents((data ?? mockWebhookEvents) as WebhookEvent[]);
+      setLoadError(error?.message ?? null);
+      setIsLoading(false);
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  const filtered = events.filter((e) => {
     const matchSearch =
       !search ||
       e.id.toLowerCase().includes(search.toLowerCase()) ||
@@ -598,16 +614,16 @@ export default function WebhookMonitorContent() {
     return matchSearch && matchProvider && matchStatus;
   });
 
-  const total = mockWebhookEvents.length;
-  const processed = mockWebhookEvents.filter((e) => e.status === 'processed').length;
-  const failed = mockWebhookEvents.filter(
+  const total = events.length;
+  const processed = events.filter((e) => e.status === 'processed').length;
+  const failed = events.filter(
     (e) => e.status === 'failed' || e.status === 'dead_letter'
   ).length;
-  const pending = mockWebhookEvents.filter(
+  const pending = events.filter(
     (e) => e.status === 'pending' || e.status === 'retrying'
   ).length;
-  const asaasCount = mockWebhookEvents.filter((e) => e.provider === 'Asaas').length;
-  const d4signCount = mockWebhookEvents.filter((e) => e.provider === 'D4Sign').length;
+  const asaasCount = events.filter((e) => e.provider === 'Asaas').length;
+  const d4signCount = events.filter((e) => e.provider === 'D4Sign').length;
 
   function toggleRow(id: string) {
     setExpandedRows((prev) => {

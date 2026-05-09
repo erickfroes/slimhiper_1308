@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Building2,
   Users,
@@ -24,6 +24,7 @@ import {
   Activity,
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
+import { listTenants } from '@/services/adminApi';
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 
@@ -505,6 +506,20 @@ function ActionMenu({ tenant, onClose }: { tenant: TenantRow; onClose: () => voi
 
 export default function TenantsManagementContent() {
   const [search, setSearch] = useState('');
+  const [tenantRows, setTenantRows] = useState<TenantRow[]>(mockTenantRows);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    listTenants(mockTenantRows).then(({ data, error }) => {
+      if (!mounted) return;
+      setTenantRows((data ?? mockTenantRows) as TenantRow[]);
+      setLoadError(error?.message ?? null);
+      setIsLoading(false);
+    });
+    return () => { mounted = false; };
+  }, []);
   const [statusFilter, setStatusFilter] = useState<'all' | TenantRow['status']>('all');
   const [planFilter, setPlanFilter] = useState<'all' | TenantRow['plan']>('all');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -515,7 +530,7 @@ export default function TenantsManagementContent() {
     { key: 'tenants', label: 'Gestão de Tenants', href: '/admin/tenants', icon: Building2 },
   ];
 
-  const filtered = mockTenantRows.filter((t) => {
+  const filtered = tenantRows.filter((t) => {
     const matchSearch =
       !search ||
       t.clinicName.toLowerCase().includes(search.toLowerCase()) ||
@@ -528,11 +543,11 @@ export default function TenantsManagementContent() {
   });
 
   const stats = {
-    total: mockTenantRows.length,
-    active: mockTenantRows.filter((t) => t.status === 'active').length,
-    trial: mockTenantRows.filter((t) => t.status === 'trial').length,
-    suspended: mockTenantRows.filter((t) => t.status === 'suspended').length,
-    totalUsers: mockTenantRows.reduce((s, t) => s + t.users, 0),
+    total: tenantRows.length,
+    active: tenantRows.filter((t) => t.status === 'active').length,
+    trial: tenantRows.filter((t) => t.status === 'trial').length,
+    suspended: tenantRows.filter((t) => t.status === 'suspended').length,
+    totalUsers: tenantRows.reduce((s, t) => s + t.users, 0),
   };
 
   return (
