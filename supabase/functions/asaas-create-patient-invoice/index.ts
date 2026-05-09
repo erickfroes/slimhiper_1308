@@ -1,0 +1,14 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const h={'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS'};
+const j=(s:number,p:Record<string,unknown>)=>new Response(JSON.stringify(p),{status:s,headers:h});
+Deno.serve(async(req)=>{if(req.method==='OPTIONS')return new Response('ok',{headers:h}); if(req.method!=='POST') return j(405,{ok:false});
+const token=(req.headers.get('Authorization')||'').replace('Bearer ',''); if(!token) return j(401,{ok:false});
+const sb=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_ANON_KEY')!,{global:{headers:{Authorization:`Bearer ${token}`}}}); const u=(await sb.auth.getUser()).data.user; if(!u)return j(401,{ok:false});
+const m=await sb.from('tenant_memberships').select('tenant_id').eq('user_id',u.id).eq('status','active').limit(1).single(); if(m.error) return j(403,{ok:false}); const tenantId=m.data.tenant_id;
+if((await sb.rpc('has_permission',{p_tenant_id:tenantId,p_permission:'financial.write'})).data!==true) return j(403,{ok:false});
+const b=await req.json(); const c=await sb.from('patient_customers').select('id,asaas_customer_id').eq('tenant_id',tenantId).eq('patient_id',b.patient_id).single(); if(c.error) return j(404,{ok:false,error:'customer_not_found'});
+const asaas=await fetch(`${Deno.env.get('ASAAS_BASE_URL')||'https://api.asaas.com/v3'}/payments`,{method:'POST',headers:{'Content-Type':'application/json',access_token:Deno.env.get('ASAAS_API_KEY')!},body:JSON.stringify({customer:c.data.asaas_customer_id,billingType:b.billing_type||'PIX',value:(b.amount_cents||0)/100,dueDate:b.due_date,description:b.description,externalReference:b.patient_id})});
+if(!asaas.ok) return j(502,{ok:false,error:'asaas_error'}); const d=await asaas.json();
+await sb.from('patient_invoices').insert({tenant_id:tenantId,patient_id:b.patient_id,patient_customer_id:c.data.id,asaas_invoice_id:d.id,status:d.status||'PENDING',amount_cents:b.amount_cents,due_date:b.due_date,description:b.description,metadata:{invoiceNumber:d.invoiceNumber??null}});
+return j(200,{ok:true,data:{asaas_invoice_id:d.id,status:d.status}});
+});

@@ -1,0 +1,17 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const cors={ 'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS'};
+const json=(s:number,p:Record<string,unknown>)=>new Response(JSON.stringify(p),{status:s,headers:cors});
+Deno.serve(async(req)=>{ if(req.method==='OPTIONS') return new Response('ok',{headers:cors}); if(req.method!=='POST') return json(405,{ok:false});
+const token=(req.headers.get('Authorization')||'').replace('Bearer ',''); if(!token) return json(401,{ok:false,error:'unauthorized'});
+const url=Deno.env.get('SUPABASE_URL'); const anon=Deno.env.get('SUPABASE_ANON_KEY'); const asaasKey=Deno.env.get('ASAAS_API_KEY'); const asaasBase=Deno.env.get('ASAAS_BASE_URL')||'https://api.asaas.com/v3';
+if(!url||!anon||!asaasKey) return json(500,{ok:false,error:'server_misconfigured'});
+const sb=createClient(url,anon,{global:{headers:{Authorization:`Bearer ${token}`}}}); const u=await sb.auth.getUser(); if(!u.data.user) return json(401,{ok:false,error:'unauthorized'});
+const mem=await sb.from('tenant_memberships').select('tenant_id').eq('user_id',u.data.user.id).eq('status','active').limit(1).maybeSingle(); if(mem.error||!mem.data) return json(403,{ok:false,error:'forbidden'});
+const tenantId=mem.data.tenant_id; const perm=await sb.rpc('has_permission',{p_tenant_id:tenantId,p_permission:'financial.write'}); if(perm.error||perm.data!==true) return json(403,{ok:false,error:'missing_financial_write'});
+const body=await req.json().catch(()=>({})); const payload={name:body?.name||'SlimHiper Clinic',email:body?.email};
+const asaas=await fetch(`${asaasBase}/accounts`,{method:'POST',headers:{'Content-Type':'application/json',access_token:asaasKey},body:JSON.stringify(payload)});
+if(!asaas.ok) return json(502,{ok:false,error:'asaas_error'}); const data=await asaas.json();
+await sb.from('tenant_billing_accounts').upsert({tenant_id:tenantId,provider:'asaas',status:'active',wallet_id:data.walletId??null,wallet_id_masked:data.walletId?String(data.walletId).slice(0,4)+'***':null,metadata:{asaasAccountId:data.id}},{onConflict:'tenant_id'});
+await sb.from('asaas_subaccounts').upsert({tenant_id:tenantId,tenant_billing_account_id:(await sb.from('tenant_billing_accounts').select('id').eq('tenant_id',tenantId).single()).data?.id,asaas_account_id:data.id,wallet_id:data.walletId??null,wallet_id_masked:data.walletId?String(data.walletId).slice(0,4)+'***':null,account_name:data.name,status:'active',masked_metadata:{email:data.email??null}},{onConflict:'tenant_billing_account_id'});
+return json(200,{ok:true,data:{tenant_id:tenantId,asaas_account_id:data.id,wallet_id_masked:data.walletId?String(data.walletId).slice(0,4)+'***':null}});
+});
