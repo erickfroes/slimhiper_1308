@@ -118,7 +118,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                   collapsed ? 'justify-center px-0 py-2.5 mx-0' : 'gap-3 px-3 py-2.5',
                   active
                     ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-primary/8 hover:text-primary',
+                    : 'text-muted-foreground hover:bg-primary/10 hover:text-primary',
                 ].join(' ')}
               >
                 <Icon size={18} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />

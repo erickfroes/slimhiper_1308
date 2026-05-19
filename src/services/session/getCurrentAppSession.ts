@@ -61,7 +61,10 @@ export async function getCurrentAppSession(
 
   const [{ data: profileRow }, { data: membershipRows }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
-    supabase.from('tenant_memberships').select('id, tenant_id, user_id, role, role_code, status, unit_id').eq('user_id', user.id),
+    supabase
+      .from('tenant_memberships')
+      .select('id, tenant_id, user_id, role, role_code, status, unit_id')
+      .eq('user_id', user.id),
   ]);
 
   const profile = asRecord(profileRow);
@@ -107,7 +110,9 @@ export async function getCurrentAppSession(
     : null;
   const activeTenantRole = activeMembership?.roleKey ?? null;
 
-  const activeMemberships = tenantMemberships.filter((membership) => membership.status === 'active');
+  const activeMemberships = tenantMemberships.filter(
+    (membership) => membership.status === 'active'
+  );
   const prioritizedMemberships = [
     ...(activeMembership ? [activeMembership] : []),
     ...activeMemberships.filter((membership) => membership.id !== activeMembership?.id),
@@ -174,7 +179,9 @@ export async function getCurrentAppSession(
   const isActiveClinicRole =
     normalizedActiveRole.length > 0 && !['patient', 'guardian'].includes(normalizedActiveRole);
   const canManageByRole = ['tenant_owner', 'clinic_admin'].includes(normalizedActiveRole);
-  const canViewRxByRole = ['physician', 'clinic_admin', 'tenant_owner'].includes(normalizedActiveRole);
+  const canViewRxByRole = ['physician', 'clinic_admin', 'tenant_owner'].includes(
+    normalizedActiveRole
+  );
 
   const session: AppSession = {
     userId: user.id,
@@ -195,15 +202,13 @@ export async function getCurrentAppSession(
       isPlatformAdminRole(platformRole) ||
       isPlatformSupportRole(platformRole) ||
       hasAnyPermission(permissionSet, PERMISSIONS.PLATFORM_ADMIN_ACCESS),
-    canAccessClinicWorkspace: () =>
-      activeMembership?.status === 'active' && isActiveClinicRole,
+    canAccessClinicWorkspace: () => activeMembership?.status === 'active' && isActiveClinicRole,
     canViewFinancial: () => hasAnyPermission(permissionSet, ['financial.read', 'financial.write']),
     canViewMedicalPrescriptions: () =>
       canViewRxByRole &&
       hasAnyPermission(permissionSet, ['prescriptions.read', 'prescriptions.write']),
     canManageTenantUsers: () =>
-      canManageByRole ||
-      hasAnyPermission(permissionSet, ['tenant.users.manage', 'settings.write']),
+      canManageByRole || hasAnyPermission(permissionSet, ['tenant.users.manage', 'settings.write']),
   };
 
   return session;

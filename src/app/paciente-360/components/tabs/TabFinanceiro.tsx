@@ -184,8 +184,15 @@ function StatusPill({ status }: { status: string }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function TabFinanceiro({ patientId, financial, canViewFinancial, permissions = [] }: TabFinanceiroProps) {
-  const [liveFinancial, setLiveFinancial] = useState<PatientFinancialSummary | null>(financial ?? null);
+export default function TabFinanceiro({
+  patientId,
+  financial,
+  canViewFinancial,
+  permissions = [],
+}: TabFinanceiroProps) {
+  const [liveFinancial, setLiveFinancial] = useState<PatientFinancialSummary | null>(
+    financial ?? null
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentLink, setPaymentLink] = useState<string | null>(null);
@@ -212,8 +219,14 @@ export default function TabFinanceiro({ patientId, financial, canViewFinancial, 
     return <SemPermissaoFinanceira />;
   }
 
-  if (loading) return <div className="card-base p-5 text-sm text-muted-foreground">Carregando financeiro...</div>;
-  if (error) return <div className="card-base p-5 text-sm text-red-600">Erro ao carregar financeiro: {error}</div>;
+  if (loading)
+    return (
+      <div className="card-base p-5 text-sm text-muted-foreground">Carregando financeiro...</div>
+    );
+  if (error)
+    return (
+      <div className="card-base p-5 text-sm text-red-600">Erro ao carregar financeiro: {error}</div>
+    );
   if (!liveFinancial) {
     return (
       <div className="card-base p-5">
@@ -246,7 +259,9 @@ export default function TabFinanceiro({ patientId, financial, canViewFinancial, 
       </div>
 
       {/* Financial state banner */}
-      {liveFinancial.financialState && <FinancialStateBanner state={liveFinancial.financialState} />}
+      {liveFinancial.financialState && (
+        <FinancialStateBanner state={liveFinancial.financialState} />
+      )}
 
       {/* ── Summary cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -299,11 +314,19 @@ export default function TabFinanceiro({ patientId, financial, canViewFinancial, 
             <Plus size={13} />
             Registrar pagamento
           </button>
-          <button className="btn-secondary text-xs flex items-center gap-1.5" disabled={!canWriteFinancial} onClick={() => setInvoiceModal(true)}>
+          <button
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            disabled={!canWriteFinancial}
+            onClick={() => setInvoiceModal(true)}
+          >
             <CreditCard size={13} />
             Gerar cobrança
           </button>
-          <button className="btn-secondary text-xs flex items-center gap-1.5" disabled={!canWriteFinancial} onClick={() => setSubModal(true)}>
+          <button
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            disabled={!canWriteFinancial}
+            onClick={() => setSubModal(true)}
+          >
             <RefreshCw size={13} />
             Criar assinatura
           </button>
@@ -325,19 +348,68 @@ export default function TabFinanceiro({ patientId, financial, canViewFinancial, 
           </button>
         </div>
       </div>
-      {!canWriteFinancial && <p className="text-xs text-amber-700">Sem permissão financial.write para criar cobranças/assinaturas.</p>}
-      {paymentLink && <p className="text-xs text-green-700">Link de pagamento: <a className="underline" href={paymentLink} target="_blank">abrir</a></p>}
+      {!canWriteFinancial && (
+        <p className="text-xs text-amber-700">
+          Sem permissão financial.write para criar cobranças/assinaturas.
+        </p>
+      )}
+      {paymentLink && (
+        <p className="text-xs text-green-700">
+          Link de pagamento:{' '}
+          <a className="underline" href={paymentLink} target="_blank">
+            abrir
+          </a>
+        </p>
+      )}
       {invoiceModal && (
         <div className="card-base p-3 text-sm space-y-2">
-          <input className="border rounded px-2 py-1 w-full" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <input className="border rounded px-2 py-1 w-full" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <input type="date" className="border rounded px-2 py-1 w-full" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          <button className="btn-primary text-xs" onClick={async () => { if (!patientId) return; const r = await createPatientInvoice(patientId, Number(amount), description, dueDate); if (r.data?.paymentLink) setPaymentLink(r.data.paymentLink); setInvoiceModal(false); }}>Confirmar cobrança</button>
+          <input
+            className="border rounded px-2 py-1 w-full"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <input
+            className="border rounded px-2 py-1 w-full"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          <input
+            type="date"
+            className="border rounded px-2 py-1 w-full"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+          <button
+            className="btn-primary text-xs"
+            onClick={async () => {
+              if (!patientId) return;
+              const r = await createPatientInvoice(patientId, Number(amount), description, dueDate);
+              if (r.data?.paymentLink) setPaymentLink(r.data.paymentLink);
+              setInvoiceModal(false);
+            }}
+          >
+            Confirmar cobrança
+          </button>
         </div>
       )}
       {subModal && (
         <div className="card-base p-3 text-sm space-y-2">
-          <button className="btn-primary text-xs" onClick={async () => { if (!patientId) return; const r = await createPatientSubscription(patientId, 'default-package', Number(amount), 'monthly'); if (r.data?.paymentLink) setPaymentLink(r.data.paymentLink); setSubModal(false); }}>Confirmar assinatura</button>
+          <button
+            className="btn-primary text-xs"
+            onClick={async () => {
+              if (!patientId) return;
+              const r = await createPatientSubscription(
+                patientId,
+                'default-package',
+                Number(amount),
+                'monthly'
+              );
+              if (r.data?.paymentLink) setPaymentLink(r.data.paymentLink);
+              setSubModal(false);
+            }}
+          >
+            Confirmar assinatura
+          </button>
         </div>
       )}
 

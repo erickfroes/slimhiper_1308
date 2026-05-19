@@ -23,7 +23,6 @@ interface SafeServiceError {
   details?: string;
 }
 
-
 type EdgeResponseEnvelope<T> = {
   ok: boolean;
   data?: T;
@@ -34,7 +33,10 @@ type EdgeResponseEnvelope<T> = {
   meta?: Record<string, unknown>;
 };
 
-function unwrapEdgeResponse<T>(response: unknown): { data: T | null; error: SafeServiceError | null } {
+function unwrapEdgeResponse<T>(response: unknown): {
+  data: T | null;
+  error: SafeServiceError | null;
+} {
   if (response && typeof response === 'object' && 'ok' in response) {
     const envelope = response as EdgeResponseEnvelope<T>;
 
@@ -86,7 +88,8 @@ function normalizeTimelineEvent(event: unknown): PatientTimelineEvent | null {
       record.metadata && typeof record.metadata === 'object'
         ? (record.metadata as Record<string, string | number | boolean>)
         : undefined,
-    category: typeof record.category === 'string' ? (record.category as TimelineEventCategory) : undefined,
+    category:
+      typeof record.category === 'string' ? (record.category as TimelineEventCategory) : undefined,
     actorName: typeof record.actorName === 'string' ? record.actorName : undefined,
     statusLabel: typeof record.statusLabel === 'string' ? record.statusLabel : undefined,
     actionLabel: typeof record.actionLabel === 'string' ? record.actionLabel : undefined,
@@ -114,7 +117,10 @@ function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-function normalizeAppointment(item: unknown, patientId: string): Patient360Summary['upcomingAppointments'][number] | null {
+function normalizeAppointment(
+  item: unknown,
+  patientId: string
+): Patient360Summary['upcomingAppointments'][number] | null {
   const record = asRecord(item);
   if (!record) return null;
 
@@ -122,9 +128,16 @@ function normalizeAppointment(item: unknown, patientId: string): Patient360Summa
     id: asString(record.id),
     patientId: asString(record.patientId, patientId),
     patientName: asString(record.patientName),
-    patientAvatarUrl: typeof record.patientAvatarUrl === 'string' ? record.patientAvatarUrl : undefined,
-    type: asString(record.type, 'consulta_medica') as Patient360Summary['upcomingAppointments'][number]['type'],
-    status: asString(record.status, 'agendado') as Patient360Summary['upcomingAppointments'][number]['status'],
+    patientAvatarUrl:
+      typeof record.patientAvatarUrl === 'string' ? record.patientAvatarUrl : undefined,
+    type: asString(
+      record.type,
+      'consulta_medica'
+    ) as Patient360Summary['upcomingAppointments'][number]['type'],
+    status: asString(
+      record.status,
+      'agendado'
+    ) as Patient360Summary['upcomingAppointments'][number]['status'],
     scheduledAt: asString(record.scheduledAt),
     durationMinutes: asNumber(record.durationMinutes),
     professionalName: asString(record.professionalName),
@@ -132,11 +145,15 @@ function normalizeAppointment(item: unknown, patientId: string): Patient360Summa
     roomName: typeof record.roomName === 'string' ? record.roomName : undefined,
     notes: typeof record.notes === 'string' ? record.notes : undefined,
     attendanceLink: typeof record.attendanceLink === 'string' ? record.attendanceLink : undefined,
-    recommendedReturn: typeof record.recommendedReturn === 'string' ? record.recommendedReturn : undefined,
+    recommendedReturn:
+      typeof record.recommendedReturn === 'string' ? record.recommendedReturn : undefined,
   };
 }
 
-function normalizePrescription(item: unknown, patientId: string): Patient360Summary['prescriptions'][number] | null {
+function normalizePrescription(
+  item: unknown,
+  patientId: string
+): Patient360Summary['prescriptions'][number] | null {
   const record = asRecord(item);
   if (!record) return null;
 
@@ -151,8 +168,14 @@ function normalizePrescription(item: unknown, patientId: string): Patient360Summ
     prescribedBy: asString(record.prescribedBy),
     isActive: asBoolean(record.isActive),
     notes: typeof record.notes === 'string' ? record.notes : undefined,
-    category: typeof record.category === 'string' ? (record.category as Patient360Summary['prescriptions'][number]['category']) : undefined,
-    status: typeof record.status === 'string' ? (record.status as Patient360Summary['prescriptions'][number]['status']) : undefined,
+    category:
+      typeof record.category === 'string'
+        ? (record.category as Patient360Summary['prescriptions'][number]['category'])
+        : undefined,
+    status:
+      typeof record.status === 'string'
+        ? (record.status as Patient360Summary['prescriptions'][number]['status'])
+        : undefined,
     issueDate: typeof record.issueDate === 'string' ? record.issueDate : undefined,
     validity: typeof record.validity === 'string' ? record.validity : undefined,
     linkedDocument: typeof record.linkedDocument === 'string' ? record.linkedDocument : undefined,
@@ -170,7 +193,9 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
   const patientId = asString(rawProfile?.id);
 
   const timeline = Array.isArray(raw?.recentTimeline)
-    ? raw.recentTimeline.map(normalizeTimelineEvent).filter((item): item is PatientTimelineEvent => Boolean(item))
+    ? raw.recentTimeline
+        .map(normalizeTimelineEvent)
+        .filter((item): item is PatientTimelineEvent => Boolean(item))
     : [];
   const appointments = Array.isArray(raw?.upcomingAppointments)
     ? raw.upcomingAppointments
@@ -188,7 +213,8 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       id: patientId,
       tenantId: asString(rawProfile?.tenantId),
       name: asString(rawProfile?.name),
-      preferredName: typeof rawProfile?.preferredName === 'string' ? rawProfile.preferredName : undefined,
+      preferredName:
+        typeof rawProfile?.preferredName === 'string' ? rawProfile.preferredName : undefined,
       age: asNumber(rawProfile?.age),
       birthDate: asString(rawProfile?.birthDate),
       cpfMasked: asString(rawProfile?.cpfMasked),
@@ -196,20 +222,30 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       email: asString(rawProfile?.email),
       avatarUrl: typeof rawProfile?.avatarUrl === 'string' ? rawProfile.avatarUrl : undefined,
       status: asString(rawProfile?.status, 'inativo') as Patient360Summary['profile']['status'],
-      careTeam: Array.isArray(rawProfile?.careTeam) ? rawProfile.careTeam.filter((item): item is string => typeof item === 'string') : [],
+      careTeam: Array.isArray(rawProfile?.careTeam)
+        ? rawProfile.careTeam.filter((item): item is string => typeof item === 'string')
+        : [],
       createdAt: asString(rawProfile?.createdAt),
-      tags: Array.isArray(rawProfile?.tags) ? rawProfile.tags.filter((item): item is string => typeof item === 'string') : undefined,
+      tags: Array.isArray(rawProfile?.tags)
+        ? rawProfile.tags.filter((item): item is string => typeof item === 'string')
+        : undefined,
     },
     activePackage: {
       id: asString(asRecord(raw?.activePackage)?.id),
       patientId: asString(asRecord(raw?.activePackage)?.patientId, patientId),
       programName: asString(asRecord(raw?.activePackage)?.programName),
-      programType: asString(asRecord(raw?.activePackage)?.programType, 'emagrecimento') as Patient360Summary['activePackage']['programType'],
+      programType: asString(
+        asRecord(raw?.activePackage)?.programType,
+        'emagrecimento'
+      ) as Patient360Summary['activePackage']['programType'],
       totalWeeks: asNumber(asRecord(raw?.activePackage)?.totalWeeks),
       currentWeek: asNumber(asRecord(raw?.activePackage)?.currentWeek),
       startDate: asString(asRecord(raw?.activePackage)?.startDate),
       endDate: asString(asRecord(raw?.activePackage)?.endDate),
-      status: asString(asRecord(raw?.activePackage)?.status, 'aguardando') as Patient360Summary['activePackage']['status'],
+      status: asString(
+        asRecord(raw?.activePackage)?.status,
+        'aguardando'
+      ) as Patient360Summary['activePackage']['status'],
       totalConsultations: asNumber(asRecord(raw?.activePackage)?.totalConsultations),
       usedConsultations: asNumber(asRecord(raw?.activePackage)?.usedConsultations),
       totalNutritionSessions: asNumber(asRecord(raw?.activePackage)?.totalNutritionSessions),
@@ -221,28 +257,48 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       startWeightKg: asNumber(asRecord(raw?.clinicalStatus)?.startWeightKg),
       currentBmi: asNumber(asRecord(raw?.clinicalStatus)?.currentBmi),
       weeklyAdherencePercent: asNumber(asRecord(raw?.clinicalStatus)?.weeklyAdherencePercent),
-      adherenceLevel: asString(asRecord(raw?.clinicalStatus)?.adherenceLevel, 'regular') as Patient360Summary['clinicalStatus']['adherenceLevel'],
+      adherenceLevel: asString(
+        asRecord(raw?.clinicalStatus)?.adherenceLevel,
+        'regular'
+      ) as Patient360Summary['clinicalStatus']['adherenceLevel'],
       weightLostKg: asNumber(asRecord(raw?.clinicalStatus)?.weightLostKg),
       weightToGoKg: asNumber(asRecord(raw?.clinicalStatus)?.weightToGoKg),
       progressPercent: asNumber(asRecord(raw?.clinicalStatus)?.progressPercent),
       lastMeasuredAt: asString(asRecord(raw?.clinicalStatus)?.lastMeasuredAt),
-      weightHistory: Array.isArray(asRecord(raw?.clinicalStatus)?.weightHistory) ? (asRecord(raw?.clinicalStatus)?.weightHistory as Patient360Summary['clinicalStatus']['weightHistory']) : [],
-      adherenceHistory: Array.isArray(asRecord(raw?.clinicalStatus)?.adherenceHistory) ? (asRecord(raw?.clinicalStatus)?.adherenceHistory as Patient360Summary['clinicalStatus']['adherenceHistory']) : [],
+      weightHistory: Array.isArray(asRecord(raw?.clinicalStatus)?.weightHistory)
+        ? (asRecord(raw?.clinicalStatus)
+            ?.weightHistory as Patient360Summary['clinicalStatus']['weightHistory'])
+        : [],
+      adherenceHistory: Array.isArray(asRecord(raw?.clinicalStatus)?.adherenceHistory)
+        ? (asRecord(raw?.clinicalStatus)
+            ?.adherenceHistory as Patient360Summary['clinicalStatus']['adherenceHistory'])
+        : [],
     },
     financial: {
-      status: asString(asRecord(raw?.financial)?.status, 'isento') as Patient360Summary['financial']['status'],
+      status: asString(
+        asRecord(raw?.financial)?.status,
+        'isento'
+      ) as Patient360Summary['financial']['status'],
       totalContractValue: asNumber(asRecord(raw?.financial)?.totalContractValue),
       totalPaid: asNumber(asRecord(raw?.financial)?.totalPaid),
       totalPending: asNumber(asRecord(raw?.financial)?.totalPending),
       totalOverdue: asNumber(asRecord(raw?.financial)?.totalOverdue),
-      invoices: Array.isArray(asRecord(raw?.financial)?.invoices) ? (asRecord(raw?.financial)?.invoices as Patient360Summary['financial']['invoices']) : [],
-      financialState: typeof asRecord(raw?.financial)?.financialState === 'string' ? (asRecord(raw?.financial)?.financialState as Patient360Summary['financial']['financialState']) : undefined,
+      invoices: Array.isArray(asRecord(raw?.financial)?.invoices)
+        ? (asRecord(raw?.financial)?.invoices as Patient360Summary['financial']['invoices'])
+        : [],
+      financialState:
+        typeof asRecord(raw?.financial)?.financialState === 'string'
+          ? (asRecord(raw?.financial)
+              ?.financialState as Patient360Summary['financial']['financialState'])
+          : undefined,
     },
     alerts: Array.isArray(raw?.alerts) ? (raw.alerts as Patient360Summary['alerts']) : [],
     tasks: Array.isArray(raw?.tasks) ? (raw.tasks as Patient360Summary['tasks']) : [],
     upcomingAppointments: appointments,
     recentTimeline: timeline,
-    documents: Array.isArray(raw?.documents) ? (raw.documents as Patient360Summary['documents']) : [],
+    documents: Array.isArray(raw?.documents)
+      ? (raw.documents as Patient360Summary['documents'])
+      : [],
     prescriptions,
     nutritionPlan: {
       id: asString(asRecord(raw?.nutritionPlan)?.id),
@@ -267,8 +323,12 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       isOpen: asBoolean(asRecord(raw?.chat)?.isOpen),
     },
     mainUnit: typeof raw?.mainUnit === 'string' ? raw.mainUnit : undefined,
-    responsibleProfessional: typeof raw?.responsibleProfessional === 'string' ? raw.responsibleProfessional : undefined,
-    clinicalRisk: typeof raw?.clinicalRisk === 'string' ? (raw.clinicalRisk as Patient360Summary['clinicalRisk']) : undefined,
+    responsibleProfessional:
+      typeof raw?.responsibleProfessional === 'string' ? raw.responsibleProfessional : undefined,
+    clinicalRisk:
+      typeof raw?.clinicalRisk === 'string'
+        ? (raw.clinicalRisk as Patient360Summary['clinicalRisk'])
+        : undefined,
     lastUpdate: typeof raw?.lastUpdate === 'string' ? raw.lastUpdate : undefined,
   };
 }
@@ -284,18 +344,25 @@ function getSupabaseClient() {
   return createBrowserSupabaseClient();
 }
 
-function applyTimelineFilters(events: PatientTimelineEvent[], filters?: PatientTimelineFilters): PatientTimelineEvent[] {
+function applyTimelineFilters(
+  events: PatientTimelineEvent[],
+  filters?: PatientTimelineFilters
+): PatientTimelineEvent[] {
   if (!filters) return events;
 
   return events
     .filter((event) => (filters.category ? event.category === filters.category : true))
     .filter((event) => (filters.types?.length ? filters.types.includes(event.type) : true))
-    .filter((event) => (filters.fromDate ? new Date(event.date) >= new Date(filters.fromDate) : true))
+    .filter((event) =>
+      filters.fromDate ? new Date(event.date) >= new Date(filters.fromDate) : true
+    )
     .filter((event) => (filters.toDate ? new Date(event.date) <= new Date(filters.toDate) : true))
     .slice(0, filters.limit ?? events.length);
 }
 
-export async function getPatient360Summary(patientId: string): Promise<{ data: Patient360Summary | null; error: SafeServiceError | null }> {
+export async function getPatient360Summary(
+  patientId: string
+): Promise<{ data: Patient360Summary | null; error: SafeServiceError | null }> {
   try {
     if (isMockEnabled()) {
       const summary = await getPatient360(patientId);
@@ -308,7 +375,14 @@ export async function getPatient360Summary(patientId: string): Promise<{ data: P
     });
 
     if (error) {
-      return { data: null, error: { message: 'Failed to fetch patient summary.', code: error.name, details: error.message } };
+      return {
+        data: null,
+        error: {
+          message: 'Failed to fetch patient summary.',
+          code: error.name,
+          details: error.message,
+        },
+      };
     }
 
     const unwrapped = unwrapEdgeResponse<Patient360Summary>(data);
@@ -322,7 +396,7 @@ export async function getPatient360Summary(patientId: string): Promise<{ data: P
 
 export async function getPatientTimeline(
   patientId: string,
-  filters?: PatientTimelineFilters,
+  filters?: PatientTimelineFilters
 ): Promise<{ data: PatientTimelineEvent[]; error: SafeServiceError | null }> {
   try {
     if (isMockEnabled()) {
@@ -344,7 +418,14 @@ export async function getPatientTimeline(
     });
 
     if (error) {
-      return { data: [], error: { message: 'Failed to fetch patient timeline.', code: error.name, details: error.message } };
+      return {
+        data: [],
+        error: {
+          message: 'Failed to fetch patient timeline.',
+          code: error.name,
+          details: error.message,
+        },
+      };
     }
 
     const unwrapped = unwrapEdgeResponse<{ events?: unknown[] } | unknown[]>(data);
@@ -354,7 +435,9 @@ export async function getPatientTimeline(
     const list = Array.isArray(timelineData)
       ? timelineData
       : ((timelineData as { events?: unknown[] } | null)?.events ?? []);
-    const normalized = list.map(normalizeTimelineEvent).filter((item): item is PatientTimelineEvent => Boolean(item));
+    const normalized = list
+      .map(normalizeTimelineEvent)
+      .filter((item): item is PatientTimelineEvent => Boolean(item));
 
     return { data: applyTimelineFilters(normalized, filters), error: null };
   } catch (error) {

@@ -314,6 +314,8 @@ function TeamNoteCard({ note }: { note: NutritionTeamNote }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function TabNutricao({ plan }: TabNutricaoProps) {
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
+
   if (!plan) {
     return (
       <div className="card-base p-5">
@@ -326,7 +328,6 @@ export default function TabNutricao({ plan }: TabNutricaoProps) {
     );
   }
 
-  const [showAllPhotos, setShowAllPhotos] = useState(false);
   const visiblePhotos = showAllPhotos
     ? (plan.mealPhotos ?? [])
     : (plan.mealPhotos ?? []).slice(0, 3);

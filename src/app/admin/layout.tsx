@@ -13,5 +13,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const authorized = canAccessPlatformAdminFromSession(session);
 
-  return <PlatformAdminGuard backHref="/" backLabel="Voltar ao Dashboard" initialAuthorized={authorized}>{children}</PlatformAdminGuard>;
+  return (
+    <PlatformAdminGuard backHref="/" backLabel="Voltar ao Dashboard" initialAuthorized={authorized}>
+      {children}
+    </PlatformAdminGuard>
+  );
 }

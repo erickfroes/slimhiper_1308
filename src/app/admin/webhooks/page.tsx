@@ -6,7 +6,5 @@ export const metadata = {
 };
 
 export default function WebhooksPage() {
-  return (
-      <WebhookMonitorContent />
-  );
+  return <WebhookMonitorContent />;
 }

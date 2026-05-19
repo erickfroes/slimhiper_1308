@@ -3,7 +3,11 @@
 import React, { useEffect, useState } from 'react';
 import type { PatientDocument360Item, PatientDocumentCategory } from '@/domain/types';
 import EmptyState from '@/components/EmptyState';
-import { getDocumentSignedUrl, getPatientDocuments, sendDocumentForSignature } from '@/services/documentsApi';
+import {
+  getDocumentSignedUrl,
+  getPatientDocuments,
+  sendDocumentForSignature,
+} from '@/services/documentsApi';
 import {
   FileText,
   Download,
@@ -126,7 +130,8 @@ function RowActions({ doc, patientId }: RowActionsProps) {
       setLoadingAction(label);
       const { data, error } = await getDocumentSignedUrl(doc.id, patientId);
       setLoadingAction(null);
-      if (error || !data?.url) return toast.error(error?.message ?? 'Falha ao abrir link temporário auditado.');
+      if (error || !data?.url)
+        return toast.error(error?.message ?? 'Falha ao abrir link temporário auditado.');
       window.open(data.url, '_blank', 'noopener,noreferrer');
       toast.success(`Link temporário auditado criado (${data.expiresInSeconds}s).`);
       setOpen(false);
@@ -134,7 +139,9 @@ function RowActions({ doc, patientId }: RowActionsProps) {
     }
     if (label === 'Enviar para assinatura') {
       setLoadingAction(label);
-      const { error } = await sendDocumentForSignature(doc.id, patientId, [{ name: 'Paciente', email: 'paciente@example.com' }]);
+      const { error } = await sendDocumentForSignature(doc.id, patientId, [
+        { name: 'Paciente', email: 'paciente@example.com' },
+      ]);
       setLoadingAction(null);
       if (error) return toast.error(error.message);
       toast.success('Documento enviado para assinatura.');
@@ -150,21 +157,38 @@ function RowActions({ doc, patientId }: RowActionsProps) {
     { label: 'Baixar', icon: <Download size={13} />, always: true },
     { label: 'Ver detalhes', icon: <Info size={13} />, always: true },
     { label: 'Ver evidência', icon: <ShieldCheck size={13} />, always: true },
-    { label: 'Baixar pacote de evidência', icon: <Package size={13} />, always: doc.hasEvidencePackage === true },
-    { label: 'Enviar para assinatura', icon: <Send size={13} />, always: doc.assinatura === 'pendente' || doc.assinatura === 'nao_requerido' },
+    {
+      label: 'Baixar pacote de evidência',
+      icon: <Package size={13} />,
+      always: doc.hasEvidencePackage === true,
+    },
+    {
+      label: 'Enviar para assinatura',
+      icon: <Send size={13} />,
+      always: doc.assinatura === 'pendente' || doc.assinatura === 'nao_requerido',
+    },
   ].filter((a) => a.always);
 
   return (
     <div className="relative">
-      <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 text-foreground border border-border transition-colors">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 text-foreground border border-border transition-colors"
+      >
         Ações
         {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-20 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[200px]">
           {actions.map((action) => (
-            <button key={action.label} disabled={loadingAction !== null} onClick={() => void handleAction(action.label)} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-foreground hover:bg-muted/60 transition-colors text-left disabled:opacity-60">
-              <span className="text-muted-foreground">{action.icon}</span>{loadingAction===action.label?'Processando...':action.label}
+            <button
+              key={action.label}
+              disabled={loadingAction !== null}
+              onClick={() => void handleAction(action.label)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-foreground hover:bg-muted/60 transition-colors text-left disabled:opacity-60"
+            >
+              <span className="text-muted-foreground">{action.icon}</span>
+              {loadingAction === action.label ? 'Processando...' : action.label}
             </button>
           ))}
         </div>

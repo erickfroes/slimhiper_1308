@@ -64,7 +64,9 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
       {/* Tab content */}
       <div className="fade-in">
         {activeTab === 'resumo' && <TabResumo data={data} />}
-        {activeTab === 'timeline' && <TabTimeline events={data.recentTimeline} patientId={data.profile.id} />}
+        {activeTab === 'timeline' && (
+          <TabTimeline events={data.recentTimeline} patientId={data.profile.id} />
+        )}
         {activeTab === 'consultas' && <TabConsultas appointments={data.upcomingAppointments} />}
         {activeTab === 'nutricao' && <TabNutricao plan={data.nutritionPlan} />}
         {activeTab === 'prescricoes' && (
@@ -85,7 +87,12 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
           />
         )}
         {activeTab === 'pacotes' && <TabPacotes pkg={data.activePackage} />}
-        {activeTab === 'chat' && <TabChat chat={data.chat} patientName={data.profile.name?.trim() || 'Paciente sem nome'} />}
+        {activeTab === 'chat' && (
+          <TabChat
+            chat={data.chat}
+            patientName={data.profile.name?.trim() || 'Paciente sem nome'}
+          />
+        )}
         {activeTab === 'relatorios' && <TabRelatorios patientName={data.profile.name} />}
       </div>
     </div>

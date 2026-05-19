@@ -96,6 +96,8 @@ const ENTITLEMENT_ICONS: Record<string, React.ReactNode> = {
 };
 
 export default function TabPacotes({ pkg }: TabPacotesProps) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   if (!pkg) {
     return (
       <div className="card-base p-5">
@@ -103,8 +105,6 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
       </div>
     );
   }
-
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   const progressPercent = Math.round((pkg.currentWeek / pkg.totalWeeks) * 100);
 
