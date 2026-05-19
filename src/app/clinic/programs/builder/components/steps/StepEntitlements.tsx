@@ -43,7 +43,7 @@ export default function StepEntitlements({ draft, onChange }: Props) {
   return (
     <div className="space-y-5">
       {/* Header info */}
-      <div className="card p-4 flex items-center gap-4 bg-primary/5 border-primary/20">
+      <div className="card-base p-4 flex items-center gap-4 bg-primary/5 border-primary/20">
         <Smartphone size={20} className="text-primary flex-shrink-0" />
         <div>
           <p className="text-sm font-semibold text-foreground">
@@ -56,7 +56,7 @@ export default function StepEntitlements({ draft, onChange }: Props) {
       </div>
 
       {/* Entitlement toggles */}
-      <div className="card divide-y divide-border">
+      <div className="card-base divide-y divide-border">
         {entitlements.map((ent) => {
           const IconComp = entitlementIcons[ent.key] ?? Smartphone;
           return (

@@ -598,7 +598,9 @@ export default function WebhookMonitorContent() {
       setLoadError(error?.message ?? null);
       setIsLoading(false);
     });
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const filtered = events.filter((e) => {
@@ -616,12 +618,8 @@ export default function WebhookMonitorContent() {
 
   const total = events.length;
   const processed = events.filter((e) => e.status === 'processed').length;
-  const failed = events.filter(
-    (e) => e.status === 'failed' || e.status === 'dead_letter'
-  ).length;
-  const pending = events.filter(
-    (e) => e.status === 'pending' || e.status === 'retrying'
-  ).length;
+  const failed = events.filter((e) => e.status === 'failed' || e.status === 'dead_letter').length;
+  const pending = events.filter((e) => e.status === 'pending' || e.status === 'retrying').length;
   const asaasCount = events.filter((e) => e.provider === 'Asaas').length;
   const d4signCount = events.filter((e) => e.provider === 'D4Sign').length;
 
@@ -655,7 +653,7 @@ export default function WebhookMonitorContent() {
           {navItems.map((item) => {
             const ItemIcon = item.icon;
             const active = item.key === 'webhooks';
-            const sharedClass = `relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/8 hover:text-primary'}`;
+            const sharedClass = `relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'}`;
             return (
               <a key={item.key} href={item.href} className={sharedClass}>
                 <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />

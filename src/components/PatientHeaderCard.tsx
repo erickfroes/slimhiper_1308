@@ -168,10 +168,10 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
     .toUpperCase();
 
   const pkgStatus = activePackage
-    ? packageStatusConfig[activePackage.status] ?? packageStatusConfig.ativo
+    ? (packageStatusConfig[activePackage.status] ?? packageStatusConfig.ativo)
     : null;
   const finStatus = financial
-    ? financialStatusConfig[financial.status] ?? financialStatusConfig.em_dia
+    ? (financialStatusConfig[financial.status] ?? financialStatusConfig.em_dia)
     : null;
   const riskConfig = clinicalRisk ? clinicalRiskConfig[clinicalRisk] : null;
 
@@ -304,15 +304,15 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
         {/* Row 3: Status badges */}
         <div className="flex flex-wrap items-center gap-2 mt-4">
           {pkgStatus ? (
-                  <BadgePill label={pkgStatus.label} className={pkgStatus.className} />
-                ) : (
-                  <span className="text-sm text-muted-foreground">Sem pacote ativo</span>
-                )}
+            <BadgePill label={pkgStatus.label} className={pkgStatus.className} />
+          ) : (
+            <span className="text-sm text-muted-foreground">Sem pacote ativo</span>
+          )}
           {finStatus ? (
-                  <BadgePill label={finStatus.label} className={finStatus.className} />
-                ) : (
-                  <span className="text-sm text-muted-foreground">Financeiro não disponível</span>
-                )}
+            <BadgePill label={finStatus.label} className={finStatus.className} />
+          ) : (
+            <span className="text-sm text-muted-foreground">Financeiro não disponível</span>
+          )}
           {riskConfig && <BadgePill label={riskConfig.label} className={riskConfig.className} />}
         </div>
       </div>

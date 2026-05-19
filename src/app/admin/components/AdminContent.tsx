@@ -700,7 +700,7 @@ export default function AdminContent({ initialSection = 'overview' }: { initialS
             const ItemIcon = item.icon;
             const active = activeSection === item.key;
             const itemHref = (item as { href?: string }).href;
-            const sharedClass = `relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/8 hover:text-primary'}`;
+            const sharedClass = `relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'}`;
             const inner = (
               <>
                 <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />

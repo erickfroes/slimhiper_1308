@@ -46,7 +46,7 @@ export default function StepDocumentos({ draft, onChange }: Props) {
   return (
     <div className="space-y-5">
       {/* Summary */}
-      <div className="card p-4 flex items-center gap-6 bg-primary/5 border-primary/20">
+      <div className="card-base p-4 flex items-center gap-6 bg-primary/5 border-primary/20">
         <FileText size={20} className="text-primary flex-shrink-0" />
         <div className="flex gap-6">
           <div>
@@ -61,7 +61,7 @@ export default function StepDocumentos({ draft, onChange }: Props) {
       </div>
 
       {/* Presets */}
-      <div className="card p-4 space-y-3">
+      <div className="card-base p-4 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Adicionar documento rápido</h3>
         <div className="flex flex-wrap gap-2">
           {documentPresets.map((p) => {
@@ -89,7 +89,7 @@ export default function StepDocumentos({ draft, onChange }: Props) {
       {/* Document list */}
       <div className="space-y-2">
         {docs.map((doc, idx) => (
-          <div key={idx} className="card p-3 flex items-center gap-3">
+          <div key={idx} className="card-base p-3 flex items-center gap-3">
             <FileText size={15} className="text-muted-foreground flex-shrink-0" />
             <input
               type="text"

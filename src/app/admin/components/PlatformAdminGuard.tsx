@@ -26,7 +26,8 @@ export default function PlatformAdminGuard({
 
     const resolveAuthorization = async () => {
       const response = await fetch('/api/auth/app-session', { cache: 'no-store' });
-      const result: { authenticated: boolean; canAccessPlatformAdmin: boolean } = await response.json();
+      const result: { authenticated: boolean; canAccessPlatformAdmin: boolean } =
+        await response.json();
 
       if (!mounted) return;
 

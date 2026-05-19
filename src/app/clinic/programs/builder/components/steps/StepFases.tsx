@@ -35,7 +35,7 @@ export default function StepFases({ draft, onChange }: Props) {
   return (
     <div className="space-y-4">
       {/* Summary */}
-      <div className="card p-4 flex items-center gap-6 bg-primary/5 border-primary/20">
+      <div className="card-base p-4 flex items-center gap-6 bg-primary/5 border-primary/20">
         <div className="text-center">
           <p className="text-2xl font-bold text-primary">{phases.length}</p>
           <p className="text-xs text-muted-foreground">Fases</p>
@@ -58,7 +58,7 @@ export default function StepFases({ draft, onChange }: Props) {
       {/* Phase list */}
       <div className="space-y-3">
         {phases.map((phase, idx) => (
-          <div key={idx} className="card p-4 space-y-3">
+          <div key={idx} className="card-base p-4 space-y-3">
             <div className="flex items-center gap-2">
               <GripVertical size={16} className="text-muted-foreground/40 flex-shrink-0" />
               <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">

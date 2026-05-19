@@ -705,7 +705,9 @@ export default function TenantDetailContent() {
       setLoadError(error?.message ?? null);
       setIsLoading(false);
     });
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [tenantId]);
 
   const navItems = [
@@ -764,7 +766,7 @@ export default function TenantDetailContent() {
                 key={item.key}
                 href={item.href}
                 title={sidebarCollapsed ? item.label : undefined}
-                className={`relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/8 hover:text-primary'}`}
+                className={`relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'}`}
               >
                 <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
                 {!sidebarCollapsed && (

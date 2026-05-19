@@ -1,5 +1,9 @@
 import type { AppSession } from '@/services/session/getCurrentAppSession';
-import { isPlatformAdminRole, isPlatformOwnerRole, isPlatformSupportRole } from '@/services/session/roles';
+import {
+  isPlatformAdminRole,
+  isPlatformOwnerRole,
+  isPlatformSupportRole,
+} from '@/services/session/roles';
 import { PERMISSIONS, hasAnyPermission } from '@/services/session/permissions';
 
 export function canAccessPlatformAdminFromSession(session: AppSession): boolean {

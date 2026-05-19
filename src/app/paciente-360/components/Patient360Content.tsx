@@ -84,7 +84,9 @@ export default function Patient360Content({ patientId, userContext }: Patient360
             {error ? 'Falha ao carregar paciente' : 'Paciente não encontrado'}
           </p>
           <p className="text-sm text-muted-foreground">
-            {error ? 'Não foi possível carregar os dados. Tente novamente.' : 'Verifique o ID do paciente e tente novamente.'}
+            {error
+              ? 'Não foi possível carregar os dados. Tente novamente.'
+              : 'Verifique o ID do paciente e tente novamente.'}
           </p>
           {error && (
             <button

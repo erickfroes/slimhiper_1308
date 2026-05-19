@@ -223,10 +223,9 @@ export default function TabResumo({ data }: TabResumoProps) {
       : financialStatus === 'inadimplente'
         ? 'bg-red-50'
         : 'bg-amber-50';
-  const financialLabel =
-    !financial
-      ? 'Não disponível'
-      : financialStatus === 'em_dia'
+  const financialLabel = !financial
+    ? 'Não disponível'
+    : financialStatus === 'em_dia'
       ? 'Em dia'
       : financialStatus === 'inadimplente'
         ? 'Inadimplente'

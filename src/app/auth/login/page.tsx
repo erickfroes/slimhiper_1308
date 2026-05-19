@@ -7,7 +7,10 @@ export default async function LoginPage() {
 
   if (context) {
     if (context.canAccessPlatformAdmin) redirect('/admin');
-    if (context.canAccessClinicWorkspace && context.memberships.some((membership) => membership.status === 'active')) {
+    if (
+      context.canAccessClinicWorkspace &&
+      context.memberships.some((membership) => membership.status === 'active')
+    ) {
       redirect('/clinic/dashboard');
     }
     if (context.canAccessPatientPortal) redirect('/patient');

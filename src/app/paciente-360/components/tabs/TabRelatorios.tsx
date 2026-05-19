@@ -204,7 +204,7 @@ export default function TabRelatorios({ patientName }: TabRelatoriosProps) {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background text-xs font-medium px-4 py-2.5 rounded-full shadow-lg animate-fade-in">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background text-xs font-medium px-4 py-2.5 rounded-full shadow-lg fade-in">
           {toast}
         </div>
       )}

@@ -23,6 +23,11 @@ interface TabChatProps {
 }
 
 export default function TabChat({ chat, patientName }: TabChatProps) {
+  const [quickMessage, setQuickMessage] = useState('');
+  const [sent, setSent] = useState(false);
+  const [markedAnswered, setMarkedAnswered] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
   if (!chat) {
     return (
       <div className="card-base p-5">
@@ -34,11 +39,6 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
       </div>
     );
   }
-
-  const [quickMessage, setQuickMessage] = useState('');
-  const [sent, setSent] = useState(false);
-  const [markedAnswered, setMarkedAnswered] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
 
   const messages = chat.messages ?? [];
   const shortcuts = chat.shortcuts ?? [];
