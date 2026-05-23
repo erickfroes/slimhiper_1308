@@ -1,4 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+declare const Deno: {
+  serve: (handler: (req: Request) => Promise<Response>) => void;
+  env: { get: (key: string) => string | undefined };
+};
 const cors={ 'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS'};
 const json=(s:number,p:Record<string,unknown>)=>new Response(JSON.stringify(p),{status:s,headers:cors});
 Deno.serve(async(req)=>{ if(req.method==='OPTIONS') return new Response('ok',{headers:cors}); if(req.method!=='POST') return json(405,{ok:false});

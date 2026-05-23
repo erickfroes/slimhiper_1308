@@ -3,9 +3,7 @@ import { getCurrentAppSession, type AppSession } from '@/services/session/getCur
 type AppSessionWithoutComputedBooleans = Omit<
   AppSession,
   | 'canAccessPlatformAdmin'
-  | 'canAccessClinicWorkspace'
-  | 'canViewFinancial'
-  | 'canViewMedicalPrescriptions'
+  | 'canAccessClinicWorkspace' |'canViewFinancial' |'canViewMedicalPrescriptions'
 >;
 
 export type UserContext = AppSessionWithoutComputedBooleans & {

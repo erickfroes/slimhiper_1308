@@ -230,8 +230,7 @@ function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
                 isSelected
                   ? 'bg-primary text-primary-foreground'
                   : isToday
-                    ? 'bg-primary/10 text-primary font-semibold'
-                    : 'text-foreground hover:bg-muted',
+                    ? 'bg-primary/10 text-primary font-semibold' :'text-foreground hover:bg-muted',
               ].join(' ')}
             >
               {day}
@@ -658,9 +657,7 @@ export default function AgendaContent() {
                 onClick={() => setActiveView('kanban')}
                 className={[
                   'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
-                  activeView === 'kanban'
-                    ? 'bg-card shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
+                  activeView === 'kanban' ?'bg-card shadow-sm text-foreground' :'text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
                 Fluxo Clínico
@@ -669,9 +666,7 @@ export default function AgendaContent() {
                 onClick={() => setActiveView('lista')}
                 className={[
                   'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
-                  activeView === 'lista'
-                    ? 'bg-card shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
+                  activeView === 'lista' ?'bg-card shadow-sm text-foreground' :'text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
                 Lista do Dia

@@ -7,16 +7,16 @@ export default function AuthStateButton() {
   const pathname = usePathname();
   const router = useRouter();
 
-  if (pathname.startsWith('/auth/login')) {
+  if (pathname?.startsWith('/auth/login')) {
     return null;
   }
 
   async function handleLogout() {
     const supabase = createClient();
-    await supabase.auth.signOut();
+    await supabase?.auth?.signOut();
 
-    router.push('/auth/login');
-    router.refresh();
+    router?.push('/auth/login');
+    router?.refresh();
   }
 
   return (

@@ -366,8 +366,7 @@ function PastCard({ appt }: { appt: AppointmentSummary }) {
           isCancelled
             ? 'bg-amber-100 dark:bg-amber-900/30'
             : isNoShow
-              ? 'bg-red-100 dark:bg-red-900/30'
-              : 'bg-muted'
+              ? 'bg-red-100 dark:bg-red-900/30' :'bg-muted'
         }`}
       >
         <span
@@ -375,8 +374,7 @@ function PastCard({ appt }: { appt: AppointmentSummary }) {
             isCancelled
               ? 'text-amber-600 dark:text-amber-400'
               : isNoShow
-                ? 'text-red-600 dark:text-red-400'
-                : 'text-muted-foreground'
+                ? 'text-red-600 dark:text-red-400' :'text-muted-foreground'
           }`}
         >
           {formatDay(appt.scheduledAt)}
@@ -386,8 +384,7 @@ function PastCard({ appt }: { appt: AppointmentSummary }) {
             isCancelled
               ? 'text-amber-500 dark:text-amber-400'
               : isNoShow
-                ? 'text-red-500 dark:text-red-400'
-                : 'text-muted-foreground'
+                ? 'text-red-500 dark:text-red-400' :'text-muted-foreground'
           }`}
         >
           {formatMonth(appt.scheduledAt)}
@@ -419,8 +416,7 @@ function PastCard({ appt }: { appt: AppointmentSummary }) {
           <p
             className={`text-xs mt-1 flex items-center gap-1 ${
               isOverdueReturn(appt.recommendedReturn)
-                ? 'text-amber-600 dark:text-amber-400 font-medium'
-                : 'text-muted-foreground'
+                ? 'text-amber-600 dark:text-amber-400 font-medium' :'text-muted-foreground'
             }`}
           >
             <RotateCcw size={11} />

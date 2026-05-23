@@ -177,8 +177,7 @@ export default function PatientListContent() {
         const bv = b[sortKey];
         if (typeof av === 'number' && typeof bv === 'number')
           return sortDir === 'asc' ? av - bv : bv - av;
-        return sortDir === 'asc'
-          ? String(av).localeCompare(String(bv), 'pt-BR')
+        return sortDir === 'asc' ? String(av).localeCompare(String(bv),'pt-BR')
           : String(bv).localeCompare(String(av), 'pt-BR');
       });
     }

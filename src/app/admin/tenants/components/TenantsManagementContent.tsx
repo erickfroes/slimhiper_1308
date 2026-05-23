@@ -893,13 +893,9 @@ export default function TenantsManagementContent() {
                           <IntegrationStatusDot
                             status={tenant.asaasSubaccountStatus}
                             label={
-                              tenant.asaasSubaccountStatus === 'active'
-                                ? 'Ativo'
-                                : tenant.asaasSubaccountStatus === 'pending'
-                                  ? 'Pendente'
-                                  : tenant.asaasSubaccountStatus === 'blocked'
-                                    ? 'Bloqueado'
-                                    : 'N/C'
+                              tenant.asaasSubaccountStatus === 'active' ?'Ativo'
+                                : tenant.asaasSubaccountStatus === 'pending' ?'Pendente'
+                                  : tenant.asaasSubaccountStatus === 'blocked' ?'Bloqueado' :'N/C'
                             }
                           />
                         </td>
@@ -908,13 +904,9 @@ export default function TenantsManagementContent() {
                           <IntegrationStatusDot
                             status={tenant.d4signStatus}
                             label={
-                              tenant.d4signStatus === 'active'
-                                ? 'Ativo'
-                                : tenant.d4signStatus === 'quota_exceeded'
-                                  ? 'Cota'
-                                  : tenant.d4signStatus === 'error'
-                                    ? 'Erro'
-                                    : 'N/C'
+                              tenant.d4signStatus === 'active' ?'Ativo'
+                                : tenant.d4signStatus === 'quota_exceeded' ?'Cota'
+                                  : tenant.d4signStatus === 'error' ?'Erro' :'N/C'
                             }
                           />
                         </td>

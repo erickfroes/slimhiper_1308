@@ -8,7 +8,7 @@ import {
   type PlatformRole,
 } from './roles';
 
-type SupabaseLike = Awaited<ReturnType<typeof createClient>>;
+type SupabaseLike = NonNullable<Awaited<ReturnType<typeof createClient>>>;
 
 export interface AppTenantMembership {
   id: string;
@@ -54,18 +54,22 @@ export async function getCurrentAppSession(
   supabaseClient?: SupabaseLike
 ): Promise<AppSession | null> {
   const supabase = supabaseClient ?? (await createClient());
+  if (!supabase) return null;
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: profileRow }, { data: membershipRows }] = await Promise.all([
+  const [profileResult, membershipResult] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
     supabase
       .from('tenant_memberships')
       .select('id, tenant_id, user_id, role, role_code, status, unit_id')
       .eq('user_id', user.id),
   ]);
+
+  const profileRow = profileResult.data;
+  const membershipRows = membershipResult.data;
 
   const profile = asRecord(profileRow);
   const platformRole =

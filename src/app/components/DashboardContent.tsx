@@ -82,11 +82,8 @@ function StatCard({
           <span
             className={[
               'text-xs font-semibold flex items-center gap-0.5',
-              trend === 'up'
-                ? 'text-positive'
-                : trend === 'down'
-                  ? 'text-negative'
-                  : 'text-muted-foreground',
+              trend === 'up' ?'text-positive'
+                : trend === 'down' ?'text-negative' :'text-muted-foreground',
             ].join(' ')}
           >
             {trendLabel}

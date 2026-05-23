@@ -1,4 +1,4 @@
-import { createServerClient, type SetAllCookies } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export function updateSession(request: NextRequest) {
@@ -6,14 +6,14 @@ export function updateSession(request: NextRequest) {
   const supabaseKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable.');
-  }
-
-  if (!supabaseKey) {
-    throw new Error(
-      'Missing Supabase public key. Set NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (preferred) or NEXT_PUBLIC_SUPABASE_ANON_KEY.'
-    );
+  if (!supabaseUrl || !supabaseKey) {
+    // Return a no-op response when Supabase env vars are not yet configured.
+    // The app will still render; protected routes will redirect to login since
+    // no authenticated user will be found.
+    return {
+      supabase: null,
+      response: NextResponse.next({ request }),
+    };
   }
 
   let response = NextResponse.next({
@@ -25,8 +25,8 @@ export function updateSession(request: NextRequest) {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(cookiesToSet: Parameters<SetAllCookies>[0]) {
-        cookiesToSet.forEach(({ name, value, options }) => {
+      setAll(cookiesToSet: { name: string; value: string; options?: object }[]) {
+        cookiesToSet.forEach(({ name, value }) => {
           request.cookies.set(name, value);
         });
         response = NextResponse.next({
