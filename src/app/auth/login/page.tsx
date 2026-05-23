@@ -6,14 +6,14 @@ export default async function LoginPage() {
   const context = await getCurrentUserContext();
 
   if (context) {
-    if (context.canAccessPlatformAdmin) redirect('/admin');
+    if (context?.canAccessPlatformAdmin) redirect('/admin');
     if (
-      context.canAccessClinicWorkspace &&
-      context.memberships.some((membership) => membership.status === 'active')
+      context?.canAccessClinicWorkspace &&
+      context?.memberships?.some((membership) => membership?.status === 'active')
     ) {
       redirect('/clinic/dashboard');
     }
-    if (context.canAccessPatientPortal) redirect('/patient');
+    if (context?.canAccessPatientPortal) redirect('/patient');
     redirect('/clinic/dashboard');
   }
 

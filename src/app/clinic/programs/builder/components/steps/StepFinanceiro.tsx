@@ -41,8 +41,7 @@ export default function StepFinanceiro({ draft, onChange }: Props) {
               className={[
                 'p-3 rounded-xl border text-left transition-all',
                 financial.paymentModel === m.value
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-border/80 hover:bg-muted/40',
+                  ? 'border-primary bg-primary/5' :'border-border hover:border-border/80 hover:bg-muted/40',
               ].join(' ')}
             >
               <p

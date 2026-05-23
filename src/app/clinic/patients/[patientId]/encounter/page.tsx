@@ -289,8 +289,7 @@ export default function EncounterPage() {
               onClick={handleSaveDraft}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
                 saved
-                  ? 'bg-green-50 border-green-300 text-green-700'
-                  : 'border-primary/40 text-primary hover:bg-primary/5'
+                  ? 'bg-green-50 border-green-300 text-green-700' :'border-primary/40 text-primary hover:bg-primary/5'
               }`}
             >
               <Save size={13} />
@@ -301,8 +300,7 @@ export default function EncounterPage() {
               disabled={finalized}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
                 finalized
-                  ? 'bg-green-600 text-white cursor-default'
-                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  ? 'bg-green-600 text-white cursor-default' :'bg-primary text-primary-foreground hover:bg-primary/90'
               }`}
             >
               <CheckCircle size={13} />
@@ -475,8 +473,7 @@ export default function EncounterPage() {
                 onClick={handleSaveDraft}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl border transition-colors ${
                   saved
-                    ? 'bg-green-50 border-green-300 text-green-700'
-                    : 'border-primary/40 text-primary hover:bg-primary/5'
+                    ? 'bg-green-50 border-green-300 text-green-700' :'border-primary/40 text-primary hover:bg-primary/5'
                 }`}
               >
                 <Save size={14} />
@@ -487,8 +484,7 @@ export default function EncounterPage() {
                 disabled={finalized}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${
                   finalized
-                    ? 'bg-green-600 text-white cursor-default'
-                    : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    ? 'bg-green-600 text-white cursor-default' :'bg-primary text-primary-foreground hover:bg-primary/90'
                 }`}
               >
                 <CheckCircle size={14} />
@@ -584,8 +580,7 @@ export default function EncounterPage() {
                     <span
                       className={`text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
                         e.status === 'concluido'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-amber-100 text-amber-700'
+                          ? 'bg-green-100 text-green-700' :'bg-amber-100 text-amber-700'
                       }`}
                     >
                       {e.status === 'concluido' ? e.resultado : 'Pendente'}

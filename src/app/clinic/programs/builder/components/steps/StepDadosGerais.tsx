@@ -95,10 +95,7 @@ export default function StepDadosGerais({ draft, onChange }: Props) {
                 className={[
                   'px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all',
                   draft.status === s
-                    ? s === 'ativo'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                      : 'bg-amber-50 text-amber-700 border-amber-300'
-                    : 'bg-muted text-muted-foreground border-border hover:bg-muted/80',
+                    ? s === 'ativo' ?'bg-emerald-50 text-emerald-700 border-emerald-300' :'bg-amber-50 text-amber-700 border-amber-300' :'bg-muted text-muted-foreground border-border hover:bg-muted/80',
                 ].join(' ')}
               >
                 {s === 'rascunho' ? 'Rascunho' : 'Ativo'}
@@ -121,8 +118,7 @@ export default function StepDadosGerais({ draft, onChange }: Props) {
                 'w-8 h-8 rounded-full transition-all',
                 c.cls,
                 draft.color === c.value
-                  ? 'ring-2 ring-offset-2 ring-primary scale-110'
-                  : 'opacity-70 hover:opacity-100',
+                  ? 'ring-2 ring-offset-2 ring-primary scale-110' :'opacity-70 hover:opacity-100',
               ].join(' ')}
             />
           ))}

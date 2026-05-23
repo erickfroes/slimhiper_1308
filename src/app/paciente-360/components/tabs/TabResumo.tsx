@@ -192,44 +192,26 @@ export default function TabResumo({ data }: TabResumoProps) {
       : clinicalStatus.currentBmi < 25
         ? 'Normal'
         : clinicalStatus.currentBmi < 30
-          ? 'Sobrepeso'
-          : 'Obesidade';
+          ? 'Sobrepeso' :'Obesidade';
   const adherenceColor =
-    clinicalStatus.adherenceLevel === 'critico'
-      ? 'text-negative'
-      : clinicalStatus.adherenceLevel === 'excelente'
-        ? 'text-positive'
-        : clinicalStatus.adherenceLevel === 'bom'
-          ? 'text-teal-600'
-          : 'text-amber-600';
+    clinicalStatus.adherenceLevel === 'critico' ?'text-negative'
+      : clinicalStatus.adherenceLevel === 'excelente' ?'text-positive'
+        : clinicalStatus.adherenceLevel === 'bom' ?'text-teal-600' :'text-amber-600';
   const adherenceBg =
-    clinicalStatus.adherenceLevel === 'critico'
-      ? 'bg-red-50'
-      : clinicalStatus.adherenceLevel === 'excelente'
-        ? 'bg-emerald-50'
-        : clinicalStatus.adherenceLevel === 'bom'
-          ? 'bg-teal-50'
-          : 'bg-amber-50';
+    clinicalStatus.adherenceLevel === 'critico' ?'bg-red-50'
+      : clinicalStatus.adherenceLevel === 'excelente' ?'bg-emerald-50'
+        : clinicalStatus.adherenceLevel === 'bom' ?'bg-teal-50' :'bg-amber-50';
   const financialStatus = financial?.status;
   const financialColor =
-    financialStatus === 'em_dia'
-      ? 'text-positive'
-      : financialStatus === 'inadimplente'
-        ? 'text-negative'
-        : 'text-amber-600';
+    financialStatus === 'em_dia' ?'text-positive'
+      : financialStatus === 'inadimplente' ?'text-negative' :'text-amber-600';
   const financialBg =
-    financialStatus === 'em_dia'
-      ? 'bg-emerald-50'
-      : financialStatus === 'inadimplente'
-        ? 'bg-red-50'
-        : 'bg-amber-50';
+    financialStatus === 'em_dia' ?'bg-emerald-50'
+      : financialStatus === 'inadimplente' ?'bg-red-50' :'bg-amber-50';
   const financialLabel = !financial
     ? 'Não disponível'
-    : financialStatus === 'em_dia'
-      ? 'Em dia'
-      : financialStatus === 'inadimplente'
-        ? 'Inadimplente'
-        : 'Pendente';
+    : financialStatus === 'em_dia' ?'Em dia'
+      : financialStatus === 'inadimplente' ?'Inadimplente' :'Pendente';
   const saldoAberto = financial ? financial.totalPending + financial.totalOverdue : 0;
   const programProgressLabel = activePackage
     ? `Sem. ${activePackage.currentWeek} / ${activePackage.totalWeeks}`

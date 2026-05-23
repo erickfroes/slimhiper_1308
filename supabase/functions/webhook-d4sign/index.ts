@@ -5,6 +5,13 @@ type JsonRecord = Record<string, unknown>;
 type SignatureStatus = 'sent' | 'viewed' | 'signed' | 'rejected' | 'expired' | 'canceled' | 'error';
 type SignerStatus = 'pending' | 'viewed' | 'signed' | 'rejected' | 'expired' | 'canceled' | 'error';
 
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+  serve(handler: (req: Request) => Response | Promise<Response>): void;
+};
+
 const corsHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',

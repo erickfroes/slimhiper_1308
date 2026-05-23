@@ -268,8 +268,7 @@ function ProgramCard({ program }: ProgramCardProps) {
                     key={ent.key}
                     className={`text-xs px-2 py-0.5 rounded-full border ${
                       ent.enabled
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-muted text-muted-foreground border-border line-through'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :'bg-muted text-muted-foreground border-border line-through'
                     }`}
                   >
                     {ent.label}
@@ -441,11 +440,8 @@ export default function ProgramsContent() {
           >
             {f === 'todos'
               ? 'Todos'
-              : f === 'ativo'
-                ? 'Ativos'
-                : f === 'rascunho'
-                  ? 'Rascunhos'
-                  : 'Arquivados'}
+              : f === 'ativo' ?'Ativos'
+                : f === 'rascunho' ?'Rascunhos' :'Arquivados'}
           </button>
         ))}
       </div>

@@ -21,6 +21,18 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const { supabase, response } = updateSession(request);
 
+  // If Supabase is not configured, allow the request through as unauthenticated.
+  if (!supabase) {
+    if (
+      pathname.startsWith('/admin') ||
+      pathname.startsWith('/clinic') ||
+      pathname.startsWith('/patient')
+    ) {
+      return NextResponse.redirect(new URL('/auth/login', request.url));
+    }
+    return response;
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -1350,11 +1350,8 @@ export default function TenantDetailContent() {
                               <span
                                 className={`inline-flex items-center rounded-full border text-xs font-medium px-2 py-0.5 ${wh.status === 'resolved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : wh.status === 'dead_letter' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}
                               >
-                                {wh.status === 'resolved'
-                                  ? 'Resolvido'
-                                  : wh.status === 'dead_letter'
-                                    ? 'Dead Letter'
-                                    : 'Pendente'}
+                                {wh.status === 'resolved' ?'Resolvido'
+                                  : wh.status === 'dead_letter' ?'Dead Letter' :'Pendente'}
                               </span>
                             </td>
                             <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">
@@ -1419,18 +1416,12 @@ export default function TenantDetailContent() {
                           </span>
                           <span
                             className={`inline-flex items-center rounded-full border text-xs font-medium px-2 py-0.5 ${
-                              session.status === 'open'
-                                ? 'bg-teal-50 text-teal-700 border-teal-200'
-                                : session.status === 'pending'
-                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                  : 'bg-slate-100 text-slate-500 border-slate-200'
+                              session.status === 'open' ?'bg-teal-50 text-teal-700 border-teal-200'
+                                : session.status === 'pending' ?'bg-amber-50 text-amber-700 border-amber-200' :'bg-slate-100 text-slate-500 border-slate-200'
                             }`}
                           >
-                            {session.status === 'open'
-                              ? 'Aberto'
-                              : session.status === 'pending'
-                                ? 'Pendente'
-                                : 'Resolvido'}
+                            {session.status === 'open' ?'Aberto'
+                              : session.status === 'pending' ?'Pendente' :'Resolvido'}
                           </span>
                         </div>
                       </div>

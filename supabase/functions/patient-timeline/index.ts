@@ -1,15 +1,15 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+declare const Deno: {
+  serve: (handler: (req: Request) => Promise<Response>) => void;
+  env: {
+    get: (key: string) => string | undefined;
+  };
+};
+
 type Json = Record<string, unknown>;
 type TimelineCategory =
-  | 'all'
-  | 'clinical'
-  | 'financial'
-  | 'documents'
-  | 'agenda'
-  | 'communication'
-  | 'patient_app'
-  | 'commercial';
+  | 'all' |'clinical' |'financial' |'documents' |'agenda' |'communication' |'patient_app' |'commercial';
 
 const ALLOWED_CATEGORIES: TimelineCategory[] = [
   'all',
@@ -23,45 +23,10 @@ const ALLOWED_CATEGORIES: TimelineCategory[] = [
 ];
 
 type TimelineEventType =
-  | 'consulta'
-  | 'nutricao'
-  | 'medicamento'
-  | 'medida'
-  | 'documento'
-  | 'pagamento'
-  | 'alerta'
-  | 'mensagem'
-  | 'inicio_programa'
-  | 'meta_atingida'
-  | 'lead_criado'
-  | 'lead_convertido'
-  | 'pacote_vendido'
-  | 'contrato_assinado'
-  | 'paciente_cadastrado'
-  | 'consulta_agendada'
-  | 'checkin_realizado'
-  | 'atendimento_iniciado'
-  | 'atendimento_concluido'
-  | 'anamnese_preenchida'
-  | 'soap_atualizado'
-  | 'medida_registrada'
-  | 'plano_alimentar_publicado'
-  | 'prescricao_emitida'
-  | 'documento_gerado'
-  | 'documento_assinado'
-  | 'pagamento_recebido'
-  | 'pagamento_atrasado'
-  | 'mensagem_enviada'
-  | 'checkin_semanal_enviado';
+  | 'consulta' |'nutricao' |'medicamento' |'medida' |'documento' |'pagamento' |'alerta' |'mensagem' |'inicio_programa' |'meta_atingida' |'lead_criado' |'lead_convertido' |'pacote_vendido' |'contrato_assinado' |'paciente_cadastrado' |'consulta_agendada' |'checkin_realizado' |'atendimento_iniciado' |'atendimento_concluido' |'anamnese_preenchida' |'soap_atualizado' |'medida_registrada' |'plano_alimentar_publicado' |'prescricao_emitida' |'documento_gerado' |'documento_assinado' |'pagamento_recebido' |'pagamento_atrasado' |'mensagem_enviada' |'checkin_semanal_enviado';
 
 type TimelineEventCategory =
-  | 'clinical'
-  | 'financial'
-  | 'documents'
-  | 'agenda'
-  | 'communication'
-  | 'patient_app'
-  | 'commercial';
+  | 'clinical' |'financial' |'documents' |'agenda' |'communication' |'patient_app' |'commercial';
 
 const VALID_EVENT_TYPES: Set<TimelineEventType> = new Set([
   'consulta',
