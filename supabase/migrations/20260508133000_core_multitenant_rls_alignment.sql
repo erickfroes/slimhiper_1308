@@ -286,6 +286,15 @@ using (
   or security.has_tenant_role(tenant_id, array['tenant_owner', 'clinic_admin'])
 );
 
+drop policy if exists "audit_logs_insert_tenant_member" on public.audit_logs;
+create policy "audit_logs_insert_tenant_member"
+on public.audit_logs
+for insert
+with check (
+  security.is_tenant_member(tenant_id)
+  and user_id = auth.uid()
+);
+
 create policy "audit_logs_manage_admin"
 on public.audit_logs
 for all
@@ -359,6 +368,7 @@ with check (security.can_manage_tenant(tenant_id));
 -- 7) Additional indexes
 create index if not exists idx_tenant_memberships_status on public.tenant_memberships(status);
 create index if not exists idx_tenant_memberships_updated_at on public.tenant_memberships(updated_at);
+create index if not exists idx_profiles_active_tenant_id on public.profiles(active_tenant_id);
 create index if not exists idx_profiles_platform_role on public.profiles(platform_role);
 create index if not exists idx_profiles_created_at on public.profiles(created_at);
 create index if not exists idx_profiles_updated_at on public.profiles(updated_at);

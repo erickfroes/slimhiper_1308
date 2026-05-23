@@ -1,0 +1,39 @@
+{
+  "name": "asaas-payment-overdue",
+  "description": "Safe local fixture for an Asaas overdue payment webhook. Values are fake and non-sensitive.",
+  "headers": {
+    "content-type": "application/json",
+    "asaas-access-token": "__fixture_valid_asaas_webhook_token__"
+  },
+  "expected": {
+    "accepted": true,
+    "eventType": "PAYMENT_OVERDUE",
+    "invoiceStatus": "vencido",
+    "paymentStatus": "overdue",
+    "financialState": "pagamento_atrasado",
+    "timelineEventType": "pagamento_atrasado",
+    "timelineCategory": "financial",
+    "tenantResolution": {
+      "strategy": "patient_invoices.asaas_invoice_id",
+      "lookupPaymentId": "pay_fixture_overdue_001",
+      "tenantId": "tenant-fixture-001",
+      "patientId": "patient-fixture-002",
+      "shouldResolve": true
+    }
+  },
+  "payload": {
+    "id": "evt_asaas_fixture_overdue_001",
+    "event": "PAYMENT_OVERDUE",
+    "dateCreated": "2026-05-19T12:05:00.000Z",
+    "payment": {
+      "id": "pay_fixture_overdue_001",
+      "customer": "cus_fixture_002",
+      "status": "OVERDUE",
+      "value": 290,
+      "netValue": 282,
+      "billingType": "BOLETO",
+      "externalReference": "patient-fixture-002",
+      "dueDate": "2026-05-07"
+    }
+  }
+}

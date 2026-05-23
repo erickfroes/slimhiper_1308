@@ -14,7 +14,7 @@ export default async function LoginPage() {
       redirect('/clinic/dashboard');
     }
     if (context.canAccessPatientPortal) redirect('/patient');
-    redirect('/clinic/dashboard');
+    redirect('/no-workspace');
   }
 
   return (

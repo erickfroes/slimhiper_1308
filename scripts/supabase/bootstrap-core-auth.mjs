@@ -1,11 +1,7 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js';
 
-const requiredEnv = [
-  'SUPABASE_URL',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'SUPABASE_BOOTSTRAP_PASSWORD',
-];
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_BOOTSTRAP_PASSWORD'];
 
 const missing = requiredEnv.filter((key) => !process.env[key]);
 if (missing.length) {
@@ -17,28 +13,69 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const CLINIC_MEMBERSHIP_ROLE_CODES = ['clinic_admin', 'physician', 'nutritionist', 'financial_user'];
+const CLINIC_MEMBERSHIP_ROLE_CODES = [
+  'clinic_admin',
+  'physician',
+  'nutritionist',
+  'financial_user',
+];
 
 const usersToSeed = [
-  { email: 'platform.admin@example.com', full_name: 'Platform Admin', platform_role: 'platform_admin' },
+  {
+    email: 'platform.admin@example.com',
+    full_name: 'Platform Admin',
+    platform_role: 'platform_admin',
+  },
   { email: 'clinic.admin@example.com', full_name: 'Clinic Admin', role_code: 'clinic_admin' },
   { email: 'physician.demo@example.com', full_name: 'Demo Physician', role_code: 'physician' },
-  { email: 'nutritionist.demo@example.com', full_name: 'Demo Nutritionist', role_code: 'nutritionist' },
-  { email: 'finance.demo@example.com', full_name: 'Demo Financial User', role_code: 'financial_user' },
+  {
+    email: 'nutritionist.demo@example.com',
+    full_name: 'Demo Nutritionist',
+    role_code: 'nutritionist',
+  },
+  {
+    email: 'finance.demo@example.com',
+    full_name: 'Demo Financial User',
+    role_code: 'financial_user',
+  },
   // Patient is seeded as auth + profile only for now.
   // Do not create tenant_membership until schema supports a valid patient-facing membership role.
-  { email: 'patient.demo@example.com', full_name: 'Demo Patient', portal_role: 'patient_portal_future' },
+  {
+    email: 'patient.demo@example.com',
+    full_name: 'Demo Patient',
+    portal_role: 'patient_portal_future',
+  },
 ];
 
 const permissionMatrix = {
-  clinic_admin: ['patients.read', 'patients.write', 'agenda.read', 'agenda.write', 'financial.read', 'financial.write', 'settings.read', 'settings.write'],
-  physician: ['patients.read', 'encounters.read', 'encounters.write', 'soap.read', 'soap.write', 'prescriptions.read', 'prescriptions.write'],
+  clinic_admin: [
+    'patients.read',
+    'patients.write',
+    'agenda.read',
+    'agenda.write',
+    'financial.read',
+    'financial.write',
+    'settings.read',
+    'settings.write',
+  ],
+  physician: [
+    'patients.read',
+    'encounters.read',
+    'encounters.write',
+    'soap.read',
+    'soap.write',
+    'prescriptions.read',
+    'prescriptions.write',
+  ],
   nutritionist: ['patients.read', 'nutrition.read', 'nutrition.write', 'reports.read'],
   financial_user: ['patients.read', 'financial.read', 'financial.write', 'reports.read'],
 };
 
 async function ensureAuthUser(email, password) {
-  const { data: list, error: listError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const { data: list, error: listError } = await supabase.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
   if (listError) throw listError;
   const existing = list.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
   if (existing) return existing;
@@ -76,6 +113,7 @@ async function run() {
     email: u.email,
     full_name: u.full_name,
     platform_role: u.platform_role ?? 'user',
+    active_tenant_id: CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code) ? tenant.id : null,
     is_active: true,
   }));
 
@@ -107,7 +145,9 @@ async function run() {
     is_system: false,
   }));
 
-  const { error: rolesError } = await supabase.from('roles').upsert(roleRows, { onConflict: 'tenant_id,name' });
+  const { error: rolesError } = await supabase
+    .from('roles')
+    .upsert(roleRows, { onConflict: 'tenant_id,name' });
   if (rolesError) throw rolesError;
 
   const permissionCodes = [...new Set(Object.values(permissionMatrix).flat())];
@@ -117,12 +157,20 @@ async function run() {
     description: `Seeded permission: ${code}`,
   }));
 
-  const { error: permissionsError } = await supabase.from('permissions').upsert(permissionRows, { onConflict: 'tenant_id,code' });
+  const { error: permissionsError } = await supabase
+    .from('permissions')
+    .upsert(permissionRows, { onConflict: 'tenant_id,code' });
   if (permissionsError) throw permissionsError;
 
-  const { data: roles, error: rolesFetchError } = await supabase.from('roles').select('id, name').eq('tenant_id', tenant.id);
+  const { data: roles, error: rolesFetchError } = await supabase
+    .from('roles')
+    .select('id, name')
+    .eq('tenant_id', tenant.id);
   if (rolesFetchError) throw rolesFetchError;
-  const { data: permissions, error: permsFetchError } = await supabase.from('permissions').select('id, code').eq('tenant_id', tenant.id);
+  const { data: permissions, error: permsFetchError } = await supabase
+    .from('permissions')
+    .select('id, code')
+    .eq('tenant_id', tenant.id);
   if (permsFetchError) throw permsFetchError;
 
   const roleIdByName = new Map(roles.map((r) => [r.name, r.id]));
@@ -135,25 +183,38 @@ async function run() {
     for (const code of codes) {
       const permissionId = permissionIdByCode.get(code);
       if (!permissionId) continue;
-      rolePermissionRows.push({ tenant_id: tenant.id, role_id: roleId, permission_id: permissionId });
+      rolePermissionRows.push({
+        tenant_id: tenant.id,
+        role_id: roleId,
+        permission_id: permissionId,
+      });
     }
   }
 
   if (rolePermissionRows.length > 0) {
-    const { error: rolePermError } = await supabase.from('role_permissions').upsert(rolePermissionRows, { onConflict: 'tenant_id,role_id,permission_id' });
+    const { error: rolePermError } = await supabase
+      .from('role_permissions')
+      .upsert(rolePermissionRows, { onConflict: 'tenant_id,role_id,permission_id' });
     if (rolePermError) throw rolePermError;
   }
 
   console.log('Bootstrap completed successfully.');
-  console.table(seededUsers.map((u) => ({
-    email: u.email,
-    auth_seeded: 'yes',
-    profile_seeded: 'yes',
-    tenant_membership: CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code) ? u.role_code : 'not seeded',
-    area_access: u.platform_role === 'platform_admin'
-      ? 'Platform admin area'
-      : (CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code) ? `Clinic app (${u.role_code})` : 'Patient portal (future profile-link flow)'),
-  })));
+  console.table(
+    seededUsers.map((u) => ({
+      email: u.email,
+      auth_seeded: 'yes',
+      profile_seeded: 'yes',
+      tenant_membership: CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code)
+        ? u.role_code
+        : 'not seeded',
+      area_access:
+        u.platform_role === 'platform_admin'
+          ? 'Platform admin area'
+          : CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code)
+            ? `Clinic app (${u.role_code})`
+            : 'Patient portal (future profile-link flow)',
+    }))
+  );
   console.log(`Tenant: ${tenant.slug} (${tenant.id})`);
   console.log('Access summary:');
   console.log('- platform.admin@example.com → Platform admin area only (no tenant_membership).');
@@ -161,7 +222,9 @@ async function run() {
   console.log('- physician.demo@example.com → Clinic tenant app as physician.');
   console.log('- nutritionist.demo@example.com → Clinic tenant app as nutritionist.');
   console.log('- finance.demo@example.com → Clinic tenant app as financial_user.');
-  console.log('- patient.demo@example.com → Auth + profile seeded; tenant_membership intentionally skipped until a valid patient membership schema exists.');
+  console.log(
+    '- patient.demo@example.com → Auth + profile seeded; tenant_membership intentionally skipped until a valid patient membership schema exists.'
+  );
 }
 
 run().catch((error) => {

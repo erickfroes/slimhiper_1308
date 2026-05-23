@@ -4,6 +4,9 @@ This project includes a development bootstrap script for core auth and
 multi-tenant role testing only. It does not create UI changes and does not
 create new clinical tables.
 
+For the app-facing session shape, route guards, expected tables/columns, and
+known contract gaps, see `docs/auth/AUTH_RBAC_SESSION_CONTRACT.md`.
+
 ## Environment Variables
 
 Create a local env file, for example `.env.local`, and set placeholders like:
@@ -72,7 +75,8 @@ Using placeholder emails:
 
 1. Creates users in Supabase Auth (`auth.users`) using the Admin API.
 2. Links `auth.users` to `public.profiles` by upserting profile rows with
-   matching `id`.
+   matching `id`. Clinic users receive `profiles.active_tenant_id` for the demo
+   tenant.
 3. Creates `tenant_memberships` only for clinic roles supported by the current
    migration: `clinic_admin`, `physician`, `nutritionist`, `financial_user`.
    `tenant_memberships.role` mirrors `role_code`.
@@ -90,11 +94,12 @@ If you prefer manual setup in Supabase Dashboard:
 2. In SQL Editor, insert or update `public.profiles` where
    `profiles.id = auth.users.id`.
 3. Insert a demo row in `public.tenants`.
-4. Insert rows in `public.tenant_memberships` for clinic users only, using valid
+4. Set `profiles.active_tenant_id` for clinic users to the demo tenant ID.
+5. Insert rows in `public.tenant_memberships` for clinic users only, using valid
    constrained role values.
-5. Seed patient as auth user plus `public.profiles` row only until a valid
+6. Seed patient as auth user plus `public.profiles` row only until a valid
    patient membership schema exists.
-6. Insert role and permission rows in `public.roles`, `public.permissions`, then
+7. Insert role and permission rows in `public.roles`, `public.permissions`, then
    relation rows in `public.role_permissions` for clinic roles.
 
 The bootstrap script automates this exact flow for local development and
@@ -105,6 +110,7 @@ testing.
 A lightweight manual SQL test checklist is available at:
 
 - `supabase/tests/core_rbac_smoke_tests.sql`
+- `supabase/tests/rls_cross_tenant_smoke_tests.sql`
 
 How to run:
 

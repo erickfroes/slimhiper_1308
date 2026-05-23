@@ -30,6 +30,7 @@ create table if not exists public.profiles (
   email text,
   full_name text,
   platform_role text not null default 'user', -- user | platform_admin
+  active_tenant_id uuid references public.tenants(id) on delete set null,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -163,6 +164,8 @@ create index if not exists idx_tenant_memberships_tenant_id on public.tenant_mem
 create index if not exists idx_tenant_memberships_user_id on public.tenant_memberships(user_id);
 create index if not exists idx_tenant_memberships_role on public.tenant_memberships(role);
 create index if not exists idx_tenant_memberships_created_at on public.tenant_memberships(created_at);
+
+create index if not exists idx_profiles_active_tenant_id on public.profiles(active_tenant_id);
 
 create index if not exists idx_roles_tenant_id on public.roles(tenant_id);
 create index if not exists idx_roles_created_at on public.roles(created_at);

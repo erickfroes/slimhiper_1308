@@ -97,10 +97,17 @@ export async function getCurrentAppSession(
     };
   });
 
+  const requestedActiveTenantId = normalizeString(profile.active_tenant_id);
+  const requestedActiveMembership = requestedActiveTenantId
+    ? (memberships.find(
+        (membership) =>
+          membership.tenantId === requestedActiveTenantId && membership.status === 'active'
+      ) ?? null)
+    : null;
+  const fallbackActiveMembership =
+    memberships.find((membership) => membership.status === 'active') ?? null;
   const activeTenantId =
-    normalizeString(profile.active_tenant_id) ??
-    memberships.find((membership) => membership.status === 'active')?.tenantId ??
-    null;
+    requestedActiveMembership?.tenantId ?? fallbackActiveMembership?.tenantId ?? null;
   const activeTenant = activeTenantId ? { id: activeTenantId } : null;
 
   const tenantMemberships: AppTenantMembership[] = memberships;
@@ -110,16 +117,8 @@ export async function getCurrentAppSession(
     : null;
   const activeTenantRole = activeMembership?.roleKey ?? null;
 
-  const activeMemberships = tenantMemberships.filter(
-    (membership) => membership.status === 'active'
-  );
-  const prioritizedMemberships = [
-    ...(activeMembership ? [activeMembership] : []),
-    ...activeMemberships.filter((membership) => membership.id !== activeMembership?.id),
-  ];
-
   let permissions: string[] = [];
-  for (const membership of prioritizedMemberships) {
+  for (const membership of activeMembership ? [activeMembership] : []) {
     const roleName = membership.roleCode ?? membership.legacyRole;
     if (!membership.tenantId || !roleName) continue;
 
@@ -135,7 +134,7 @@ export async function getCurrentAppSession(
 
     const { data: rolePermissionRows } = await supabase
       .from('role_permissions')
-      .select('permissions!inner(id, key, code, slug, name)')
+      .select('permissions!inner(id, code)')
       .eq('role_id', roleId);
 
     permissions = Array.from(
@@ -160,7 +159,7 @@ export async function getCurrentAppSession(
 
   const { data: featureFlagRows } = activeTenantId
     ? await supabase.from('feature_flags').select('*').eq('tenant_id', activeTenantId)
-    : await supabase.from('feature_flags').select('*').is('tenant_id', null);
+    : { data: [] };
 
   const featureFlags = Array.from(
     new Set(
@@ -196,7 +195,7 @@ export async function getCurrentAppSession(
     isPlatformAdmin: () => isPlatformAdminRole(platformRole),
     isPlatformSupport: () => isPlatformSupportRole(platformRole),
     isClinicUser: () => tenantMemberships.length > 0,
-    isPatient: () => isPatientRole(platformRole) || tenantMemberships.length === 0,
+    isPatient: () => isPatientRole(platformRole),
     canAccessPlatformAdmin: () =>
       isPlatformOwnerRole(platformRole) ||
       isPlatformAdminRole(platformRole) ||

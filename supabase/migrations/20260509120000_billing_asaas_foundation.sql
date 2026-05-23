@@ -2,11 +2,17 @@
 
 create extension if not exists pgcrypto;
 
-insert into public.permissions (code, name, description)
-values
-  ('financial.read', 'Financial Read', 'Read tenant financial and billing records.'),
-  ('financial.write', 'Financial Write', 'Create/update patient charges and subscriptions.')
-on conflict (code) do update set name = excluded.name, description = excluded.description;
+insert into public.permissions (tenant_id, code, description)
+select t.id, p.code, p.description
+from public.tenants t
+cross join (
+  values
+    ('financial.read', 'Read tenant financial and billing records.'),
+    ('financial.write', 'Create/update patient charges and subscriptions.')
+) as p(code, description)
+on conflict (tenant_id, code) do update
+set description = excluded.description,
+    updated_at = now();
 
 create table if not exists public.platform_plans (
   id uuid primary key default gen_random_uuid(),

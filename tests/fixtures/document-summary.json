@@ -1,0 +1,54 @@
+{
+  "name": "document-summary-fixture",
+  "description": "Safe local fixture for frontend document summary and signature status mapping.",
+  "data": {
+    "documents": [
+      {
+        "id": "doc-summary-fixture-001",
+        "patientId": "patient-fixture-001",
+        "name": "Termo de Consentimento Fixture",
+        "category": "termo",
+        "tipo": "Termo de Consentimento",
+        "status": "assinado",
+        "assinatura": "assinado",
+        "emitidoEm": "2026-05-19T11:30:00.000Z",
+        "ultimoAcesso": "2026-05-19T12:05:00.000Z",
+        "emitidoPor": "Dra. Marina Fixture",
+        "hasEvidencePackage": true,
+        "signature": {
+          "provider": "d4sign",
+          "providerDocumentId": "d4sign-doc-fixture-001",
+          "signatureRequestId": "sigreq-fixture-001",
+          "status": "signed",
+          "idempotencyKey": "evt_d4sign_fixture_001:document.signed"
+        }
+      },
+      {
+        "id": "doc-summary-fixture-002",
+        "patientId": "patient-fixture-001",
+        "name": "Contrato de Programa Fixture",
+        "category": "contrato",
+        "tipo": "Contrato",
+        "status": "pendente_assinatura",
+        "assinatura": "pendente",
+        "emitidoEm": "2026-05-19T10:00:00.000Z",
+        "emitidoPor": "Equipe Administrativa Fixture",
+        "hasEvidencePackage": false,
+        "signature": {
+          "provider": "d4sign",
+          "providerDocumentId": "d4sign-doc-fixture-002",
+          "signatureRequestId": "sigreq-fixture-002",
+          "status": "sent",
+          "idempotencyKey": "evt_d4sign_fixture_002:document.sent"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "documentCount": 2,
+    "d4signStatuses": ["signed", "sent"],
+    "frontendStatuses": ["assinado", "pendente_assinatura"],
+    "frontendSignatureStatuses": ["assinado", "pendente"],
+    "mustNotExposeFields": ["storage_path", "storage_bucket", "signed_url", "raw_payload"]
+  }
+}

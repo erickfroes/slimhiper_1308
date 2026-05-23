@@ -544,22 +544,23 @@ Status usados:
   - `scripts/supabase/test-documents-contract.mjs`
   - `scripts/supabase/test-billing-contract.mjs`
   - `docs/testing/CONTRACT_TESTS.md`
+  - `.github/workflows/ci.yml`
+  - `.github/workflows/contract-fixtures.yml`
+  - `eslint.config.mjs`
 - Dependencias:
-  - `npm run type-check`, `npm run build`, `npm run lint` atualmente apontando
-    para `next lint`, scripts de contrato dependentes de env/tokens autorizados.
+  - `npm run type-check`, `npm run build`, `npm run lint` via ESLint CLI,
+    scripts de contrato dependentes de env/tokens autorizados.
 - Riscos:
-  - `next lint` pode exigir migracao porque Next 15 removeu o comando em versoes
-    mais novas.
   - Contract tests chamam funcoes/ambientes externos quando envs reais existem.
-  - Nao ha evidencia de pipeline CI versionado no repo local.
+  - CI automatico nao deve exigir secrets nem chamar providers externos.
 - Proximo passo:
-  - Criar workflow CI minimo com type-check/build e separar testes de contrato
-    gated por secrets.
+  - Manter CI automatico sem secrets e ampliar contratos gated somente com
+    autorizacao.
 - Testes necessarios:
   - `git diff --check`
   - `npm run type-check`
   - `npm run build`
-  - `npm run lint` apos task dedicada de lint.
+  - `npm run lint`.
   - Contract tests somente com autorizacao e ambiente sandbox.
 
 ## Top 10 prioridades tecnicas

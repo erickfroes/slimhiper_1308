@@ -13,8 +13,8 @@ migration, UI e integracao externa quando isso nao for inevitavel.
 - Manter `service_role` apenas server-side, scripts autorizados ou Edge
   Functions.
 - Rodar sempre `git diff --check`, `npm run type-check` e `npm run build`.
-- `npm run lint` pode falhar por depender de `next lint`; migrar lint em PR
-  proprio.
+- Rodar `npm run lint` para mudancas de frontend, lint ou TypeScript. O script
+  usa ESLint CLI, nao `next lint`.
 
 ## Sequencia de PRs
 
@@ -28,27 +28,29 @@ migration, UI e integracao externa quando isso nao for inevitavel.
 - Checks:
   - `git diff --check`
 
-### PR 2: chore/ci-baseline-checks
-
-- Objetivo: versionar pipeline minimo sem secrets.
-- Escopo:
-  - Rodar type-check e build em CI.
-  - Deixar testes de contrato apenas como jobs manuais/gated.
-  - Documentar que lint precisa migracao separada se `next lint` nao funcionar.
-- Risco principal: bloquear PRs por lint legado.
-- Checks:
-  - `git diff --check`
-  - `npm run type-check`
-  - `npm run build`
-
-### PR 3: chore/lint-next15-migration
+### PR 2: chore/lint-next15-migration
 
 - Objetivo: corrigir estrategia de lint para Next 15 sem mudar feature.
 - Escopo:
-  - Migrar de `next lint` para ESLint CLI se necessario.
-  - Ajustar scripts sem remover `rocketCritical`.
+  - Migrar de `next lint` para ESLint CLI.
+  - Manter `rocketCritical` sem remocao.
+  - Documentar que lint cobre `src/**/*.{ts,tsx}`.
 - Risco principal: alterar `package.json` sem justificativa.
 - Checks:
+  - `npm run lint`
+  - `npm run type-check`
+  - `npm run build`
+
+### PR 3: chore/ci-baseline-checks
+
+- Objetivo: versionar pipeline minimo sem secrets.
+- Escopo:
+  - Rodar whitespace check, type-check, lint e build em CI.
+  - Deixar testes de contrato apenas como jobs manuais/gated.
+  - Manter contratos reais fora do CI automatico.
+- Risco principal: CI exigir env real ou chamar provider externo.
+- Checks:
+  - `git diff --check`
   - `npm run lint`
   - `npm run type-check`
   - `npm run build`
@@ -105,16 +107,28 @@ migration, UI e integracao externa quando isso nao for inevitavel.
   - Type-check/build.
   - Teste manual de lista vazia, erro e permissao.
 
-### PR 8: dashboard-real-data-contract
+### PR 8: feat/dashboard-provider-contract
 
-- Objetivo: definir e conectar contrato de dashboard por tenant.
+- Objetivo: isolar o Dashboard de `mockApi` direto e definir contrato de
+  provider por tenant.
 - Escopo:
+  - Criar `src/services/dashboardApi.ts`.
   - KPIs, fila, alertas e pacientes em revisao.
+  - Provider mock mantido apenas quando `NEXT_PUBLIC_USE_MOCK_DATA=true` ou em
+    ambiente `development`.
+  - Stub Supabase futuro deve falhar explicitamente ate existir backend seguro.
   - Estados loading/empty/error.
 - Risco principal: KPIs divergirem de pacientes/agenda/billing.
 - Checks:
   - Type-check/build.
   - Teste visual responsivo.
+- Proxima etapa real:
+  - Implementar provider Supabase real em PR dedicado, usando somente consultas
+    sob sessao do usuario/RLS.
+  - Definir origem de cada KPI: agenda, pacientes, billing, documentos, chat e
+    alertas clinicos.
+  - Garantir estados empty/forbidden/error sem cair em mock silencioso em
+    producao.
 
 ### PR 9: agenda-queue-service
 
@@ -287,6 +301,6 @@ migration, UI e integracao externa quando isso nao for inevitavel.
 
 ## Proxima task recomendada
 
-Depois deste PR de docs, a proxima task recomendada e `chore/ci-baseline-checks`,
-porque ela cria uma rede de seguranca para os PRs funcionais seguintes sem tocar
-em schema, secrets ou integracoes externas.
+Depois da Fase 0 de lint/CI/baseline, a proxima task recomendada e
+`fix/auth-rbac-schema-alignment`, porque Auth/RBAC/RLS e a base segura para
+trocar mocks clinicos por dados reais sem vazar informacao entre tenants.

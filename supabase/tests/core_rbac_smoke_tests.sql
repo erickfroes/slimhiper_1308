@@ -86,22 +86,22 @@
 
 /* -------------------------------------------------------------------------- */
 /* 5) financial_user has financial.read permission                            */
-/* Expected: query returns 1 row with permission_code = 'financial.read'.     */
+/* Expected: query returns 1 row with code = 'financial.read'.                */
 /* -------------------------------------------------------------------------- */
 -- select set_config('request.jwt.claim.sub', 'USER_FINANCIAL_UUID', true);
 -- select set_config('request.jwt.claim.role', 'authenticated', true);
 --
--- select p.permission_code
+-- select p.code
 -- from public.tenant_memberships tm
 -- join public.roles r
 --   on r.tenant_id = tm.tenant_id
---  and r.role_code = tm.role
+--  and r.name = tm.role_code
 -- join public.role_permissions rp
 --   on rp.role_id = r.id
 -- join public.permissions p
 --   on p.id = rp.permission_id
 -- where tm.user_id = 'USER_FINANCIAL_UUID'
---   and p.permission_code = 'financial.read';
+--   and p.code = 'financial.read';
 
 
 /* -------------------------------------------------------------------------- */
@@ -111,17 +111,17 @@
 -- select set_config('request.jwt.claim.sub', 'USER_NUTRITIONIST_UUID', true);
 -- select set_config('request.jwt.claim.role', 'authenticated', true);
 --
--- select p.permission_code
+-- select p.code
 -- from public.tenant_memberships tm
 -- join public.roles r
 --   on r.tenant_id = tm.tenant_id
---  and r.role_code = tm.role
+--  and r.name = tm.role_code
 -- join public.role_permissions rp
 --   on rp.role_id = r.id
 -- join public.permissions p
 --   on p.id = rp.permission_id
 -- where tm.user_id = 'USER_NUTRITIONIST_UUID'
---   and p.permission_code = 'prescriptions.write';
+--   and p.code = 'prescriptions.write';
 
 
 /* -------------------------------------------------------------------------- */
@@ -131,17 +131,17 @@
 -- select set_config('request.jwt.claim.sub', 'USER_RECEPTIONIST_UUID', true);
 -- select set_config('request.jwt.claim.role', 'authenticated', true);
 --
--- select p.permission_code
+-- select p.code
 -- from public.tenant_memberships tm
 -- join public.roles r
 --   on r.tenant_id = tm.tenant_id
---  and r.role_code = tm.role
+--  and r.name = tm.role_code
 -- join public.role_permissions rp
 --   on rp.role_id = r.id
 -- join public.permissions p
 --   on p.id = rp.permission_id
 -- where tm.user_id = 'USER_RECEPTIONIST_UUID'
---   and p.permission_code in ('users.manage', 'tenant_users.manage');
+--   and p.code in ('tenant.users.manage', 'settings.write');
 
 
 /* -------------------------------------------------------------------------- */
@@ -151,17 +151,17 @@
 -- select set_config('request.jwt.claim.sub', 'USER_CLINIC_ADMIN_UUID', true);
 -- select set_config('request.jwt.claim.role', 'authenticated', true);
 --
--- select p.permission_code
+-- select p.code
 -- from public.tenant_memberships tm
 -- join public.roles r
 --   on r.tenant_id = tm.tenant_id
---  and r.role_code = tm.role
+--  and r.name = tm.role_code
 -- join public.role_permissions rp
 --   on rp.role_id = r.id
 -- join public.permissions p
 --   on p.id = rp.permission_id
 -- where tm.user_id = 'USER_CLINIC_ADMIN_UUID'
---   and p.permission_code in ('users.manage', 'tenant_users.manage');
+--   and p.code in ('tenant.users.manage', 'settings.write');
 
 
 /* -------------------------------------------------------------------------- */

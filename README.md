@@ -32,7 +32,7 @@ npm run build
 Notes:
 
 - `npm run dev` starts the app on port `4028`.
-- `npm run lint` currently uses `next lint`.
+- `npm run lint` runs ESLint CLI over `src/**/*.{ts,tsx}`.
 - `npm run start` currently starts the development server.
 - Do not change `package.json` or `rocketCritical` dependencies without a
   specific reason and explanation.
@@ -41,16 +41,20 @@ Notes:
 
 - Project overview: [docs/README_OVERVIEW.md](docs/README_OVERVIEW.md)
 - Core Auth/RBAC bootstrap: [docs/supabase/CORE_AUTH_RBAC_RUNBOOK.md](docs/supabase/CORE_AUTH_RBAC_RUNBOOK.md)
+- Auth/RBAC session contract: [docs/auth/AUTH_RBAC_SESSION_CONTRACT.md](docs/auth/AUTH_RBAC_SESSION_CONTRACT.md)
 - Patient 360 setup and checkpoint: [docs/supabase/PATIENT360_RUNBOOK.md](docs/supabase/PATIENT360_RUNBOOK.md)
 - Document templates bootstrap: [docs/supabase/DOCUMENT_TEMPLATES_RUNBOOK.md](docs/supabase/DOCUMENT_TEMPLATES_RUNBOOK.md)
 - D4Sign documents runbook: [docs/integrations/D4SIGN_RUNBOOK.md](docs/integrations/D4SIGN_RUNBOOK.md)
 - Asaas billing runbook: [docs/integrations/ASAAS_BILLING_RUNBOOK.md](docs/integrations/ASAAS_BILLING_RUNBOOK.md)
+- Environment hygiene: [docs/security/ENV_HYGIENE.md](docs/security/ENV_HYGIENE.md)
 - Contract and smoke checks: [docs/testing/CONTRACT_TESTS.md](docs/testing/CONTRACT_TESTS.md)
 - Codex agent operating rules: [AGENTS.md](AGENTS.md)
 
 ## Secrets And Safety
 
 - Never commit real secrets.
+- Keep local values in `.env.local`; use `.env.example` as the versioned
+  template.
 - Never place service-role credentials or provider secrets in `NEXT_PUBLIC_*`.
 - Use service-role credentials only in trusted server-side scripts or Edge
   Functions.

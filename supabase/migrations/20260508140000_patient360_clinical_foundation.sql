@@ -114,8 +114,10 @@ create table if not exists public.appointments (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references public.tenants(id) on delete cascade,
   patient_id uuid not null references public.patients(id) on delete cascade,
+  type text not null default 'consulta_medica',
   status text not null default 'scheduled',
   scheduled_at timestamptz not null,
+  arrived_at timestamptz,
   duration_minutes integer,
   practitioner_id uuid references public.profiles(id) on delete set null,
   location text,
@@ -129,6 +131,7 @@ create table if not exists public.queue_events (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references public.tenants(id) on delete cascade,
   patient_id uuid not null references public.patients(id) on delete cascade,
+  appointment_id uuid references public.appointments(id) on delete set null,
   event_type text not null,
   status text not null default 'open',
   event_at timestamptz not null default now(),
@@ -147,6 +150,8 @@ create table if not exists public.encounters (
   encounter_type text,
   started_at timestamptz,
   ended_at timestamptz,
+  created_by uuid references public.profiles(id) on delete set null,
+  finalized_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -179,6 +184,10 @@ create table if not exists public.measurements (
   weight_kg numeric(6,2),
   bmi numeric(5,2),
   body_fat_pct numeric(5,2),
+  waist_cm numeric(5,2),
+  hip_cm numeric(5,2),
+  measured_by uuid references public.profiles(id) on delete set null,
+  notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -268,13 +277,16 @@ create index if not exists idx_patient_timeline_events_created_at on public.pati
 create index if not exists idx_appointments_tenant_id on public.appointments(tenant_id);
 create index if not exists idx_appointments_patient_id on public.appointments(patient_id);
 create index if not exists idx_appointments_status on public.appointments(status);
+create index if not exists idx_appointments_type on public.appointments(type);
 create index if not exists idx_appointments_scheduled_at on public.appointments(scheduled_at);
 create index if not exists idx_appointments_created_at on public.appointments(created_at);
 
 create index if not exists idx_queue_events_tenant_id on public.queue_events(tenant_id);
 create index if not exists idx_queue_events_patient_id on public.queue_events(patient_id);
+create index if not exists idx_queue_events_appointment_id on public.queue_events(appointment_id);
 create index if not exists idx_queue_events_status on public.queue_events(status);
 create index if not exists idx_queue_events_event_type on public.queue_events(event_type);
+create index if not exists idx_queue_events_event_at on public.queue_events(event_at);
 create index if not exists idx_queue_events_created_at on public.queue_events(created_at);
 
 create index if not exists idx_encounters_tenant_id on public.encounters(tenant_id);
@@ -290,21 +302,25 @@ create index if not exists idx_soap_notes_created_at on public.soap_notes(create
 create index if not exists idx_measurements_tenant_id on public.measurements(tenant_id);
 create index if not exists idx_measurements_patient_id on public.measurements(patient_id);
 create index if not exists idx_measurements_status on public.measurements(status);
+create index if not exists idx_measurements_measured_at on public.measurements(measured_at);
 create index if not exists idx_measurements_created_at on public.measurements(created_at);
 
 create index if not exists idx_bioimpedance_results_tenant_id on public.bioimpedance_results(tenant_id);
 create index if not exists idx_bioimpedance_results_patient_id on public.bioimpedance_results(patient_id);
 create index if not exists idx_bioimpedance_results_status on public.bioimpedance_results(status);
+create index if not exists idx_bioimpedance_results_measured_at on public.bioimpedance_results(measured_at);
 create index if not exists idx_bioimpedance_results_created_at on public.bioimpedance_results(created_at);
 
 create index if not exists idx_lab_orders_tenant_id on public.lab_orders(tenant_id);
 create index if not exists idx_lab_orders_patient_id on public.lab_orders(patient_id);
 create index if not exists idx_lab_orders_status on public.lab_orders(status);
+create index if not exists idx_lab_orders_ordered_at on public.lab_orders(ordered_at);
 create index if not exists idx_lab_orders_created_at on public.lab_orders(created_at);
 
 create index if not exists idx_lab_results_tenant_id on public.lab_results(tenant_id);
 create index if not exists idx_lab_results_patient_id on public.lab_results(patient_id);
 create index if not exists idx_lab_results_status on public.lab_results(status);
+create index if not exists idx_lab_results_result_at on public.lab_results(result_at);
 create index if not exists idx_lab_results_created_at on public.lab_results(created_at);
 
 create index if not exists idx_prescriptions_placeholder_tenant_id on public.prescriptions_placeholder(tenant_id);

@@ -25,7 +25,7 @@ import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import EmptyState from '@/components/EmptyState';
 import { SkeletonTableRow } from '@/components/LoadingSkeleton';
-import { getPatientList } from '@/services/mockApi';
+import { getPatientList } from '@/services/patientsApi';
 import type { PatientListRow, ProgramType, FinancialStatus, AdherenceLevel } from '@/domain/types';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────

@@ -1,0 +1,27 @@
+{
+  "name": "asaas-invalid-token",
+  "description": "Safe local fixture for an Asaas webhook that must fail closed due to invalid token.",
+  "headers": {
+    "content-type": "application/json",
+    "asaas-access-token": "__fixture_invalid_asaas_webhook_token__"
+  },
+  "expected": {
+    "accepted": false,
+    "error": "invalid_webhook_token"
+  },
+  "payload": {
+    "id": "evt_asaas_fixture_invalid_token_001",
+    "event": "PAYMENT_CONFIRMED",
+    "dateCreated": "2026-05-19T12:15:00.000Z",
+    "payment": {
+      "id": "pay_fixture_invalid_token_001",
+      "customer": "cus_fixture_invalid",
+      "status": "CONFIRMED",
+      "value": 100,
+      "netValue": 97,
+      "billingType": "PIX",
+      "externalReference": "patient-fixture-invalid",
+      "dueDate": "2026-05-22"
+    }
+  }
+}

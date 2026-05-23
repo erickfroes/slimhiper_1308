@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import DashboardShell from '@/components/DashboardShell';
-import { getPatient360 } from '@/services/mockApi';
+import { finalizeEncounterSoap, getEncounterContext, saveSoapDraft } from '@/services/encounterApi';
+import { getPatientClinicalRecords, type ClinicalRecordsData } from '@/services/clinicalRecordsApi';
 import type { Patient360Summary } from '@/domain/types';
 import {
   ArrowLeft,
@@ -26,32 +27,6 @@ import {
 } from 'lucide-react';
 
 // ─── Mock encounter-specific data ────────────────────────────────────────────
-
-const mockBioimpedancia = {
-  date: '2026-05-05',
-  gorduraCorporal: '32.4%',
-  massaMuscular: '44.2 kg',
-  gorduraVisceral: '9',
-  aguaCorporal: '51.3%',
-  metabolismoBasal: '1.482 kcal',
-};
-
-const mockExames = [
-  { nome: 'Hemograma Completo', solicitadoEm: '2026-04-23', status: 'pendente' },
-  {
-    nome: 'Glicemia em Jejum',
-    solicitadoEm: '2026-04-10',
-    resultado: '98 mg/dL',
-    status: 'concluido',
-  },
-  { nome: 'TSH', solicitadoEm: '2026-04-10', resultado: '2.1 mUI/L', status: 'concluido' },
-  {
-    nome: 'Colesterol Total',
-    solicitadoEm: '2026-04-10',
-    resultado: '187 mg/dL',
-    status: 'concluido',
-  },
-];
 
 const mockSintomasRecentes = [
   { sintoma: 'Fadiga leve ao final do dia', relatadoEm: '2026-05-04' },
@@ -156,6 +131,18 @@ function MetricPill({
   );
 }
 
+function formatDate(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('pt-BR');
+}
+
+function formatClinicalValue(value?: string | number | boolean | null, fallback = '-') {
+  if (value === undefined || value === null || value === '') return fallback;
+  return String(value);
+}
+
 function SOAPField({
   label,
   value,
@@ -193,25 +180,115 @@ export default function EncounterPage() {
   const patientId = params?.patientId as string;
 
   const [data, setData] = useState<Patient360Summary | null>(null);
+  const [clinicalRecords, setClinicalRecords] = useState<ClinicalRecordsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [clinicalRecordsError, setClinicalRecordsError] = useState<string | null>(null);
 
   const [soap, setSoap] = useState({ S: '', O: '', A: '', P: '' });
+  const [encounterId, setEncounterId] = useState<string | null>(null);
+  const [soapNoteId, setSoapNoteId] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [finalized, setFinalized] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
-    getPatient360(patientId).then((d) => {
-      setData(d);
+    let isMounted = true;
+
+    async function loadEncounter() {
+      setLoading(true);
+      setLoadError(null);
+
+      const result = await getEncounterContext(patientId);
+      if (!isMounted) return;
+
+      if (result.error || !result.data) {
+        setData(null);
+        setLoadError(result.error?.message ?? 'Nao foi possivel carregar o atendimento.');
+        setLoading(false);
+        return;
+      }
+
+      setData(result.data.summary);
+      const recordsResult = await getPatientClinicalRecords(patientId);
+      if (!isMounted) return;
+
+      setClinicalRecords(recordsResult.data);
+      setClinicalRecordsError(recordsResult.error?.message ?? null);
+      setEncounterId(result.data.soap?.encounterId ?? null);
+      setSoapNoteId(result.data.soap?.soapNoteId ?? null);
+      setFinalized(result.data.soap?.status === 'final');
+
+      if (result.data.soap) {
+        setSoap({
+          S: result.data.soap.subjective,
+          O: result.data.soap.objective,
+          A: result.data.soap.assessment,
+          P: result.data.soap.plan,
+        });
+      }
+
       setLoading(false);
-    });
+    }
+
+    void loadEncounter();
+
+    return () => {
+      isMounted = false;
+    };
   }, [patientId]);
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
+    setSaving(true);
+    setActionError(null);
+
+    const result = await saveSoapDraft({
+      patientId,
+      encounterId,
+      soapNoteId,
+      subjective: soap.S,
+      objective: soap.O,
+      assessment: soap.A,
+      plan: soap.P,
+    });
+
+    setSaving(false);
+
+    if (result.error || !result.data) {
+      setActionError(result.error?.message ?? 'Nao foi possivel salvar o rascunho.');
+      return;
+    }
+
+    setEncounterId(result.data.encounterId);
+    setSoapNoteId(result.data.soapNoteId);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
-  const handleFinalize = () => {
+  const handleFinalize = async () => {
+    setSaving(true);
+    setActionError(null);
+
+    const result = await finalizeEncounterSoap({
+      patientId,
+      encounterId,
+      soapNoteId,
+      subjective: soap.S,
+      objective: soap.O,
+      assessment: soap.A,
+      plan: soap.P,
+    });
+
+    setSaving(false);
+
+    if (result.error || !result.data) {
+      setActionError(result.error?.message ?? 'Nao foi possivel finalizar o atendimento.');
+      return;
+    }
+
+    setEncounterId(result.data.encounterId);
+    setSoapNoteId(result.data.soapNoteId);
     setFinalized(true);
   };
 
@@ -225,12 +302,39 @@ export default function EncounterPage() {
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <DashboardShell>
+        <div className="flex flex-col items-center justify-center h-64 gap-3 text-center px-6">
+          <AlertTriangle size={22} className="text-destructive" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Atendimento indisponivel</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {loadError ?? 'Nao foi possivel carregar os dados deste paciente.'}
+            </p>
+          </div>
+          <button
+            onClick={() => router.push(`/clinic/patients/${patientId}`)}
+            className="btn-secondary text-sm px-3 py-1.5"
+          >
+            Voltar ao Paciente 360
+          </button>
+        </div>
+      </DashboardShell>
+    );
+  }
 
   const { profile, activePackage, clinicalStatus, prescriptions, alerts, tasks } = data;
 
   const activePrescriptions = prescriptions?.filter((p) => p.isActive) ?? [];
   const openTasks = tasks?.filter((t) => !t.isCompleted) ?? [];
+  const latestMeasurement = clinicalRecords?.latestMeasurement;
+  const latestBioimpedance = clinicalRecords?.latestBioimpedance;
+  const labOrders = clinicalRecords?.labOrders ?? [];
+  const labResults = clinicalRecords?.labResults ?? [];
+  const currentWeightKg = latestMeasurement?.weightKg ?? clinicalStatus.currentWeightKg;
+  const currentBmi = latestMeasurement?.bmi ?? clinicalStatus.currentBmi;
+  const lastMeasuredAt = latestMeasurement?.measuredAt ?? clinicalStatus.lastMeasuredAt;
 
   return (
     <DashboardShell>
@@ -287,6 +391,7 @@ export default function EncounterPage() {
             </button>
             <button
               onClick={handleSaveDraft}
+              disabled={saving || finalized}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
                 saved
                   ? 'bg-green-50 border-green-300 text-green-700'
@@ -294,11 +399,11 @@ export default function EncounterPage() {
               }`}
             >
               <Save size={13} />
-              {saved ? 'Rascunho salvo!' : 'Salvar Rascunho'}
+              {saving ? 'Salvando...' : saved ? 'Rascunho salvo!' : 'Salvar Rascunho'}
             </button>
             <button
               onClick={handleFinalize}
-              disabled={finalized}
+              disabled={saving || finalized}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
                 finalized
                   ? 'bg-green-600 text-white cursor-default'
@@ -306,7 +411,11 @@ export default function EncounterPage() {
               }`}
             >
               <CheckCircle size={13} />
-              {finalized ? 'Atendimento Finalizado' : 'Finalizar Atendimento'}
+              {saving
+                ? 'Processando...'
+                : finalized
+                  ? 'Atendimento Finalizado'
+                  : 'Finalizar Atendimento'}
             </button>
           </div>
         </div>
@@ -384,16 +493,26 @@ export default function EncounterPage() {
             {/* Latest metrics */}
             <SectionCard title="Últimas Medidas">
               <div className="space-y-0">
-                <MetricPill label="Peso atual" value={clinicalStatus.currentWeightKg} unit=" kg" />
+                <MetricPill label="Peso atual" value={currentWeightKg} unit=" kg" />
                 <MetricPill label="Peso inicial" value={clinicalStatus.startWeightKg} unit=" kg" />
                 <MetricPill label="Meta" value={clinicalStatus.goalWeightKg} unit=" kg" />
                 <MetricPill label="Perdido" value={clinicalStatus.weightLostKg} unit=" kg" />
-                <MetricPill label="IMC" value={clinicalStatus.currentBmi} />
+                <MetricPill label="IMC" value={currentBmi} />
+                {latestMeasurement?.bodyFatPercent !== undefined && (
+                  <MetricPill
+                    label="Gordura corporal"
+                    value={latestMeasurement.bodyFatPercent}
+                    unit="%"
+                  />
+                )}
+                {latestMeasurement?.waistCm !== undefined && (
+                  <MetricPill label="Cintura" value={latestMeasurement.waistCm} unit=" cm" />
+                )}
                 <MetricPill
                   label="Adesão semanal"
                   value={`${clinicalStatus.weeklyAdherencePercent}%`}
                 />
-                <MetricPill label="Última medição" value={clinicalStatus.lastMeasuredAt} />
+                <MetricPill label="Última medição" value={formatDate(lastMeasuredAt)} />
               </div>
             </SectionCard>
 
@@ -440,6 +559,13 @@ export default function EncounterPage() {
               </div>
             )}
 
+            {actionError && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+                <AlertTriangle size={15} />
+                {actionError}
+              </div>
+            )}
+
             <SOAPField
               label="S — Subjetivo"
               value={soap.S}
@@ -473,6 +599,7 @@ export default function EncounterPage() {
             <div className="flex items-center gap-3 pt-2 border-t border-border">
               <button
                 onClick={handleSaveDraft}
+                disabled={saving || finalized}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl border transition-colors ${
                   saved
                     ? 'bg-green-50 border-green-300 text-green-700'
@@ -480,11 +607,11 @@ export default function EncounterPage() {
                 }`}
               >
                 <Save size={14} />
-                {saved ? 'Salvo!' : 'Salvar Rascunho'}
+                {saving ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar Rascunho'}
               </button>
               <button
                 onClick={handleFinalize}
-                disabled={finalized}
+                disabled={saving || finalized}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${
                   finalized
                     ? 'bg-green-600 text-white cursor-default'
@@ -492,7 +619,7 @@ export default function EncounterPage() {
                 }`}
               >
                 <CheckCircle size={14} />
-                {finalized ? 'Finalizado' : 'Finalizar Atendimento'}
+                {saving ? 'Processando...' : finalized ? 'Finalizado' : 'Finalizar Atendimento'}
               </button>
             </div>
           </div>
@@ -514,6 +641,12 @@ export default function EncounterPage() {
                 </span>
               </p>
             </SectionCard>
+
+            {clinicalRecordsError && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Dados clínicos complementares indisponíveis: {clinicalRecordsError}
+              </div>
+            )}
 
             {/* Alergias */}
             <SectionCard title="Alergias">
@@ -553,8 +686,8 @@ export default function EncounterPage() {
             {/* Últimas medidas */}
             <SectionCard title="Últimas Medidas" defaultOpen={false}>
               <div className="space-y-0">
-                <MetricPill label="Peso" value={clinicalStatus.currentWeightKg} unit=" kg" />
-                <MetricPill label="IMC" value={clinicalStatus.currentBmi} />
+                <MetricPill label="Peso" value={currentWeightKg} unit=" kg" />
+                <MetricPill label="IMC" value={currentBmi} />
                 <MetricPill label="Adesão" value={`${clinicalStatus.weeklyAdherencePercent}%`} />
                 <MetricPill label="Perdido" value={clinicalStatus.weightLostKg} unit=" kg" />
               </div>
@@ -562,37 +695,88 @@ export default function EncounterPage() {
 
             {/* Bioimpedância */}
             <SectionCard title="Bioimpedância" defaultOpen={false}>
-              <p className="text-xs text-muted-foreground mb-2">Última: {mockBioimpedancia.date}</p>
-              <div className="space-y-0">
-                <MetricPill label="Gordura corporal" value={mockBioimpedancia.gorduraCorporal} />
-                <MetricPill label="Massa muscular" value={mockBioimpedancia.massaMuscular} />
-                <MetricPill label="Gordura visceral" value={mockBioimpedancia.gorduraVisceral} />
-                <MetricPill label="Água corporal" value={mockBioimpedancia.aguaCorporal} />
-                <MetricPill label="Metabolismo basal" value={mockBioimpedancia.metabolismoBasal} />
-              </div>
+              {latestBioimpedance ? (
+                <>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Última: {formatDate(latestBioimpedance.measuredAt)}
+                  </p>
+                  <div className="space-y-0">
+                    <MetricPill
+                      label="Massa magra"
+                      value={formatClinicalValue(latestBioimpedance.leanMassKg)}
+                      unit={latestBioimpedance.leanMassKg !== undefined ? ' kg' : undefined}
+                    />
+                    <MetricPill
+                      label="Massa gorda"
+                      value={formatClinicalValue(latestBioimpedance.fatMassKg)}
+                      unit={latestBioimpedance.fatMassKg !== undefined ? ' kg' : undefined}
+                    />
+                    <MetricPill
+                      label="Água corporal"
+                      value={formatClinicalValue(latestBioimpedance.bodyWaterLiters)}
+                      unit={latestBioimpedance.bodyWaterLiters !== undefined ? ' L' : undefined}
+                    />
+                    <MetricPill
+                      label="Ângulo de fase"
+                      value={formatClinicalValue(latestBioimpedance.phaseAngleDeg)}
+                      unit={latestBioimpedance.phaseAngleDeg !== undefined ? '°' : undefined}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  Nenhuma bioimpedância registrada.
+                </p>
+              )}
             </SectionCard>
 
             {/* Exames */}
             <SectionCard title="Exames" defaultOpen={false}>
-              <div className="space-y-2">
-                {mockExames.map((e, i) => (
-                  <div key={i} className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-medium text-foreground">{e.nome}</p>
-                      <p className="text-xs text-muted-foreground">{e.solicitadoEm}</p>
+              {labOrders.length === 0 && labResults.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">Nenhum exame registrado.</p>
+              ) : (
+                <div className="space-y-3">
+                  {labOrders.map((order) => (
+                    <div key={order.id} className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-medium text-foreground">{order.panelName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(order.orderedAt)} · {order.tests.length} testes
+                        </p>
+                      </div>
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 bg-amber-100 text-amber-700">
+                        {order.status}
+                      </span>
                     </div>
-                    <span
-                      className={`text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                        e.status === 'concluido'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-amber-100 text-amber-700'
-                      }`}
-                    >
-                      {e.status === 'concluido' ? e.resultado : 'Pendente'}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                  {labResults.map((result) => (
+                    <div key={result.id} className="rounded-lg border border-border p-2">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className="text-xs font-semibold text-foreground">Resultado recebido</p>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(result.resultAt)}
+                        </span>
+                      </div>
+                      {result.interpretation && (
+                        <p className="text-xs text-muted-foreground mb-1">
+                          {result.interpretation}
+                        </p>
+                      )}
+                      <div className="space-y-0">
+                        {Object.entries(result.values)
+                          .slice(0, 4)
+                          .map(([key, value]) => (
+                            <MetricPill
+                              key={key}
+                              label={key.replaceAll('_', ' ')}
+                              value={formatClinicalValue(value)}
+                            />
+                          ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </SectionCard>
 
             {/* Sintomas recentes */}

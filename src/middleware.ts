@@ -14,7 +14,7 @@ function getTargetRoute(context: MiddlewareUserContext) {
   if (context.canAccessClinicWorkspace && context.hasActiveTenantMembership)
     return '/clinic/dashboard';
   if (context.canAccessPatientPortal) return '/patient';
-  return '/clinic/dashboard';
+  return '/no-workspace';
 }
 
 export async function middleware(request: NextRequest) {
