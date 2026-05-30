@@ -121,4 +121,3 @@
 -- select id, slug, name
 -- from public.tenants
 -- where id = 'TENANT_B_UUID';
-
