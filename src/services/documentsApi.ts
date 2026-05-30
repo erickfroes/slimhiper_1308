@@ -1,5 +1,5 @@
 import type { PatientDocument360Item, PatientDocumentSignatureStatus } from '@/domain/types';
-import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { getPatientDocuments360 } from '@/services/mockApi';
 
 interface SafeServiceError {

@@ -1,4 +1,4 @@
-import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { SafeServiceError } from '@/services/billingApi';
 
 export interface AdminTenantRow {
@@ -101,15 +101,7 @@ export async function getTenantDetail(tenantId: string, fallback: AdminTenantDet
   if (isMockEnabled()) return { data: fallback, error: null as SafeServiceError | null };
   try {
     const supabase = createBrowserSupabaseClient();
-    const [
-      { data: tenant, error: tErr },
-      { count: userCount },
-      { count: ffCount },
-      { count: supportCount },
-      { count: bgCount },
-      { count: d4Count },
-      { count: asaasCount },
-    ] = await Promise.all([
+    const results = await Promise.all([
       supabase
         .from('tenants')
         .select('id,name,status,settings,created_at,updated_at')
@@ -141,6 +133,14 @@ export async function getTenantDetail(tenantId: string, fallback: AdminTenantDet
         .select('*', { count: 'exact', head: true })
         .eq('tenant_id', tenantId),
     ]);
+    const tenant = results[0].data;
+    const tErr = results[0].error;
+    const userCount = results[1].count;
+    const ffCount = results[2].count;
+    const supportCount = results[3].count;
+    const bgCount = results[4].count;
+    const d4Count = results[5].count;
+    const asaasCount = results[6].count;
     if (tErr || !tenant)
       return { data: fallback, error: fallbackError(tErr?.message ?? 'Tenant not found') };
     const base = mapTenant(tenant);
@@ -170,7 +170,7 @@ export async function listWebhookSummaries(mockData: AdminWebhookEventSummary[])
   if (isMockEnabled()) return { data: mockData, error: null as SafeServiceError | null };
   try {
     const supabase = createBrowserSupabaseClient();
-    const [{ data: asaas }, { data: d4 }] = await Promise.all([
+    const webhookResults = await Promise.all([
       supabase
         .from('asaas_events')
         .select(
@@ -186,6 +186,8 @@ export async function listWebhookSummaries(mockData: AdminWebhookEventSummary[])
         .order('created_at', { ascending: false })
         .limit(100),
     ]);
+    const asaas = webhookResults[0].data;
+    const d4 = webhookResults[1].data;
     const tenants = await supabase.from('tenants').select('id,name');
     const byId = new Map((tenants.data ?? []).map((t: any) => [t.id, t.name]));
     const mapped: AdminWebhookEventSummary[] = [

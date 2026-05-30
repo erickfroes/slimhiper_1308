@@ -5,7 +5,7 @@ import type {
   PatientStatus,
   ProgramType,
 } from '@/domain/types';
-import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { getPatientList as getMockPatientList } from '@/services/mockApi';
 
 type SafeServiceError = {

@@ -5,15 +5,19 @@ export function createClient() {
   const supabaseKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable.');
-  }
-
-  if (!supabaseKey) {
-    throw new Error(
-      'Missing Supabase public key. Set NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (preferred) or NEXT_PUBLIC_SUPABASE_ANON_KEY.'
-    );
+  if (!supabaseUrl || !supabaseKey) {
+    return null;
   }
 
   return createBrowserClient(supabaseUrl, supabaseKey);
+}
+
+export function createRequiredClient() {
+  const supabase = createClient();
+
+  if (!supabase) {
+    throw new Error('Supabase browser client is not configured.');
+  }
+
+  return supabase;
 }

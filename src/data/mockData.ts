@@ -297,6 +297,7 @@ export const mockFinancialJuliana: PatientFinancialSummary = {
       status: 'pendente',
     },
   ],
+
   paymentHistory: [
     {
       id: 'pay-001',
@@ -326,6 +327,7 @@ export const mockFinancialJuliana: PatientFinancialSummary = {
       receiptId: 'rec-003',
     },
   ],
+
   charges: [
     {
       id: 'chg-001',
@@ -348,6 +350,7 @@ export const mockFinancialJuliana: PatientFinancialSummary = {
       sentAt: '2026-04-28',
     },
   ],
+
   receipts: [
     {
       id: 'rec-001',
@@ -377,6 +380,7 @@ export const mockFinancialJuliana: PatientFinancialSummary = {
       receiptNumber: 'REC-2026-003',
     },
   ],
+
   negotiations: [],
 };
 
@@ -2108,12 +2112,14 @@ export const mockClinicPrograms: ClinicProgram[] = [
         description: 'Manutenção dos resultados, ajuste de metas e preparação para alta.',
       },
     ],
+
     includedServices: [
       { label: 'Consultas médicas', quantity: 6, unit: 'sessões' },
       { label: 'Sessões de nutrição', quantity: 4, unit: 'sessões' },
       { label: 'Bioimpedância', quantity: 3, unit: 'avaliações' },
       { label: 'Exames laboratoriais', quantity: 1, unit: 'painel' },
     ],
+
     checkInsTotal: 12,
     checkInFrequency: 'Semanal via app',
     appEntitlements: [
@@ -2122,12 +2128,14 @@ export const mockClinicPrograms: ClinicProgram[] = [
       { key: 'checkin', label: 'Check-in semanal', enabled: true },
       { key: 'comunidade', label: 'Comunidade', enabled: false },
     ],
+
     requiredDocuments: [
       { label: 'Contrato de prestação de serviços', required: true },
       { label: 'Termo de consentimento informado', required: true },
       { label: 'Anamnese clínica', required: true },
       { label: 'Exames pré-tratamento', required: false },
     ],
+
     paymentModel: 'parcelado',
     paymentDescription: 'Parcelado em até 9x ou à vista com desconto de 10%.',
     activePatients: 24,
@@ -2161,12 +2169,14 @@ export const mockClinicPrograms: ClinicProgram[] = [
         description: 'Ajuste de macros, manutenção de massa e preparação para resultado final.',
       },
     ],
+
     includedServices: [
       { label: 'Consultas médicas', quantity: 5, unit: 'sessões' },
       { label: 'Sessões de nutrição', quantity: 6, unit: 'sessões' },
       { label: 'Bioimpedância', quantity: 4, unit: 'avaliações' },
       { label: 'Avaliação de força', quantity: 2, unit: 'avaliações' },
     ],
+
     checkInsTotal: 16,
     checkInFrequency: 'Semanal via app',
     appEntitlements: [
@@ -2175,12 +2185,14 @@ export const mockClinicPrograms: ClinicProgram[] = [
       { key: 'checkin', label: 'Check-in semanal', enabled: true },
       { key: 'comunidade', label: 'Comunidade', enabled: true },
     ],
+
     requiredDocuments: [
       { label: 'Contrato de prestação de serviços', required: true },
       { label: 'Termo de consentimento informado', required: true },
       { label: 'Anamnese clínica', required: true },
       { label: 'Avaliação cardiológica', required: false },
     ],
+
     paymentModel: 'parcelado',
     paymentDescription: 'Parcelado em até 12x ou à vista com desconto de 8%.',
     activePatients: 11,
@@ -2213,11 +2225,13 @@ export const mockClinicPrograms: ClinicProgram[] = [
         description: 'Consolidação dos resultados e plano de manutenção.',
       },
     ],
+
     includedServices: [
       { label: 'Consultas médicas', quantity: 5, unit: 'sessões' },
       { label: 'Sessões de nutrição', quantity: 5, unit: 'sessões' },
       { label: 'Bioimpedância', quantity: 4, unit: 'avaliações' },
     ],
+
     checkInsTotal: 14,
     checkInFrequency: 'Semanal via app',
     appEntitlements: [
@@ -2226,11 +2240,13 @@ export const mockClinicPrograms: ClinicProgram[] = [
       { key: 'checkin', label: 'Check-in semanal', enabled: true },
       { key: 'comunidade', label: 'Comunidade', enabled: false },
     ],
+
     requiredDocuments: [
       { label: 'Contrato de prestação de serviços', required: true },
       { label: 'Termo de consentimento informado', required: true },
       { label: 'Anamnese clínica', required: true },
     ],
+
     paymentModel: 'hibrido',
     paymentDescription: 'Entrada + parcelamento em até 10x, ou à vista com desconto de 12%.',
     activePatients: 8,
@@ -2265,12 +2281,14 @@ export const mockClinicPrograms: ClinicProgram[] = [
         description: 'Exames de controle, ajuste de tratamento e planejamento de manutenção.',
       },
     ],
+
     includedServices: [
       { label: 'Consultas médicas', quantity: 6, unit: 'sessões' },
       { label: 'Sessões de nutrição', quantity: 4, unit: 'sessões' },
       { label: 'Bioimpedância', quantity: 2, unit: 'avaliações' },
       { label: 'Painéis laboratoriais', quantity: 2, unit: 'painéis' },
     ],
+
     checkInsTotal: 13,
     checkInFrequency: 'Semanal via app',
     appEntitlements: [
@@ -2279,6 +2297,7 @@ export const mockClinicPrograms: ClinicProgram[] = [
       { key: 'checkin', label: 'Check-in semanal', enabled: true },
       { key: 'comunidade', label: 'Comunidade', enabled: false },
     ],
+
     requiredDocuments: [
       { label: 'Contrato de prestação de serviços', required: true },
       { label: 'Termo de consentimento informado', required: true },
@@ -2286,6 +2305,7 @@ export const mockClinicPrograms: ClinicProgram[] = [
       { label: 'Exames pré-tratamento', required: true },
       { label: 'Declaração de saúde', required: false },
     ],
+
     paymentModel: 'avista',
     paymentDescription: 'Pagamento à vista ou em até 6x sem juros.',
     activePatients: 15,
@@ -2319,6 +2339,7 @@ export const mockClinicPrograms: ClinicProgram[] = [
           'Consolidação de hábitos, reavaliação de biomarcadores e plano de longo prazo.',
       },
     ],
+
     includedServices: [
       { label: 'Consultas médicas', quantity: 8, unit: 'sessões' },
       { label: 'Sessões de nutrição', quantity: 6, unit: 'sessões' },
@@ -2326,6 +2347,7 @@ export const mockClinicPrograms: ClinicProgram[] = [
       { label: 'Painéis laboratoriais avançados', quantity: 3, unit: 'painéis' },
       { label: 'Avaliação de sono', quantity: 1, unit: 'avaliação' },
     ],
+
     checkInsTotal: 24,
     checkInFrequency: 'Semanal via app',
     appEntitlements: [
@@ -2334,6 +2356,7 @@ export const mockClinicPrograms: ClinicProgram[] = [
       { key: 'checkin', label: 'Check-in semanal', enabled: true },
       { key: 'comunidade', label: 'Comunidade', enabled: true },
     ],
+
     requiredDocuments: [
       { label: 'Contrato de prestação de serviços', required: true },
       { label: 'Termo de consentimento informado', required: true },
@@ -2341,6 +2364,7 @@ export const mockClinicPrograms: ClinicProgram[] = [
       { label: 'Exames pré-tratamento', required: true },
       { label: 'Questionário de estilo de vida', required: true },
     ],
+
     paymentModel: 'assinatura',
     paymentDescription: 'Assinatura mensal ou pagamento semestral com desconto de 15%.',
     activePatients: 6,

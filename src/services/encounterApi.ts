@@ -1,5 +1,5 @@
 import type { Patient360Summary } from '@/domain/types';
-import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { getPatient360Summary } from '@/services/patient360Api';
 
 export interface SoapFields {

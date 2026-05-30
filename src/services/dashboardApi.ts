@@ -8,7 +8,7 @@ import type {
   PatientReviewItem,
   WaitingQueueEntry,
 } from '@/domain/types';
-import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 export interface DashboardProvider {
   getDashboardStats(): Promise<DashboardStats>;

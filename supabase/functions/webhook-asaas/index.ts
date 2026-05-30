@@ -1,4 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+declare const Deno: {
+  serve: (handler: (req: Request) => Promise<Response>) => void;
+  env: { get: (key: string) => string | undefined };
+};
 const h={'Content-Type':'application/json'}; const j=(s:number,p:Record<string,unknown>)=>new Response(JSON.stringify(p),{status:s,headers:h});
 async function sha256(v:string){const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,'0')).join('');}
 Deno.serve(async(req)=>{ if(req.method!=='POST') return j(405,{ok:false}); const token=req.headers.get('asaas-access-token'); if(!token||token!==Deno.env.get('ASAAS_WEBHOOK_TOKEN')) return j(401,{ok:false,error:'invalid_webhook_token'});
