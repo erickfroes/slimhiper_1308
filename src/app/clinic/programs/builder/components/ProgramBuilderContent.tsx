@@ -130,7 +130,8 @@ export default function ProgramBuilderContent() {
                         isActive
                           ? 'bg-primary text-primary-foreground'
                           : isCompleted
-                            ? 'bg-emerald-500 text-white' :'bg-muted text-muted-foreground',
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-muted text-muted-foreground',
                       ].join(' ')}
                     >
                       {isCompleted ? <Check size={12} strokeWidth={3} /> : idx + 1}

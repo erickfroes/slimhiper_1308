@@ -74,7 +74,8 @@ export default function StepDocumentos({ draft, onChange }: Props) {
                 className={[
                   'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
                   added
-                    ? 'bg-primary/10 text-primary border-primary/30 cursor-default' :'bg-muted text-muted-foreground border-border hover:bg-primary/5 hover:text-primary hover:border-primary/30',
+                    ? 'bg-primary/10 text-primary border-primary/30 cursor-default'
+                    : 'bg-muted text-muted-foreground border-border hover:bg-primary/5 hover:text-primary hover:border-primary/30',
                 ].join(' ')}
               >
                 {added ? '✓ ' : '+ '}
@@ -102,7 +103,8 @@ export default function StepDocumentos({ draft, onChange }: Props) {
               className={[
                 'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all flex-shrink-0',
                 doc.required
-                  ? 'bg-negative/10 text-negative border-negative/30' :'bg-muted text-muted-foreground border-border hover:bg-muted/80',
+                  ? 'bg-negative/10 text-negative border-negative/30'
+                  : 'bg-muted text-muted-foreground border-border hover:bg-muted/80',
               ].join(' ')}
             >
               {doc.required ? 'Obrigatório' : 'Opcional'}

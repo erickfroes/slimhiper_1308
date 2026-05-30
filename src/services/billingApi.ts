@@ -1,5 +1,5 @@
 import type { PatientFinancialSummary } from '@/domain/types';
-import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { getPatient360 } from '@/services/mockApi';
 
 export interface SafeServiceError {

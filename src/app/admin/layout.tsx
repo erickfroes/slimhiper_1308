@@ -1,6 +1,6 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
-import PlatformAdminGuard from './components/PlatformAdminGuard';
+import Link from 'next/link';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 
@@ -13,9 +13,21 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const authorized = canAccessPlatformAdminFromSession(session);
 
-  return (
-    <PlatformAdminGuard backHref="/" backLabel="Voltar ao Dashboard" initialAuthorized={authorized}>
-      {children}
-    </PlatformAdminGuard>
-  );
+  if (!authorized) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="max-w-sm text-center">
+          <h2 className="mb-2 text-lg font-bold text-foreground">Acesso negado</h2>
+          <p className="mb-5 text-sm text-muted-foreground">
+            Esta area e restrita a usuarios autorizados da plataforma.
+          </p>
+          <Link href="/" className="btn-primary">
+            Voltar
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }

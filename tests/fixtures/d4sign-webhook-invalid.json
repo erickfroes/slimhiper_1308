@@ -1,0 +1,30 @@
+{
+  "name": "d4sign-invalid-missing-signature",
+  "description": "Safe local fixture for a webhook that must fail closed because signature verification is missing.",
+  "headers": {
+    "content-type": "application/json",
+    "idempotency-key": "evt_d4sign_fixture_invalid:document.signed"
+  },
+  "expected": {
+    "accepted": false,
+    "errorCode": "unauthorized_webhook",
+    "reason": "missing_signature"
+  },
+  "payload": {
+    "event": "document.signed",
+    "event_id": "evt_d4sign_fixture_invalid",
+    "provider_document_id": "d4sign-doc-fixture-invalid",
+    "status": "signed",
+    "document": {
+      "uuid": "d4sign-doc-fixture-invalid",
+      "name": "Invalid Local Fixture"
+    },
+    "signers": [
+      {
+        "name": "Paciente Fixture",
+        "email": "patient.fixture@example.com",
+        "status": "signed"
+      }
+    ]
+  }
+}

@@ -11,3 +11,13 @@ export function createClient() {
 
   return createBrowserClient(supabaseUrl, supabaseKey);
 }
+
+export function createRequiredClient() {
+  const supabase = createClient();
+
+  if (!supabase) {
+    throw new Error('Supabase browser client is not configured.');
+  }
+
+  return supabase;
+}

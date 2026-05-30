@@ -12,6 +12,7 @@ operation.
 For ordinary code changes:
 
 ```bash
+git diff --check
 npm run type-check
 npm run build
 ```
@@ -21,6 +22,9 @@ For lint-related or frontend changes:
 ```bash
 npm run lint
 ```
+
+`npm run lint` uses ESLint CLI over `src/**/*.{ts,tsx}`. It does not depend on
+`next lint`.
 
 For documentation-only changes:
 
@@ -33,6 +37,7 @@ git diff --check
 Manual SQL checklist:
 
 - `supabase/tests/core_rbac_smoke_tests.sql`
+- `supabase/tests/rls_cross_tenant_smoke_tests.sql`
 
 Prerequisites:
 
@@ -58,6 +63,12 @@ Manual checklist:
 Scripted smoke checks:
 
 - `scripts/supabase/test-patient360-contract.mjs`
+
+Local fixture mode does not require Supabase credentials:
+
+```bash
+node scripts/supabase/test-patient360-contract.mjs --mode=fixture
+```
 
 Validated behavior:
 
@@ -157,6 +168,17 @@ node scripts/supabase/test-documents-contract.mjs
 Only run when authorized. The script may generate documents, request signed
 URLs, and invoke D4Sign-related functions.
 
+## D4Sign Fixture Test
+
+Local fixture test:
+
+```bash
+node scripts/supabase/test-d4sign-fixtures.mjs
+```
+
+This test validates payload shape, status mapping, idempotency hash strategy,
+and fail-closed invalid fixture behavior without calling D4Sign.
+
 ## Billing Contract Test
 
 Scripts:
@@ -173,6 +195,25 @@ node scripts/supabase/test-billing-contract.mjs
 
 Billing contract scripts may call Asaas-related functions and can create
 provider-side customers, invoices, or subscriptions depending on configuration.
+
+Local fixture test:
+
+```bash
+node scripts/supabase/test-billing-fixtures.mjs
+```
+
+This fixture test validates event-to-status mapping, idempotency hash strategy,
+tenant resolution expectations, duplicated payload behavior, and invalid token
+handling without calling Asaas.
+
+## CI Workflows
+
+- `.github/workflows/ci.yml`: automatic baseline on pull requests and `main`
+  pushes using `npm ci`, `git diff --check`, type-check, lint, and build.
+  It uses safe public placeholder Supabase values only for static build
+  compilation; it does not use service-role credentials or provider secrets.
+- `.github/workflows/contract-fixtures.yml`: manual fixture-only contract checks
+  with no provider secrets.
 
 ## Recommended Patient 360 Baseline Label
 

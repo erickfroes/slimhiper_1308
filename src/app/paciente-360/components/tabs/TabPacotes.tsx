@@ -395,7 +395,8 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
             const variantClass = isPrimary
               ? 'bg-teal-600 hover:bg-teal-700 text-white'
               : isDanger
-                ? 'border border-red-300 text-red-600 hover:bg-red-50' :'border border-border text-foreground hover:bg-muted/60';
+                ? 'border border-red-300 text-red-600 hover:bg-red-50'
+                : 'border border-border text-foreground hover:bg-muted/60';
             return (
               <button key={action.key} className={`${baseClass} ${variantClass}`}>
                 {action.icon}

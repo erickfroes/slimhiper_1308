@@ -134,7 +134,9 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
               <div
                 className={[
                   'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5',
-                  msg.from === 'staff' ?'bg-primary/10 text-primary' :'bg-muted text-muted-foreground',
+                  msg.from === 'staff'
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-muted text-muted-foreground',
                 ].join(' ')}
               >
                 {msg.from === 'staff' ? (responsible?.name?.[0] ?? 'A') : patientName[0]}
@@ -239,7 +241,8 @@ export default function TabChat({ chat, patientName }: TabChatProps) {
           className={[
             'flex items-center justify-center gap-2 py-2.5 text-sm rounded-lg border font-medium transition-colors',
             markedAnswered
-              ? 'bg-positive/10 border-positive/30 text-positive cursor-default' :'btn-secondary',
+              ? 'bg-positive/10 border-positive/30 text-positive cursor-default'
+              : 'btn-secondary',
           ].join(' ')}
         >
           <CheckCheck size={15} />

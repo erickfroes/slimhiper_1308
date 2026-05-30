@@ -25,7 +25,7 @@ import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import EmptyState from '@/components/EmptyState';
 import { SkeletonTableRow } from '@/components/LoadingSkeleton';
-import { getPatientList } from '@/services/mockApi';
+import { getPatientList } from '@/services/patientsApi';
 import type { PatientListRow, ProgramType, FinancialStatus, AdherenceLevel } from '@/domain/types';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
@@ -177,7 +177,8 @@ export default function PatientListContent() {
         const bv = b[sortKey];
         if (typeof av === 'number' && typeof bv === 'number')
           return sortDir === 'asc' ? av - bv : bv - av;
-        return sortDir === 'asc' ? String(av).localeCompare(String(bv),'pt-BR')
+        return sortDir === 'asc'
+          ? String(av).localeCompare(String(bv), 'pt-BR')
           : String(bv).localeCompare(String(av), 'pt-BR');
       });
     }

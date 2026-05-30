@@ -1,0 +1,40 @@
+{
+  "name": "asaas-payment-cancelled",
+  "description": "Safe local fixture for an Asaas cancelled/deleted payment webhook. Values are fake and non-sensitive.",
+  "headers": {
+    "content-type": "application/json",
+    "asaas-access-token": "__fixture_valid_asaas_webhook_token__"
+  },
+  "expected": {
+    "accepted": true,
+    "eventType": "PAYMENT_DELETED",
+    "invoiceStatus": "cancelado",
+    "paymentStatus": "canceled",
+    "financialState": "cobranca_pendente",
+    "timelineEventType": null,
+    "timelineCategory": null,
+    "tenantResolution": {
+      "strategy": "patient_invoices.asaas_invoice_id",
+      "lookupPaymentId": "pay_fixture_cancelled_001",
+      "tenantId": "tenant-fixture-001",
+      "patientId": "patient-fixture-003",
+      "shouldResolve": true
+    }
+  },
+  "payload": {
+    "id": "evt_asaas_fixture_cancelled_001",
+    "event": "PAYMENT_DELETED",
+    "dateCreated": "2026-05-19T12:10:00.000Z",
+    "payment": {
+      "id": "pay_fixture_cancelled_001",
+      "customer": "cus_fixture_003",
+      "status": "DELETED",
+      "value": 150,
+      "netValue": 0,
+      "billingType": "CREDIT_CARD",
+      "externalReference": "patient-fixture-003",
+      "dueDate": "2026-05-30",
+      "deleted": true
+    }
+  }
+}

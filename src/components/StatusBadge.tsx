@@ -13,7 +13,13 @@ type BadgeVariant =
   | FinancialStatus
   | PackageStatus
   | AdherenceLevel
-  | 'pago' |'pendente' |'vencido' |'cancelado' |'em_analise' |'pendente_assinatura' |'assinado';
+  | 'pago'
+  | 'pendente'
+  | 'vencido'
+  | 'cancelado'
+  | 'em_analise'
+  | 'pendente_assinatura'
+  | 'assinado';
 
 const badgeConfig: Record<string, { label: string; classes: string }> = {
   // Appointment statuses

@@ -1,0 +1,37 @@
+{
+  "name": "d4sign-valid-document-signed",
+  "description": "Safe local fixture for a D4Sign signed-document webhook. Values are fake and non-sensitive.",
+  "headers": {
+    "content-type": "application/json",
+    "x-d4sign-signature": "sha256=__computed_from_fixture_secret__",
+    "idempotency-key": "evt_d4sign_fixture_001:document.signed"
+  },
+  "expected": {
+    "accepted": true,
+    "normalizedStatus": "signed",
+    "signerStatus": "signed",
+    "idempotencyKey": "evt_d4sign_fixture_001:document.signed",
+    "providerDocumentId": "d4sign-doc-fixture-001",
+    "providerEventId": "evt_d4sign_fixture_001",
+    "timelineEventType": "documento_assinado"
+  },
+  "payload": {
+    "event": "document.signed",
+    "event_id": "evt_d4sign_fixture_001",
+    "provider_document_id": "d4sign-doc-fixture-001",
+    "status": "signed",
+    "signed_at": "2026-05-19T12:00:00.000Z",
+    "document": {
+      "uuid": "d4sign-doc-fixture-001",
+      "name": "Termo de Consentimento Fixture"
+    },
+    "signers": [
+      {
+        "name": "Paciente Fixture",
+        "email": "patient.fixture@example.com",
+        "status": "signed",
+        "signed_at": "2026-05-19T12:00:00.000Z"
+      }
+    ]
+  }
+}

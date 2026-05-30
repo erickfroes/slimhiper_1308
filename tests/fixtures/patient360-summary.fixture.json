@@ -1,0 +1,335 @@
+{
+  "summary": {
+    "status": 200,
+    "json": {
+      "ok": true,
+      "data": {
+        "profile": {
+          "id": "patient-fixture-001",
+          "tenantId": "tenant-fixture-001",
+          "name": "Ana Contrato",
+          "preferredName": "Ana",
+          "age": 39,
+          "birthDate": "1987-03-14",
+          "cpfMasked": "***.***.***-**",
+          "phone": "+55 00 00000-0000",
+          "email": "ana.fixture@example.com",
+          "status": "ativo",
+          "careTeam": ["Dra. Marina", "Nutri Carla"],
+          "createdAt": "2026-05-01T12:00:00.000Z",
+          "tags": ["fixture", "patient360"]
+        },
+        "activePackage": {
+          "id": "pkg-fixture-001",
+          "patientId": "patient-fixture-001",
+          "programName": "Programa Metabolico Fixture",
+          "programType": "saude_metabolica",
+          "totalWeeks": 12,
+          "currentWeek": 4,
+          "startDate": "2026-05-01T12:00:00.000Z",
+          "endDate": "2026-07-24T12:00:00.000Z",
+          "status": "ativo",
+          "totalConsultations": 6,
+          "usedConsultations": 2,
+          "totalNutritionSessions": 4,
+          "usedNutritionSessions": 1
+        },
+        "clinicalStatus": {
+          "currentWeightKg": 82.4,
+          "goalWeightKg": 74,
+          "startWeightKg": 86,
+          "currentBmi": 29.1,
+          "weeklyAdherencePercent": 82,
+          "adherenceLevel": "bom",
+          "weightLostKg": 3.6,
+          "weightToGoKg": 8.4,
+          "progressPercent": 30,
+          "lastMeasuredAt": "2026-05-18T09:30:00.000Z",
+          "weightHistory": [
+            {
+              "week": 1,
+              "weightKg": 86,
+              "date": "2026-05-01"
+            },
+            {
+              "week": 4,
+              "weightKg": 82.4,
+              "date": "2026-05-18"
+            }
+          ],
+          "adherenceHistory": [
+            {
+              "week": 1,
+              "adherencePercent": 70,
+              "label": "Inicio"
+            },
+            {
+              "week": 4,
+              "adherencePercent": 82,
+              "label": "Semana 4"
+            }
+          ]
+        },
+        "financial": {
+          "status": "em_dia",
+          "financialState": "em_dia",
+          "totalContractValue": 2400,
+          "totalPaid": 1200,
+          "totalPending": 1200,
+          "totalOverdue": 0,
+          "nextDueDate": "2026-06-05",
+          "nextDueAmount": 600,
+          "invoices": [
+            {
+              "id": "invoice-fixture-001",
+              "description": "Parcela 2",
+              "amount": 600,
+              "dueDate": "2026-06-05",
+              "status": "pendente"
+            }
+          ]
+        },
+        "alerts": [
+          {
+            "id": "alert-fixture-001",
+            "patientId": "patient-fixture-001",
+            "severity": "medio",
+            "title": "Revisar adesao semanal",
+            "description": "Paciente abaixo da meta de agua por dois dias.",
+            "createdAt": "2026-05-18T10:00:00.000Z",
+            "isResolved": false,
+            "category": "adesao"
+          }
+        ],
+        "tasks": [
+          {
+            "id": "task-fixture-001",
+            "patientId": "patient-fixture-001",
+            "title": "Enviar orientacao alimentar",
+            "description": "Atualizar plano com refeicoes da semana.",
+            "dueDate": "2026-05-20T18:00:00.000Z",
+            "isCompleted": false,
+            "assignedTo": "Nutri Carla",
+            "category": "clinico",
+            "priority": "media"
+          }
+        ],
+        "upcomingAppointments": [
+          {
+            "id": "appointment-fixture-001",
+            "patientId": "patient-fixture-001",
+            "patientName": "Ana Contrato",
+            "type": "consulta_medica",
+            "status": "agendado",
+            "scheduledAt": "2026-05-22T13:00:00.000Z",
+            "durationMinutes": 30,
+            "professionalName": "Dra. Marina",
+            "professionalRole": "Medica",
+            "roomName": "Consultorio 2"
+          },
+          {
+            "id": "appointment-fixture-002",
+            "patientId": "patient-fixture-001",
+            "patientName": "Ana Contrato",
+            "type": "nutricao",
+            "status": "concluido",
+            "scheduledAt": "2026-05-15T13:00:00.000Z",
+            "durationMinutes": 45,
+            "professionalName": "Nutri Carla",
+            "professionalRole": "Nutricionista"
+          }
+        ],
+        "recentTimeline": [
+          {
+            "id": "timeline-fixture-001",
+            "patientId": "patient-fixture-001",
+            "type": "soap_atualizado",
+            "title": "SOAP atualizado",
+            "description": "Plano clinico revisado para a semana.",
+            "date": "2026-05-18T09:30:00.000Z",
+            "category": "clinical",
+            "actorName": "Dra. Marina",
+            "statusLabel": "Registrado",
+            "actionLabel": "Ver atendimento",
+            "detailsHref": "/clinic/patients/patient-fixture-001/encounter",
+            "metadata": {
+              "source": "fixture",
+              "week": 4,
+              "sensitive": false
+            }
+          },
+          {
+            "id": "timeline-fixture-002",
+            "patientId": "patient-fixture-001",
+            "type": "pagamento_recebido",
+            "title": "Pagamento recebido",
+            "description": "Pagamento de parcela registrado.",
+            "date": "2026-05-10T11:00:00.000Z",
+            "category": "financial",
+            "actorName": "Financeiro",
+            "statusLabel": "Pago"
+          }
+        ],
+        "documents": [
+          {
+            "id": "document-fixture-001",
+            "patientId": "patient-fixture-001",
+            "name": "Termo de consentimento",
+            "type": "consentimento",
+            "status": "pendente_assinatura",
+            "createdAt": "2026-05-01T15:00:00.000Z",
+            "uploadedBy": "Dra. Marina",
+            "fileSizeKb": 180
+          }
+        ],
+        "prescriptions": [
+          {
+            "id": "prescription-fixture-001",
+            "patientId": "patient-fixture-001",
+            "medicationName": "Prescricao registrada",
+            "dosage": "Conforme orientacao profissional",
+            "frequency": "Conforme orientacao profissional",
+            "startDate": "2026-05-18T09:30:00.000Z",
+            "prescribedBy": "Dra. Marina",
+            "isActive": true,
+            "status": "ativo",
+            "issueDate": "2026-05-18T09:30:00.000Z",
+            "signatureStatus": "nao_requerido"
+          }
+        ],
+        "nutritionPlan": {
+          "id": "nutrition-fixture-001",
+          "patientId": "patient-fixture-001",
+          "planName": "Plano alimentar inicial",
+          "targetCalories": 1800,
+          "targetProteinG": 120,
+          "targetCarbsG": 160,
+          "targetFatG": 60,
+          "createdAt": "2026-05-01T12:00:00.000Z",
+          "updatedAt": "2026-05-18T09:30:00.000Z",
+          "nutritionistName": "Nutri Carla",
+          "isActive": true
+        },
+        "chat": {
+          "id": "chat-fixture-001",
+          "patientId": "patient-fixture-001",
+          "lastMessageAt": "2026-05-18T14:00:00.000Z",
+          "lastMessagePreview": "Enviei o diario alimentar.",
+          "lastMessageFrom": "patient",
+          "unreadCount": 1,
+          "isOpen": true
+        },
+        "mainUnit": null,
+        "responsibleProfessional": null,
+        "clinicalRisk": null,
+        "lastUpdate": "2026-05-18T14:00:00.000Z"
+      },
+      "meta": {
+        "tenantId": "tenant-fixture-001",
+        "permissions": {
+          "patientsRead": true,
+          "soapRead": true,
+          "prescriptionsRead": true
+        },
+        "timestamp": "2026-05-19T00:00:00.000Z"
+      }
+    }
+  },
+  "timeline": {
+    "status": 200,
+    "json": {
+      "ok": true,
+      "data": {
+        "events": [
+          {
+            "id": "timeline-fixture-001",
+            "patientId": "patient-fixture-001",
+            "type": "soap_atualizado",
+            "title": "SOAP atualizado",
+            "description": "Plano clinico revisado para a semana.",
+            "date": "2026-05-18T09:30:00.000Z",
+            "category": "clinical",
+            "actorName": "Dra. Marina",
+            "statusLabel": "Registrado",
+            "actionLabel": "Ver atendimento",
+            "detailsHref": "/clinic/patients/patient-fixture-001/encounter"
+          },
+          {
+            "id": "timeline-fixture-002",
+            "patientId": "patient-fixture-001",
+            "type": "pagamento_recebido",
+            "title": "Pagamento recebido",
+            "description": "Pagamento de parcela registrado.",
+            "date": "2026-05-10T11:00:00.000Z",
+            "category": "financial",
+            "actorName": "Financeiro",
+            "statusLabel": "Pago"
+          }
+        ],
+        "page": 1,
+        "page_size": 10,
+        "total": 2
+      },
+      "meta": {
+        "timestamp": "2026-05-19T00:00:00.000Z",
+        "patient_id": "patient-fixture-001",
+        "category": "all"
+      }
+    }
+  },
+  "timelineWithCategory": {
+    "status": 200,
+    "json": {
+      "ok": true,
+      "data": {
+        "events": [
+          {
+            "id": "timeline-fixture-001",
+            "patientId": "patient-fixture-001",
+            "type": "soap_atualizado",
+            "title": "SOAP atualizado",
+            "description": "Plano clinico revisado para a semana.",
+            "date": "2026-05-18T09:30:00.000Z",
+            "category": "clinical",
+            "actorName": "Dra. Marina",
+            "statusLabel": "Registrado"
+          }
+        ],
+        "page": 1,
+        "page_size": 10,
+        "total": 1
+      },
+      "meta": {
+        "timestamp": "2026-05-19T00:00:00.000Z",
+        "patient_id": "patient-fixture-001",
+        "category": "clinical"
+      }
+    }
+  },
+  "forbiddenWithoutPatientsRead": {
+    "status": 403,
+    "json": {
+      "ok": false,
+      "error": {
+        "code": "forbidden",
+        "message": "Missing patients.read permission."
+      },
+      "meta": {
+        "timestamp": "2026-05-19T00:00:00.000Z"
+      }
+    }
+  },
+  "crossTenant": {
+    "status": 404,
+    "json": {
+      "ok": false,
+      "error": {
+        "code": "not_found",
+        "message": "Patient not found."
+      },
+      "meta": {
+        "timestamp": "2026-05-19T00:00:00.000Z"
+      }
+    }
+  }
+}

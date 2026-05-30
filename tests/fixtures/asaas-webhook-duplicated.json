@@ -1,0 +1,43 @@
+{
+  "name": "asaas-webhook-duplicated",
+  "description": "Safe local fixture for a duplicated Asaas webhook. Payload intentionally matches asaas-payment-confirmed.",
+  "duplicateOf": "asaas-payment-confirmed",
+  "headers": {
+    "content-type": "application/json",
+    "asaas-access-token": "__fixture_valid_asaas_webhook_token__"
+  },
+  "expected": {
+    "accepted": true,
+    "idempotent": true,
+    "eventType": "PAYMENT_CONFIRMED",
+    "invoiceStatus": "pago",
+    "paymentStatus": "paid",
+    "financialState": "em_dia",
+    "timelineEventType": "pagamento_recebido",
+    "timelineCategory": "financial",
+    "tenantResolution": {
+      "strategy": "patient_invoices.asaas_invoice_id",
+      "lookupPaymentId": "pay_fixture_confirmed_001",
+      "tenantId": "tenant-fixture-001",
+      "patientId": "patient-fixture-001",
+      "shouldResolve": true
+    }
+  },
+  "payload": {
+    "id": "evt_asaas_fixture_confirmed_001",
+    "event": "PAYMENT_CONFIRMED",
+    "dateCreated": "2026-05-19T12:00:00.000Z",
+    "payment": {
+      "id": "pay_fixture_confirmed_001",
+      "customer": "cus_fixture_001",
+      "status": "CONFIRMED",
+      "value": 400,
+      "netValue": 390,
+      "billingType": "PIX",
+      "externalReference": "patient-fixture-001",
+      "dueDate": "2026-05-20",
+      "paymentDate": "2026-05-19",
+      "clientPaymentDate": "2026-05-19"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+name: Contract Fixtures
+
+on:
+  workflow_dispatch:
+
+jobs:
+  local-fixtures:
+    name: Local Contract Fixtures
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Patient 360 fixture contract
+        run: node scripts/supabase/test-patient360-contract.mjs --mode=fixture
+
+      - name: D4Sign fixture contract
+        run: node scripts/supabase/test-d4sign-fixtures.mjs
+
+      - name: Billing fixture contract
+        run: node scripts/supabase/test-billing-fixtures.mjs

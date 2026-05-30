@@ -14,9 +14,43 @@ Relevant files include:
 - `supabase/functions/patient-documents`
 - `src/services/documentsApi.ts`
 - `scripts/supabase/test-documents-contract.mjs`
+- `scripts/supabase/test-d4sign-fixtures.mjs`
 - `scripts/supabase/bootstrap-document-templates-demo.mjs`
+- `tests/fixtures/d4sign-webhook-valid.json`
+- `tests/fixtures/d4sign-webhook-invalid.json`
+- `tests/fixtures/document-summary.json`
+
+## Local Fixture Contract Checks
+
+Use local fixture checks before calling any Supabase or D4Sign environment:
+
+```bash
+node scripts/supabase/test-d4sign-fixtures.mjs
+```
+
+This script is offline-only. It does not read secrets, does not call D4Sign,
+does not call Supabase, and does not write data.
+
+It validates:
+
+- D4Sign webhook payload shape.
+- Deterministic idempotency key derivation.
+- Local SHA-256 payload hash strategy without printing payloads.
+- HMAC SHA-256 verification strategy with a fixture-only placeholder secret.
+- Status mapping from D4Sign events to internal signature/document states.
+- Fail-closed behavior for an invalid webhook fixture with missing signature.
+- Document summary shape expected by the frontend, including storage/raw payload
+  leakage checks.
+
+The valid fixture documents `x-d4sign-signature: sha256=<digest>` as the target
+header shape, but uses a placeholder marker instead of a real signature. The
+script computes the HMAC locally with a hard-coded fixture-only value that must
+never be reused as a real secret.
 
 ## Setup Flow
+
+The setup flow below can call Supabase and D4Sign-related Edge Functions. Run it
+only after explicit authorization for the target environment.
 
 1. Run migrations from the project root:
 
@@ -62,6 +96,12 @@ Only run this script when authorized. It may generate documents, request signed
 URLs, or invoke D4Sign-related functions depending on environment and function
 configuration.
 
+For day-to-day local validation, prefer:
+
+```bash
+node scripts/supabase/test-d4sign-fixtures.mjs
+```
+
 ## Edge Function Secrets
 
 Do not place these in `NEXT_PUBLIC_*`. Configure them only in trusted server or
@@ -79,11 +119,34 @@ Use placeholders in docs and examples. Never commit real values.
 
 - D4Sign APIs must not be called without explicit authorization.
 - Webhook verification must fail closed.
+- Webhook handlers must reject missing token/signature configuration.
+- Webhook handlers must reject missing or mismatched HMAC signatures when HMAC
+  is configured.
+- Idempotency keys must be deterministic when provider event/document ids are
+  present.
 - Store only the minimum operational payload needed.
 - Prefer redacted payload summaries over raw provider bodies.
+- Local fixture tests must not print raw webhook payloads or real identifiers.
 - Signed document URLs must be short-lived and permission-checked.
 - Keep patient, document, signature, and provider identifiers treated as
   sensitive operational data.
+
+## Status Mapping Contract
+
+Local contract fixtures assert this provider-to-internal mapping:
+
+| D4Sign/webhook status | Signature request | Signer | Frontend document status | Frontend signature |
+| --- | --- | --- | --- | --- |
+| `sent`, `created`, `enviado` | `sent` | `pending` | `pendente_assinatura` | `pendente` |
+| `view`, `opened`, `visualiz*` | `viewed` | `viewed` | `pendente_assinatura` | `pendente` |
+| `sign*`, `assinad*`, `done`, `completed` | `signed` | `signed` | `assinado` | `assinado` |
+| `reject*`, `refus*`, `declin*` | `rejected` | `rejected` | `cancelado` | `pendente` |
+| `expir*` | `expired` | `expired` | `vencido` | `pendente` |
+| `cancel*` | `canceled` | `canceled` | `cancelado` | `pendente` |
+| `error`, `fail*`, `invalid` | `error` | `error` | `em_analise` | `pendente` |
+
+When a webhook maps to `signed`, the expected timeline event is
+`documento_assinado` with category `documents`.
 
 ## Deployment Notes
 

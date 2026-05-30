@@ -42,8 +42,8 @@ Scripts in `package.json`:
 - `npm run dev`: starts Next dev server on port `4028`.
 - `npm run build`: runs `next build`.
 - `npm run start`: currently runs `next dev -p 4028`.
-- `npm run lint`: currently runs `next lint`.
-- `npm run lint:fix`: currently runs `next lint --fix`.
+- `npm run lint`: runs ESLint CLI over `src/**/*.{ts,tsx}`.
+- `npm run lint:fix`: runs ESLint CLI with `--fix` over `src/**/*.{ts,tsx}`.
 - `npm run format`: runs Prettier over `src/**/*.{ts,tsx,css,md,json}`.
 - `npm run serve`: runs `next start`.
 - `npm run type-check`: runs `tsc --noEmit`.
@@ -57,6 +57,9 @@ script and environment.
 
 Do not alter `package.json` unless the task requires it. If you must change it,
 explain why, what changed, and what install/check command was run.
+
+This repo uses npm. Keep `package-lock.json` versioned for reproducible
+installs and builds.
 
 Do not remove or edit the `rocketCritical` section in `package.json` without
 explicit authorization.
@@ -79,6 +82,8 @@ explicit authorization.
   parties.
 - `.env` should not be versioned. If a task touches env hygiene, add or preserve
   an `.env.example` template and avoid committing real values.
+- Local development values belong in `.env.local`. Keep `.env.example` limited
+  to empty values or safe placeholders.
 - `src/app/layout.tsx` currently includes external Rocket scripts. Do not remove
   or modify those scripts unless the task specifically asks for Rocket script
   governance/removal.
@@ -226,9 +231,8 @@ For lint-related or frontend changes, also run:
 
 - `npm run lint`
 
-Important: lint currently uses `next lint`. If Next.js deprecates or removes
-that workflow, migrate linting in a dedicated task rather than mixing it into an
-unrelated change.
+Important: lint is intentionally handled by ESLint CLI because Next.js 15+
+tooling should not depend on `next lint`.
 
 For docs-only changes, at minimum run:
 

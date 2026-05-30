@@ -1,4 +1,4 @@
-import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { SafeServiceError } from '@/services/billingApi';
 
 export interface AdminTenantRow {

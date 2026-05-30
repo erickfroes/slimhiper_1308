@@ -31,7 +31,10 @@ interface TabPrescricoesProps {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type PrescCategory =
-  | 'prescricao_medica' |'suplementacao' |'orientacoes_nutricionais' |'orientacoes_gerais';
+  | 'prescricao_medica'
+  | 'suplementacao'
+  | 'orientacoes_nutricionais'
+  | 'orientacoes_gerais';
 
 interface CategoryConfig {
   key: PrescCategory;

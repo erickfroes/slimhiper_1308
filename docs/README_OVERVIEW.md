@@ -11,11 +11,13 @@ foundation through Asaas, and development bootstraps for Supabase data.
 - React 19.
 - Tailwind CSS utility-first styling.
 - Supabase Auth/RBAC and multi-tenant role testing.
+- Auth/RBAC session contract documentation.
 - Clinical workspace routes under `src/app/clinic`.
 - Platform admin routes under `src/app/admin`.
 - Patient 360 screens and Edge Function contract checks.
 - Document templates and D4Sign integration runbooks.
 - Billing and Asaas integration runbooks.
+- Environment hygiene guidance in `docs/security/ENV_HYGIENE.md`.
 
 ## Installation
 
@@ -100,11 +102,20 @@ This project uses Tailwind CSS with:
 - `npm run build`: build the application for production.
 - `npm run start`: currently starts the development server.
 - `npm run serve`: start the production server after a build.
-- `npm run lint`: run ESLint through `next lint`.
-- `npm run lint:fix`: run `next lint --fix`.
+- `npm run lint`: run ESLint CLI over `src/**/*.{ts,tsx}`.
+- `npm run lint:fix`: run ESLint CLI with `--fix` over `src/**/*.{ts,tsx}`.
 - `npm run format`: format `src/**/*.{ts,tsx,css,md,json}` with Prettier.
 - `npm run type-check`: run `tsc --noEmit`.
 - `npm run supabase:bootstrap:core-auth`: run the core auth bootstrap script.
+
+## Security And Env Hygiene
+
+Use `docs/security/ENV_HYGIENE.md` as the source of truth for `.env.local`,
+`.env.example`, public `NEXT_PUBLIC_*` variables, server-only secrets, and
+`package-lock.json` versioning.
+
+Use `docs/auth/AUTH_RBAC_SESSION_CONTRACT.md` as the source of truth for app
+session shape, Auth/RBAC tables, guards, and known contract gaps.
 
 ## Deployment
 

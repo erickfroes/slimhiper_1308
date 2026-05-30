@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ChevronLeft,
@@ -15,8 +15,13 @@ import {
 } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
 import PageHeader from '@/components/PageHeader';
-import type { AppointmentStatus, AppointmentType } from '@/domain/types';
-import { mockTodayAppointments, mockWaitingQueue } from '@/data/mockData';
+import type {
+  AppointmentStatus,
+  AppointmentSummary,
+  AppointmentType,
+  WaitingQueueEntry,
+} from '@/domain/types';
+import { getAgendaDay } from '@/services/agendaApi';
 
 // ─── WORKFLOW STAGES ──────────────────────────────────────────────────────────
 
@@ -125,43 +130,31 @@ function getFirstDayOfMonth(year: number, month: number) {
   return new Date(year, month, 1).getDay();
 }
 
-// ─── MOCK CALENDAR EVENTS (days with appointments) ────────────────────────────
+function getLocalDateValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
-const calendarEvents: Record<string, number> = {
-  '2026-05-07': 10,
-  '2026-05-08': 6,
-  '2026-05-09': 4,
-  '2026-05-12': 8,
-  '2026-05-13': 5,
-  '2026-05-14': 9,
-  '2026-05-15': 7,
-  '2026-05-16': 3,
-  '2026-05-19': 11,
-  '2026-05-20': 8,
-  '2026-05-21': 6,
-  '2026-05-22': 4,
-  '2026-05-23': 7,
-  '2026-05-26': 9,
-  '2026-05-27': 5,
-  '2026-05-28': 8,
-  '2026-05-29': 6,
-  '2026-05-30': 4,
-};
+// ─── MOCK CALENDAR EVENTS (days with appointments) ────────────────────────────
 
 // ─── MINI CALENDAR ────────────────────────────────────────────────────────────
 
 interface MiniCalendarProps {
   selectedDate: string;
+  calendarEvents: Record<string, number>;
   onSelectDate: (date: string) => void;
 }
 
-function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
-  const [viewYear, setViewYear] = useState(2026);
-  const [viewMonth, setViewMonth] = useState(4); // May = 4
+function MiniCalendar({ selectedDate, calendarEvents, onSelectDate }: MiniCalendarProps) {
+  const [selectedYear, selectedMonth] = selectedDate.split('-').map(Number);
+  const [viewYear, setViewYear] = useState(selectedYear);
+  const [viewMonth, setViewMonth] = useState(selectedMonth - 1);
 
   const daysInMonth = getDaysInMonth(viewYear, viewMonth);
   const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
-  const today = '2026-05-07';
+  const today = getLocalDateValue();
 
   const prevMonth = () => {
     if (viewMonth === 0) {
@@ -219,7 +212,6 @@ function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
           const isToday = dateStr === today;
           const isSelected = dateStr === selectedDate;
           const hasEvents = !!calendarEvents[dateStr];
-          const eventCount = calendarEvents[dateStr] ?? 0;
 
           return (
             <button
@@ -230,7 +222,8 @@ function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
                 isSelected
                   ? 'bg-primary text-primary-foreground'
                   : isToday
-                    ? 'bg-primary/10 text-primary font-semibold' :'text-foreground hover:bg-muted',
+                    ? 'bg-primary/10 text-primary font-semibold'
+                    : 'text-foreground hover:bg-muted',
               ].join(' ')}
             >
               {day}
@@ -269,7 +262,7 @@ function MiniCalendar({ selectedDate, onSelectDate }: MiniCalendarProps) {
 
 interface KanbanColumnProps {
   stage: WorkflowStage;
-  appointments: typeof mockTodayAppointments;
+  appointments: AppointmentSummary[];
 }
 
 function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
@@ -352,7 +345,7 @@ function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
 // ─── DAY SCHEDULE LIST ────────────────────────────────────────────────────────
 
 interface DayScheduleProps {
-  appointments: typeof mockTodayAppointments;
+  appointments: AppointmentSummary[];
 }
 
 function DaySchedule({ appointments }: DayScheduleProps) {
@@ -371,40 +364,46 @@ function DaySchedule({ appointments }: DayScheduleProps) {
       </div>
 
       <div className="divide-y divide-border">
-        {sorted.map((appt) => {
-          const time = new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-          return (
-            <Link
-              key={appt.id}
-              href={`/clinic/patients/${appt.patientId}`}
-              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer group"
-            >
-              {/* Time */}
-              <div className="w-12 flex-shrink-0 text-xs font-semibold text-muted-foreground tabular-nums">
-                {time}
-              </div>
+        {sorted.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <p className="text-xs text-muted-foreground">Nenhuma consulta para esta data.</p>
+          </div>
+        ) : (
+          sorted.map((appt) => {
+            const time = new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            return (
+              <Link
+                key={appt.id}
+                href={`/clinic/patients/${appt.patientId}`}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer group"
+              >
+                {/* Time */}
+                <div className="w-12 flex-shrink-0 text-xs font-semibold text-muted-foreground tabular-nums">
+                  {time}
+                </div>
 
-              {/* Color bar */}
-              <div className="w-0.5 h-8 rounded-full bg-primary/30 flex-shrink-0" />
+                {/* Color bar */}
+                <div className="w-0.5 h-8 rounded-full bg-primary/30 flex-shrink-0" />
 
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                  {appt.patientName}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {appointmentTypeLabel[appt.type]} · {appt.professionalName}
-                </p>
-              </div>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                    {appt.patientName}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {appointmentTypeLabel[appt.type]} · {appt.professionalName}
+                  </p>
+                </div>
 
-              {/* Status badge */}
-              <StatusBadge status={appt.status} size="xs" />
-            </Link>
-          );
-        })}
+                {/* Status badge */}
+                <StatusBadge status={appt.status} size="xs" />
+              </Link>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -412,7 +411,13 @@ function DaySchedule({ appointments }: DayScheduleProps) {
 
 // ─── WAITING QUEUE PANEL ──────────────────────────────────────────────────────
 
-function WaitingQueuePanel() {
+interface WaitingQueuePanelProps {
+  queue: WaitingQueueEntry[];
+  isLoading: boolean;
+  onRefresh: () => void;
+}
+
+function WaitingQueuePanel({ queue, isLoading, onRefresh }: WaitingQueuePanelProps) {
   const activeStatuses: AppointmentStatus[] = [
     'triagem',
     'medidas',
@@ -421,10 +426,8 @@ function WaitingQueuePanel() {
     'em_consulta',
     'checkout',
   ];
-  const activeQueue = mockWaitingQueue.filter((e) =>
-    activeStatuses.includes(e.status as AppointmentStatus)
-  );
-  const waiting = mockWaitingQueue.filter((e) => e.status === 'agendado');
+  const activeQueue = queue.filter((entry) => activeStatuses.includes(entry.status));
+  const waiting = queue.filter((entry) => entry.status === 'agendado' || entry.status === 'chegou');
 
   return (
     <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
@@ -437,8 +440,11 @@ function WaitingQueuePanel() {
           <span className="text-xs bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full">
             {activeQueue.length} ativos
           </span>
-          <button className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-            <RefreshCw size={13} />
+          <button
+            onClick={onRefresh}
+            className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          >
+            <RefreshCw size={13} className={isLoading ? 'animate-spin' : undefined} />
           </button>
         </div>
       </div>
@@ -473,7 +479,7 @@ function WaitingQueuePanel() {
                   <p className="text-xs text-muted-foreground truncate">{entry.professionalName}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <StatusBadge status={entry.status as AppointmentStatus} size="xs" />
+                  <StatusBadge status={entry.status} size="xs" />
                   {entry.waitingMinutes > 0 && (
                     <span className="text-xs text-muted-foreground tabular-nums">
                       {entry.waitingMinutes}min
@@ -514,10 +520,16 @@ function WaitingQueuePanel() {
                   </p>
                   <p className="text-xs text-muted-foreground">{entry.scheduledTime}</p>
                 </div>
-                <StatusBadge status={entry.status as AppointmentStatus} size="xs" />
+                <StatusBadge status={entry.status} size="xs" />
               </Link>
             ))}
           </div>
+        </div>
+      )}
+
+      {!isLoading && activeQueue.length === 0 && waiting.length === 0 && (
+        <div className="px-4 py-8 text-center">
+          <p className="text-xs text-muted-foreground">Nenhum paciente na fila.</p>
         </div>
       )}
     </div>
@@ -526,7 +538,7 @@ function WaitingQueuePanel() {
 
 // ─── WORKFLOW PROGRESS BAR ────────────────────────────────────────────────────
 
-function WorkflowProgressBar({ appointments }: { appointments: typeof mockTodayAppointments }) {
+function WorkflowProgressBar({ appointments }: { appointments: AppointmentSummary[] }) {
   const total = appointments.length;
   const concluded = appointments.filter((a) => a.status === 'concluido').length;
   const inProgress = appointments.filter((a) =>
@@ -600,11 +612,36 @@ function WorkflowProgressBar({ appointments }: { appointments: typeof mockTodayA
 // ─── MAIN CONTENT ─────────────────────────────────────────────────────────────
 
 export default function AgendaContent() {
-  const [selectedDate, setSelectedDate] = useState('2026-05-07');
+  const [selectedDate, setSelectedDate] = useState(() => getLocalDateValue());
   const [activeView, setActiveView] = useState<'kanban' | 'lista'>('kanban');
+  const [appointments, setAppointments] = useState<AppointmentSummary[]>([]);
+  const [waitingQueue, setWaitingQueue] = useState<WaitingQueueEntry[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<Record<string, number>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // For demo, always show today's appointments regardless of selected date
-  const appointments = mockTodayAppointments;
+  const loadAgenda = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const data = await getAgendaDay(selectedDate);
+      setAppointments(data.appointments);
+      setWaitingQueue(data.waitingQueue);
+      setCalendarEvents(data.calendarEvents);
+    } catch (error) {
+      setAppointments([]);
+      setWaitingQueue([]);
+      setCalendarEvents({});
+      setLoadError(error instanceof Error ? error.message : 'Erro ao carregar agenda.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    void loadAgenda();
+  }, [loadAgenda]);
 
   const formattedDate = (() => {
     const [y, m, d] = selectedDate.split('-').map(Number);
@@ -622,7 +659,11 @@ export default function AgendaContent() {
       {/* Page header */}
       <PageHeader
         title="Agenda e Fila"
-        subtitle={`${formattedDate} · ${appointments.length} consultas`}
+        subtitle={
+          isLoading
+            ? `${formattedDate} - carregando`
+            : `${formattedDate} - ${appointments.length} consultas`
+        }
         actions={
           <div className="flex items-center gap-2">
             <button className="btn-ghost flex items-center gap-1.5 text-sm px-3 py-1.5">
@@ -637,12 +678,22 @@ export default function AgendaContent() {
         }
       />
 
+      {loadError && (
+        <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Nao foi possivel carregar a agenda. {loadError}
+        </div>
+      )}
+
       {/* Main layout */}
       <div className="flex gap-5 items-start">
         {/* LEFT COLUMN: Calendar + Queue */}
         <div className="flex flex-col gap-4 w-64 flex-shrink-0">
-          <MiniCalendar selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-          <WaitingQueuePanel />
+          <MiniCalendar
+            selectedDate={selectedDate}
+            calendarEvents={calendarEvents}
+            onSelectDate={setSelectedDate}
+          />
+          <WaitingQueuePanel queue={waitingQueue} isLoading={isLoading} onRefresh={loadAgenda} />
         </div>
 
         {/* RIGHT COLUMN: Workflow + Schedule */}
@@ -657,7 +708,9 @@ export default function AgendaContent() {
                 onClick={() => setActiveView('kanban')}
                 className={[
                   'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
-                  activeView === 'kanban' ?'bg-card shadow-sm text-foreground' :'text-muted-foreground hover:text-foreground',
+                  activeView === 'kanban'
+                    ? 'bg-card shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
                 Fluxo Clínico
@@ -666,7 +719,9 @@ export default function AgendaContent() {
                 onClick={() => setActiveView('lista')}
                 className={[
                   'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
-                  activeView === 'lista' ?'bg-card shadow-sm text-foreground' :'text-muted-foreground hover:text-foreground',
+                  activeView === 'lista'
+                    ? 'bg-card shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
                 Lista do Dia

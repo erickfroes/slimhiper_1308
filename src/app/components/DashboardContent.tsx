@@ -26,7 +26,7 @@ import {
   getTodayAppointments,
   getDashboardAlerts,
   getPatientsNeedingReview,
-} from '@/services/mockApi';
+} from '@/services/dashboardApi';
 import type {
   DashboardStats,
   WaitingQueueEntry,
@@ -82,8 +82,11 @@ function StatCard({
           <span
             className={[
               'text-xs font-semibold flex items-center gap-0.5',
-              trend === 'up' ?'text-positive'
-                : trend === 'down' ?'text-negative' :'text-muted-foreground',
+              trend === 'up'
+                ? 'text-positive'
+                : trend === 'down'
+                  ? 'text-negative'
+                  : 'text-muted-foreground',
             ].join(' ')}
           >
             {trendLabel}
@@ -134,7 +137,6 @@ export default function DashboardContent() {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     try {
-      // Backend integration point: replace with Supabase calls via getDashboardStats(), getWaitingQueue(), getTodayAppointments()
       const [s, q, a, alerts, review] = await Promise.all([
         getDashboardStats(),
         getWaitingQueue(),
@@ -148,7 +150,10 @@ export default function DashboardContent() {
       setClinicAlerts(alerts);
       setReviewPatients(review);
       if (isRefresh) toast.success('Dados atualizados');
-    } catch {
+    } catch (dashboardError) {
+      if (dashboardError instanceof Error) {
+        console.error('[DashboardContent] load error:', dashboardError.message);
+      }
       toast.error('Falha ao carregar dados do dashboard. Tente novamente.');
     } finally {
       setLoading(false);

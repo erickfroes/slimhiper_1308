@@ -64,7 +64,18 @@ interface Integration {
 }
 
 type PermissionKey =
-  | 'pacientes' |'agenda' |'atendimento' |'soap' |'nutricao' |'prescricoes' |'documentos' |'financeiro' |'pacotes' |'chat' |'relatorios' |'configuracoes';
+  | 'pacientes'
+  | 'agenda'
+  | 'atendimento'
+  | 'soap'
+  | 'nutricao'
+  | 'prescricoes'
+  | 'documentos'
+  | 'financeiro'
+  | 'pacotes'
+  | 'chat'
+  | 'relatorios'
+  | 'configuracoes';
 
 interface RolePermissions {
   roleId: string;
@@ -1061,7 +1072,8 @@ export default function ClinicSettingsContent() {
                 onClick={() => scrollTo(section.id)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all duration-150 ${
                   isActive
-                    ? 'bg-primary/10 text-primary' :'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
                 <SIcon size={14} className="flex-shrink-0" />
