@@ -113,6 +113,8 @@ Using placeholder emails:
    and data contracts are implemented.
 5. Assigns roles and permissions by upserting tenant-scoped `roles`,
    `permissions`, and `role_permissions` for the clinic roles above.
+   `clinic_admin` includes `packages.read` and `packages.write` for the
+   programs/packages MVP contract.
 
 ## Manual Flow
 

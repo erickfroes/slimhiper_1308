@@ -27,6 +27,17 @@ const IDS = {
   labOrder1: '11111111-1111-4111-8111-111111111111',
   labResult1: '22222222-2222-4222-8222-222222222222',
   prescription1: '33333333-3333-4333-8333-333333333333',
+  program: '71000000-0000-4000-8000-0000000000a1',
+  programPhase1: '71000000-0000-4000-8000-0000000000b1',
+  programPhase2: '71000000-0000-4000-8000-0000000000b2',
+  programService1: '71000000-0000-4000-8000-0000000000a2',
+  programService2: '71000000-0000-4000-8000-0000000000a5',
+  programEntitlement: '71000000-0000-4000-8000-0000000000a3',
+  programDocument: '71000000-0000-4000-8000-0000000000d1',
+  programCheckinTemplate: '71000000-0000-4000-8000-0000000000c1',
+  enrollment: '71000000-0000-4000-8000-0000000000a4',
+  checkin1: '71000000-0000-4000-8000-0000000000e1',
+  checkin2: '71000000-0000-4000-8000-0000000000e2',
 };
 
 async function tableExists(tableName) {
@@ -374,6 +385,212 @@ async function run() {
   await supabase.from('patient_alerts').upsert(alerts, { onConflict: 'tenant_id,patient_id,title' }).throwOnError();
   await supabase.from('patient_tasks').upsert(tasks, { onConflict: 'tenant_id,patient_id,title' }).throwOnError();
   await supabase.from('patient_timeline_events').upsert(timelineEvents, { onConflict: 'tenant_id,patient_id,event_type,event_at' }).throwOnError();
+
+  await supabase
+    .from('programs')
+    .upsert(
+      {
+        id: IDS.program,
+        tenant_id: tenant.id,
+        name: 'Metabolic Reset 12 Weeks',
+        program_type: 'saude_metabolica',
+        objective: 'Programa demo com enrollment e check-ins reais para Paciente 360.',
+        duration_weeks: 12,
+        status: 'ativo',
+        payment_model: 'parcelado',
+        payment_description: 'Plano demo em 12 parcelas.',
+        color: 'teal',
+        created_by: practitionerId,
+        checkins_total: 12,
+        checkin_frequency: 'Semanal via app',
+        financial_config: {
+          paymentModel: 'parcelado',
+          basePrice: 2400,
+          installments: 12,
+          discountPercent: 0,
+          description: 'Plano demo em 12 parcelas.',
+        },
+      },
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  await supabase
+    .from('program_phases')
+    .upsert(
+      [
+        {
+          id: IDS.programPhase1,
+          tenant_id: tenant.id,
+          program_id: IDS.program,
+          position: 1,
+          name: 'Avaliacao',
+          duration_weeks: 2,
+          description: 'Triagem, exames e metas iniciais.',
+        },
+        {
+          id: IDS.programPhase2,
+          tenant_id: tenant.id,
+          program_id: IDS.program,
+          position: 2,
+          name: 'Acompanhamento',
+          duration_weeks: 10,
+          description: 'Consultas, nutricao e check-ins semanais.',
+        },
+      ],
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  await supabase
+    .from('program_services')
+    .upsert(
+      [
+        {
+          id: IDS.programService1,
+          tenant_id: tenant.id,
+          program_id: IDS.program,
+          label: 'Consultas clinicas',
+          quantity: 4,
+          unit: 'consulta',
+        },
+        {
+          id: IDS.programService2,
+          tenant_id: tenant.id,
+          program_id: IDS.program,
+          label: 'Sessoes de nutricao',
+          quantity: 3,
+          unit: 'sessao',
+        },
+      ],
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  await supabase
+    .from('program_entitlements')
+    .upsert(
+      {
+        id: IDS.programEntitlement,
+        tenant_id: tenant.id,
+        program_id: IDS.program,
+        key: 'chat',
+        label: 'Chat com equipe',
+        enabled: true,
+      },
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  await supabase
+    .from('program_required_documents')
+    .upsert(
+      {
+        id: IDS.programDocument,
+        tenant_id: tenant.id,
+        program_id: IDS.program,
+        label: 'Termo de consentimento informado',
+        required: true,
+      },
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  await supabase
+    .from('program_checkin_templates')
+    .upsert(
+      {
+        id: IDS.programCheckinTemplate,
+        tenant_id: tenant.id,
+        program_id: IDS.program,
+        label: 'Check-in semanal demo',
+        frequency: 'Semanal',
+        channel: 'app',
+        questions: [
+          'Como foi sua adesao ao plano nesta semana?',
+          'Teve algum sintoma ou dificuldade?',
+          'Deseja deixar alguma observacao para a equipe?',
+        ],
+      },
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  if (practitionerId) {
+    await supabase
+      .from('program_team_members')
+      .upsert(
+        {
+          tenant_id: tenant.id,
+          program_id: IDS.program,
+          profile_id: practitionerId,
+          role_label: 'Medico',
+          specialty: 'Medicina',
+        },
+        { onConflict: 'tenant_id,program_id,profile_id' }
+      )
+      .throwOnError();
+  }
+
+  await supabase
+    .from('patient_program_enrollments')
+    .upsert(
+      {
+        id: IDS.enrollment,
+        tenant_id: tenant.id,
+        patient_id: IDS.patient,
+        program_id: IDS.program,
+        status: 'ativo',
+        start_date: '2026-05-01',
+        end_date: '2026-07-23',
+        current_week: 5,
+        total_consultations: 4,
+        used_consultations: 1,
+        total_nutrition_sessions: 3,
+        used_nutrition_sessions: 1,
+        metadata: { seeded_by: 'bootstrap-patient360-demo' },
+      },
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  await supabase
+    .from('patient_program_checkins')
+    .upsert(
+      [
+        {
+          id: IDS.checkin1,
+          tenant_id: tenant.id,
+          patient_id: IDS.patient,
+          enrollment_id: IDS.enrollment,
+          program_id: IDS.program,
+          template_id: IDS.programCheckinTemplate,
+          title: 'Check-in semanal demo #1',
+          channel: 'app',
+          due_date: '2026-05-08',
+          status: 'completed',
+          questions: ['Como foi sua adesao ao plano nesta semana?'],
+          responses: { adherence: 84 },
+          completed_at: '2026-05-08T10:00:00Z',
+        },
+        {
+          id: IDS.checkin2,
+          tenant_id: tenant.id,
+          patient_id: IDS.patient,
+          enrollment_id: IDS.enrollment,
+          program_id: IDS.program,
+          template_id: IDS.programCheckinTemplate,
+          title: 'Check-in semanal demo #2',
+          channel: 'app',
+          due_date: '2026-05-15',
+          status: 'scheduled',
+          questions: ['Como foi sua adesao ao plano nesta semana?'],
+          responses: {},
+        },
+      ],
+      { onConflict: 'id' }
+    )
+    .throwOnError();
 
   console.log('Paciente 360 demo bootstrap completed.');
   console.log(`Tenant: ${tenant.slug} (${tenant.id})`);

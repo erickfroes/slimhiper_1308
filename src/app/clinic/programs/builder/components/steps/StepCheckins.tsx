@@ -2,11 +2,11 @@
 
 import React from 'react';
 import { CheckSquare, Plus } from 'lucide-react';
-import type { ProgramBuilderDraft } from '@/domain/types';
-import { mockCheckinTemplates } from '@/data/mockBuilderData';
+import type { ProgramBuilderCheckinTemplate, ProgramBuilderDraft } from '@/domain/types';
 
 interface Props {
   draft: ProgramBuilderDraft;
+  templates: ProgramBuilderCheckinTemplate[];
   onChange: (patch: Partial<ProgramBuilderDraft>) => void;
 }
 
@@ -25,11 +25,11 @@ const frequencyOptions = [
   'Quinzenal via WhatsApp',
 ];
 
-export default function StepCheckins({ draft, onChange }: Props) {
+export default function StepCheckins({ draft, templates, onChange }: Props) {
   const selectedTemplateIds = draft.checkinTemplates.map((t) => t.id);
 
   const toggleTemplate = (id: string) => {
-    const template = mockCheckinTemplates.find((t) => t.id === id);
+    const template = templates.find((t) => t.id === id);
     if (!template) return;
     const isSelected = selectedTemplateIds.includes(id);
     onChange({
@@ -81,7 +81,7 @@ export default function StepCheckins({ draft, onChange }: Props) {
           </span>
         </div>
 
-        {mockCheckinTemplates.map((template) => {
+        {templates.map((template) => {
           const selected = selectedTemplateIds.includes(template.id);
           return (
             <div
@@ -130,7 +130,19 @@ export default function StepCheckins({ draft, onChange }: Props) {
           );
         })}
 
-        <button className="flex items-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-dashed border-border text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary hover:bg-primary/5 transition-all">
+        {templates.length === 0 && (
+          <div className="card-base p-4 text-xs text-muted-foreground">
+            Nenhum template salvo ainda. Ao salvar o programa com check-ins, o backend cria um
+            template padrao seguro para o enrollment.
+          </div>
+        )}
+
+        <button
+          type="button"
+          disabled
+          title="Criacao inline bloqueada ate existir editor auditado de perguntas."
+          className="flex items-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-dashed border-border text-sm font-medium text-muted-foreground transition-all cursor-not-allowed opacity-55"
+        >
           <Plus size={16} />
           Criar template personalizado
         </button>

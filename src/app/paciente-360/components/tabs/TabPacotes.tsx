@@ -7,6 +7,7 @@ import type {
   PatientPackageEntitlement,
   PatientPackageServiceUsage,
   PatientPackageLimit,
+  PatientPackageCheckin,
 } from '@/domain/types';
 import {
   Package,
@@ -95,6 +96,17 @@ const ENTITLEMENT_ICONS: Record<string, React.ReactNode> = {
   app: <Smartphone size={14} />,
 };
 
+const CHECKIN_STATUS: Record<
+  PatientPackageCheckin['status'],
+  { label: string; className: string }
+> = {
+  scheduled: { label: 'Agendado', className: 'bg-gray-100 text-gray-600' },
+  sent: { label: 'Enviado', className: 'bg-blue-100 text-blue-700' },
+  completed: { label: 'Concluido', className: 'bg-emerald-100 text-emerald-700' },
+  overdue: { label: 'Atrasado', className: 'bg-red-100 text-red-700' },
+  canceled: { label: 'Cancelado', className: 'bg-gray-100 text-gray-500' },
+};
+
 export default function TabPacotes({ pkg }: TabPacotesProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -146,6 +158,7 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
     },
   ];
   const packageLimits: PatientPackageLimit[] = pkg.packageLimits ?? [];
+  const checkins: PatientPackageCheckin[] = pkg.checkins ?? [];
 
   const actions = [
     {
@@ -340,6 +353,47 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
       )}
 
       {/* ── Package History ── */}
+      <div className="card-base p-5">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Check-ins da Jornada</p>
+            <p className="text-xs text-muted-foreground">
+              Eventos gerados pelo enrollment do programa.
+            </p>
+          </div>
+          <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+            {checkins.length}
+          </span>
+        </div>
+        {checkins.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Nenhum check-in foi retornado para este enrollment.
+          </p>
+        ) : (
+          <div className="divide-y divide-border">
+            {checkins.slice(0, 6).map((checkin) => {
+              const status = CHECKIN_STATUS[checkin.status] ?? CHECKIN_STATUS.scheduled;
+              return (
+                <div key={checkin.id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{checkin.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(checkin.dueDate).toLocaleDateString('pt-BR')}
+                      {checkin.channel ? ` - ${checkin.channel}` : ''}
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${status.className}`}
+                  >
+                    {status.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="card-base overflow-hidden">
         <button
           onClick={() => setHistoryOpen((v) => !v)}

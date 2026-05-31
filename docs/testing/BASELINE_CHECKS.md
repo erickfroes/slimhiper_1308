@@ -3,7 +3,63 @@
 Local baseline captured before new feature work. This document records commands,
 results, pending items, and environment details for the current repository state.
 
-## Latest Implementation Validation
+## Latest Implementation Validation - Phase 6
+
+- Date: 2026-05-31 19:25 -03:00.
+- Branch: `test/asaas-billing-contract-hardening`.
+- Commit base: `bb190f1`.
+- Touched paths in this pass:
+  `supabase/migrations/20260531180000_140_programs_builder_contract.sql`,
+  `supabase/migrations/20260531181000_141_program_checkin_template_fk_fix.sql`,
+  `src/services/programsApi.ts`,
+  `src/app/clinic/programs/components/ProgramsContent.tsx`,
+  `src/app/clinic/programs/builder/components/ProgramBuilderContent.tsx`,
+  builder steps for check-ins/team/review, `src/domain/types.ts`,
+  `supabase/functions/patient-360-summary/index.ts`,
+  `src/app/paciente-360/components/tabs/TabPacotes.tsx`,
+  `src/services/patient360Api.ts`, bootstraps/smokes, and docs.
+- Phase 6 result: Programs/packages are complete for MVP local evidence. The
+  new migration adds builder metadata, program team members, patient program
+  check-ins, RLS and RPC contracts for list/options/save/publish/archive/clone
+  and enrollment. `/clinic/programs` now uses `programsApi` instead of direct
+  mock data. The builder persists drafts/publications through RPC and reads
+  team/check-in options from Supabase. Patient 360 pacotes now displays real
+  check-ins generated from enrollment.
+- Local migration applied:
+  `npx supabase migration up --local --include-all` applied
+  `20260531180000_140_programs_builder_contract.sql` and
+  `20260531181000_141_program_checkin_template_fk_fix.sql`.
+- Local Phase 6 smoke passed:
+  `node scripts/supabase/test-programs-phase6-local-smoke.mjs`. It re-ran core
+  auth and Patient 360 demo bootstraps, signed in a clinic admin, validated
+  `get_clinic_programs`, `get_program_builder_options`,
+  `upsert_program_from_builder`, `clone_program`, `update_program_status`,
+  `enroll_patient_in_program`, generated `patient_program_checkins`, and
+  confirmed `patient-360-summary` exposes package check-ins.
+- Patient 360 local real smoke re-run passed:
+  `node scripts/supabase/test-patient360-local-real-smoke.mjs`, including the
+  new package check-ins assertion.
+- `npm run type-check`: passed.
+- `npm run lint`: passed with 23 existing warnings in unrelated files.
+- `npm run build`: passed; Next generated 26 app routes including
+  `/clinic/programs` and `/clinic/programs/builder`.
+- Local fixture contracts passed:
+  `node scripts/supabase/test-patient360-contract.mjs --mode=fixture`,
+  `node scripts/supabase/test-d4sign-fixtures.mjs`, and
+  `node scripts/supabase/test-billing-fixtures.mjs`.
+- Browser smoke with the existing dev server on port `4028`: `/auth/login`
+  rendered with one `Entrar` button, no console errors and no Next overlay;
+  `/clinic/programs`, `/clinic/programs/builder`, and
+  `/clinic/patients/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa?tab=pacotes`
+  redirected fail-closed to `/auth/login` without a session.
+- Skipped/blocked: authenticated visual Browser traversal was not rerun because
+  the local Browser remains unreliable for entering credentials; authenticated
+  behavior is covered by the local RPC/Edge smoke. Automated invoice/document
+  creation from enrollment is not part of this MVP contract yet.
+- Residual risks: patient-submitted check-in UX, portal-scoped check-in RLS,
+  and automatic billing/document workflows on enrollment remain follow-ups.
+
+## Previous Implementation Validation - D4Sign Sandbox Follow-up
 
 - Date: 2026-05-31 16:05 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.

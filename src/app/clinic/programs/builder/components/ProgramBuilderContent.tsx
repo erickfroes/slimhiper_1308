@@ -1,10 +1,22 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Check, Save, Send, ChevronRight } from 'lucide-react';
-import { BUILDER_STEPS, initialBuilderDraft } from '@/data/mockBuilderData';
-import type { ProgramBuilderDraft, BuilderStepKey } from '@/domain/types';
+import { ArrowLeft, ArrowRight, Check, ChevronRight, RefreshCw, Save, Send } from 'lucide-react';
+import type {
+  BuilderStepKey,
+  ProgramBuilderCheckinTemplate,
+  ProgramBuilderDraft,
+  ProgramBuilderTeamMember,
+} from '@/domain/types';
+import {
+  BUILDER_STEPS,
+  createInitialProgramBuilderDraft,
+  getClinicPrograms,
+  getProgramBuilderOptions,
+  programToBuilderDraft,
+  saveProgramDraft,
+} from '@/services/programsApi';
 import StepDadosGerais from './steps/StepDadosGerais';
 import StepFases from './steps/StepFases';
 import StepServicos from './steps/StepServicos';
@@ -15,11 +27,15 @@ import StepFinanceiro from './steps/StepFinanceiro';
 import StepEquipe from './steps/StepEquipe';
 import StepRevisao from './steps/StepRevisao';
 
-// ─── STEP RENDERER ────────────────────────────────────────────────────────────
+interface BuilderOptions {
+  checkinTemplates: ProgramBuilderCheckinTemplate[];
+  teamMembers: ProgramBuilderTeamMember[];
+}
 
 function renderStep(
   stepKey: BuilderStepKey,
   draft: ProgramBuilderDraft,
+  options: BuilderOptions,
   onChange: (patch: Partial<ProgramBuilderDraft>) => void
 ) {
   switch (stepKey) {
@@ -32,13 +48,15 @@ function renderStep(
     case 'entitlements':
       return <StepEntitlements draft={draft} onChange={onChange} />;
     case 'checkins':
-      return <StepCheckins draft={draft} onChange={onChange} />;
+      return (
+        <StepCheckins draft={draft} templates={options.checkinTemplates} onChange={onChange} />
+      );
     case 'documentos':
       return <StepDocumentos draft={draft} onChange={onChange} />;
     case 'financeiro':
       return <StepFinanceiro draft={draft} onChange={onChange} />;
     case 'equipe':
-      return <StepEquipe draft={draft} onChange={onChange} />;
+      return <StepEquipe draft={draft} teamMembers={options.teamMembers} onChange={onChange} />;
     case 'revisao':
       return <StepRevisao draft={draft} />;
     default:
@@ -46,24 +64,82 @@ function renderStep(
   }
 }
 
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
-
 export default function ProgramBuilderContent() {
   const [currentStep, setCurrentStep] = useState(0);
-  const [draft, setDraft] = useState<ProgramBuilderDraft>(initialBuilderDraft);
-  const [savedDraft, setSavedDraft] = useState(false);
+  const [draft, setDraft] = useState<ProgramBuilderDraft>(() => createInitialProgramBuilderDraft());
+  const [options, setOptions] = useState<BuilderOptions>({ checkinTemplates: [], teamMembers: [] });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const totalSteps = BUILDER_STEPS.length;
   const step = BUILDER_STEPS[currentStep];
 
+  const loadBuilder = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    const [optionsResult, programsResult] = await Promise.all([
+      getProgramBuilderOptions(),
+      getClinicPrograms(),
+    ]);
+
+    if (optionsResult.error) {
+      setError(optionsResult.error.message);
+    } else {
+      setOptions({
+        checkinTemplates: optionsResult.data?.checkinTemplates ?? [],
+        teamMembers: optionsResult.data?.teamMembers ?? [],
+      });
+    }
+
+    const queryProgramId =
+      typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('programId')
+        : null;
+    if (queryProgramId) {
+      if (programsResult.error) {
+        setError(programsResult.error.message);
+      } else {
+        const program = programsResult.data?.programs.find((item) => item.id === queryProgramId);
+        if (program) {
+          setDraft(programToBuilderDraft(program));
+        } else {
+          setError('Programa nao encontrado para edicao.');
+        }
+      }
+    }
+
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void loadBuilder();
+  }, [loadBuilder]);
+
   const handleChange = (patch: Partial<ProgramBuilderDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }));
-    setSavedDraft(false);
+    setFeedback(null);
+    setError(null);
   };
 
-  const handleSaveDraft = () => {
-    setSavedDraft(true);
-    setTimeout(() => setSavedDraft(false), 2500);
+  const persistDraft = async (publish: boolean) => {
+    setSaving(true);
+    setError(null);
+    setFeedback(null);
+    const result = await saveProgramDraft(draft, publish);
+    if (result.error) {
+      setError(result.error.message);
+    } else if (result.data?.id) {
+      setDraft((prev) => ({
+        ...prev,
+        id: result.data?.id,
+        status: publish ? 'ativo' : prev.status,
+      }));
+      setFeedback(publish ? 'Programa publicado.' : 'Rascunho salvo.');
+    }
+    setSaving(false);
   };
 
   const handlePrev = () => setCurrentStep((s) => Math.max(0, s - 1));
@@ -71,7 +147,6 @@ export default function ProgramBuilderContent() {
 
   return (
     <div className="flex flex-col h-full min-h-screen bg-background">
-      {/* ── Page header ── */}
       <div className="flex items-center gap-3 px-6 py-4 bg-card border-b border-border">
         <Link
           href="/clinic/programs"
@@ -81,18 +156,29 @@ export default function ProgramBuilderContent() {
           Programas
         </Link>
         <ChevronRight size={14} className="text-muted-foreground/50" />
-        <span className="text-sm font-semibold text-foreground">Builder de Programa</span>
+        <span className="text-sm font-semibold text-foreground">
+          {draft.id ? 'Editar programa' : 'Builder de Programa'}
+        </span>
 
         <div className="ml-auto flex items-center gap-2">
+          {feedback && <span className="text-xs font-medium text-emerald-600">{feedback}</span>}
+          {error && <span className="text-xs font-medium text-red-600">{error}</span>}
           <button
-            onClick={handleSaveDraft}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+            type="button"
+            onClick={() => void persistDraft(false)}
+            disabled={saving || loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-50"
           >
-            <Save size={14} />
-            {savedDraft ? 'Rascunho salvo!' : 'Salvar rascunho'}
+            {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+            Salvar rascunho
           </button>
           {currentStep === totalSteps - 1 && (
-            <button className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all">
+            <button
+              type="button"
+              onClick={() => void persistDraft(true)}
+              disabled={saving || loading}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
+            >
               <Send size={14} />
               Publicar programa
             </button>
@@ -101,7 +187,6 @@ export default function ProgramBuilderContent() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Sidebar stepper ── */}
         <aside className="w-64 flex-shrink-0 bg-card border-r border-border overflow-y-auto py-6 px-3">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-4">
             Etapas
@@ -113,9 +198,10 @@ export default function ProgramBuilderContent() {
               return (
                 <li key={s.key}>
                   <button
+                    type="button"
                     onClick={() => setCurrentStep(idx)}
                     className={[
-                      'w-full flex items-start gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150',
+                      'w-full flex items-start gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150',
                       isActive
                         ? 'bg-primary/10 text-primary'
                         : isCompleted
@@ -123,7 +209,6 @@ export default function ProgramBuilderContent() {
                           : 'text-muted-foreground hover:bg-muted/60',
                     ].join(' ')}
                   >
-                    {/* Step indicator */}
                     <span
                       className={[
                         'flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5',
@@ -155,7 +240,6 @@ export default function ProgramBuilderContent() {
             })}
           </ol>
 
-          {/* Progress bar */}
           <div className="mt-6 px-3">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs text-muted-foreground">Progresso</span>
@@ -172,10 +256,8 @@ export default function ProgramBuilderContent() {
           </div>
         </aside>
 
-        {/* ── Step content ── */}
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-6 py-8">
-            {/* Step header */}
             <div className="mb-8">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-semibold text-primary uppercase tracking-wider">
@@ -186,15 +268,21 @@ export default function ProgramBuilderContent() {
               <p className="text-sm text-muted-foreground mt-1">{step.description}</p>
             </div>
 
-            {/* Step body */}
-            <div className="space-y-6">{renderStep(step.key, draft, handleChange)}</div>
+            {loading ? (
+              <div className="space-y-3">
+                <div className="h-24 rounded-lg border border-border bg-card animate-pulse" />
+                <div className="h-36 rounded-lg border border-border bg-card animate-pulse" />
+              </div>
+            ) : (
+              <div className="space-y-6">{renderStep(step.key, draft, options, handleChange)}</div>
+            )}
 
-            {/* Navigation */}
             <div className="flex items-center justify-between mt-10 pt-6 border-t border-border">
               <button
+                type="button"
                 onClick={handlePrev}
                 disabled={currentStep === 0}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ArrowLeft size={15} />
                 Anterior
@@ -202,14 +290,20 @@ export default function ProgramBuilderContent() {
 
               {currentStep < totalSteps - 1 ? (
                 <button
+                  type="button"
                   onClick={handleNext}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all"
+                  className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all"
                 >
-                  Próxima etapa
+                  Proxima etapa
                   <ArrowRight size={15} />
                 </button>
               ) : (
-                <button className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all">
+                <button
+                  type="button"
+                  onClick={() => void persistDraft(true)}
+                  disabled={saving || loading}
+                  className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
+                >
                   <Send size={15} />
                   Publicar programa
                 </button>

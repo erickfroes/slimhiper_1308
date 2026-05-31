@@ -1,32 +1,37 @@
 'use client';
 
 import Link from 'next/link';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Plus,
+  Archive,
   BookOpen,
-  Clock,
-  Users,
   CheckSquare,
-  Smartphone,
-  FileText,
-  CreditCard,
-  Layers,
-  Target,
   ChevronDown,
   ChevronUp,
+  Clock,
   Copy,
-  Archive,
+  CreditCard,
   Edit2,
   Eye,
-  Wrench,
+  FileText,
+  Layers,
   MoreHorizontal,
+  Plus,
+  RefreshCw,
+  Send,
+  Smartphone,
+  Target,
+  Users,
+  Wrench,
 } from 'lucide-react';
 
-import { mockClinicPrograms } from '@/data/mockData';
 import type { ClinicProgram, ProgramStatus } from '@/domain/types';
-
-// ─── COLOR MAP ────────────────────────────────────────────────────────────────
+import {
+  cloneProgram,
+  getClinicPrograms,
+  setProgramStatus,
+  type ClinicProgramsSummary,
+} from '@/services/programsApi';
 
 const colorMap: Record<string, { accent: string; badge: string; dot: string; icon: string }> = {
   teal: {
@@ -63,9 +68,9 @@ const colorMap: Record<string, { accent: string; badge: string; dot: string; ico
 
 const paymentModelLabel: Record<string, string> = {
   parcelado: 'Parcelado',
-  avista: 'À Vista',
+  avista: 'A vista',
   assinatura: 'Assinatura',
-  hibrido: 'Híbrido',
+  hibrido: 'Hibrido',
 };
 
 const statusConfig: Record<ProgramStatus, { label: string; className: string }> = {
@@ -74,28 +79,42 @@ const statusConfig: Record<ProgramStatus, { label: string; className: string }> 
   rascunho: { label: 'Rascunho', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
 };
 
-// ─── PROGRAM CARD ─────────────────────────────────────────────────────────────
+const emptySummary: ClinicProgramsSummary = {
+  total: 0,
+  active: 0,
+  draft: 0,
+  archived: 0,
+  activePatients: 0,
+};
 
 interface ProgramCardProps {
   program: ClinicProgram;
+  busy: boolean;
+  onArchive: (program: ClinicProgram) => void;
+  onPublish: (program: ClinicProgram) => void;
+  onClone: (program: ClinicProgram) => void;
 }
 
-function ProgramCard({ program }: ProgramCardProps) {
+function ProgramCard({ program, busy, onArchive, onPublish, onClone }: ProgramCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const colors = colorMap[program.color] ?? colorMap['teal'];
   const status = statusConfig[program.status];
 
+  const closeAndRun = (callback: () => void) => {
+    setMenuOpen(false);
+    callback();
+  };
+
   return (
     <div
-      className={`bg-card border border-border rounded-2xl border-l-4 ${colors.accent} shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden`}
+      className={`bg-card border border-border rounded-xl border-l-4 ${colors.accent} shadow-sm overflow-hidden`}
     >
-      {/* Card Header */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
             <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${colors.badge}`}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${colors.badge}`}
             >
               <BookOpen size={16} className={colors.icon} />
             </div>
@@ -111,48 +130,59 @@ function ProgramCard({ program }: ProgramCardProps) {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed line-clamp-2">
-                {program.objective}
+                {program.objective || 'Sem objetivo registrado.'}
               </p>
             </div>
           </div>
 
-          {/* Actions menu */}
           <div className="relative flex-shrink-0">
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              type="button"
+              onClick={() => setMenuOpen((value) => !value)}
+              disabled={busy}
+              aria-label="Abrir acoes do programa"
+              className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
             >
-              <MoreHorizontal size={16} />
+              {busy ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <MoreHorizontal size={16} />
+              )}
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-8 z-20 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[160px]">
-                <button
-                  onClick={() => setMenuOpen(false)}
+              <div className="absolute right-0 top-8 z-20 bg-card border border-border rounded-lg shadow-lg py-1 min-w-[170px]">
+                <Link
+                  href={`/clinic/programs/builder?programId=${program.id}`}
                   className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
                 >
                   <Edit2 size={13} className="text-muted-foreground" /> Editar
-                </button>
+                </Link>
                 <button
-                  onClick={() => setMenuOpen(false)}
+                  type="button"
+                  onClick={() => closeAndRun(() => onClone(program))}
                   className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
                 >
                   <Copy size={13} className="text-muted-foreground" /> Duplicar
                 </button>
-                <button
-                  onClick={() => setMenuOpen(false)}
+                {program.status !== 'ativo' && (
+                  <button
+                    type="button"
+                    onClick={() => closeAndRun(() => onPublish(program))}
+                    className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                  >
+                    <Send size={13} className="text-muted-foreground" /> Publicar
+                  </button>
+                )}
+                <Link
+                  href={`/clinic/patients?programId=${program.id}`}
                   className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
                 >
                   <Eye size={13} className="text-muted-foreground" /> Ver pacientes
-                </button>
-                <button
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
-                >
-                  <Wrench size={13} className="text-muted-foreground" /> Abrir builder
-                </button>
+                </Link>
                 <div className="border-t border-border my-1" />
                 <button
-                  onClick={() => setMenuOpen(false)}
+                  type="button"
+                  onClick={() => closeAndRun(() => onArchive(program))}
                   className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-negative hover:bg-negative/5 transition-colors"
                 >
                   <Archive size={13} /> Arquivar
@@ -162,7 +192,6 @@ function ProgramCard({ program }: ProgramCardProps) {
           </div>
         </div>
 
-        {/* Key metrics row */}
         <div className="mt-4 grid grid-cols-3 gap-2">
           <div className="flex items-center gap-1.5">
             <Clock size={13} className="text-muted-foreground flex-shrink-0" />
@@ -175,7 +204,7 @@ function ProgramCard({ program }: ProgramCardProps) {
           <div className="flex items-center gap-1.5">
             <Users size={13} className="text-muted-foreground flex-shrink-0" />
             <Link
-              href="/clinic/patients"
+              href={`/clinic/patients?programId=${program.id}`}
               className="text-xs font-medium text-foreground hover:underline"
             >
               {program.activePatients} pacientes
@@ -183,39 +212,41 @@ function ProgramCard({ program }: ProgramCardProps) {
           </div>
         </div>
 
-        {/* Phases pills */}
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {program.phases.map((phase, i) => (
+          {program.phases.slice(0, 4).map((phase) => (
             <span
-              key={i}
+              key={`${program.id}-${phase.name}`}
               className="inline-flex items-center gap-1 text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full"
             >
               <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
-              {phase.name} · {phase.durationWeeks}sem
+              {phase.name} - {phase.durationWeeks}sem
             </span>
           ))}
+          {program.phases.length === 0 && (
+            <span className="text-xs text-muted-foreground">Sem fases cadastradas</span>
+          )}
         </div>
       </div>
 
-      {/* Divider */}
       <div className="border-t border-border" />
 
-      {/* Summary info row */}
       <div className="px-5 py-3 grid grid-cols-2 gap-x-4 gap-y-2">
-        {/* Services */}
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
             <CheckSquare size={12} className="text-muted-foreground" />
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Serviços
+              Servicos
             </span>
           </div>
           <div className="space-y-0.5">
-            {program.includedServices.slice(0, 3).map((svc, i) => (
-              <div key={i} className="text-xs text-foreground">
-                {svc.quantity}× {svc.label}
+            {program.includedServices.slice(0, 3).map((svc) => (
+              <div key={`${program.id}-${svc.label}`} className="text-xs text-foreground">
+                {svc.quantity}x {svc.label}
               </div>
             ))}
+            {program.includedServices.length === 0 && (
+              <div className="text-xs text-muted-foreground">Sem servicos</div>
+            )}
             {program.includedServices.length > 3 && (
               <div className="text-xs text-muted-foreground">
                 +{program.includedServices.length - 3} mais
@@ -224,7 +255,6 @@ function ProgramCard({ program }: ProgramCardProps) {
           </div>
         </div>
 
-        {/* Check-ins + Payment */}
         <div className="space-y-3">
           <div>
             <div className="flex items-center gap-1.5 mb-1">
@@ -234,7 +264,7 @@ function ProgramCard({ program }: ProgramCardProps) {
               </span>
             </div>
             <div className="text-xs text-foreground">
-              {program.checkInsTotal} · {program.checkInFrequency}
+              {program.checkInsTotal} - {program.checkInFrequency}
             </div>
           </div>
           <div>
@@ -249,17 +279,15 @@ function ProgramCard({ program }: ProgramCardProps) {
         </div>
       </div>
 
-      {/* Expandable details */}
       {expanded && (
         <>
           <div className="border-t border-border" />
           <div className="px-5 py-4 space-y-4">
-            {/* App entitlements */}
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <Smartphone size={12} className="text-muted-foreground" />
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  App do Paciente
+                  App do paciente
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -275,20 +303,22 @@ function ProgramCard({ program }: ProgramCardProps) {
                     {ent.label}
                   </span>
                 ))}
+                {program.appEntitlements.length === 0 && (
+                  <span className="text-xs text-muted-foreground">Sem entitlements</span>
+                )}
               </div>
             </div>
 
-            {/* Required documents */}
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <FileText size={12} className="text-muted-foreground" />
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Documentos Necessários
+                  Documentos obrigatorios
                 </span>
               </div>
               <div className="space-y-1">
-                {program.requiredDocuments.map((doc, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-foreground">
+                {program.requiredDocuments.map((doc) => (
+                  <div key={doc.label} className="flex items-center gap-2 text-xs text-foreground">
                     <span
                       className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${doc.required ? 'bg-negative' : 'bg-muted-foreground'}`}
                     />
@@ -296,175 +326,220 @@ function ProgramCard({ program }: ProgramCardProps) {
                     {!doc.required && <span className="text-muted-foreground">(opcional)</span>}
                   </div>
                 ))}
+                {program.requiredDocuments.length === 0 && (
+                  <div className="text-xs text-muted-foreground">Sem documentos vinculados</div>
+                )}
               </div>
             </div>
 
-            {/* Payment description */}
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <CreditCard size={12} className="text-muted-foreground" />
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Modelo de Pagamento
+                  Modelo financeiro
                 </span>
               </div>
-              <p className="text-xs text-foreground">{program.paymentDescription}</p>
-            </div>
-
-            {/* Phases detail */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-2">
-                <Layers size={12} className="text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Fases do Programa
-                </span>
-              </div>
-              <div className="space-y-2">
-                {program.phases.map((phase, i) => (
-                  <div key={i} className="flex gap-3">
-                    <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold ${colors.badge}`}
-                    >
-                      {i + 1}
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-foreground">
-                        {phase.name}{' '}
-                        <span className="text-muted-foreground font-normal">
-                          · {phase.durationWeeks} semanas
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">{phase.description}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs text-foreground">
+                {program.paymentDescription || 'Sem descricao financeira.'}
+              </p>
             </div>
           </div>
         </>
       )}
 
-      {/* Card footer: expand + quick actions */}
-      <div className="border-t border-border px-5 py-3 flex items-center justify-between">
+      <div className="border-t border-border px-5 py-3 flex items-center justify-between gap-3">
         <button
-          onClick={() => setExpanded(!expanded)}
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
           className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          {expanded ? 'Recolher detalhes' : 'Ver detalhes completos'}
+          {expanded ? 'Recolher detalhes' : 'Ver detalhes'}
         </button>
 
         <div className="flex items-center gap-1">
-          <button className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+          <Link
+            href={`/clinic/patients?programId=${program.id}`}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
             <Eye size={12} /> Pacientes
-          </button>
-          <button className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+          </Link>
+          <Link
+            href={`/clinic/programs/builder?programId=${program.id}`}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+          >
             <Wrench size={12} /> Builder
-          </button>
-          <button className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium">
-            <Edit2 size={12} /> Editar
-          </button>
+          </Link>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── MAIN CONTENT ─────────────────────────────────────────────────────────────
-
 export default function ProgramsContent() {
   const [filter, setFilter] = useState<ProgramStatus | 'todos'>('todos');
+  const [programs, setPrograms] = useState<ClinicProgram[]>([]);
+  const [summary, setSummary] = useState<ClinicProgramsSummary>(emptySummary);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyProgramId, setBusyProgramId] = useState<string | null>(null);
 
-  const filtered =
-    filter === 'todos' ? mockClinicPrograms : mockClinicPrograms.filter((p) => p.status === filter);
+  const loadPrograms = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const response = await getClinicPrograms();
+    if (response.error) {
+      setPrograms([]);
+      setSummary(emptySummary);
+      setError(response.error.message);
+    } else {
+      setPrograms(response.data?.programs ?? []);
+      setSummary(response.data?.summary ?? emptySummary);
+    }
+    setLoading(false);
+  }, []);
 
-  const totalActive = mockClinicPrograms.filter((p) => p.status === 'ativo').length;
-  const totalPatients = mockClinicPrograms.reduce((sum, p) => sum + p.activePatients, 0);
+  useEffect(() => {
+    void loadPrograms();
+  }, [loadPrograms]);
+
+  const filtered = useMemo(
+    () => (filter === 'todos' ? programs : programs.filter((program) => program.status === filter)),
+    [filter, programs]
+  );
+
+  const runProgramAction = async (
+    program: ClinicProgram,
+    action: 'archive' | 'publish' | 'clone'
+  ) => {
+    setBusyProgramId(program.id);
+    setError(null);
+    const result =
+      action === 'clone'
+        ? await cloneProgram(program.id)
+        : await setProgramStatus(program.id, action === 'archive' ? 'arquivado' : 'ativo');
+    if (result.error) {
+      setError(result.error.message);
+    } else {
+      await loadPrograms();
+    }
+    setBusyProgramId(null);
+  };
 
   return (
     <div className="p-6 space-y-6">
-      {/* Page header */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-foreground">Programas e Pacotes</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Templates de programas clínicos e pacotes de atendimento da clínica.
+            Templates clinicos persistidos, enrollment e check-ins por paciente.
           </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors flex-shrink-0">
+        <Link
+          href="/clinic/programs/builder"
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors flex-shrink-0"
+        >
           <Plus size={15} />
           Criar programa
-        </button>
+        </Link>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
             <BookOpen size={15} className="text-primary" />
           </div>
           <div>
-            <div className="text-lg font-bold text-foreground">{totalActive}</div>
+            <div className="text-lg font-bold text-foreground">{summary.active}</div>
             <div className="text-xs text-muted-foreground">Programas ativos</div>
           </div>
         </div>
-        <div className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3">
+        <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
             <Users size={15} className="text-teal-600" />
           </div>
           <div>
-            <div className="text-lg font-bold text-foreground">{totalPatients}</div>
+            <div className="text-lg font-bold text-foreground">{summary.activePatients}</div>
             <div className="text-xs text-muted-foreground">Pacientes em programas</div>
           </div>
         </div>
-        <div className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3">
+        <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
             <Layers size={15} className="text-violet-600" />
           </div>
           <div>
-            <div className="text-lg font-bold text-foreground">{mockClinicPrograms.length}</div>
+            <div className="text-lg font-bold text-foreground">{summary.total}</div>
             <div className="text-xs text-muted-foreground">Templates cadastrados</div>
           </div>
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex items-center gap-1 bg-muted rounded-xl p-1 w-fit">
-        {(['todos', 'ativo', 'rascunho', 'arquivado'] as const).map((f) => (
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
+          <span>{error}</span>
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${
-              filter === f
+            type="button"
+            onClick={() => void loadPrograms()}
+            className="text-xs font-semibold underline"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit">
+        {(['todos', 'ativo', 'rascunho', 'arquivado'] as const).map((statusFilter) => (
+          <button
+            key={statusFilter}
+            type="button"
+            onClick={() => setFilter(statusFilter)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              filter === statusFilter
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            {f === 'todos'
+            {statusFilter === 'todos'
               ? 'Todos'
-              : f === 'ativo'
+              : statusFilter === 'ativo'
                 ? 'Ativos'
-                : f === 'rascunho'
+                : statusFilter === 'rascunho'
                   ? 'Rascunhos'
                   : 'Arquivados'}
           </button>
         ))}
       </div>
 
-      {/* Program cards grid */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-64 rounded-lg border border-border bg-card animate-pulse"
+            />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mb-3">
+          <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mb-3">
             <BookOpen size={20} className="text-muted-foreground" />
           </div>
           <p className="text-sm font-medium text-foreground">Nenhum programa encontrado</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Tente outro filtro ou crie um novo programa.
+            Crie um programa ou ajuste o filtro selecionado.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
           {filtered.map((program) => (
-            <ProgramCard key={program.id} program={program} />
+            <ProgramCard
+              key={program.id}
+              program={program}
+              busy={busyProgramId === program.id}
+              onArchive={(item) => void runProgramAction(item, 'archive')}
+              onPublish={(item) => void runProgramAction(item, 'publish')}
+              onClone={(item) => void runProgramAction(item, 'clone')}
+            />
           ))}
         </div>
       )}

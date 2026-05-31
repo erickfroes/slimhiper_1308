@@ -22,6 +22,7 @@ This script seeds development-safe Patient 360 clinical data for tenant
 - bioimpedance
 - labs
 - prescriptions placeholder
+- program enrollment, services, entitlements, required documents and check-ins
 - alerts
 - tasks
 - timeline events
@@ -96,13 +97,14 @@ cross-tenant demo bootstraps, creates local smoke users, signs in through the
 anon key, and executes `test-patient360-contract.mjs --mode=real` with
 forbidden and cross-tenant checks enabled. It also seeds and validates tab data
 for documents, nutrition, reports, consultas, pacotes, prescricoes, financeiro,
-chat, and timeline lab events.
+chat, package check-ins, and timeline lab events.
 
 2026-05-31 local validation: `test-patient360-local-real-smoke.mjs` passed
 against the local Supabase stack. It confirmed staff summary/timeline real
 contract, 403 for a user without `patients.read`, cross-tenant block with
 status 404, Patient 360 tab contracts through Edge/RLS/RPC, and timeline event
-types `exame_solicitado` and `exame_resultado_recebido`. The clinical core
+types `exame_solicitado` and `exame_resultado_recebido`. The Phase 6 re-run
+also confirmed `activePackage.checkins` from `patient_program_checkins`. The clinical core
 smoke also passed locally after Phase 2 completion, including patient CRUD
 contracts, appointment queue events, SOAP, measurements, bioimpedance, labs,
 timeline, and audit rows.
@@ -112,6 +114,8 @@ timeline, and audit rows.
 1. `patient-360-summary` returns `{ ok:true, data, meta }`.
 2. `data.profile` matches the frontend `PatientProfile` shape.
 3. `data.activePackage` uses valid `ProgramType` and `PackageStatus` values.
+   For Phase 6, `activePackage.checkins` is populated from
+   `patient_program_checkins` when the enrollment has generated check-ins.
 4. `data.clinicalStatus` numeric KPIs and history arrays exist.
 5. `data.financial` uses valid `FinancialStatus` and numeric totals.
 6. `data.alerts`, `data.tasks`, `data.upcomingAppointments`,

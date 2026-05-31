@@ -239,6 +239,45 @@ contract with forbidden and cross-tenant checks, and validates the MVP Patient
 360 tab contracts for documents, nutrition, reports, consultas, pacotes,
 prescricoes, financeiro, chat, and clinical timeline lab events.
 
+## Programs And Packages Contract Checks
+
+Scripted local smoke:
+
+- `scripts/supabase/test-programs-phase6-local-smoke.mjs`
+
+Required local variables:
+
+```bash
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=<local anon or publishable key>
+SUPABASE_SERVICE_ROLE_KEY=<local service role JWT>
+SUPABASE_BOOTSTRAP_PASSWORD=<local demo password>
+```
+
+Run:
+
+```bash
+npx supabase migration up --local --include-all
+node scripts/supabase/test-programs-phase6-local-smoke.mjs
+```
+
+Validated behavior:
+
+1. Core auth and Patient 360 demo seeds are present.
+2. `get_clinic_programs()` returns seeded programs for a clinic admin.
+3. `get_program_builder_options()` returns active tenant team members and
+   check-in template options.
+4. `upsert_program_from_builder()` saves a draft and publishes it.
+5. `clone_program()` creates a draft clone.
+6. `update_program_status()` archives the clone.
+7. `enroll_patient_in_program()` creates a real enrollment and generated
+   `patient_program_checkins`.
+8. `patient-360-summary` exposes package check-ins in the Paciente 360 pacotes
+   tab contract.
+
+The script refuses non-local targets unless
+`ALLOW_REMOTE_PROGRAMS_SMOKE=true` is set for an approved sandbox.
+
 ## Documents Contract Test
 
 Scripts:
