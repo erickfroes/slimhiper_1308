@@ -305,8 +305,11 @@ RUN_D4SIGN_SANDBOX_SEND=true node scripts/supabase/test-documents-phase4-local-s
 ```
 
 Only enable this after configuring `D4SIGN_TOKEN_API`, `D4SIGN_CRYPT_KEY`,
-`D4SIGN_BASE_URL`, and `D4SIGN_SAFE_UUID` in the trusted Edge Function
-environment. The script does not print provider secrets or signed URLs.
+`D4SIGN_BASE_URL`, and either `D4SIGN_SAFE_UUID` or approved sandbox-only
+`D4SIGN_AUTO_DISCOVER_SAFE=true` in the trusted Edge Function environment. The
+script does not print provider secrets or signed URLs. If D4Sign returns no
+cofres from `GET /safes`, the expected blocked result is
+`provider_safe_not_found`.
 
 ## D4Sign Fixture Test
 

@@ -118,6 +118,36 @@ function d4signUrl(baseUrl: string, path: string, params: Record<string, string>
   return url.toString();
 }
 
+function getSafeUuid(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const row = value as Record<string, unknown>;
+  return safeString(row['uuid-safe'] ?? row.uuidSafe ?? row.uuid_safe ?? row.uuid);
+}
+
+async function discoverD4SignSafeUuid(baseUrl: string, tokenApi: string, cryptKey: string) {
+  const response = await fetch(
+    d4signUrl(baseUrl, '/safes', {
+      tokenAPI: tokenApi,
+      cryptKey,
+    }),
+    { headers: { 'Content-Type': 'application/json' } }
+  );
+
+  if (!response.ok) {
+    await response.text();
+    return { uuid: '', status: response.status, found: false };
+  }
+
+  const payload = (await response.json().catch(() => [])) as unknown;
+  const safes = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === 'object' && Array.isArray((payload as Json).data)
+      ? ((payload as Json).data as unknown[])
+      : [];
+  const uuid = getSafeUuid(safes[0]);
+  return { uuid, status: response.status, found: Boolean(uuid) };
+}
+
 async function markDocumentFailed(
   supabase: ReturnType<typeof createClient>,
   generatedDocument: GeneratedDocumentRecord
@@ -364,13 +394,41 @@ Deno.serve(async (req) => {
     const d4signTokenApi = Deno.env.get('D4SIGN_TOKEN_API')?.trim();
     const d4signCryptKey = Deno.env.get('D4SIGN_CRYPT_KEY')?.trim();
     const d4signBaseUrl = Deno.env.get('D4SIGN_BASE_URL')?.trim();
-    const d4signSafeUuid = Deno.env.get('D4SIGN_SAFE_UUID')?.trim();
+    let d4signSafeUuid = Deno.env.get('D4SIGN_SAFE_UUID')?.trim();
     const d4signFolderUuid = Deno.env.get('D4SIGN_FOLDER_UUID')?.trim();
+    const shouldAutoDiscoverSafe = Deno.env.get('D4SIGN_AUTO_DISCOVER_SAFE') === 'true';
 
-    if (!d4signTokenApi || !d4signCryptKey || !d4signBaseUrl || !d4signSafeUuid) {
+    if (!d4signTokenApi || !d4signCryptKey || !d4signBaseUrl) {
       return jsonResponse(500, {
         ok: false,
         error: { code: 'server_misconfigured', message: 'D4Sign environment is not configured.' },
+        meta: { timestamp },
+      });
+    }
+
+    if (!d4signSafeUuid && shouldAutoDiscoverSafe) {
+      const safeDiscovery = await discoverD4SignSafeUuid(
+        d4signBaseUrl,
+        d4signTokenApi,
+        d4signCryptKey
+      );
+      if (!safeDiscovery.found) {
+        return jsonResponse(502, {
+          ok: false,
+          error: {
+            code: 'provider_safe_not_found',
+            message: 'D4Sign did not return an available safe for this account.',
+          },
+          meta: { timestamp, provider_step: 'list_safes', provider_status: safeDiscovery.status },
+        });
+      }
+      d4signSafeUuid = safeDiscovery.uuid;
+    }
+
+    if (!d4signSafeUuid) {
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'server_misconfigured', message: 'D4Sign safe UUID is not configured.' },
         meta: { timestamp },
       });
     }

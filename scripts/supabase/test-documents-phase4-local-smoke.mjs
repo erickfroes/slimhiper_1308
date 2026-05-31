@@ -438,10 +438,15 @@ async function invokeD4SignWebhook(signatureRequestId, documentId, tenantId) {
 async function runOptionalSandboxSend(staffToken, patientId, templateId) {
   if (process.env.RUN_D4SIGN_SANDBOX_SEND !== 'true') return false;
 
-  const required = ['D4SIGN_TOKEN_API', 'D4SIGN_CRYPT_KEY', 'D4SIGN_BASE_URL', 'D4SIGN_SAFE_UUID'];
+  const required = ['D4SIGN_TOKEN_API', 'D4SIGN_CRYPT_KEY', 'D4SIGN_BASE_URL'];
   const missing = required.filter((key) => !process.env[key]);
   if (missing.length) {
     throw new Error(`D4Sign sandbox send requested but missing env vars: ${missing.join(', ')}`);
+  }
+  if (!process.env.D4SIGN_SAFE_UUID && process.env.D4SIGN_AUTO_DISCOVER_SAFE !== 'true') {
+    throw new Error(
+      'D4Sign sandbox send requested but D4SIGN_SAFE_UUID is missing. Set D4SIGN_AUTO_DISCOVER_SAFE=true only for approved sandbox auto-discovery.'
+    );
   }
 
   const gen = await callFunction('generate-document', staffToken, {
@@ -460,7 +465,9 @@ async function runOptionalSandboxSend(staffToken, patientId, templateId) {
   });
   ok(
     send.status === 200 && send.json?.ok === true,
-    `D4Sign sandbox send failed with ${send.status}`
+    `D4Sign sandbox send failed with ${send.status} ${
+      send.json?.error?.code ?? send.json?.error?.message ?? 'unexpected_response'
+    }`
   );
   return true;
 }
@@ -600,7 +607,7 @@ async function run() {
   console.log(
     sandboxRan
       ? '- D4Sign sandbox send passed'
-      : '- D4Sign sandbox send skipped; set RUN_D4SIGN_SANDBOX_SEND=true with D4SIGN_SAFE_UUID to run it'
+      : '- D4Sign sandbox send skipped; set RUN_D4SIGN_SANDBOX_SEND=true with D4SIGN_SAFE_UUID or approved D4SIGN_AUTO_DISCOVER_SAFE=true to run it'
   );
 }
 

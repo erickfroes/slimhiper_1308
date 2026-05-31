@@ -19,7 +19,7 @@ comparativo competitivo e ordem de finalizacao.
 
 ## Execucao Atual
 
-- Data: 2026-05-31 15:09 -03:00.
+- Data: 2026-05-31 16:05 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
 - Commit base: `bb190f1`.
 - Alvo aprovado: MVP clinico.
@@ -35,7 +35,8 @@ comparativo competitivo e ordem de finalizacao.
   `guardian_links`. `document-signed-url` aceita staff com `documents.read` ou
   paciente/guardian vinculado, sempre com storage privado. Webhook D4Sign local
   passou com HMAC, idempotencia, auditoria, status assinado e timeline; envio
-  sandbox D4Sign real segue blocked ate configurar `D4SIGN_SAFE_UUID`.
+  sandbox D4Sign real foi tentado com auto-discovery segura e segue blocked
+  porque `GET /safes` retornou que nao ha cofre disponivel na conta sandbox.
 - Lote concluido anteriormente: Fase 3 - Paciente 360 completo para MVP local.
   As Edge Functions `patient-360-summary` e `patient-timeline` preservam eventos
   `exame_solicitado` e `exame_resultado_recebido`; os services Patient 360,
@@ -90,7 +91,10 @@ comparativo competitivo e ordem de finalizacao.
   `node scripts/supabase/test-documents-phase4-local-smoke.mjs`,
   fixtures Patient360/D4Sign/Billing, `npm run type-check`, `npm run lint`,
   `npm run build`, `git diff --check`, e smoke HTTP local: `/auth/login` 200 e
-  `/clinic/documents` 307 para `/auth/login` sem sessao.
+  `/clinic/documents` 307 para `/auth/login` sem sessao. O smoke com
+  `RUN_D4SIGN_SANDBOX_SEND=true` e `D4SIGN_AUTO_DISCOVER_SAFE=true` tambem foi
+  executado e chegou ao provider, mas falhou corretamente em
+  `provider_safe_not_found` porque a conta sandbox nao retornou cofre.
 - Skips deliberados: valores de secrets nao foram impressos; `.env` foi usado
   apenas em processo local para bootstrap/smoke sem exibir valores; Supabase
   remoto nao foi mutado; `supabase db push` remoto nao foi executado; Browser
@@ -99,10 +103,11 @@ comparativo competitivo e ordem de finalizacao.
   smoke HTTP autenticado com cookie SSR local. Teste visual de credencial
   invalida tambem ficou blocked pelo mesmo limite de input do Browser. Asaas/D4Sign
   sandbox provider nao foram chamados neste lote de settings/smoke/guard.
-  Neste lote Fase 4, envio D4Sign sandbox real foi skipped/blocked porque
-  `D4SIGN_SAFE_UUID` ainda nao existe no ambiente local; o smoke local validou
-  webhook/idempotencia/auditoria sem chamar D4Sign. O in-app Browser autenticado
-  nao foi usado; smoke visual ficou limitado a HTTP anonimo e build.
+  Neste lote Fase 4, envio D4Sign sandbox real foi tentado e segue blocked
+  porque a conta sandbox nao possui cofre retornado por `GET /safes`; o smoke
+  local validou webhook/idempotencia/auditoria sem depender de provider. O in-app
+  Browser autenticado nao foi usado; smoke visual ficou limitado a HTTP anonimo
+  e build.
 - Evidencia deste lote: `QuickActionsCard` sem no-op silencioso, dashboard com
   empty states, agenda usando `updateAppointmentStatus` em transicoes visiveis,
   lista de pacientes sem toasts fake para chat/revisao, atendimento sem arrays
@@ -190,18 +195,22 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
   dados reais via `clinicDocumentsApi`, gera documentos por Edge Function,
   libera/oculta acesso paciente/guardian e mostra monitor de pendentes/falhas;
   `generate-document` grava `document.pdf` com variaveis protegidas
-  server-side, `d4sign-send-document` exige PDF/safe UUID e nao expoe tokens,
+  server-side, `d4sign-send-document` exige PDF e cofre explicito ou
+  auto-discovery sandbox opt-in, e nao expoe tokens,
   `document-signed-url` emite URL curta para staff autorizado ou vinculo
   paciente/guardian, e `test-documents-phase4-local-smoke.mjs` confirmou
   geracao, RLS propria, signed URL, cross-tenant fail-closed, webhook HMAC,
-  idempotencia, auditoria e timeline.
+  idempotencia, auditoria e timeline; smoke sandbox real falhou com
+  `provider_safe_not_found`, confirmando que falta criar/selecionar um cofre na
+  conta D4Sign sandbox.
 - Proximos bloqueios: convites de equipe via Auth Admin auditado, alteracao real
   de roles/permissoes por RPC, settings por usuario, admin plataforma com dados
   reais, UI/contratos scoped do portal paciente antes de abrir `/patient`,
   executor/export real de relatorios, CRUD real de plano alimentar, smokes
   autenticados amplos de navegador para os novos modais da Fase 2, smoke sandbox
-  Asaas, envio D4Sign sandbox com `D4SIGN_SAFE_UUID`/cofre configurado e
-  contratos sandbox dependem de ambiente/credenciais autorizados.
+  Asaas, criacao/selecionamento de cofre D4Sign sandbox para obter
+  `D4SIGN_SAFE_UUID`, e contratos sandbox dependem de ambiente/credenciais
+  autorizados.
 - Docker local: Docker Engine respondeu (`29.2.1`); Docker Desktop foi ajustado
   via API local para expor `tcp://localhost:2375` (`ExposeDockerAPIOnTCP2375`
   em `settings-store.json`), com backup local do arquivo de configuracao;
@@ -239,7 +248,7 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 1 - Auth/RBAC/guards/RLS      | Concluida para MVP local | Guard clinico server-side implementado; `profiles.is_active=false` derruba sessao do app; smoke HTTP local passou para anonimo, workspace valido, no-workspace, forbidden e perfil inativo; smoke RLS cross-tenant automatizado passou para paciente, documentos, financeiro, chat e relatorios; linkage paciente/guardian possui leitura propria do vinculo ativo e smoke cross-patient. Portal segue fail-closed ate Fase 8. |
 | Fase 2 - Core clinico              | Concluida para MVP local | Pacientes CRUD/PII/paginacao/filtros, dashboard KPIs reais, agenda CRUD/status/cancelamento e Encounter/SOAP com medidas/bio/labs/timeline/auditoria implementados; `type-check`, `lint`, `build`, fixtures e `test-clinical-core-contract.mjs` passaram localmente. Smokes autenticados de navegador amplo seguem como gate de release.                                                                                       |
 | Fase 3 - Paciente 360              | Concluida para MVP local | Contrato real local passou com staff, forbidden real sem `patients.read`, cross-tenant tenant A/B, tab contracts por Edge/RLS/RPC e mocks carregados somente sob `NEXT_PUBLIC_USE_MOCK_DATA=true`; smokes visuais autenticados amplos seguem como gate de release, nao como bloqueio do MVP local.                                                                                                                             |
-| Fase 4 - Documentos/D4Sign         | Parcial MVP local        | Templates/UI, PDF local, variaveis permitidas, policy paciente/guardian, signed URL, monitor operacional e webhook/idempotencia/auditoria passaram em smoke local; envio D4Sign sandbox real segue blocked por `D4SIGN_SAFE_UUID` ausente.                                                                                                                                                                                     |
+| Fase 4 - Documentos/D4Sign         | Parcial MVP local        | Templates/UI, PDF local, variaveis permitidas, policy paciente/guardian, signed URL, monitor operacional e webhook/idempotencia/auditoria passaram em smoke local; envio D4Sign sandbox real foi tentado e segue blocked porque `GET /safes` nao retornou cofre disponivel na conta sandbox.                                                                                                                                   |
 | Fase 5 - Financeiro/Asaas          | Parcial MVP local        | RPCs/Edge/webhook/fixtures locais passaram; sandbox Asaas e conciliacao/divergencias seguem pendentes.                                                                                                                                                                                                                                                                                                                         |
 | Fase 6 - Programas/pacotes         | Pendente                 | `programsApi`, builder persistente, enrollment e check-ins reais ainda nao iniciados neste lote.                                                                                                                                                                                                                                                                                                                               |
 | Fase 7 - Admin/settings/auditoria  | Parcial                  | Settings tenant/unidade persistem por RPC auditada; admin real, equipe/roles mutantes e break-glass seguem pendentes.                                                                                                                                                                                                                                                                                                          |
@@ -584,9 +593,12 @@ Fontes externas consultadas:
 - [ ] Finalizar D4Sign sandbox com envio, webhook, idempotencia e auditoria.
       Parcial MVP local: `d4sign-send-document` agora exige arquivo suportado,
       service role server-side para baixar PDF privado, envs D4Sign server-side
-      e `D4SIGN_SAFE_UUID` antes de provider; `webhook-d4sign` passou localmente
-      com HMAC, idempotencia, auditoria, status assinado e timeline. Envio
-      sandbox real nao foi chamado porque `D4SIGN_SAFE_UUID` ainda esta ausente.
+      e cofre explicito (`D4SIGN_SAFE_UUID`) ou auto-discovery sandbox opt-in
+      (`D4SIGN_AUTO_DISCOVER_SAFE=true`) antes de provider; `webhook-d4sign`
+      passou localmente com HMAC, idempotencia, auditoria, status assinado e
+      timeline. Envio sandbox real foi tentado com
+      `RUN_D4SIGN_SANDBOX_SEND=true` e falhou em `provider_safe_not_found`,
+      porque `GET /safes` nao retornou cofre disponivel na conta sandbox.
 - [x] Criar monitor operacional de documentos pendentes/falhados. Evidencia
       local: `/clinic/documents` exibe metricas, pendencias/falhas de documentos
       e eventos recentes de `d4sign_events` por dados reais; provider errors em

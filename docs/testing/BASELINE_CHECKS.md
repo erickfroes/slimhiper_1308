@@ -5,6 +5,32 @@ results, pending items, and environment details for the current repository state
 
 ## Latest Implementation Validation
 
+- Date: 2026-05-31 16:05 -03:00.
+- Branch: `test/asaas-billing-contract-hardening`.
+- Commit base: `bb190f1`.
+- Incremental D4Sign sandbox change: `d4sign-send-document` now supports
+  approved sandbox safe auto-discovery when `D4SIGN_AUTO_DISCOVER_SAFE=true`;
+  production/default behavior still requires explicit `D4SIGN_SAFE_UUID`.
+  `scripts/supabase/test-documents-phase4-local-smoke.mjs` can run the provider
+  path with either explicit safe UUID or sandbox auto-discovery.
+- Supabase local was restarted with `D4SIGN_AUTO_DISCOVER_SAFE=true` mapped
+  through `[edge_runtime.secrets]`; containers came back up, including DB, Kong,
+  Auth, REST, Storage, Vector, Analytics, and Edge runtime.
+- `npx supabase migration up --local --include-all`: passed after restart.
+- Provider sandbox smoke attempted:
+  `RUN_D4SIGN_SANDBOX_SEND=true D4SIGN_AUTO_DISCOVER_SAFE=true node scripts/supabase/test-documents-phase4-local-smoke.mjs`.
+  It reached D4Sign safe discovery but failed with
+  `provider_safe_not_found`; a direct `GET /safes` check returned no available
+  safe for the sandbox account. No provider token, crypt key, UUID, signed URL,
+  or raw provider body was printed.
+- Local non-provider documents smoke re-run passed:
+  `node scripts/supabase/test-documents-phase4-local-smoke.mjs`.
+- Remaining blocker: create or select a D4Sign sandbox cofre/safe and set
+  `D4SIGN_SAFE_UUID`, or ensure `GET /safes` returns at least one safe before
+  rerunning provider send.
+
+## Previous Implementation Validation - Phase 4
+
 - Date: 2026-05-31 15:09 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
 - Commit base: `bb190f1`.
