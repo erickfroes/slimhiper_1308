@@ -120,11 +120,37 @@ Use placeholders in docs and examples. Never commit real values.
 - `generated_documents.storage_bucket` is constrained to the clinical
   document bucket allow-list.
 - Direct storage downloads are intentionally blocked by policy.
+- `generate-document` validates the caller JWT, active tenant membership, and
+  `documents.write` with the user-scoped client, then writes the rendered object,
+  generated document row, and timeline event with the service-role client. This
+  keeps storage writes backend-owned while preserving user authorization.
 - Users request short-lived URLs through `document-signed-url`, which checks
   tenant membership, `documents.read`, the bucket allow-list, and the canonical
   storage path shape before using the service-role storage client.
 - Upload/update remains limited to users with `documents.write` in the document
   tenant context.
+
+## Patient 360 Signature Gating
+
+- `src/app/paciente-360/components/tabs/TabDocumentos.tsx` calls
+  `sendDocumentForSignature(documentId, patientId)` without building a fake
+  signer in the browser.
+- `src/services/documentsApi.ts` invokes only `d4sign-send-document`; browser
+  code does not receive D4Sign tokens or provider credentials.
+- `supabase/functions/d4sign-send-document` validates tenant membership and
+  `documents.write`, rejects medical prescription categories, blocks duplicate
+  pending signature requests, and derives the signer from `patient_pii`
+  (`full_name` plus email or phone) when the request does not include explicit
+  signers.
+- If no real signer can be derived, the function returns
+  `missing_patient_signer` and does not call D4Sign.
+- `supabase/functions/patient-documents` exposes only safe UI hints:
+  `canRequestSignature` and `signatureDisabledReason`. It must not expose
+  storage paths, signed URLs, raw provider payloads, or signer PII.
+- `scripts/supabase/test-documents-contract.mjs` no longer sends
+  `paciente@example.com`; when the authorized environment is missing D4Sign
+  configuration or signer data, `server_misconfigured` and
+  `missing_patient_signer` are accepted gated outcomes.
 
 ## Security Rules
 
@@ -146,15 +172,15 @@ Use placeholders in docs and examples. Never commit real values.
 
 Local contract fixtures assert this provider-to-internal mapping:
 
-| D4Sign/webhook status | Signature request | Signer | Frontend document status | Frontend signature |
-| --- | --- | --- | --- | --- |
-| `sent`, `created`, `enviado` | `sent` | `pending` | `pendente_assinatura` | `pendente` |
-| `view`, `opened`, `visualiz*` | `viewed` | `viewed` | `pendente_assinatura` | `pendente` |
-| `sign*`, `assinad*`, `done`, `completed` | `signed` | `signed` | `assinado` | `assinado` |
-| `reject*`, `refus*`, `declin*` | `rejected` | `rejected` | `cancelado` | `pendente` |
-| `expir*` | `expired` | `expired` | `vencido` | `pendente` |
-| `cancel*` | `canceled` | `canceled` | `cancelado` | `pendente` |
-| `error`, `fail*`, `invalid` | `error` | `error` | `em_analise` | `pendente` |
+| D4Sign/webhook status                    | Signature request | Signer     | Frontend document status | Frontend signature |
+| ---------------------------------------- | ----------------- | ---------- | ------------------------ | ------------------ |
+| `sent`, `created`, `enviado`             | `sent`            | `pending`  | `pendente_assinatura`    | `pendente`         |
+| `view`, `opened`, `visualiz*`            | `viewed`          | `viewed`   | `pendente_assinatura`    | `pendente`         |
+| `sign*`, `assinad*`, `done`, `completed` | `signed`          | `signed`   | `assinado`               | `assinado`         |
+| `reject*`, `refus*`, `declin*`           | `rejected`        | `rejected` | `cancelado`              | `pendente`         |
+| `expir*`                                 | `expired`         | `expired`  | `vencido`                | `pendente`         |
+| `cancel*`                                | `canceled`        | `canceled` | `cancelado`              | `pendente`         |
+| `error`, `fail*`, `invalid`              | `error`           | `error`    | `em_analise`             | `pendente`         |
 
 When a webhook maps to `signed`, the expected timeline event is
 `documento_assinado` with category `documents`.

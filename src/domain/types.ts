@@ -278,6 +278,8 @@ export type TimelineEventType =
   | 'anamnese_preenchida'
   | 'soap_atualizado'
   | 'medida_registrada'
+  | 'exame_solicitado'
+  | 'exame_resultado_recebido'
   | 'plano_alimentar_publicado'
   | 'prescricao_emitida'
   | 'documento_gerado'
@@ -466,6 +468,7 @@ export interface PatientChatSummary {
   isOpen: boolean;
   messages?: PatientChatMessage[];
   shortcuts?: PatientChatShortcut[];
+  threads?: PatientChatThread[];
   responsibleTeamMember?: PatientChatResponsibleMember;
   serviceHours?: PatientChatServiceHours;
   slaExpected?: PatientChatSla;
@@ -522,6 +525,14 @@ export type PatientDocumentCategory =
 
 export type PatientDocumentSignatureStatus = 'assinado' | 'pendente' | 'nao_requerido';
 
+export interface PatientDocumentSignatureSummary {
+  provider: 'd4sign';
+  providerDocumentId?: string | null;
+  signatureRequestId: string;
+  status: 'sent' | 'viewed' | 'signed' | 'rejected' | 'expired' | 'canceled' | 'error';
+  idempotencyKey?: string | null;
+}
+
 export interface PatientDocument360Item {
   id: string;
   patientId: string;
@@ -540,6 +551,9 @@ export interface PatientDocument360Item {
   ultimoAcesso?: string;
   emitidoPor: string;
   hasEvidencePackage?: boolean;
+  signature?: PatientDocumentSignatureSummary;
+  canRequestSignature?: boolean;
+  signatureDisabledReason?: string;
 }
 
 export interface Patient360Summary {

@@ -107,9 +107,10 @@ Using placeholder emails:
 3. Creates `tenant_memberships` for the seeded clinic roles:
    `clinic_admin`, `physician`, `nutritionist`, `financial_user`.
    `tenant_memberships.role` mirrors `role_code`.
-4. Skips patient tenant membership for now, even though the schema contains
-   `patient_accounts` and `guardian_links`; the patient portal remains
-   fail-closed until UI guards and account-linking flows are implemented.
+4. Skips patient tenant membership for now. Patient/guardian portal identity is
+   represented by `patient_accounts` and `guardian_links`, whose own-link RLS is
+   validated separately; the patient portal remains fail-closed until scoped UI
+   and data contracts are implemented.
 5. Assigns roles and permissions by upserting tenant-scoped `roles`,
    `permissions`, and `role_permissions` for the clinic roles above.
 
@@ -125,8 +126,9 @@ If you prefer manual setup in Supabase Dashboard:
 4. Set `profiles.active_tenant_id` for clinic users to the demo tenant ID.
 5. Insert rows in `public.tenant_memberships` for clinic users only, using valid
    constrained role values.
-6. Seed patient as auth user plus `public.profiles` row only until the
-   patient-account linking flow is explicitly implemented.
+6. Seed patient as auth user plus `public.profiles` row only for core auth. Use
+   the patient linkage contract when you need active `patient_accounts` or
+   `guardian_links` demo rows.
 7. Insert role and permission rows in `public.roles`, `public.permissions`, then
    relation rows in `public.role_permissions` for clinic roles.
 
@@ -139,6 +141,8 @@ A lightweight manual SQL test checklist is available at:
 
 - `supabase/tests/core_rbac_smoke_tests.sql`
 - `supabase/tests/rls_cross_tenant_smoke_tests.sql`
+- `scripts/supabase/test-rls-cross-tenant-contract.mjs`
+- `scripts/supabase/test-patient-linkage-contract.mjs`
 
 How to run:
 
@@ -147,6 +151,9 @@ How to run:
    - `node scripts/supabase/bootstrap-core-auth.mjs`
    - Optional cross-tenant smoke seed:
      `node scripts/supabase/bootstrap-cross-tenant-demo.mjs`
+   - Optional scripted local RLS contracts:
+     `node scripts/supabase/test-rls-cross-tenant-contract.mjs` and
+     `node scripts/supabase/test-patient-linkage-contract.mjs`
 2. Open Supabase Dashboard -> SQL Editor.
 3. Open or copy `supabase/tests/core_rbac_smoke_tests.sql`.
 4. Replace all placeholder IDs (`USER_*_UUID`, `TENANT_*_UUID`) with values

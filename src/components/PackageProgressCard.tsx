@@ -16,9 +16,15 @@ const programTypeLabel: Record<string, string> = {
 };
 
 export default function PackageProgressCard({ pkg }: PackageProgressCardProps) {
-  const weekPercent = Math.round((pkg.currentWeek / pkg.totalWeeks) * 100);
-  const consultPercent = Math.round((pkg.usedConsultations / pkg.totalConsultations) * 100);
-  const nutriPercent = Math.round((pkg.usedNutritionSessions / pkg.totalNutritionSessions) * 100);
+  const weekPercent = pkg.totalWeeks > 0 ? Math.round((pkg.currentWeek / pkg.totalWeeks) * 100) : 0;
+  const consultPercent =
+    pkg.totalConsultations > 0
+      ? Math.round((pkg.usedConsultations / pkg.totalConsultations) * 100)
+      : 0;
+  const nutriPercent =
+    pkg.totalNutritionSessions > 0
+      ? Math.round((pkg.usedNutritionSessions / pkg.totalNutritionSessions) * 100)
+      : 0;
 
   return (
     <div className="card-base p-5">

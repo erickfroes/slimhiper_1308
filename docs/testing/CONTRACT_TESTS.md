@@ -61,6 +61,11 @@ Manual SQL checklist:
 - `supabase/tests/core_rbac_smoke_tests.sql`
 - `supabase/tests/rls_cross_tenant_smoke_tests.sql`
 
+Scripted local RLS smoke:
+
+- `scripts/supabase/test-rls-cross-tenant-contract.mjs`
+- `scripts/supabase/test-patient-linkage-contract.mjs`
+
 Prerequisites:
 
 ```bash
@@ -68,7 +73,59 @@ supabase db push
 node scripts/supabase/bootstrap-core-auth.mjs
 ```
 
-Then:
+For the scripted local smoke, use an authorized local Supabase stack with
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and
+`SUPABASE_BOOTSTRAP_PASSWORD` available:
+
+```bash
+node scripts/supabase/test-rls-cross-tenant-contract.mjs
+node scripts/supabase/test-patient-linkage-contract.mjs
+```
+
+The scripted smoke seeds demo tenant A/B users and records no secrets. It
+refuses mutating runs outside localhost unless `ALLOW_REMOTE_RLS_SMOKE=true` is
+set for an approved sandbox. It verifies tenant isolation for patients, PII,
+generated documents, patient invoices, chat threads/messages, report
+definitions, and a cross-tenant patient update attempt.
+
+The patient linkage smoke seeds demo `patient_accounts` and `guardian_links`,
+confirms linked patients/guardians can read only their own active linkage rows,
+confirms cross-patient linkage reads return 0 rows, and confirms linked
+patient/guardian users still cannot read `patients` directly while the portal
+remains fail-closed.
+
+## Clinical Core Contract Checks
+
+Scripted local smoke:
+
+- `scripts/supabase/test-clinical-core-contract.mjs`
+
+Use only against authorized local Supabase unless an approved sandbox explicitly
+sets `ALLOW_REMOTE_CLINICAL_CORE_SMOKE=true`.
+
+Required environment variables:
+
+```bash
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_SERVICE_ROLE_KEY=<local service role JWT>
+```
+
+Run:
+
+```bash
+node scripts/supabase/test-clinical-core-contract.mjs
+```
+
+Validated behavior:
+
+1. Creates a temporary tenant, patient, and `patient_pii` record.
+2. Creates an appointment and writes valid queue transition events.
+3. Creates encounter and final SOAP records.
+4. Creates measurements, bioimpedance, lab order and lab result records.
+5. Writes clinical timeline and audit records.
+6. Asserts persisted row counts and deletes the temporary tenant in cleanup.
+
+For the manual SQL checklist:
 
 1. Open Supabase Dashboard -> SQL Editor.
 2. Open or copy `supabase/tests/core_rbac_smoke_tests.sql`.

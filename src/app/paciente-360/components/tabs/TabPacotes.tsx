@@ -106,7 +106,26 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
     );
   }
 
-  const progressPercent = Math.round((pkg.currentWeek / pkg.totalWeeks) * 100);
+  const hasActivePackage =
+    pkg.programName !== 'Sem pacote ativo' ||
+    pkg.totalWeeks > 0 ||
+    pkg.totalConsultations > 0 ||
+    pkg.totalNutritionSessions > 0;
+
+  if (!hasActivePackage) {
+    return (
+      <div className="card-base p-5">
+        <EmptyState
+          icon={Package}
+          title="Sem pacote ativo"
+          description="Nenhum enrollment de programa foi retornado para este paciente."
+        />
+      </div>
+    );
+  }
+
+  const progressPercent =
+    pkg.totalWeeks > 0 ? Math.round((pkg.currentWeek / pkg.totalWeeks) * 100) : 0;
 
   const packageHistory: PatientPackageHistoryItem[] = pkg.packageHistory ?? [];
   const packageEntitlements: PatientPackageEntitlement[] = pkg.packageEntitlements ?? [];
@@ -232,8 +251,8 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
         <p className="text-sm font-semibold text-foreground mb-4">Serviços do Pacote</p>
         <div className="space-y-4">
           {serviceUsage.map((svc) => {
-            const pct = Math.round((svc.used / svc.total) * 100);
-            const remaining = svc.total - svc.used;
+            const pct = svc.total > 0 ? Math.round((svc.used / svc.total) * 100) : 0;
+            const remaining = Math.max(0, svc.total - svc.used);
             return (
               <div key={svc.label}>
                 <div className="flex items-center justify-between text-xs mb-1.5">
@@ -372,11 +391,21 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
           . Renove antes do vencimento para manter o acesso do paciente.
         </p>
         <div className="flex flex-wrap gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold transition-colors">
+          <button
+            type="button"
+            disabled
+            title="Acao bloqueada ate contrato real de renovacao de pacote."
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold transition-colors cursor-not-allowed opacity-55"
+          >
             <RefreshCw size={13} />
             Renovar pacote
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 text-xs font-semibold transition-colors">
+          <button
+            type="button"
+            disabled
+            title="Acao bloqueada ate contrato real de cancelamento de pacote."
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-300 text-red-600 text-xs font-semibold transition-colors cursor-not-allowed opacity-55"
+          >
             <XCircle size={13} />
             Cancelar pacote
           </button>
@@ -398,7 +427,13 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
                 ? 'border border-red-300 text-red-600 hover:bg-red-50'
                 : 'border border-border text-foreground hover:bg-muted/60';
             return (
-              <button key={action.key} className={`${baseClass} ${variantClass}`}>
+              <button
+                key={action.key}
+                type="button"
+                disabled
+                title="Acao bloqueada ate contrato real de pacotes."
+                className={`${baseClass} ${variantClass} cursor-not-allowed opacity-55`}
+              >
                 {action.icon}
                 {action.label}
               </button>

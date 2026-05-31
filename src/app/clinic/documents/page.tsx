@@ -87,6 +87,9 @@ const d4signPlaceholders = [
   { when: '2026-05-07 17:05', event: 'signature.completed (placeholder)', ref: 'DOC-1150' },
 ];
 
+const disabledDocumentsActionReason =
+  'Acao desabilitada no MVP local: use o fluxo auditado por paciente/Edge Function.';
+
 function statusBadge(status: DocumentStatus) {
   const classes: Record<DocumentStatus, string> = {
     Template: 'bg-violet-50 text-violet-700 border-violet-200',
@@ -134,7 +137,10 @@ function DocumentsContent() {
           ].map((action) => (
             <button
               key={action.label}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:bg-muted transition-colors"
+              type="button"
+              disabled
+              title={disabledDocumentsActionReason}
+              className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
             >
               <action.icon size={14} />
               {action.label}
@@ -220,7 +226,10 @@ function DocumentsContent() {
                       {['Reenviar', 'Baixar assinado'].map((action) => (
                         <button
                           key={action}
-                          className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-muted"
+                          type="button"
+                          disabled
+                          title={disabledDocumentsActionReason}
+                          className="text-xs px-2.5 py-1 rounded-lg border border-border text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {action}
                         </button>

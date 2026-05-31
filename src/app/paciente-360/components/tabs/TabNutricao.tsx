@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type {
   PatientNutritionPlanSummary,
   NutritionMeal,
@@ -35,12 +35,14 @@ import {
   History,
   BarChart2,
   Utensils,
+  AlertTriangle,
 } from 'lucide-react';
-import Icon from '@/components/ui/AppIcon';
 import EmptyState from '@/components/EmptyState';
+import { getPatientNutritionPlan } from '@/services/nutritionApi';
 
 interface TabNutricaoProps {
-  plan?: PatientNutritionPlanSummary | null;
+  patientId: string;
+  initialPlan?: PatientNutritionPlanSummary | null;
 }
 
 // ─── Food group icon + color map ─────────────────────────────────────────────
@@ -313,16 +315,62 @@ function TeamNoteCard({ note }: { note: NutritionTeamNote }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function TabNutricao({ plan }: TabNutricaoProps) {
+export default function TabNutricao({ patientId, initialPlan = null }: TabNutricaoProps) {
   const [showAllPhotos, setShowAllPhotos] = useState(false);
+  const [plan, setPlan] = useState<PatientNutritionPlanSummary | null>(initialPlan);
+  const [isLoading, setIsLoading] = useState(!initialPlan);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  if (!plan) {
+  const loadPlan = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const { data, error } = await getPatientNutritionPlan(patientId);
+      setPlan(data);
+      setLoadError(error?.message ?? null);
+    } catch (error) {
+      setPlan(null);
+      setLoadError(
+        error instanceof Error ? error.message : 'Falha inesperada ao carregar nutricao.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [patientId]);
+
+  useEffect(() => {
+    void loadPlan();
+  }, [loadPlan]);
+
+  if (isLoading) {
+    return (
+      <div className="card-base p-8 text-sm text-muted-foreground">
+        Carregando plano alimentar...
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="card-base p-8 text-center">
+        <AlertTriangle size={24} className="mx-auto text-amber-600" />
+        <p className="mt-3 text-sm font-semibold text-foreground">Nutricao indisponivel</p>
+        <p className="mt-1 text-xs text-muted-foreground">{loadError}</p>
+        <button type="button" onClick={() => void loadPlan()} className="btn-secondary mt-4">
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  if (!plan || !plan.isActive || plan.targetCalories <= 0) {
     return (
       <div className="card-base p-5">
         <EmptyState
           icon={Utensils}
           title="Nutrição indisponível"
-          description="Nenhum plano alimentar publicado"
+          description="Nenhum plano alimentar real foi publicado para este paciente."
         />
       </div>
     );
@@ -360,7 +408,13 @@ export default function TabNutricao({ plan }: TabNutricaoProps) {
                 : `${base} text-muted-foreground hover:text-foreground hover:bg-muted`;
           const Icon = ActionIcon as React.ElementType;
           return (
-            <button key={label} className={cls} type="button">
+            <button
+              key={label}
+              className={`${cls} cursor-not-allowed opacity-55`}
+              type="button"
+              disabled
+              title="Acao bloqueada ate contrato real de plano alimentar."
+            >
               <Icon size={13} />
               {label}
             </button>

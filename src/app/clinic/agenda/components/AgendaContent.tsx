@@ -12,6 +12,8 @@ import {
   Plus,
   RefreshCw,
   ArrowRight,
+  Pencil,
+  XCircle,
 } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
 import PageHeader from '@/components/PageHeader';
@@ -19,13 +21,19 @@ import type {
   AppointmentStatus,
   AppointmentSummary,
   AppointmentType,
+  PatientListRow,
   WaitingQueueEntry,
 } from '@/domain/types';
 import {
+  cancelAppointment,
+  createAppointment,
   getAgendaDay,
   getNextAppointmentStatus,
+  updateAppointment,
   updateAppointmentStatus,
+  type AppointmentMutationInput,
 } from '@/services/agendaApi';
+import { getPatientList } from '@/services/patientsApi';
 
 // ─── WORKFLOW STAGES ──────────────────────────────────────────────────────────
 
@@ -171,9 +179,235 @@ function getLocalDateValue(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function getLocalTimeValue(date = new Date()) {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function toLocalDateTimeParts(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return { date: getLocalDateValue(), time: '09:00' };
+  }
+  return {
+    date: getLocalDateValue(date),
+    time: getLocalTimeValue(date),
+  };
+}
+
+type AppointmentFormState = {
+  patientId: string;
+  type: AppointmentType;
+  date: string;
+  time: string;
+  durationMinutes: string;
+  location: string;
+  notes: string;
+};
+
+function createEmptyAppointmentForm(date: string): AppointmentFormState {
+  return {
+    patientId: '',
+    type: 'consulta_medica',
+    date,
+    time: '09:00',
+    durationMinutes: '30',
+    location: '',
+    notes: '',
+  };
+}
+
+function appointmentToForm(appointment: AppointmentSummary): AppointmentFormState {
+  const parts = toLocalDateTimeParts(appointment.scheduledAt);
+  return {
+    patientId: appointment.patientId,
+    type: appointment.type,
+    date: parts.date,
+    time: parts.time,
+    durationMinutes: String(appointment.durationMinutes || 30),
+    location: appointment.roomName ?? '',
+    notes: appointment.notes ?? '',
+  };
+}
+
+function toAppointmentMutationInput(form: AppointmentFormState): AppointmentMutationInput {
+  return {
+    patientId: form.patientId,
+    type: form.type,
+    scheduledAt: new Date(`${form.date}T${form.time || '09:00'}:00`).toISOString(),
+    durationMinutes: Number(form.durationMinutes) || 30,
+    location: form.location,
+    notes: form.notes,
+  };
+}
+
 // ─── MOCK CALENDAR EVENTS (days with appointments) ────────────────────────────
 
 // ─── MINI CALENDAR ────────────────────────────────────────────────────────────
+
+function AppointmentFormModal({
+  mode,
+  form,
+  patients,
+  patientsLoading,
+  error,
+  submitting,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  mode: 'create' | 'edit';
+  form: AppointmentFormState;
+  patients: PatientListRow[];
+  patientsLoading: boolean;
+  error: string | null;
+  submitting: boolean;
+  onChange: (patch: Partial<AppointmentFormState>) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">
+              {mode === 'create' ? 'Nova consulta' : 'Editar consulta'}
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              A consulta sera gravada no tenant ativo e validada por RLS.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            aria-label="Fechar"
+          >
+            <XCircle size={16} />
+          </button>
+        </div>
+
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+          className="space-y-4 px-5 py-5"
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
+              Paciente
+              <select
+                value={form.patientId}
+                onChange={(event) => onChange({ patientId: event.target.value })}
+                className="input-base text-sm"
+                required
+                disabled={patientsLoading}
+              >
+                <option value="">
+                  {patientsLoading ? 'Carregando pacientes...' : 'Selecione um paciente'}
+                </option>
+                {patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+              Tipo
+              <select
+                value={form.type}
+                onChange={(event) => onChange({ type: event.target.value as AppointmentType })}
+                className="input-base text-sm"
+              >
+                {(Object.keys(appointmentTypeLabel) as AppointmentType[]).map((type) => (
+                  <option key={type} value={type}>
+                    {appointmentTypeLabel[type]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+              Duracao
+              <input
+                type="number"
+                min={10}
+                step={5}
+                value={form.durationMinutes}
+                onChange={(event) => onChange({ durationMinutes: event.target.value })}
+                className="input-base text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+              Data
+              <input
+                type="date"
+                value={form.date}
+                onChange={(event) => onChange({ date: event.target.value })}
+                className="input-base text-sm"
+                required
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+              Horario
+              <input
+                type="time"
+                value={form.time}
+                onChange={(event) => onChange({ time: event.target.value })}
+                className="input-base text-sm"
+                required
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
+              Sala/local
+              <input
+                value={form.location}
+                onChange={(event) => onChange({ location: event.target.value })}
+                className="input-base text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
+              Observacoes
+              <textarea
+                value={form.notes}
+                onChange={(event) => onChange({ notes: event.target.value })}
+                className="input-base min-h-20 resize-none text-sm"
+              />
+            </label>
+          </div>
+
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="btn-secondary text-sm disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || patientsLoading}
+              className="btn-primary text-sm disabled:opacity-60"
+            >
+              {submitting ? 'Salvando...' : mode === 'create' ? 'Criar consulta' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 interface MiniCalendarProps {
   selectedDate: string;
@@ -299,6 +533,8 @@ interface KanbanColumnProps {
   appointments: AppointmentSummary[];
   transitioningId: string | null;
   onAdvanceStatus: (appointment: AppointmentSummary) => void;
+  onEditAppointment: (appointment: AppointmentSummary) => void;
+  onCancelAppointment: (appointment: AppointmentSummary) => void;
 }
 
 function KanbanColumn({
@@ -306,6 +542,8 @@ function KanbanColumn({
   appointments,
   transitioningId,
   onAdvanceStatus,
+  onEditAppointment,
+  onCancelAppointment,
 }: KanbanColumnProps) {
   const items = appointments.filter((a) => a.status === stage.key);
 
@@ -385,7 +623,6 @@ function KanbanColumn({
                     </div>
                   )}
                 </Link>
-
                 {nextStatus ? (
                   <button
                     type="button"
@@ -404,6 +641,28 @@ function KanbanColumn({
                     Sem próxima etapa
                   </div>
                 )}
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onEditAppointment(appt)}
+                    disabled={isTransitioning}
+                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-border px-2 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary disabled:opacity-60"
+                  >
+                    <Pencil size={12} />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onCancelAppointment(appt)}
+                    disabled={
+                      isTransitioning || ['concluido', 'cancelado', 'falta'].includes(appt.status)
+                    }
+                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-red-200 px-2 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <XCircle size={12} />
+                    Cancelar
+                  </button>
+                </div>{' '}
               </div>
             );
           })
@@ -417,9 +676,11 @@ function KanbanColumn({
 
 interface DayScheduleProps {
   appointments: AppointmentSummary[];
+  onEditAppointment: (appointment: AppointmentSummary) => void;
+  onCancelAppointment: (appointment: AppointmentSummary) => void;
 }
 
-function DaySchedule({ appointments }: DayScheduleProps) {
+function DaySchedule({ appointments, onEditAppointment, onCancelAppointment }: DayScheduleProps) {
   const sorted = [...appointments].sort(
     (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
   );
@@ -446,10 +707,9 @@ function DaySchedule({ appointments }: DayScheduleProps) {
               minute: '2-digit',
             });
             return (
-              <Link
+              <div
                 key={appt.id}
-                href={`/clinic/patients/${appt.patientId}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer group"
+                className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors group"
               >
                 {/* Time */}
                 <div className="w-12 flex-shrink-0 text-xs font-semibold text-muted-foreground tabular-nums">
@@ -471,7 +731,24 @@ function DaySchedule({ appointments }: DayScheduleProps) {
 
                 {/* Status badge */}
                 <StatusBadge status={appt.status} size="xs" />
-              </Link>
+                <button
+                  type="button"
+                  onClick={() => onEditAppointment(appt)}
+                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                  title="Editar consulta"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCancelAppointment(appt)}
+                  disabled={['concluido', 'cancelado', 'falta'].includes(appt.status)}
+                  className="rounded-lg p-1.5 text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Cancelar consulta"
+                >
+                  <XCircle size={14} />
+                </button>
+              </div>
             );
           })
         )}
@@ -694,6 +971,15 @@ export default function AgendaContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [transitioningId, setTransitioningId] = useState<string | null>(null);
+  const [appointmentFormMode, setAppointmentFormMode] = useState<'create' | 'edit' | null>(null);
+  const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
+  const [appointmentForm, setAppointmentForm] = useState<AppointmentFormState>(() =>
+    createEmptyAppointmentForm(getLocalDateValue())
+  );
+  const [appointmentFormError, setAppointmentFormError] = useState<string | null>(null);
+  const [appointmentFormSubmitting, setAppointmentFormSubmitting] = useState(false);
+  const [patientOptions, setPatientOptions] = useState<PatientListRow[]>([]);
+  const [patientOptionsLoading, setPatientOptionsLoading] = useState(false);
 
   const loadAgenda = useCallback(async () => {
     setIsLoading(true);
@@ -742,6 +1028,83 @@ export default function AgendaContent() {
     [loadAgenda]
   );
 
+  const loadPatientOptions = useCallback(async () => {
+    setPatientOptionsLoading(true);
+    try {
+      const rows = await getPatientList();
+      setPatientOptions(rows);
+    } catch (error) {
+      setPatientOptions([]);
+      setAppointmentFormError(
+        error instanceof Error ? error.message : 'Nao foi possivel carregar pacientes.'
+      );
+    } finally {
+      setPatientOptionsLoading(false);
+    }
+  }, []);
+
+  const closeAppointmentForm = () => {
+    if (appointmentFormSubmitting) return;
+    setAppointmentFormMode(null);
+    setEditingAppointmentId(null);
+    setAppointmentFormError(null);
+  };
+
+  const openCreateAppointment = () => {
+    setAppointmentFormMode('create');
+    setEditingAppointmentId(null);
+    setAppointmentForm(createEmptyAppointmentForm(selectedDate));
+    setAppointmentFormError(null);
+    void loadPatientOptions();
+  };
+
+  const openEditAppointment = (appointment: AppointmentSummary) => {
+    setAppointmentFormMode('edit');
+    setEditingAppointmentId(appointment.id);
+    setAppointmentForm(appointmentToForm(appointment));
+    setAppointmentFormError(null);
+    void loadPatientOptions();
+  };
+
+  const handleSubmitAppointmentForm = async () => {
+    setAppointmentFormSubmitting(true);
+    setAppointmentFormError(null);
+
+    const input = toAppointmentMutationInput(appointmentForm);
+    const result =
+      appointmentFormMode === 'edit' && editingAppointmentId
+        ? await updateAppointment(editingAppointmentId, input)
+        : await createAppointment(input);
+
+    setAppointmentFormSubmitting(false);
+
+    if (result.error || !result.data) {
+      setAppointmentFormError(result.error?.message ?? 'Nao foi possivel salvar consulta.');
+      return;
+    }
+
+    closeAppointmentForm();
+    setSelectedDate(appointmentForm.date);
+    await loadAgenda();
+  };
+
+  const handleCancelAppointment = async (appointment: AppointmentSummary) => {
+    const confirmed = window.confirm(`Cancelar a consulta de ${appointment.patientName}?`);
+    if (!confirmed) return;
+
+    setTransitioningId(appointment.id);
+    setLoadError(null);
+
+    const result = await cancelAppointment(appointment.id, 'Cancelada pela agenda clinica.');
+    if (result.error) {
+      setLoadError(result.error.message);
+    } else {
+      await loadAgenda();
+    }
+
+    setTransitioningId(null);
+  };
+
   const formattedDate = (() => {
     const [y, m, d] = selectedDate.split('-').map(Number);
     const date = new Date(y, m - 1, d);
@@ -755,6 +1118,20 @@ export default function AgendaContent() {
 
   return (
     <div className="p-4 lg:p-6 space-y-5">
+      {appointmentFormMode && (
+        <AppointmentFormModal
+          mode={appointmentFormMode}
+          form={appointmentForm}
+          patients={patientOptions}
+          patientsLoading={patientOptionsLoading}
+          error={appointmentFormError}
+          submitting={appointmentFormSubmitting}
+          onChange={(patch) => setAppointmentForm((current) => ({ ...current, ...patch }))}
+          onClose={closeAppointmentForm}
+          onSubmit={handleSubmitAppointmentForm}
+        />
+      )}
+
       {/* Page header */}
       <PageHeader
         title="Agenda e Fila"
@@ -776,8 +1153,7 @@ export default function AgendaContent() {
             </button>
             <button
               type="button"
-              disabled
-              title="Criação de consulta depende do service real de CRUD."
+              onClick={openCreateAppointment}
               className="btn-primary flex items-center gap-1.5 text-sm px-3 py-1.5"
             >
               <Plus size={14} />
@@ -882,12 +1258,18 @@ export default function AgendaContent() {
                     appointments={appointments}
                     transitioningId={transitioningId}
                     onAdvanceStatus={handleAdvanceStatus}
+                    onEditAppointment={openEditAppointment}
+                    onCancelAppointment={handleCancelAppointment}
                   />
                 ))}
               </div>
             </div>
           ) : (
-            <DaySchedule appointments={appointments} />
+            <DaySchedule
+              appointments={appointments}
+              onEditAppointment={openEditAppointment}
+              onCancelAppointment={handleCancelAppointment}
+            />
           )}
         </div>
       </div>

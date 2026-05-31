@@ -85,7 +85,8 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    if (!supabaseUrl || !anonKey) {
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       return jsonResponse(500, {
         ok: false,
         error: { code: 'server_misconfigured', message: 'Server configuration error.' },
@@ -95,6 +96,9 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const serviceSupabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -153,10 +157,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: canWriteDocuments, error: permissionError } = await supabase.rpc('has_clinical_permission', {
-      p_tenant_id: tenantId,
-      p_permission: 'documents.write',
-    });
+    const { data: canWriteDocuments, error: permissionError } = await supabase.rpc(
+      'has_clinical_permission',
+      {
+        p_tenant_id: tenantId,
+        p_permission: 'documents.write',
+      }
+    );
 
     if (permissionError) throw permissionError;
     if (canWriteDocuments !== true) {
@@ -233,10 +240,15 @@ Deno.serve(async (req) => {
     }
 
     const uploadContent = new Blob([renderedContent], { type: 'text/html; charset=utf-8' });
-    const { error: uploadError } = await supabase.storage.from(storageBucket).upload(storagePath, uploadContent, { upsert: true, contentType: 'text/html; charset=utf-8' });
+    const { error: uploadError } = await serviceSupabase.storage
+      .from(storageBucket)
+      .upload(storagePath, uploadContent, {
+        upsert: true,
+        contentType: 'text/html; charset=utf-8',
+      });
     if (uploadError) throw uploadError;
 
-    const { data: generatedDocument, error: generatedDocumentError } = await supabase
+    const { data: generatedDocument, error: generatedDocumentError } = await serviceSupabase
       .from('generated_documents')
       .insert({
         id: generatedDocumentId,
@@ -250,7 +262,9 @@ Deno.serve(async (req) => {
         storage_path: storagePath,
         generated_by: authData.user.id,
       })
-      .select('id, tenant_id, patient_id, template_id, name, category, status, generated_by, generated_at, created_at, updated_at')
+      .select(
+        'id, tenant_id, patient_id, template_id, name, category, status, generated_by, generated_at, created_at, updated_at'
+      )
       .single();
 
     if (generatedDocumentError) throw generatedDocumentError;
@@ -263,7 +277,7 @@ Deno.serve(async (req) => {
       document_status: generatedDocument.status,
     };
 
-    const { error: timelineError } = await supabase.from('patient_timeline_events').insert({
+    const { error: timelineError } = await serviceSupabase.from('patient_timeline_events').insert({
       tenant_id: tenantId,
       patient_id: patientId,
       event_type: 'documento_gerado',

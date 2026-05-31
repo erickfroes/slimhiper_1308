@@ -13,7 +13,6 @@ import {
   FileDown,
   Table2,
   Printer,
-  X,
   AlertTriangle,
 } from 'lucide-react';
 import type { PatientReportDefinition } from '@/domain/types';
@@ -51,49 +50,28 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
   const [reports, setReports] = useState<PatientReportDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [viewingReport, setViewingReport] = useState<string | null>(null);
 
   const loadReports = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
 
-    const { data, error } = await getPatientReportDefinitions(patientId);
-    setReports(data);
-    setLoadError(error?.message ?? null);
-    setIsLoading(false);
+    try {
+      const { data, error } = await getPatientReportDefinitions(patientId);
+      setReports(data);
+      setLoadError(error?.message ?? null);
+    } catch (error) {
+      setReports([]);
+      setLoadError(
+        error instanceof Error ? error.message : 'Falha inesperada ao carregar relatórios.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
   }, [patientId]);
 
   useEffect(() => {
     void loadReports();
   }, [loadReports]);
-
-  const showToast = (message: string) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const handleVerRelatorio = (label: string) => {
-    setViewingReport(label);
-  };
-
-  const handleExportPDF = (card: PatientReportDefinition) => {
-    if (!card.exportImplemented) {
-      showToast('Exportação em breve');
-    }
-  };
-
-  const handleExportExcel = (card: PatientReportDefinition) => {
-    if (!card.exportImplemented) {
-      showToast('Exportação em breve');
-    }
-  };
-
-  const handleImprimir = (card: PatientReportDefinition) => {
-    if (!card.exportImplemented) {
-      showToast('Exportação em breve');
-    }
-  };
 
   return (
     <div className="space-y-5">
@@ -136,6 +114,9 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
               iconBg: 'bg-gray-50',
               iconColor: 'text-gray-600',
             };
+            const disabledReason = card.exportImplemented
+              ? 'Executor de relatorio ainda nao foi publicado neste lote.'
+              : 'Relatorio cadastrado sem exportacao habilitada.';
             return (
               <div
                 key={card.key}
@@ -172,8 +153,10 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
                 <div className="flex flex-col gap-2">
                   {/* Primary action */}
                   <button
-                    onClick={() => handleVerRelatorio(card.label)}
-                    className="btn-primary text-xs w-full gap-1.5 justify-center"
+                    type="button"
+                    disabled
+                    title={disabledReason}
+                    className="btn-primary text-xs w-full gap-1.5 justify-center cursor-not-allowed opacity-55"
                   >
                     <Eye size={13} />
                     Ver relatório completo
@@ -182,25 +165,28 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
                   {/* Secondary actions */}
                   <div className="grid grid-cols-3 gap-1.5">
                     <button
-                      onClick={() => handleExportPDF(card)}
-                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5"
-                      title="Exportar PDF"
+                      type="button"
+                      disabled
+                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5 cursor-not-allowed opacity-55"
+                      title={disabledReason}
                     >
                       <FileDown size={12} />
                       PDF
                     </button>
                     <button
-                      onClick={() => handleExportExcel(card)}
-                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5"
-                      title="Exportar Excel"
+                      type="button"
+                      disabled
+                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5 cursor-not-allowed opacity-55"
+                      title={disabledReason}
                     >
                       <Table2 size={12} />
                       Excel
                     </button>
                     <button
-                      onClick={() => handleImprimir(card)}
-                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5"
-                      title="Imprimir"
+                      type="button"
+                      disabled
+                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5 cursor-not-allowed opacity-55"
+                      title={disabledReason}
                     >
                       <Printer size={12} />
                       Imprimir
@@ -210,43 +196,6 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Report Viewer Modal */}
-      {viewingReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="card-base w-full max-w-lg p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-foreground">{viewingReport}</p>
-              <button
-                onClick={() => setViewingReport(null)}
-                className="w-7 h-7 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground"
-              >
-                <X size={15} />
-              </button>
-            </div>
-            <div className="bg-muted rounded-xl p-8 flex flex-col items-center gap-3 text-center">
-              <FileText size={32} className="text-muted-foreground/50" />
-              <p className="text-sm font-medium text-foreground">Visualização em breve</p>
-              <p className="text-xs text-muted-foreground">
-                O relatório <span className="font-medium">{viewingReport}</span> de{' '}
-                <span className="font-medium">{patientName}</span> estará disponível em breve.
-              </p>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setViewingReport(null)} className="btn-secondary text-xs">
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground text-background text-xs font-medium px-4 py-2.5 rounded-full shadow-lg fade-in">
-          {toast}
         </div>
       )}
     </div>

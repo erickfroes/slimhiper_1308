@@ -1,1083 +1,1231 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Building2,
-  MapPin,
-  Users,
-  ShieldCheck,
-  Palette,
-  Globe,
-  Plug,
-  CreditCard,
+  AlertCircle,
   BookOpen,
+  Building2,
   Camera,
-  Plus,
-  Edit2,
-  Trash2,
   Check,
   ChevronRight,
-  Phone,
+  CreditCard,
+  Edit2,
+  Globe,
+  Loader2,
+  MapPin,
+  Palette,
+  Plug,
+  Plus,
+  RefreshCw,
   Save,
-  Upload,
+  ShieldCheck,
+  UserPlus,
+  Users,
+  X,
 } from 'lucide-react';
-import Icon from '@/components/ui/AppIcon';
+import {
+  getClinicSettings,
+  saveClinicUnit,
+  updateClinicSettings,
+  type ClinicBrandingSettings,
+  type ClinicFinanceSettings,
+  type ClinicIntegration,
+  type ClinicPortalSettings,
+  type ClinicProfileSettings,
+  type ClinicSettingsSnapshot,
+  type ClinicUnit,
+  type ClinicUnitStatus,
+  type SaveClinicUnitInput,
+} from '@/services/clinicSettingsApi';
 
-// ─── MOCK DATA ────────────────────────────────────────────────────────────────
-
-interface ClinicUnit {
-  id: string;
-  name: string;
-  address: string;
-  city: string;
-  phone: string;
-  isMain: boolean;
-  active: boolean;
-}
-
-interface TeamMember {
-  id: string;
-  name: string;
-  role: string;
-  email: string;
-  specialty?: string;
-  active: boolean;
-  avatarInitials: string;
-  color: string;
-}
-
-interface ClinicRole {
-  id: string;
-  name: string;
-  label: string;
-  membersCount: number;
-  color: string;
-}
-
-interface Integration {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  connected: boolean;
-  icon: string;
-}
-
-type PermissionKey =
-  | 'pacientes'
-  | 'agenda'
-  | 'atendimento'
-  | 'soap'
-  | 'nutricao'
-  | 'prescricoes'
-  | 'documentos'
+type SectionId =
+  | 'perfil'
+  | 'unidades'
+  | 'equipe'
+  | 'papeis'
+  | 'branding'
+  | 'portal'
+  | 'integracoes'
   | 'financeiro'
-  | 'pacotes'
-  | 'chat'
-  | 'relatorios'
-  | 'configuracoes';
+  | 'programas';
 
-interface RolePermissions {
-  roleId: string;
-  permissions: Record<PermissionKey, { read: boolean; write: boolean }>;
-}
+type ProfileDraft = ClinicProfileSettings & { name: string };
 
-const PERMISSION_MODULES: { key: PermissionKey; label: string }[] = [
-  { key: 'pacientes', label: 'Pacientes' },
-  { key: 'agenda', label: 'Agenda' },
-  { key: 'atendimento', label: 'Atendimento' },
-  { key: 'soap', label: 'SOAP' },
-  { key: 'nutricao', label: 'Nutrição' },
-  { key: 'prescricoes', label: 'Prescrições' },
-  { key: 'documentos', label: 'Documentos' },
-  { key: 'financeiro', label: 'Financeiro' },
-  { key: 'pacotes', label: 'Pacotes' },
-  { key: 'chat', label: 'Chat' },
-  { key: 'relatorios', label: 'Relatórios' },
-  { key: 'configuracoes', label: 'Configurações' },
-];
+type SaveKey =
+  | 'profile'
+  | 'branding'
+  | 'portal'
+  | 'integrations'
+  | 'finance'
+  | 'programs'
+  | 'unit'
+  | null;
 
-const mockUnits: ClinicUnit[] = [
-  {
-    id: 'u1',
-    name: 'Unidade Central',
-    address: 'Av. Paulista, 1000 – Sala 301',
-    city: 'São Paulo, SP',
-    phone: '(11) 3000-1234',
-    isMain: true,
-    active: true,
-  },
-  {
-    id: 'u2',
-    name: 'Unidade Moema',
-    address: 'Rua Iraí, 220 – Sala 12',
-    city: 'São Paulo, SP',
-    phone: '(11) 3000-5678',
-    isMain: false,
-    active: true,
-  },
-  {
-    id: 'u3',
-    name: 'Unidade ABC',
-    address: 'Av. Industrial, 500',
-    city: 'Santo André, SP',
-    phone: '(11) 4000-9012',
-    isMain: false,
-    active: false,
-  },
-];
-
-const mockTeam: TeamMember[] = [
-  {
-    id: 't1',
-    name: 'Dra. Fernanda Lima',
-    role: 'Médica',
-    email: 'fernanda@slimhiper.com',
-    specialty: 'Endocrinologia',
-    active: true,
-    avatarInitials: 'FL',
-    color: 'bg-teal-100 text-teal-700',
-  },
-  {
-    id: 't2',
-    name: 'Nutr. Carlos Mendes',
-    role: 'Nutricionista',
-    email: 'carlos@slimhiper.com',
-    specialty: 'Nutrição Clínica',
-    active: true,
-    avatarInitials: 'CM',
-    color: 'bg-violet-100 text-violet-700',
-  },
-  {
-    id: 't3',
-    name: 'Ana Souza',
-    role: 'Coordenadora',
-    email: 'ana@slimhiper.com',
-    active: true,
-    avatarInitials: 'AS',
-    color: 'bg-blue-100 text-blue-700',
-  },
-  {
-    id: 't4',
-    name: 'Beatriz Costa',
-    role: 'Recepcionista',
-    email: 'beatriz@slimhiper.com',
-    active: true,
-    avatarInitials: 'BC',
-    color: 'bg-amber-100 text-amber-700',
-  },
-  {
-    id: 't5',
-    name: 'Dr. Rafael Torres',
-    role: 'Médico',
-    email: 'rafael@slimhiper.com',
-    specialty: 'Nutrologia',
-    active: false,
-    avatarInitials: 'RT',
-    color: 'bg-rose-100 text-rose-700',
-  },
-];
-
-const mockRoles: ClinicRole[] = [
-  {
-    id: 'admin',
-    name: 'admin',
-    label: 'Administrador',
-    membersCount: 1,
-    color: 'bg-rose-50 text-rose-700 border-rose-200',
-  },
-  {
-    id: 'physician',
-    name: 'physician',
-    label: 'Médico',
-    membersCount: 2,
-    color: 'bg-teal-50 text-teal-700 border-teal-200',
-  },
-  {
-    id: 'nutritionist',
-    name: 'nutritionist',
-    label: 'Nutricionista',
-    membersCount: 1,
-    color: 'bg-violet-50 text-violet-700 border-violet-200',
-  },
-  {
-    id: 'coordinator',
-    name: 'coordinator',
-    label: 'Coordenador',
-    membersCount: 1,
-    color: 'bg-blue-50 text-blue-700 border-blue-200',
-  },
-  {
-    id: 'receptionist',
-    name: 'receptionist',
-    label: 'Recepcionista',
-    membersCount: 1,
-    color: 'bg-amber-50 text-amber-700 border-amber-200',
-  },
-];
-
-const defaultPermissions = (
-  roleId: string
-): Record<PermissionKey, { read: boolean; write: boolean }> => {
-  const all: Record<PermissionKey, { read: boolean; write: boolean }> = {
-    pacientes: { read: true, write: true },
-    agenda: { read: true, write: true },
-    atendimento: { read: true, write: true },
-    soap: { read: true, write: true },
-    nutricao: { read: true, write: true },
-    prescricoes: { read: true, write: true },
-    documentos: { read: true, write: true },
-    financeiro: { read: true, write: true },
-    pacotes: { read: true, write: true },
-    chat: { read: true, write: true },
-    relatorios: { read: true, write: true },
-    configuracoes: { read: true, write: true },
-  };
-  if (roleId === 'receptionist') {
-    return {
-      ...all,
-      soap: { read: false, write: false },
-      nutricao: { read: false, write: false },
-      prescricoes: { read: false, write: false },
-      financeiro: { read: true, write: false },
-      relatorios: { read: false, write: false },
-      configuracoes: { read: false, write: false },
-    };
-  }
-  if (roleId === 'nutritionist') {
-    return {
-      ...all,
-      prescricoes: { read: true, write: false },
-      financeiro: { read: true, write: false },
-      configuracoes: { read: false, write: false },
-    };
-  }
-  if (roleId === 'physician') {
-    return {
-      ...all,
-      configuracoes: { read: false, write: false },
-    };
-  }
-  if (roleId === 'coordinator') {
-    return {
-      ...all,
-      soap: { read: true, write: false },
-      nutricao: { read: true, write: false },
-      prescricoes: { read: true, write: false },
-      configuracoes: { read: true, write: false },
-    };
-  }
-  return all;
-};
-
-const mockRolePermissions: RolePermissions[] = mockRoles.map((r) => ({
-  roleId: r.id,
-  permissions: defaultPermissions(r.id),
-}));
-
-const mockIntegrations: Integration[] = [
-  {
-    id: 'i1',
-    name: 'WhatsApp Business',
-    description: 'Envio de mensagens e notificações automáticas',
-    category: 'Comunicação',
-    connected: true,
-    icon: '💬',
-  },
-  {
-    id: 'i2',
-    name: 'Google Agenda',
-    description: 'Sincronização bidirecional de consultas',
-    category: 'Agenda',
-    connected: true,
-    icon: '📅',
-  },
-  {
-    id: 'i3',
-    name: 'Stripe',
-    description: 'Processamento de pagamentos e assinaturas',
-    category: 'Financeiro',
-    connected: false,
-    icon: '💳',
-  },
-  {
-    id: 'i4',
-    name: 'DocuSign',
-    description: 'Assinatura eletrônica de documentos',
-    category: 'Documentos',
-    connected: false,
-    icon: '✍️',
-  },
-  {
-    id: 'i5',
-    name: 'Receita Federal',
-    description: 'Validação de CPF e dados cadastrais',
-    category: 'Compliance',
-    connected: true,
-    icon: '🏛️',
-  },
-  {
-    id: 'i6',
-    name: 'iClinic',
-    description: 'Importação de prontuários legados',
-    category: 'Migração',
-    connected: false,
-    icon: '🔄',
-  },
-];
-
-const mockDefaultPrograms = [
-  { id: 'dp1', name: 'Emagrecimento 12 semanas', active: true },
-  { id: 'dp2', name: 'Hipertrofia 16 semanas', active: true },
-  { id: 'dp3', name: 'Recomposição corporal', active: false },
-  { id: 'dp4', name: 'Saúde metabólica 90 dias', active: true },
-  { id: 'dp5', name: 'Longevidade preventiva', active: false },
-];
-
-// ─── SECTION IDs ──────────────────────────────────────────────────────────────
-
-const SECTIONS = [
-  { id: 'perfil', label: 'Perfil da clínica', icon: Building2 },
+const SECTIONS: Array<{ id: SectionId; label: string; icon: React.ElementType }> = [
+  { id: 'perfil', label: 'Perfil', icon: Building2 },
   { id: 'unidades', label: 'Unidades', icon: MapPin },
   { id: 'equipe', label: 'Equipe', icon: Users },
-  { id: 'papeis', label: 'Papéis e permissões', icon: ShieldCheck },
+  { id: 'papeis', label: 'Papeis', icon: ShieldCheck },
   { id: 'branding', label: 'Branding', icon: Palette },
-  { id: 'portal', label: 'Portal do paciente', icon: Globe },
-  { id: 'integracoes', label: 'Integrações', icon: Plug },
+  { id: 'portal', label: 'Portal', icon: Globe },
+  { id: 'integracoes', label: 'Integracoes', icon: Plug },
   { id: 'financeiro', label: 'Financeiro', icon: CreditCard },
-  { id: 'programas', label: 'Programas padrão', icon: BookOpen },
-] as const;
+  { id: 'programas', label: 'Programas', icon: BookOpen },
+];
 
-type SectionId = (typeof SECTIONS)[number]['id'];
+const EMPTY_PROFILE: ProfileDraft = {
+  name: '',
+  cnpj: '',
+  email: '',
+  phone: '',
+  website: '',
+  timezone: 'America/Sao_Paulo',
+  specialties: '',
+  logoUrl: '',
+};
 
-// ─── TOGGLE COMPONENT ─────────────────────────────────────────────────────────
+const EMPTY_BRANDING: ClinicBrandingSettings = {
+  primaryColor: '#0d9488',
+  accentColor: '#059669',
+  fontFamily: 'Plus Jakarta Sans',
+};
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+const EMPTY_PORTAL: ClinicPortalSettings = {
+  url: '',
+  selfScheduling: false,
+  chatEnabled: false,
+  documentsAccess: false,
+  financialAccess: false,
+  checkInReminder: false,
+  npsEnabled: false,
+};
+
+const EMPTY_FINANCE: ClinicFinanceSettings = {
+  currency: 'BRL',
+  defaultDueDay: 10,
+  lateFeePercent: 2,
+  monthlyInterestPercent: 1,
+  pixKey: '',
+  autoInvoice: false,
+  delinquencyAlerts: true,
+  emailReceipts: true,
+};
+
+const EMPTY_UNIT: SaveClinicUnitInput = {
+  code: '',
+  name: '',
+  status: 'active',
+  address: '',
+  city: '',
+  phone: '',
+  isMain: false,
+};
+
+function Toggle({
+  checked,
+  onChange,
+  disabled = false,
+  label,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+  label: string;
+}) {
   return (
     <button
       type="button"
+      aria-label={label}
+      aria-pressed={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-        checked ? 'bg-primary' : 'bg-border'
-      }`}
+      className={[
+        'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+        checked ? 'bg-primary' : 'bg-muted-foreground/30',
+        disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+      ].join(' ')}
     >
       <span
-        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${
-          checked ? 'translate-x-4' : 'translate-x-1'
-        }`}
+        className={[
+          'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
+          checked ? 'translate-x-6' : 'translate-x-1',
+        ].join(' ')}
       />
     </button>
   );
 }
 
-// ─── SECTION: PERFIL ─────────────────────────────────────────────────────────
-
-function SectionPerfil() {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center border-2 border-dashed border-primary/30 cursor-pointer hover:bg-primary/15 transition-colors group relative overflow-hidden">
-          <Camera
-            size={22}
-            className="text-primary/60 group-hover:text-primary transition-colors"
-          />
-          <span className="absolute bottom-1 text-[9px] text-primary/60 font-medium">Logo</span>
-        </div>
-        <div>
-          <p className="text-sm font-medium text-foreground">Logo da clínica</p>
-          <p className="text-xs text-muted-foreground mt-0.5">PNG ou SVG, máx. 2 MB</p>
-          <button className="mt-2 flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-            <Upload size={12} /> Fazer upload
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Nome da clínica *
-          </label>
-          <input defaultValue="SlimHiper Clinic" className="input-base w-full text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">CNPJ</label>
-          <input defaultValue="12.345.678/0001-90" className="input-base w-full text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            E-mail principal
-          </label>
-          <input
-            defaultValue="contato@slimhiper.com"
-            type="email"
-            className="input-base w-full text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Telefone</label>
-          <input defaultValue="(11) 3000-1234" className="input-base w-full text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Site</label>
-          <input defaultValue="https://slimhiper.com.br" className="input-base w-full text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Fuso horário
-          </label>
-          <select className="input-base w-full text-sm">
-            <option>America/Sao_Paulo (UTC-3)</option>
-            <option>America/Manaus (UTC-4)</option>
-          </select>
-        </div>
-        <div className="md:col-span-2">
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Especialidades
-          </label>
-          <input
-            defaultValue="Endocrinologia, Nutrologia, Nutrição Clínica"
-            className="input-base w-full text-sm"
-          />
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors">
-          <Save size={14} /> Salvar alterações
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── SECTION: UNIDADES ────────────────────────────────────────────────────────
-
-function SectionUnidades() {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{mockUnits.length} unidades cadastradas</p>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-xl text-xs font-medium hover:bg-primary/90 transition-colors">
-          <Plus size={13} /> Nova unidade
-        </button>
-      </div>
-
-      <div className="space-y-3">
-        {mockUnits.map((unit) => (
-          <div
-            key={unit.id}
-            className={`bg-background border border-border rounded-xl p-4 ${!unit.active ? 'opacity-60' : ''}`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <MapPin size={14} className="text-primary" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-foreground">{unit.name}</span>
-                    {unit.isMain && (
-                      <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
-                        Principal
-                      </span>
-                    )}
-                    {!unit.active && (
-                      <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
-                        Inativa
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{unit.address}</p>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <MapPin size={11} /> {unit.city}
-                    </span>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Phone size={11} /> {unit.phone}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                  <Edit2 size={13} />
-                </button>
-                {!unit.isMain && (
-                  <button className="p-1.5 rounded-lg text-muted-foreground hover:bg-negative/10 hover:text-negative transition-colors">
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── SECTION: EQUIPE ─────────────────────────────────────────────────────────
-
-function SectionEquipe() {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{mockTeam.length} membros</p>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-xl text-xs font-medium hover:bg-primary/90 transition-colors">
-          <Plus size={13} /> Convidar membro
-        </button>
-      </div>
-
-      <div className="space-y-2">
-        {mockTeam.map((member) => (
-          <div
-            key={member.id}
-            className={`flex items-center gap-3 p-3 bg-background border border-border rounded-xl ${!member.active ? 'opacity-60' : ''}`}
-          >
-            <div
-              className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${member.color}`}
-            >
-              {member.avatarInitials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">{member.name}</span>
-                {!member.active && (
-                  <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-                    Inativo
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs text-muted-foreground">{member.role}</span>
-                {member.specialty && (
-                  <>
-                    <span className="text-muted-foreground/40">·</span>
-                    <span className="text-xs text-muted-foreground">{member.specialty}</span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <span className="text-xs text-muted-foreground hidden sm:block">{member.email}</span>
-              <button className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors ml-2">
-                <Edit2 size={13} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── SECTION: PAPÉIS E PERMISSÕES ────────────────────────────────────────────
-
-function SectionPapeis() {
-  const [selectedRole, setSelectedRole] = useState<string>('admin');
-  const [permissions, setPermissions] = useState<RolePermissions[]>(mockRolePermissions);
-
-  const currentPerms = permissions.find((p) => p.roleId === selectedRole)!;
-  const currentRole = mockRoles.find((r) => r.id === selectedRole)!;
-
-  const togglePerm = (key: PermissionKey, type: 'read' | 'write') => {
-    setPermissions((prev) =>
-      prev.map((p) => {
-        if (p.roleId !== selectedRole) return p;
-        const updated = { ...p.permissions[key] };
-        if (type === 'read') {
-          updated.read = !updated.read;
-          if (!updated.read) updated.write = false; // can't write without read
-        } else {
-          updated.write = !updated.write;
-          if (updated.write) updated.read = true; // write implies read
-        }
-        return { ...p, permissions: { ...p.permissions, [key]: updated } };
-      })
-    );
-  };
-
-  return (
-    <div className="space-y-5">
-      {/* Role selector */}
-      <div className="flex flex-wrap gap-2">
-        {mockRoles.map((role) => (
-          <button
-            key={role.id}
-            onClick={() => setSelectedRole(role.id)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all duration-150 ${
-              selectedRole === role.id
-                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                : 'bg-background border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
-            }`}
-          >
-            {role.label}
-            <span
-              className={`text-xs px-1.5 py-0.5 rounded-full ${selectedRole === role.id ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'}`}
-            >
-              {role.membersCount}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* Permission matrix */}
-      <div className="border border-border rounded-2xl overflow-hidden">
-        {/* Header */}
-        <div className="grid grid-cols-[1fr_80px_80px] bg-muted/60 border-b border-border px-4 py-2.5">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Módulo
-          </span>
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-center">
-            Leitura
-          </span>
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide text-center">
-            Escrita
-          </span>
-        </div>
-
-        {/* Rows */}
-        <div className="divide-y divide-border">
-          {PERMISSION_MODULES.map((mod) => {
-            const perm = currentPerms.permissions[mod.key];
-            return (
-              <div
-                key={mod.key}
-                className="grid grid-cols-[1fr_80px_80px] items-center px-4 py-3 hover:bg-muted/30 transition-colors"
-              >
-                <span className="text-sm text-foreground font-medium">{mod.label}</span>
-                <div className="flex justify-center">
-                  <Toggle checked={perm.read} onChange={() => togglePerm(mod.key, 'read')} />
-                </div>
-                <div className="flex justify-center">
-                  <Toggle checked={perm.write} onChange={() => togglePerm(mod.key, 'write')} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          Editando permissões de:{' '}
-          <span className="font-semibold text-foreground">{currentRole.label}</span>
-        </p>
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors">
-          <Save size={14} /> Salvar permissões
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── SECTION: BRANDING ───────────────────────────────────────────────────────
-
-function SectionBranding() {
-  const [primaryColor, setPrimaryColor] = useState('#0d9488');
-  const [accentColor, setAccentColor] = useState('#059669');
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-2">
-            Cor primária
-          </label>
-          <div className="flex items-center gap-3">
-            <input
-              type="color"
-              value={primaryColor}
-              onChange={(e) => setPrimaryColor(e.target.value)}
-              className="w-10 h-10 rounded-lg border border-border cursor-pointer"
-            />
-            <input
-              value={primaryColor}
-              onChange={(e) => setPrimaryColor(e.target.value)}
-              className="input-base flex-1 text-sm font-mono"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-2">
-            Cor de destaque
-          </label>
-          <div className="flex items-center gap-3">
-            <input
-              type="color"
-              value={accentColor}
-              onChange={(e) => setAccentColor(e.target.value)}
-              className="w-10 h-10 rounded-lg border border-border cursor-pointer"
-            />
-            <input
-              value={accentColor}
-              onChange={(e) => setAccentColor(e.target.value)}
-              className="input-base flex-1 text-sm font-mono"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-2">
-          Fonte principal
-        </label>
-        <select className="input-base w-full max-w-xs text-sm">
-          <option>Plus Jakarta Sans</option>
-          <option>DM Sans</option>
-          <option>Manrope</option>
-          <option>General Sans</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-2">
-          Favicon / ícone do app
-        </label>
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-dashed border-primary/30">
-            <Building2 size={20} className="text-primary/50" />
-          </div>
-          <button className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-            <Upload size={12} /> Fazer upload
-          </button>
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors">
-          <Save size={14} /> Salvar branding
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── SECTION: PORTAL DO PACIENTE ─────────────────────────────────────────────
-
-function SectionPortal() {
-  const [settings, setSettings] = useState({
-    selfScheduling: true,
-    chatEnabled: true,
-    documentsAccess: true,
-    financialAccess: false,
-    checkInReminder: true,
-    npsEnabled: true,
-  });
-
-  const toggle = (key: keyof typeof settings) =>
-    setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
-
-  const items = [
-    {
-      key: 'selfScheduling' as const,
-      label: 'Auto-agendamento',
-      desc: 'Pacientes podem agendar consultas pelo app',
-    },
-    {
-      key: 'chatEnabled' as const,
-      label: 'Chat com equipe',
-      desc: 'Mensagens diretas entre paciente e profissional',
-    },
-    {
-      key: 'documentsAccess' as const,
-      label: 'Acesso a documentos',
-      desc: 'Visualização de laudos, receitas e resultados',
-    },
-    {
-      key: 'financialAccess' as const,
-      label: 'Extrato financeiro',
-      desc: 'Paciente visualiza cobranças e pagamentos',
-    },
-    {
-      key: 'checkInReminder' as const,
-      label: 'Lembretes de check-in',
-      desc: 'Notificações push para check-ins pendentes',
-    },
-    {
-      key: 'npsEnabled' as const,
-      label: 'Pesquisa de satisfação (NPS)',
-      desc: 'Envio automático após consultas',
-    },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-          URL do portal
-        </label>
-        <div className="flex items-center gap-2">
-          <input
-            defaultValue="https://app.slimhiper.com.br/p/slimhiper"
-            readOnly
-            className="input-base flex-1 text-sm bg-muted/40 text-muted-foreground"
-          />
-          <button className="px-3 py-2 border border-border rounded-xl text-xs font-medium text-muted-foreground hover:bg-muted transition-colors">
-            Copiar
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-2 mt-2">
-        {items.map((item) => (
-          <div
-            key={item.key}
-            className="flex items-center justify-between p-3.5 bg-background border border-border rounded-xl"
-          >
-            <div>
-              <p className="text-sm font-medium text-foreground">{item.label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
-            </div>
-            <Toggle checked={settings[item.key]} onChange={() => toggle(item.key)} />
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-end">
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors">
-          <Save size={14} /> Salvar configurações
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── SECTION: INTEGRAÇÕES ─────────────────────────────────────────────────────
-
-function SectionIntegracoes() {
-  const [integrations, setIntegrations] = useState(mockIntegrations);
-
-  const toggle = (id: string) =>
-    setIntegrations((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, connected: !i.connected } : i))
-    );
-
-  const categories = Array.from(new Set(integrations.map((i) => i.category)));
-
-  return (
-    <div className="space-y-5">
-      {categories.map((cat) => (
-        <div key={cat}>
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            {cat}
-          </h4>
-          <div className="space-y-2">
-            {integrations
-              .filter((i) => i.category === cat)
-              .map((intg) => (
-                <div
-                  key={intg.id}
-                  className="flex items-center gap-3 p-3.5 bg-background border border-border rounded-xl"
-                >
-                  <span className="text-xl w-8 text-center flex-shrink-0">{intg.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{intg.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{intg.description}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {intg.connected ? (
-                      <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
-                        <Check size={11} /> Conectado
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Desconectado</span>
-                    )}
-                    <button
-                      onClick={() => toggle(intg.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        intg.connected
-                          ? 'bg-muted text-muted-foreground hover:bg-negative/10 hover:text-negative'
-                          : 'bg-primary/10 text-primary hover:bg-primary/20'
-                      }`}
-                    >
-                      {intg.connected ? 'Desconectar' : 'Conectar'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── SECTION: FINANCEIRO ─────────────────────────────────────────────────────
-
-function SectionFinanceiro() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Moeda</label>
-          <select className="input-base w-full text-sm">
-            <option>BRL – Real Brasileiro</option>
-            <option>USD – Dólar Americano</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Dia de vencimento padrão
-          </label>
-          <select className="input-base w-full text-sm">
-            {[1, 5, 10, 15, 20, 25, 28].map((d) => (
-              <option key={d}>Dia {d}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Multa por atraso (%)
-          </label>
-          <input defaultValue="2" type="number" className="input-base w-full text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Juros mensais (%)
-          </label>
-          <input defaultValue="1" type="number" className="input-base w-full text-sm" />
-        </div>
-        <div className="md:col-span-2">
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-            Chave PIX
-          </label>
-          <input defaultValue="financeiro@slimhiper.com.br" className="input-base w-full text-sm" />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        {[
-          {
-            label: 'Emitir NF-e automaticamente',
-            desc: 'Nota fiscal gerada após confirmação de pagamento',
-          },
-          { label: 'Notificar inadimplência', desc: 'Alerta automático após 5 dias de atraso' },
-          { label: 'Recibo por e-mail', desc: 'Enviar comprovante ao paciente após pagamento' },
-        ].map((item) => (
-          <div
-            key={item.label}
-            className="flex items-center justify-between p-3.5 bg-background border border-border rounded-xl"
-          >
-            <div>
-              <p className="text-sm font-medium text-foreground">{item.label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
-            </div>
-            <Toggle checked onChange={() => {}} />
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-end">
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors">
-          <Save size={14} /> Salvar configurações
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── SECTION: PROGRAMAS PADRÃO ───────────────────────────────────────────────
-
-function SectionProgramas() {
-  const [programs, setPrograms] = useState(mockDefaultPrograms);
-
-  const toggle = (id: string) =>
-    setPrograms((prev) => prev.map((p) => (p.id === id ? { ...p, active: !p.active } : p)));
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Defina quais programas ficam disponíveis por padrão ao criar um novo pacote.
-      </p>
-
-      <div className="space-y-2">
-        {programs.map((prog) => (
-          <div
-            key={prog.id}
-            className="flex items-center justify-between p-3.5 bg-background border border-border rounded-xl"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-2 h-2 rounded-full flex-shrink-0 ${prog.active ? 'bg-primary' : 'bg-muted-foreground/40'}`}
-              />
-              <span className="text-sm font-medium text-foreground">{prog.name}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Toggle checked={prog.active} onChange={() => toggle(prog.id)} />
-              <button className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-                <Edit2 size={13} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <button className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-        <Plus size={13} /> Adicionar programa padrão
-      </button>
-    </div>
-  );
-}
-
-// ─── SECTION WRAPPER ─────────────────────────────────────────────────────────
-
-interface SectionCardProps {
+function SectionCard({
+  id,
+  title,
+  icon: Icon,
+  children,
+}: {
   id: SectionId;
   title: string;
   icon: React.ElementType;
   children: React.ReactNode;
-}
-
-function SectionCard({ id, title, icon: Icon, children }: SectionCardProps) {
+}) {
   return (
-    <div id={id} className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border bg-muted/20">
-        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <Icon size={15} className="text-primary" />
+    <section id={id} className="card-base overflow-hidden scroll-mt-6">
+      <div className="flex items-center gap-3 border-b border-border bg-muted/20 px-5 py-4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+          <Icon size={16} className="text-primary" />
         </div>
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       </div>
-      <div className="px-6 py-5">{children}</div>
+      <div className="p-5">{children}</div>
+    </section>
+  );
+}
+
+function InlineAlert({ message, tone = 'error' }: { message: string; tone?: 'error' | 'ok' }) {
+  return (
+    <div
+      className={[
+        'flex items-start gap-2 rounded-xl border px-3 py-2 text-sm',
+        tone === 'ok'
+          ? 'border-positive/20 bg-positive-bg text-positive'
+          : 'border-negative/20 bg-negative-bg text-negative',
+      ].join(' ')}
+    >
+      {tone === 'ok' ? (
+        <Check size={15} className="mt-0.5" />
+      ) : (
+        <AlertCircle size={15} className="mt-0.5" />
+      )}
+      <span>{message}</span>
     </div>
   );
 }
 
-// ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
+function SaveButton({
+  children,
+  saving,
+  disabled,
+  onClick,
+}: {
+  children: React.ReactNode;
+  saving: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={saving || disabled} className="btn-primary">
+      {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+      {children}
+    </button>
+  );
+}
 
-export default function ClinicSettingsContent() {
-  const [activeSection, setActiveSection] = useState<SectionId>('perfil');
+function textStatus(status: string) {
+  const normalized = status.toLowerCase();
+  if (normalized === 'active') return 'Ativo';
+  if (normalized === 'inactive') return 'Inativo';
+  if (normalized === 'archived') return 'Arquivado';
+  if (normalized === 'invited') return 'Convidado';
+  if (normalized === 'suspended') return 'Suspenso';
+  if (normalized === 'revoked') return 'Revogado';
+  if (normalized === 'rascunho') return 'Rascunho';
+  if (normalized === 'ativo') return 'Ativo';
+  return status || 'Indefinido';
+}
 
-  const scrollTo = (id: SectionId) => {
-    setActiveSection(id);
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+function StatusBadge({ status }: { status: string }) {
+  const normalized = status.toLowerCase();
+  const color =
+    normalized === 'active' || normalized === 'ativo'
+      ? 'bg-positive-bg text-positive'
+      : normalized === 'inactive' || normalized === 'suspended'
+        ? 'bg-warning-bg text-warning'
+        : 'bg-muted text-muted-foreground';
+
+  return (
+    <span className={['rounded-full px-2 py-0.5 text-xs font-medium', color].join(' ')}>
+      {textStatus(status)}
+    </span>
+  );
+}
+
+function SectionPerfil({
+  draft,
+  setDraft,
+  saving,
+  onSave,
+}: {
+  draft: ProfileDraft;
+  setDraft: React.Dispatch<React.SetStateAction<ProfileDraft>>;
+  saving: boolean;
+  onSave: () => void;
+}) {
+  const update = (key: keyof ProfileDraft, value: string) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-4">
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-primary/30 bg-primary/10">
+          <Camera size={20} className="text-primary/70" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">Identidade da clinica</p>
+          <p className="text-xs text-muted-foreground">
+            Nome e dados operacionais salvos em tenant settings, sem tokens no browser.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Nome da clinica
+          <input
+            value={draft.name}
+            onChange={(event) => update('name', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          CNPJ
+          <input
+            value={draft.cnpj}
+            onChange={(event) => update('cnpj', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          E-mail principal
+          <input
+            type="email"
+            value={draft.email}
+            onChange={(event) => update('email', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Telefone
+          <input
+            value={draft.phone}
+            onChange={(event) => update('phone', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Site
+          <input
+            value={draft.website}
+            onChange={(event) => update('website', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Fuso horario
+          <select
+            value={draft.timezone}
+            onChange={(event) => update('timezone', event.target.value)}
+            className="input-base"
+          >
+            <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+            <option value="America/Manaus">America/Manaus</option>
+            <option value="America/Belem">America/Belem</option>
+          </select>
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground md:col-span-2">
+          Especialidades
+          <input
+            value={draft.specialties}
+            onChange={(event) => update('specialties', event.target.value)}
+            className="input-base"
+          />
+        </label>
+      </div>
+
+      <div className="flex justify-end">
+        <SaveButton saving={saving} onClick={onSave}>
+          Salvar perfil
+        </SaveButton>
+      </div>
+    </div>
+  );
+}
+
+function SectionUnidades({
+  units,
+  unitDraft,
+  setUnitDraft,
+  formOpen,
+  setFormOpen,
+  saving,
+  onSave,
+}: {
+  units: ClinicUnit[];
+  unitDraft: SaveClinicUnitInput;
+  setUnitDraft: React.Dispatch<React.SetStateAction<SaveClinicUnitInput>>;
+  formOpen: boolean;
+  setFormOpen: (value: boolean) => void;
+  saving: boolean;
+  onSave: () => void;
+}) {
+  const update = (key: keyof SaveClinicUnitInput, value: string | boolean) =>
+    setUnitDraft((prev) => ({ ...prev, [key]: value }));
+
+  const startNew = () => {
+    setUnitDraft(EMPTY_UNIT);
+    setFormOpen(true);
+  };
+
+  const startEdit = (unit: ClinicUnit) => {
+    setUnitDraft({
+      id: unit.id,
+      code: unit.code,
+      name: unit.name,
+      status: unit.status,
+      address: unit.address,
+      city: unit.city,
+      phone: unit.phone,
+      isMain: unit.isMain,
+    });
+    setFormOpen(true);
   };
 
   return (
-    <div className="flex min-h-full">
-      {/* Left sidebar nav */}
-      <aside className="hidden lg:flex flex-col w-56 flex-shrink-0 border-r border-border bg-card sticky top-0 h-screen overflow-y-auto">
-        <div className="px-4 py-5 border-b border-border">
-          <h1 className="text-sm font-bold text-foreground">Configurações</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Configurações da Clínica</p>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{units.length} unidades reais no tenant</p>
+        <button type="button" onClick={startNew} className="btn-secondary py-1.5 text-xs">
+          <Plus size={14} />
+          Nova unidade
+        </button>
+      </div>
+
+      {formOpen && (
+        <div className="rounded-xl border border-border bg-background p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-foreground">
+              {unitDraft.id ? 'Editar unidade' : 'Nova unidade'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setFormOpen(false)}
+              className="btn-ghost p-1.5"
+              aria-label="Fechar formulario de unidade"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              Nome
+              <input
+                value={unitDraft.name}
+                onChange={(event) => update('name', event.target.value)}
+                className="input-base"
+              />
+            </label>
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              Codigo
+              <input
+                value={unitDraft.code}
+                onChange={(event) => update('code', event.target.value)}
+                className="input-base"
+              />
+            </label>
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              Status
+              <select
+                value={unitDraft.status}
+                onChange={(event) => update('status', event.target.value as ClinicUnitStatus)}
+                className="input-base"
+              >
+                <option value="active">Ativa</option>
+                <option value="inactive">Inativa</option>
+                <option value="archived">Arquivada</option>
+              </select>
+            </label>
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              Telefone
+              <input
+                value={unitDraft.phone}
+                onChange={(event) => update('phone', event.target.value)}
+                className="input-base"
+              />
+            </label>
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground md:col-span-2">
+              Endereco
+              <input
+                value={unitDraft.address}
+                onChange={(event) => update('address', event.target.value)}
+                className="input-base"
+              />
+            </label>
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              Cidade
+              <input
+                value={unitDraft.city}
+                onChange={(event) => update('city', event.target.value)}
+                className="input-base"
+              />
+            </label>
+            <label className="flex items-center gap-2 pt-6 text-xs font-medium text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={unitDraft.isMain}
+                onChange={(event) => update('isMain', event.target.checked)}
+                className="rounded border-border text-primary focus:ring-primary"
+              />
+              Unidade principal
+            </label>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <SaveButton saving={saving} onClick={onSave}>
+              Salvar unidade
+            </SaveButton>
+          </div>
         </div>
-        <nav className="flex-1 py-3 px-2 space-y-0.5">
+      )}
+
+      <div className="space-y-3">
+        {units.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+            Nenhuma unidade retornada pelo contrato local.
+          </div>
+        ) : (
+          units.map((unit) => (
+            <div key={unit.id} className="rounded-xl border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-foreground">{unit.name}</p>
+                    <StatusBadge status={unit.status} />
+                    {unit.isMain && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                        Principal
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{unit.code}</p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    {unit.address && <span>{unit.address}</span>}
+                    {unit.city && <span>{unit.city}</span>}
+                    {unit.phone && <span>{unit.phone}</span>}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => startEdit(unit)}
+                  className="btn-ghost p-1.5"
+                  aria-label={`Editar ${unit.name}`}
+                >
+                  <Edit2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionEquipe({ snapshot }: { snapshot: ClinicSettingsSnapshot }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {snapshot.team.length} membros reais no tenant
+        </p>
+        <button
+          type="button"
+          disabled
+          className="btn-secondary py-1.5 text-xs opacity-60"
+          title="Convite de usuario exige backend Auth Admin auditado."
+        >
+          <UserPlus size={14} />
+          Convidar membro
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {snapshot.team.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+            Nenhum membro retornado pelo contrato local.
+          </div>
+        ) : (
+          snapshot.team.map((member) => (
+            <div
+              key={member.id}
+              className="flex items-center gap-3 rounded-xl border border-border bg-background p-3"
+            >
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                {member.initials}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {member.fullName}
+                  </p>
+                  <StatusBadge status={member.status} />
+                  {!member.isActive && (
+                    <span className="rounded-full bg-negative-bg px-2 py-0.5 text-xs font-medium text-negative">
+                      Perfil inativo
+                    </span>
+                  )}
+                </div>
+                <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+              </div>
+              <div className="hidden text-right text-xs text-muted-foreground sm:block">
+                <p className="font-medium text-foreground">{member.roleCode}</p>
+                <p>{member.unitName ?? 'Sem unidade'}</p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionPapeis({ snapshot }: { snapshot: ClinicSettingsSnapshot }) {
+  const permissionsByRole = useMemo(() => {
+    return new Map(
+      snapshot.rolePermissions.map((entry) => [entry.roleName, new Set(entry.permissions)])
+    );
+  }, [snapshot.rolePermissions]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {snapshot.roles.length} papeis e {snapshot.permissions.length} permissoes pelo RBAC local
+        </p>
+        <button
+          type="button"
+          disabled
+          className="btn-secondary py-1.5 text-xs opacity-60"
+          title="Alteracao de role/permissao fica bloqueada ate RPC auditada."
+        >
+          <ShieldCheck size={14} />
+          Alterar roles
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {snapshot.roles.map((role) => {
+          const permissionSet = permissionsByRole.get(role.name) ?? new Set<string>();
+          return (
+            <div key={role.id} className="rounded-xl border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-foreground">{role.name}</p>
+                    {role.isSystem && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                        Sistema
+                      </span>
+                    )}
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      {role.membersCount} membros
+                    </span>
+                  </div>
+                  {role.description && (
+                    <p className="mt-1 text-xs text-muted-foreground">{role.description}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {snapshot.permissions.slice(0, 18).map((permission) => {
+                  const enabled = permissionSet.has(permission.code);
+                  return (
+                    <span
+                      key={permission.id}
+                      className={[
+                        'rounded-full px-2 py-0.5 text-xs font-medium',
+                        enabled
+                          ? 'bg-positive-bg text-positive'
+                          : 'bg-muted text-muted-foreground opacity-60',
+                      ].join(' ')}
+                    >
+                      {permission.code}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SectionBranding({
+  draft,
+  setDraft,
+  saving,
+  onSave,
+}: {
+  draft: ClinicBrandingSettings;
+  setDraft: React.Dispatch<React.SetStateAction<ClinicBrandingSettings>>;
+  saving: boolean;
+  onSave: () => void;
+}) {
+  const update = (key: keyof ClinicBrandingSettings, value: string) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Cor primaria
+          <div className="flex gap-2">
+            <input
+              type="color"
+              value={draft.primaryColor}
+              onChange={(event) => update('primaryColor', event.target.value)}
+              className="h-10 w-12 rounded-lg border border-border bg-card"
+            />
+            <input
+              value={draft.primaryColor}
+              onChange={(event) => update('primaryColor', event.target.value)}
+              className="input-base font-mono"
+            />
+          </div>
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Cor de destaque
+          <div className="flex gap-2">
+            <input
+              type="color"
+              value={draft.accentColor}
+              onChange={(event) => update('accentColor', event.target.value)}
+              className="h-10 w-12 rounded-lg border border-border bg-card"
+            />
+            <input
+              value={draft.accentColor}
+              onChange={(event) => update('accentColor', event.target.value)}
+              className="input-base font-mono"
+            />
+          </div>
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Fonte principal
+          <select
+            value={draft.fontFamily}
+            onChange={(event) => update('fontFamily', event.target.value)}
+            className="input-base"
+          >
+            <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
+            <option value="DM Sans">DM Sans</option>
+            <option value="Manrope">Manrope</option>
+            <option value="General Sans">General Sans</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="flex justify-end">
+        <SaveButton saving={saving} onClick={onSave}>
+          Salvar branding
+        </SaveButton>
+      </div>
+    </div>
+  );
+}
+
+function SectionPortal({
+  draft,
+  setDraft,
+  saving,
+  onSave,
+}: {
+  draft: ClinicPortalSettings;
+  setDraft: React.Dispatch<React.SetStateAction<ClinicPortalSettings>>;
+  saving: boolean;
+  onSave: () => void;
+}) {
+  const toggle = (key: keyof ClinicPortalSettings, value: boolean) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const updateUrl = (value: string) => setDraft((prev) => ({ ...prev, url: value }));
+
+  const items: Array<{ key: keyof ClinicPortalSettings; label: string; description: string }> = [
+    {
+      key: 'selfScheduling',
+      label: 'Auto-agendamento',
+      description: 'Preferencia de disponibilidade do portal.',
+    },
+    { key: 'chatEnabled', label: 'Chat', description: 'Preferencia de chat do paciente.' },
+    {
+      key: 'documentsAccess',
+      label: 'Documentos',
+      description: 'Preferencia de acesso a documentos.',
+    },
+    {
+      key: 'financialAccess',
+      label: 'Financeiro',
+      description: 'Preferencia de acesso financeiro.',
+    },
+    {
+      key: 'checkInReminder',
+      label: 'Lembretes',
+      description: 'Preferencia de check-in e lembretes.',
+    },
+    { key: 'npsEnabled', label: 'NPS', description: 'Preferencia de pesquisa pos-atendimento.' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+        URL do portal
+        <input
+          value={draft.url}
+          onChange={(event) => updateUrl(event.target.value)}
+          className="input-base"
+        />
+      </label>
+
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div
+            key={item.key}
+            className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background p-3"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">{item.label}</p>
+              <p className="text-xs text-muted-foreground">{item.description}</p>
+            </div>
+            <Toggle
+              label={item.label}
+              checked={Boolean(draft[item.key])}
+              onChange={(value) => toggle(item.key, value)}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end">
+        <SaveButton saving={saving} onClick={onSave}>
+          Salvar portal
+        </SaveButton>
+      </div>
+    </div>
+  );
+}
+
+function SectionIntegracoes({
+  integrations,
+  draft,
+  setDraft,
+  saving,
+  onSave,
+}: {
+  integrations: ClinicIntegration[];
+  draft: Record<string, boolean>;
+  setDraft: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  saving: boolean;
+  onSave: () => void;
+}) {
+  const categories = useMemo(
+    () => Array.from(new Set(integrations.map((integration) => integration.category))),
+    [integrations]
+  );
+
+  const toggle = (id: string, value: boolean) => setDraft((prev) => ({ ...prev, [id]: value }));
+
+  return (
+    <div className="space-y-5">
+      {categories.map((category) => (
+        <div key={category} className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase text-muted-foreground">{category}</h3>
+          {integrations
+            .filter((integration) => integration.category === category)
+            .map((integration) => {
+              const enabled = draft[integration.id] ?? integration.enabled;
+              return (
+                <div
+                  key={integration.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground">{integration.name}</p>
+                      <StatusBadge status={enabled ? 'active' : integration.status} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{integration.description}</p>
+                  </div>
+                  <Toggle
+                    label={integration.name}
+                    checked={enabled}
+                    onChange={(value) => toggle(integration.id, value)}
+                  />
+                </div>
+              );
+            })}
+        </div>
+      ))}
+
+      <div className="flex justify-end">
+        <SaveButton saving={saving} onClick={onSave}>
+          Salvar integracoes
+        </SaveButton>
+      </div>
+    </div>
+  );
+}
+
+function SectionFinanceiro({
+  draft,
+  setDraft,
+  saving,
+  onSave,
+}: {
+  draft: ClinicFinanceSettings;
+  setDraft: React.Dispatch<React.SetStateAction<ClinicFinanceSettings>>;
+  saving: boolean;
+  onSave: () => void;
+}) {
+  const update = (key: keyof ClinicFinanceSettings, value: string | number | boolean) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
+
+  const flags: Array<{ key: keyof ClinicFinanceSettings; label: string; description: string }> = [
+    { key: 'autoInvoice', label: 'NF-e automatica', description: 'Preferencia de emissao futura.' },
+    {
+      key: 'delinquencyAlerts',
+      label: 'Alertas de inadimplencia',
+      description: 'Preferencia de alerta operacional.',
+    },
+    {
+      key: 'emailReceipts',
+      label: 'Recibo por e-mail',
+      description: 'Preferencia de envio de comprovante.',
+    },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Moeda
+          <select
+            value={draft.currency}
+            onChange={(event) => update('currency', event.target.value)}
+            className="input-base"
+          >
+            <option value="BRL">BRL</option>
+            <option value="USD">USD</option>
+          </select>
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Dia de vencimento padrao
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={draft.defaultDueDay}
+            onChange={(event) => update('defaultDueDay', Number(event.target.value))}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Multa por atraso (%)
+          <input
+            type="number"
+            min={0}
+            step="0.1"
+            value={draft.lateFeePercent}
+            onChange={(event) => update('lateFeePercent', Number(event.target.value))}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Juros mensais (%)
+          <input
+            type="number"
+            min={0}
+            step="0.1"
+            value={draft.monthlyInterestPercent}
+            onChange={(event) => update('monthlyInterestPercent', Number(event.target.value))}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground md:col-span-2">
+          Chave PIX operacional
+          <input
+            value={draft.pixKey}
+            onChange={(event) => update('pixKey', event.target.value)}
+            className="input-base"
+          />
+        </label>
+      </div>
+
+      <div className="space-y-2">
+        {flags.map((flag) => (
+          <div
+            key={flag.key}
+            className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background p-3"
+          >
+            <div>
+              <p className="text-sm font-semibold text-foreground">{flag.label}</p>
+              <p className="text-xs text-muted-foreground">{flag.description}</p>
+            </div>
+            <Toggle
+              label={flag.label}
+              checked={Boolean(draft[flag.key])}
+              onChange={(value) => update(flag.key, value)}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end">
+        <SaveButton saving={saving} onClick={onSave}>
+          Salvar financeiro
+        </SaveButton>
+      </div>
+    </div>
+  );
+}
+
+function SectionProgramas({
+  snapshot,
+  selectedIds,
+  setSelectedIds,
+  saving,
+  onSave,
+}: {
+  snapshot: ClinicSettingsSnapshot;
+  selectedIds: string[];
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+  saving: boolean;
+  onSave: () => void;
+}) {
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const toggle = (id: string, enabled: boolean) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (enabled) next.add(id);
+      else next.delete(id);
+      return Array.from(next);
+    });
+
+  return (
+    <div className="space-y-4">
+      {snapshot.programs.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+          Nenhum programa retornado pelo contrato local de packages.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {snapshot.programs.map((program) => {
+            const enabled = selectedSet.has(program.id);
+            return (
+              <div
+                key={program.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background p-3"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-foreground">{program.name}</p>
+                    <StatusBadge status={program.status} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {program.programType || 'Tipo nao informado'} - {program.durationWeeks} semanas
+                  </p>
+                </div>
+                <Toggle
+                  label={`Programa padrao ${program.name}`}
+                  checked={enabled}
+                  onChange={(value) => toggle(program.id, value)}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <SaveButton saving={saving} disabled={snapshot.programs.length === 0} onClick={onSave}>
+          Salvar programas
+        </SaveButton>
+      </div>
+    </div>
+  );
+}
+
+export default function ClinicSettingsContent() {
+  const [activeSection, setActiveSection] = useState<SectionId>('perfil');
+  const [snapshot, setSnapshot] = useState<ClinicSettingsSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<SaveKey>(null);
+  const [profileDraft, setProfileDraft] = useState<ProfileDraft>(EMPTY_PROFILE);
+  const [brandingDraft, setBrandingDraft] = useState<ClinicBrandingSettings>(EMPTY_BRANDING);
+  const [portalDraft, setPortalDraft] = useState<ClinicPortalSettings>(EMPTY_PORTAL);
+  const [financeDraft, setFinanceDraft] = useState<ClinicFinanceSettings>(EMPTY_FINANCE);
+  const [integrationDraft, setIntegrationDraft] = useState<Record<string, boolean>>({});
+  const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
+  const [unitDraft, setUnitDraft] = useState<SaveClinicUnitInput>(EMPTY_UNIT);
+  const [unitFormOpen, setUnitFormOpen] = useState(false);
+
+  const applySnapshot = useCallback((next: ClinicSettingsSnapshot) => {
+    setSnapshot(next);
+    setProfileDraft({ name: next.tenant.name, ...next.profile });
+    setBrandingDraft(next.branding);
+    setPortalDraft(next.portal);
+    setFinanceDraft(next.finance);
+    setIntegrationDraft(
+      Object.fromEntries(
+        next.integrations.map((integration) => [integration.id, integration.enabled])
+      )
+    );
+    setSelectedProgramIds(next.defaultProgramIds);
+  }, []);
+
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    const result = await getClinicSettings();
+    if (result.error || !result.data) {
+      setLoadError(result.error?.message ?? 'Nao foi possivel carregar configuracoes.');
+      setSnapshot(null);
+    } else {
+      applySnapshot(result.data);
+    }
+    setLoading(false);
+  }, [applySnapshot]);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
+
+  const savePatch = useCallback(
+    async (
+      key: Exclude<SaveKey, null | 'unit'>,
+      message: string,
+      patch: Parameters<typeof updateClinicSettings>[1],
+      name: string | null = null
+    ) => {
+      setSavingKey(key);
+      setSaveError(null);
+      setNotice(null);
+      const result = await updateClinicSettings(name, patch);
+      if (result.error || !result.data) {
+        setSaveError(result.error?.message ?? 'Nao foi possivel salvar configuracoes.');
+      } else {
+        applySnapshot(result.data);
+        setNotice(message);
+      }
+      setSavingKey(null);
+    },
+    [applySnapshot]
+  );
+
+  const saveProfile = () => {
+    const { name, ...profile } = profileDraft;
+    void savePatch('profile', 'Perfil salvo com auditoria local.', { profile }, name);
+  };
+
+  const saveBranding = () =>
+    void savePatch('branding', 'Branding salvo em tenant settings.', { branding: brandingDraft });
+
+  const savePortal = () =>
+    void savePatch('portal', 'Preferencias do portal salvas.', { portal: portalDraft });
+
+  const saveIntegrations = () => {
+    const integrations = Object.fromEntries(
+      Object.entries(integrationDraft).map(([id, enabled]) => [
+        id,
+        { enabled, status: enabled ? 'enabled' : 'disabled' },
+      ])
+    );
+    void savePatch('integrations', 'Integracoes salvas sem secrets no browser.', { integrations });
+  };
+
+  const saveFinance = () =>
+    void savePatch('finance', 'Preferencias financeiras salvas.', { finance: financeDraft });
+
+  const savePrograms = () =>
+    void savePatch(
+      'programs',
+      'Programas padrao salvos.',
+      { defaultPrograms: { programIds: selectedProgramIds } },
+      null
+    );
+
+  const saveUnit = async () => {
+    setSavingKey('unit');
+    setSaveError(null);
+    setNotice(null);
+    const result = await saveClinicUnit(unitDraft);
+    if (result.error || !result.data) {
+      setSaveError(result.error?.message ?? 'Nao foi possivel salvar unidade.');
+    } else {
+      applySnapshot(result.data);
+      setUnitDraft(EMPTY_UNIT);
+      setUnitFormOpen(false);
+      setNotice('Unidade salva com auditoria local.');
+    }
+    setSavingKey(null);
+  };
+
+  const scrollTo = (id: SectionId) => {
+    setActiveSection(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-full items-center justify-center p-8">
+        <div className="card-base flex items-center gap-3 p-5 text-sm text-muted-foreground">
+          <Loader2 size={18} className="animate-spin text-primary" />
+          Carregando configuracoes reais...
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError || !snapshot) {
+    return (
+      <div className="flex min-h-full items-center justify-center p-8">
+        <div className="card-base max-w-lg space-y-4 p-6">
+          <InlineAlert message={loadError ?? 'Configuracoes indisponiveis.'} />
+          <button type="button" onClick={loadSettings} className="btn-secondary">
+            <RefreshCw size={15} />
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-full">
+      <aside className="hidden h-screen w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-border bg-card lg:flex">
+        <div className="border-b border-border px-4 py-5">
+          <h1 className="text-sm font-bold text-foreground">Configuracoes</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">{snapshot.tenant.name}</p>
+        </div>
+        <nav className="flex-1 space-y-0.5 px-2 py-3">
           {SECTIONS.map((section) => {
-            const SIcon = section.icon;
+            const Icon = section.icon;
             const isActive = activeSection === section.id;
             return (
               <button
                 key={section.id}
+                type="button"
                 onClick={() => scrollTo(section.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all duration-150 ${
+                className={[
+                  'flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors',
                   isActive
                     ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                }`}
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                ].join(' ')}
               >
-                <SIcon size={14} className="flex-shrink-0" />
-                <span className={`text-xs ${isActive ? 'font-semibold' : 'font-medium'}`}>
+                <Icon size={14} />
+                <span className={['text-xs', isActive ? 'font-semibold' : 'font-medium'].join(' ')}>
                   {section.label}
                 </span>
                 {isActive && <ChevronRight size={12} className="ml-auto" />}
@@ -1087,75 +1235,124 @@ export default function ClinicSettingsContent() {
         </nav>
       </aside>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0 px-4 lg:px-8 py-6 space-y-6">
-        {/* Page header */}
-        <div className="flex items-center justify-between">
+      <div className="min-w-0 flex-1 space-y-6 px-4 py-6 lg:px-8">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-lg font-bold text-foreground">Configurações da Clínica</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Gerencie perfil, equipe, permissões e preferências da clínica
+            <h1 className="text-lg font-bold text-foreground">Configuracoes da Clinica</h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Dados do tenant, unidades, RBAC e preferencias pelo contrato local.
             </p>
           </div>
+          <button type="button" onClick={loadSettings} className="btn-secondary py-1.5 text-xs">
+            <RefreshCw size={14} />
+            Atualizar
+          </button>
         </div>
 
-        {/* Mobile section nav */}
-        <div className="flex lg:hidden gap-2 overflow-x-auto pb-1 scrollbar-thin">
+        <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden">
           {SECTIONS.map((section) => {
-            const SIcon = section.icon;
+            const Icon = section.icon;
             const isActive = activeSection === section.id;
             return (
               <button
                 key={section.id}
+                type="button"
                 onClick={() => scrollTo(section.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap flex-shrink-0 transition-colors ${
+                className={[
+                  'flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium',
                   isActive
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-                }`}
+                    : 'border border-border bg-card text-muted-foreground',
+                ].join(' ')}
               >
-                <SIcon size={12} />
+                <Icon size={12} />
                 {section.label}
               </button>
             );
           })}
         </div>
 
-        {/* Sections */}
-        <SectionCard id="perfil" title="Perfil da Clínica" icon={Building2}>
-          <SectionPerfil />
+        {(saveError || notice) && (
+          <div className="space-y-2">
+            {saveError && <InlineAlert message={saveError} />}
+            {notice && <InlineAlert tone="ok" message={notice} />}
+          </div>
+        )}
+
+        <SectionCard id="perfil" title="Perfil da Clinica" icon={Building2}>
+          <SectionPerfil
+            draft={profileDraft}
+            setDraft={setProfileDraft}
+            saving={savingKey === 'profile'}
+            onSave={saveProfile}
+          />
         </SectionCard>
 
         <SectionCard id="unidades" title="Unidades" icon={MapPin}>
-          <SectionUnidades />
+          <SectionUnidades
+            units={snapshot.units}
+            unitDraft={unitDraft}
+            setUnitDraft={setUnitDraft}
+            formOpen={unitFormOpen}
+            setFormOpen={setUnitFormOpen}
+            saving={savingKey === 'unit'}
+            onSave={() => void saveUnit()}
+          />
         </SectionCard>
 
         <SectionCard id="equipe" title="Equipe" icon={Users}>
-          <SectionEquipe />
+          <SectionEquipe snapshot={snapshot} />
         </SectionCard>
 
-        <SectionCard id="papeis" title="Papéis e Permissões" icon={ShieldCheck}>
-          <SectionPapeis />
+        <SectionCard id="papeis" title="Papeis e Permissoes" icon={ShieldCheck}>
+          <SectionPapeis snapshot={snapshot} />
         </SectionCard>
 
         <SectionCard id="branding" title="Branding" icon={Palette}>
-          <SectionBranding />
+          <SectionBranding
+            draft={brandingDraft}
+            setDraft={setBrandingDraft}
+            saving={savingKey === 'branding'}
+            onSave={saveBranding}
+          />
         </SectionCard>
 
         <SectionCard id="portal" title="Portal do Paciente" icon={Globe}>
-          <SectionPortal />
+          <SectionPortal
+            draft={portalDraft}
+            setDraft={setPortalDraft}
+            saving={savingKey === 'portal'}
+            onSave={savePortal}
+          />
         </SectionCard>
 
-        <SectionCard id="integracoes" title="Integrações" icon={Plug}>
-          <SectionIntegracoes />
+        <SectionCard id="integracoes" title="Integracoes" icon={Plug}>
+          <SectionIntegracoes
+            integrations={snapshot.integrations}
+            draft={integrationDraft}
+            setDraft={setIntegrationDraft}
+            saving={savingKey === 'integrations'}
+            onSave={saveIntegrations}
+          />
         </SectionCard>
 
         <SectionCard id="financeiro" title="Financeiro" icon={CreditCard}>
-          <SectionFinanceiro />
+          <SectionFinanceiro
+            draft={financeDraft}
+            setDraft={setFinanceDraft}
+            saving={savingKey === 'finance'}
+            onSave={saveFinance}
+          />
         </SectionCard>
 
-        <SectionCard id="programas" title="Programas Padrão" icon={BookOpen}>
-          <SectionProgramas />
+        <SectionCard id="programas" title="Programas Padrao" icon={BookOpen}>
+          <SectionProgramas
+            snapshot={snapshot}
+            selectedIds={selectedProgramIds}
+            setSelectedIds={setSelectedProgramIds}
+            saving={savingKey === 'programs'}
+            onSave={savePrograms}
+          />
         </SectionCard>
       </div>
     </div>

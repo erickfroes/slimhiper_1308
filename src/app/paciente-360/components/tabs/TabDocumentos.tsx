@@ -1,9 +1,13 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { PatientDocument360Item, PatientDocumentCategory } from '@/domain/types';
 import EmptyState from '@/components/EmptyState';
-import { getDocumentSignedUrl, getPatientDocuments } from '@/services/documentsApi';
+import {
+  getDocumentSignedUrl,
+  getPatientDocuments,
+  sendDocumentForSignature,
+} from '@/services/documentsApi';
 import {
   FileText,
   Download,
@@ -22,26 +26,20 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// ─── Category filter type (adds virtual filter keys) ─────────────────────────
-
 type DocFilterKey = PatientDocumentCategory | 'todos' | 'assinado' | 'pendente';
-
-// ─── Category config ──────────────────────────────────────────────────────────
 
 const CATEGORIES: { key: DocFilterKey; label: string }[] = [
   { key: 'todos', label: 'Todos' },
-  { key: 'relatorio', label: 'Relatórios' },
-  { key: 'prescricao', label: 'Prescrições' },
+  { key: 'relatorio', label: 'Relatorios' },
+  { key: 'prescricao', label: 'Prescricoes' },
   { key: 'termo', label: 'Termos' },
   { key: 'contrato', label: 'Contratos' },
   { key: 'consentimento', label: 'Consentimentos' },
-  { key: 'orientacao', label: 'Orientações' },
-  { key: 'pacote_evidencia', label: 'Pacotes de Evidência' },
-  { key: 'assinado', label: 'Documentos Assinados' },
-  { key: 'pendente', label: 'Documentos Pendentes' },
+  { key: 'orientacao', label: 'Orientacoes' },
+  { key: 'pacote_evidencia', label: 'Pacotes de Evidencia' },
+  { key: 'assinado', label: 'Documentos assinados' },
+  { key: 'pendente', label: 'Documentos pendentes' },
 ];
-
-// ─── Status badge ─────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: PatientDocument360Item['status'] }) {
   const map: Record<
@@ -59,7 +57,7 @@ function StatusBadge({ status }: { status: PatientDocument360Item['status'] }) {
       cls: 'bg-amber-50 text-amber-700 border border-amber-200',
     },
     em_analise: {
-      label: 'Em análise',
+      label: 'Em analise',
       icon: <AlertCircle size={11} />,
       cls: 'bg-blue-50 text-blue-700 border border-blue-200',
     },
@@ -74,7 +72,7 @@ function StatusBadge({ status }: { status: PatientDocument360Item['status'] }) {
       cls: 'bg-gray-100 text-gray-500 border border-gray-200',
     },
     disponivel: {
-      label: 'Disponível',
+      label: 'Disponivel',
       icon: <CheckCircle2 size={11} />,
       cls: 'bg-sky-50 text-sky-700 border border-sky-200',
     },
@@ -107,80 +105,108 @@ function AssinaturaBadge({ assinatura }: { assinatura: PatientDocument360Item['a
       </span>
     );
   }
-  return <span className="text-xs text-muted-foreground">—</span>;
+  return <span className="text-xs text-muted-foreground">-</span>;
 }
-
-// ─── Row actions ──────────────────────────────────────────────────────────────
 
 interface RowActionsProps {
   doc: PatientDocument360Item;
   patientId: string;
+  onChanged: () => void;
 }
 
-function RowActions({ doc, patientId }: RowActionsProps) {
+type RowAction = {
+  key: 'open' | 'download' | 'details' | 'evidence' | 'evidence-package' | 'send-signature';
+  label: string;
+  icon: React.ReactNode;
+  always: boolean;
+  disabledReason?: string;
+};
+
+function RowActions({ doc, patientId, onChanged }: RowActionsProps) {
   const [open, setOpen] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
-  const actions: Array<{
-    label: string;
-    icon: React.ReactNode;
-    always: boolean;
-    disabledReason?: string;
-  }> = [
-    { label: 'Abrir', icon: <Eye size={13} />, always: true },
-    { label: 'Baixar', icon: <Download size={13} />, always: true },
-    { label: 'Ver detalhes', icon: <Info size={13} />, always: true },
-    { label: 'Ver evidência', icon: <ShieldCheck size={13} />, always: true },
+  const allActions: RowAction[] = [
+    { key: 'open', label: 'Abrir', icon: <Eye size={13} />, always: true },
+    { key: 'download', label: 'Baixar', icon: <Download size={13} />, always: true },
+    { key: 'details', label: 'Ver detalhes', icon: <Info size={13} />, always: true },
+    { key: 'evidence', label: 'Ver evidencia', icon: <ShieldCheck size={13} />, always: true },
     {
-      label: 'Baixar pacote de evidência',
+      key: 'evidence-package',
+      label: 'Baixar pacote de evidencia',
       icon: <Package size={13} />,
       always: doc.hasEvidencePackage === true,
     },
     {
+      key: 'send-signature',
       label: 'Enviar para assinatura',
       icon: <Send size={13} />,
-      always: doc.assinatura === 'pendente',
-      disabledReason: 'Envio D4Sign exige signatário real validado para este paciente.',
+      always: doc.canRequestSignature === true || Boolean(doc.signatureDisabledReason),
+      disabledReason:
+        doc.canRequestSignature === true
+          ? undefined
+          : (doc.signatureDisabledReason ??
+            'Envio D4Sign exige signatario real validado para este paciente.'),
     },
-  ].filter((action) => action.always);
+  ];
+  const actions = allActions.filter((action) => action.always);
 
-  const handleAction = async (label: string) => {
-    if (label === 'Abrir' || label === 'Baixar') {
-      setLoadingAction(label);
+  const handleAction = async (action: (typeof actions)[number]) => {
+    if (action.key === 'open' || action.key === 'download') {
+      setLoadingAction(action.key);
       const { data, error } = await getDocumentSignedUrl(doc.id, patientId);
       setLoadingAction(null);
-      if (error || !data?.url)
-        return toast.error(error?.message ?? 'Falha ao abrir link temporário auditado.');
+      if (error || !data?.url) {
+        toast.error(error?.message ?? 'Falha ao abrir link temporario auditado.');
+        return;
+      }
       window.open(data.url, '_blank', 'noopener,noreferrer');
-      toast.success(`Link temporário auditado criado (${data.expiresInSeconds}s).`);
+      toast.success(`Link temporario auditado criado (${data.expiresInSeconds}s).`);
       setOpen(false);
       return;
     }
-    toast.info('Acesso via link temporário auditado.');
+
+    if (action.key === 'send-signature') {
+      setLoadingAction(action.key);
+      const { data, error } = await sendDocumentForSignature(doc.id, patientId);
+      setLoadingAction(null);
+      if (error || !data) {
+        toast.error(error?.message ?? 'Falha ao enviar documento para assinatura.');
+        return;
+      }
+      toast.success('Documento enviado para assinatura com signatario real validado.');
+      setOpen(false);
+      onChanged();
+      return;
+    }
+
+    toast.info('Acesso via link temporario auditado.');
     setOpen(false);
   };
 
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 text-foreground border border-border transition-colors"
       >
-        Ações
+        Acoes
         {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-20 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[200px]">
           {actions.map((action) => (
             <button
-              key={action.label}
+              key={action.key}
+              type="button"
               disabled={loadingAction !== null || Boolean(action.disabledReason)}
               title={action.disabledReason}
-              onClick={() => void handleAction(action.label)}
+              onClick={() => void handleAction(action)}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-foreground hover:bg-muted/60 transition-colors text-left disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="text-muted-foreground">{action.icon}</span>
-              {loadingAction === action.label ? 'Processando...' : action.label}
+              {loadingAction === action.key ? 'Processando...' : action.label}
             </button>
           ))}
         </div>
@@ -188,8 +214,6 @@ function RowActions({ doc, patientId }: RowActionsProps) {
     </div>
   );
 }
-
-// ─── Main component ───────────────────────────────────────────────────────────
 
 interface TabDocumentosProps {
   patientId: string;
@@ -202,10 +226,10 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
   const [activeCategory, setActiveCategory] = useState<DocFilterKey>('todos');
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    const loadDocuments = async () => {
-      setIsLoading(true);
-      setLoadError(null);
+  const loadDocuments = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
       const { data, error } = await getPatientDocuments(patientId);
       if (error) {
         setLoadError(error.message);
@@ -213,12 +237,21 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
       } else {
         setDocuments360(data);
       }
+    } catch (error) {
+      setDocuments360([]);
+      setLoadError(
+        error instanceof Error ? error.message : 'Falha inesperada ao carregar documentos.'
+      );
+    } finally {
       setIsLoading(false);
-    };
-
-    void loadDocuments();
+    }
   }, [patientId]);
 
+  useEffect(() => {
+    void loadDocuments();
+  }, [loadDocuments]);
+
+  const normalizedSearch = search.trim().toLowerCase();
   const filtered = documents360.filter((doc) => {
     const matchesCategory =
       activeCategory === 'todos'
@@ -230,9 +263,9 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
             : doc.category === activeCategory;
 
     const matchesSearch =
-      search.trim() === '' ||
-      doc.name.toLowerCase().includes(search.toLowerCase()) ||
-      doc.tipo.toLowerCase().includes(search.toLowerCase());
+      normalizedSearch === '' ||
+      doc.name.toLowerCase().includes(normalizedSearch) ||
+      doc.tipo.toLowerCase().includes(normalizedSearch);
 
     return matchesCategory && matchesSearch;
   });
@@ -251,7 +284,6 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm font-semibold text-foreground">Documentos ({documents360.length})</p>
         <div className="flex items-center gap-2">
@@ -271,11 +303,11 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
         </div>
       </div>
 
-      {/* Category filter tabs */}
       <div className="flex flex-wrap gap-1.5">
         {categoriesWithCount.map((cat) => (
           <button
             key={cat.key}
+            type="button"
             onClick={() => setActiveCategory(cat.key)}
             className={[
               'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
@@ -299,22 +331,27 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
         ))}
       </div>
 
-      {/* Security notice */}
       <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
         <ShieldCheck size={13} className="mt-0.5 flex-shrink-0 text-amber-600" />
         <span>
-          Por segurança, os arquivos são acessados exclusivamente via{' '}
-          <strong>link temporário auditado</strong>. Caminhos de armazenamento não são expostos.
+          Por seguranca, os arquivos sao acessados exclusivamente via{' '}
+          <strong>link temporario auditado</strong>. Caminhos de armazenamento nao sao expostos.
         </span>
       </div>
 
-      {/* Table */}
       {isLoading ? (
         <div className="card-base p-8 text-sm text-muted-foreground">Carregando documentos...</div>
       ) : loadError ? (
         <div className="card-base p-8 text-center">
           <p className="text-sm font-semibold text-foreground mb-2">Falha ao carregar documentos</p>
           <p className="text-xs text-muted-foreground">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void loadDocuments()}
+            className="btn-secondary mt-4 text-xs"
+          >
+            Tentar novamente
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState
@@ -334,8 +371,8 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
                     'Status',
                     'Assinatura',
                     'Emitido em',
-                    'Último acesso',
-                    'Ações',
+                    'Ultimo acesso',
+                    'Acoes',
                   ].map((col) => (
                     <th
                       key={col}
@@ -355,7 +392,6 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
                       i % 2 === 1 ? 'bg-muted/10' : '',
                     ].join(' ')}
                   >
-                    {/* Documento */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <FileText size={14} className="text-muted-foreground flex-shrink-0" />
@@ -369,37 +405,29 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
                         </div>
                       </div>
                     </td>
-
-                    {/* Tipo */}
                     <td className="px-4 py-3">
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {doc.tipo}
                       </span>
                     </td>
-
-                    {/* Status */}
                     <td className="px-4 py-3">
                       <StatusBadge status={doc.status} />
                     </td>
-
-                    {/* Assinatura */}
                     <td className="px-4 py-3">
                       <AssinaturaBadge assinatura={doc.assinatura} />
                     </td>
-
-                    {/* Emitido em */}
                     <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                       {doc.emitidoEm}
                     </td>
-
-                    {/* Último acesso */}
                     <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                      {doc.ultimoAcesso ?? '—'}
+                      {doc.ultimoAcesso ?? '-'}
                     </td>
-
-                    {/* Ações */}
                     <td className="px-4 py-3">
-                      <RowActions doc={doc} patientId={patientId} />
+                      <RowActions
+                        doc={doc}
+                        patientId={patientId}
+                        onChanged={() => void loadDocuments()}
+                      />
                     </td>
                   </tr>
                 ))}

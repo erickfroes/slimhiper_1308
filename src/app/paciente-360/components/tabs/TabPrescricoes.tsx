@@ -20,7 +20,6 @@ import {
   AlertCircle,
   FileSignature,
 } from 'lucide-react';
-import Icon from '@/components/ui/AppIcon';
 
 interface TabPrescricoesProps {
   prescriptions: PatientPrescriptionSummary[];
@@ -219,19 +218,39 @@ function PrescriptionCard({
           )}
           {/* Per-card actions */}
           <div className="flex flex-wrap gap-2 border-t border-border pt-2">
-            <button className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border hover:bg-muted transition-colors">
+            <button
+              type="button"
+              disabled
+              title="Acao bloqueada ate contrato real de documentos de prescricao."
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border transition-colors cursor-not-allowed opacity-55"
+            >
               <FileText size={12} />
               Gerar documento
             </button>
-            <button className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border hover:bg-muted transition-colors">
+            <button
+              type="button"
+              disabled
+              title="Acao bloqueada ate contrato real de assinatura de prescricao."
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border transition-colors cursor-not-allowed opacity-55"
+            >
               <Send size={12} />
               Enviar para assinatura
             </button>
-            <button className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border hover:bg-muted transition-colors">
+            <button
+              type="button"
+              disabled
+              title="Acao bloqueada ate contrato real de duplicacao de prescricao."
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border transition-colors cursor-not-allowed opacity-55"
+            >
               <Copy size={12} />
               Duplicar
             </button>
-            <button className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+            <button
+              type="button"
+              disabled
+              title="Acao bloqueada ate contrato real de cancelamento de prescricao."
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 transition-colors cursor-not-allowed opacity-55"
+            >
               <XCircle size={12} />
               Cancelar
             </button>
@@ -328,12 +347,22 @@ export default function TabPrescricoes({
         </p>
         <div className="flex flex-wrap gap-2">
           {!isNutritionist && (
-            <button className="btn-primary text-xs flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled
+              title="Acao bloqueada ate contrato real de criacao de prescricao."
+              className="btn-primary text-xs flex items-center gap-1.5 cursor-not-allowed opacity-55"
+            >
               <Plus size={13} />
               Nova prescrição
             </button>
           )}
-          <button className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-muted transition-colors">
+          <button
+            type="button"
+            disabled
+            title="Acao bloqueada ate contrato real de orientacao."
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-background transition-colors cursor-not-allowed opacity-55"
+          >
             <FileSignature size={13} />
             Nova orientação
           </button>

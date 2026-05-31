@@ -122,6 +122,23 @@ function toSoapState(soap: SoapRow | null): EncounterSoapState | null {
   };
 }
 
+function validateFinalSoap(input: PersistSoapInput) {
+  const requiredFields: Array<[keyof SoapFields, string]> = [
+    ['subjective', 'Subjetivo'],
+    ['objective', 'Objetivo'],
+    ['assessment', 'Avaliacao'],
+    ['plan', 'Plano'],
+  ];
+
+  const missing = requiredFields.filter(([key]) => !input[key].trim()).map(([, label]) => label);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Preencha os campos SOAP obrigatorios antes de finalizar: ${missing.join(', ')}.`
+    );
+  }
+}
+
 export async function getEncounterContext(
   patientId: string
 ): Promise<{ data: EncounterContext | null; error: SafeServiceError | null }> {
@@ -219,6 +236,8 @@ async function persistSoap(
   input: PersistSoapInput,
   status: 'draft' | 'final'
 ): Promise<PersistSoapResult> {
+  if (status === 'final') validateFinalSoap(input);
+
   if (isMockEnabled()) {
     return {
       encounterId: input.encounterId ?? 'mock-encounter',

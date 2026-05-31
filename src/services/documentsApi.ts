@@ -110,7 +110,7 @@ export async function sendDocumentForSignature(
     email: string;
     role?: string;
     assinatura?: PatientDocumentSignatureStatus;
-  }>
+  }> = []
 ): Promise<{ data: SendForSignatureResult | null; error: SafeServiceError | null }> {
   try {
     const normalizedSigners: DocumentSigner[] = signers.map(({ name, email, role }) => ({
@@ -118,15 +118,16 @@ export async function sendDocumentForSignature(
       email,
       role,
     }));
+    const body: Record<string, unknown> = {
+      generated_document_id: generatedDocumentId,
+      patient_id: patientId,
+    };
+    if (normalizedSigners.length > 0) body.signers = normalizedSigners;
     const res = await invokeSafe<{
       signature_request_id: string;
       provider_document_id?: string;
       status: string;
-    }>('d4sign-send-document', {
-      generated_document_id: generatedDocumentId,
-      patient_id: patientId,
-      signers: normalizedSigners,
-    });
+    }>('d4sign-send-document', body);
     if (res.error) return { data: null, error: res.error };
     return {
       data: {
