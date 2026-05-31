@@ -306,7 +306,7 @@ export default function EncounterPage() {
     return (
       <DashboardShell>
         <div className="flex flex-col items-center justify-center h-64 gap-3 text-center px-6">
-          <AlertTriangle size={22} className="text-destructive" />
+          <AlertTriangle size={22} className="text-red-600" />
           <div>
             <p className="text-sm font-semibold text-foreground">Atendimento indisponivel</p>
             <p className="text-sm text-muted-foreground mt-1">
@@ -340,8 +340,8 @@ export default function EncounterPage() {
     <DashboardShell>
       <div className="flex flex-col h-full">
         {/* ── Top bar ── */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card flex-shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 px-4 py-4 border-b border-border bg-card flex-shrink-0 xl:flex-row xl:items-center xl:justify-between xl:px-6">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => router.push(`/clinic/patients/${patientId}`)}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -362,29 +362,33 @@ export default function EncounterPage() {
           {/* Action buttons */}
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <button
-              onClick={() => {}}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              disabled
+              title="Solicitacao de exames sera habilitada apos contrato backend."
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground opacity-60 cursor-not-allowed"
             >
               <FlaskConical size={13} />
               Solicitar Exames
             </button>
             <button
-              onClick={() => {}}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              disabled
+              title="Prescricoes serao habilitadas apos contrato backend."
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground opacity-60 cursor-not-allowed"
             >
               <Pill size={13} />
               Criar Prescrição
             </button>
             <button
-              onClick={() => {}}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              disabled
+              title="Atualizacao de plano sera habilitada apos contrato backend."
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground opacity-60 cursor-not-allowed"
             >
               <RefreshCw size={13} />
               Atualizar Plano
             </button>
             <button
-              onClick={() => {}}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              disabled
+              title="Atribuicao de tarefas sera habilitada apos contrato backend."
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground opacity-60 cursor-not-allowed"
             >
               <UserPlus size={13} />
               Atribuir Tarefa
@@ -421,9 +425,9 @@ export default function EncounterPage() {
         </div>
 
         {/* ── Three-column body ── */}
-        <div className="flex-1 overflow-hidden grid grid-cols-[280px_1fr_280px] gap-0 min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto xl:overflow-hidden grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_280px] gap-0">
           {/* ── LEFT COLUMN ── */}
-          <div className="border-r border-border overflow-y-auto scrollbar-thin p-4 space-y-3 bg-muted/20">
+          <div className="border-b border-border overflow-visible p-4 space-y-3 bg-muted/20 xl:border-b-0 xl:border-r xl:overflow-y-auto xl:scrollbar-thin">
             {/* Patient summary */}
             <SectionCard title="Paciente">
               <div className="flex items-center gap-3 mb-3">
@@ -542,7 +546,7 @@ export default function EncounterPage() {
           </div>
 
           {/* ── CENTER COLUMN — SOAP Editor ── */}
-          <div className="overflow-y-auto scrollbar-thin p-6 space-y-5">
+          <div className="min-w-0 overflow-y-auto scrollbar-thin p-4 lg:p-6 space-y-5">
             <div className="flex items-center gap-2 mb-2">
               <FileText size={16} className="text-primary" />
               <h2 className="text-base font-semibold text-foreground">Registro SOAP</h2>
@@ -625,7 +629,7 @@ export default function EncounterPage() {
           </div>
 
           {/* ── RIGHT COLUMN — Clinical context ── */}
-          <div className="border-l border-border overflow-y-auto scrollbar-thin p-4 space-y-3 bg-muted/20">
+          <div className="border-t border-border overflow-visible p-4 space-y-3 bg-muted/20 xl:border-t-0 xl:border-l xl:overflow-y-auto xl:scrollbar-thin">
             {/* Programa ativo */}
             <SectionCard title="Programa Ativo">
               <div className="flex items-center gap-2 mb-2">

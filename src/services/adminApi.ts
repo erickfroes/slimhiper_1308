@@ -87,12 +87,12 @@ export async function listTenants(mockData: AdminTenantRow[]) {
       .from('tenants')
       .select('id,name,status,settings,created_at,updated_at')
       .order('created_at', { ascending: false });
-    if (error) return { data: mockData, error: fallbackError(error.message) };
+    if (error) return { data: [] as AdminTenantRow[], error: fallbackError(error.message) };
     return { data: (data ?? []).map(mapTenant), error: null as SafeServiceError | null };
   } catch {
     return {
-      data: mockData,
-      error: fallbackError('Failed to load tenants from backend, using mock fallback.'),
+      data: [] as AdminTenantRow[],
+      error: fallbackError('Failed to load tenants from backend.'),
     };
   }
 }
@@ -142,7 +142,7 @@ export async function getTenantDetail(tenantId: string, fallback: AdminTenantDet
     const d4Count = results[5].count;
     const asaasCount = results[6].count;
     if (tErr || !tenant)
-      return { data: fallback, error: fallbackError(tErr?.message ?? 'Tenant not found') };
+      return { data: null, error: fallbackError(tErr?.message ?? 'Tenant not found') };
     const base = mapTenant(tenant);
     return {
       data: {
@@ -160,8 +160,8 @@ export async function getTenantDetail(tenantId: string, fallback: AdminTenantDet
     };
   } catch {
     return {
-      data: fallback,
-      error: fallbackError('Failed to load tenant detail from backend, using fallback.'),
+      data: null,
+      error: fallbackError('Failed to load tenant detail from backend.'),
     };
   }
 }
@@ -178,7 +178,8 @@ export async function listWebhookSummaries(mockData: AdminWebhookEventSummary[])
       .order('created_at', { ascending: false })
       .limit(100);
 
-    if (error) return { data: mockData, error: fallbackError(error.message) };
+    if (error)
+      return { data: [] as AdminWebhookEventSummary[], error: fallbackError(error.message) };
 
     const mapped: AdminWebhookEventSummary[] = (data ?? [])
       .map((e: any) => ({
@@ -197,11 +198,11 @@ export async function listWebhookSummaries(mockData: AdminWebhookEventSummary[])
       }))
       .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
 
-    return { data: mapped.length ? mapped : mockData, error: null as SafeServiceError | null };
+    return { data: mapped, error: null as SafeServiceError | null };
   } catch {
     return {
-      data: mockData,
-      error: fallbackError('Failed to load webhook summaries from backend, using mock fallback.'),
+      data: [] as AdminWebhookEventSummary[],
+      error: fallbackError('Failed to load webhook summaries from backend.'),
     };
   }
 }

@@ -10,6 +10,10 @@ type Json = Record<string, unknown>;
 const headers = { 'Content-Type': 'application/json' };
 const json = (status: number, payload: Json) =>
   new Response(JSON.stringify(payload), { status, headers });
+const internalError = (reason: string, context: Json = {}) => {
+  console.error('[webhook-asaas] internal_error', { reason, ...context });
+  return json(500, { ok: false, error: 'internal_error' });
+};
 
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -75,6 +79,24 @@ function normalizeEvent(event: string) {
   };
 }
 
+function minimizedWebhookPayload(
+  bodyRecord: Record<string, unknown>,
+  payment: Record<string, unknown>,
+  eventHash: string
+) {
+  const valueCents = toAmountCents(payment.value);
+  return {
+    event: getString(bodyRecord.event) || 'unknown',
+    event_hash: eventHash,
+    provider_event_id: getString(bodyRecord.id) || null,
+    payment_id: getString(payment.id) || null,
+    payment_status: getString(payment.status) || null,
+    billing_type: getString(payment.billingType) || null,
+    value_cents: valueCents > 0 ? valueCents : null,
+    due_date: getString(payment.dueDate) || null,
+  };
+}
+
 Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
 
@@ -96,7 +118,7 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceRoleKey) {
-    return json(500, { ok: false, error: 'server_misconfigured' });
+    return internalError('server_misconfigured');
   }
 
   const bodyRecord = toObject(body);
@@ -116,7 +138,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (existing.error) {
-    return json(500, { ok: false, error: 'idempotency_lookup_failed' });
+    return internalError('idempotency_lookup_failed', { eventHash });
   }
 
   if (existing.data?.id) {
@@ -127,12 +149,12 @@ Deno.serve(async (req) => {
     provider: 'asaas',
     event_hash: eventHash,
     event_type: eventType,
-    payload: bodyRecord,
+    payload: minimizedWebhookPayload(bodyRecord, payment, eventHash),
     status: 'received',
   });
 
   if (webhookInsertError) {
-    return json(500, { ok: false, error: 'webhook_event_insert_failed' });
+    return internalError('webhook_event_insert_failed', { eventHash });
   }
 
   let tenantId: string | null = null;
@@ -151,7 +173,7 @@ Deno.serve(async (req) => {
         .from('billing_webhook_events')
         .update({ status: 'failed', error_message: 'invoice_lookup_failed' })
         .eq('event_hash', eventHash);
-      return json(500, { ok: false, error: 'invoice_lookup_failed' });
+      return internalError('invoice_lookup_failed', { eventHash });
     }
 
     tenantId = invoice.data?.tenant_id ?? null;
@@ -185,7 +207,7 @@ Deno.serve(async (req) => {
       .from('billing_webhook_events')
       .update({ status: 'failed', error_message: 'asaas_event_insert_failed' })
       .eq('event_hash', eventHash);
-    return json(500, { ok: false, error: 'asaas_event_insert_failed' });
+    return internalError('asaas_event_insert_failed', { eventHash });
   }
 
   if (tenantId && patientId && invoiceId) {
@@ -195,7 +217,8 @@ Deno.serve(async (req) => {
         status: mapping.invoiceStatus,
         paid_at: mapping.invoiceStatus === 'paid' ? timestamp : null,
         invoice_url: getString(payment.invoiceUrl, payment.invoice_url) || null,
-        payment_link: getString(payment.bankSlipUrl, payment.invoiceUrl, payment.invoice_url) || null,
+        payment_link:
+          getString(payment.bankSlipUrl, payment.invoiceUrl, payment.invoice_url) || null,
         metadata: {
           provider_status: getString(payment.status) || null,
           provider_event: eventType,
@@ -210,7 +233,7 @@ Deno.serve(async (req) => {
         .from('billing_webhook_events')
         .update({ status: 'failed', error_message: 'invoice_update_failed' })
         .eq('event_hash', eventHash);
-      return json(500, { ok: false, error: 'invoice_update_failed' });
+      return internalError('invoice_update_failed', { eventHash });
     }
 
     const amountCents = toAmountCents(payment.value);
@@ -239,7 +262,7 @@ Deno.serve(async (req) => {
           .from('billing_webhook_events')
           .update({ status: 'failed', error_message: 'payment_upsert_failed' })
           .eq('event_hash', eventHash);
-        return json(500, { ok: false, error: 'payment_upsert_failed' });
+        return internalError('payment_upsert_failed', { eventHash });
       }
     }
 
@@ -267,7 +290,7 @@ Deno.serve(async (req) => {
           .from('billing_webhook_events')
           .update({ status: 'failed', error_message: 'timeline_insert_failed' })
           .eq('event_hash', eventHash);
-        return json(500, { ok: false, error: 'timeline_insert_failed' });
+        return internalError('timeline_insert_failed', { eventHash });
       }
     }
   }
@@ -282,7 +305,7 @@ Deno.serve(async (req) => {
     .eq('event_hash', eventHash);
 
   if (processedUpdateError) {
-    return json(500, { ok: false, error: 'webhook_event_update_failed' });
+    return internalError('webhook_event_update_failed', { eventHash });
   }
 
   return json(200, {

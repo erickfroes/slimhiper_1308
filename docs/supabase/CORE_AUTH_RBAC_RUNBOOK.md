@@ -69,6 +69,7 @@ Expected clean migration order:
 5. `20260530124000_040_documents_storage_d4sign.sql`
 6. `20260530125000_050_billing_asaas.sql`
 7. `20260530126000_060_contract_views_rpcs.sql`
+8. `20260531090000_070_billing_webhook_security_hardening.sql`
 
 ## Run The Bootstrap Script
 

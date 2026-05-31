@@ -212,6 +212,10 @@ Deno.serve(async (req) => {
 
     return jsonResponse(200, { ok: true, processed: true, data: { idempotency_key: idempotencyKey, signature_request_id: signatureRequest.id, status: normalizedStatus }, meta: { timestamp } });
   } catch (error) {
-    return jsonResponse(500, { ok: false, error: { code: 'internal_error', message: error instanceof Error ? error.message : 'Unexpected webhook error.' }, meta: { timestamp } });
+    console.error('[webhook-d4sign] unexpected_error', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+
+    return jsonResponse(500, { ok: false, error: { code: 'internal_error', message: 'Unexpected server error.' }, meta: { timestamp } });
   }
 });

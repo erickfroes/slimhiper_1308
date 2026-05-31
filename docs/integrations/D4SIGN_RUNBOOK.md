@@ -161,6 +161,7 @@ When a webhook maps to `signed`, the expected timeline event is
 
 ## Deployment Notes
 
-Runbook users should confirm whether webhook functions need JWT verification
-disabled at deployment time and document the deployment command for the target
-Supabase project. Do not infer deployment settings from local code alone.
+`supabase/config.toml` versions `[functions.webhook-d4sign] verify_jwt = false`
+because the provider cannot send a Supabase JWT. Keep this setting limited to
+webhook handlers that validate their own token/HMAC, and document the target
+project deployment command without printing secrets.

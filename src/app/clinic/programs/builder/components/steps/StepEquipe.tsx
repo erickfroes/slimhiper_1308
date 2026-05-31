@@ -32,7 +32,7 @@ export default function StepEquipe({ draft, onChange }: Props) {
     <div className="space-y-5">
       {/* Selected team */}
       {draft.team.length > 0 && (
-        <div className="card p-4 space-y-3">
+        <div className="card-base p-4 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">
             Equipe selecionada ({draft.team.length})
           </h3>
@@ -69,7 +69,7 @@ export default function StepEquipe({ draft, onChange }: Props) {
               key={member.id}
               onClick={() => toggleMember(member)}
               className={[
-                'card p-4 flex items-center gap-4 cursor-pointer transition-all',
+                'card-base p-4 flex items-center gap-4 cursor-pointer transition-all',
                 selected ? 'border-primary/40 bg-primary/5' : 'hover:border-border/80',
               ].join(' ')}
             >

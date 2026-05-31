@@ -3,6 +3,32 @@
 Local baseline captured before new feature work. This document records commands,
 results, pending items, and environment details for the current repository state.
 
+## Latest Implementation Validation
+
+- Date: 2026-05-31.
+- Branch: local working tree.
+- Touched paths: README/checkpoint/runbooks, Supabase config/functions/migration,
+  admin services/screens, dashboard/agenda/patient services, Patient 360
+  documents redirect/action handling, encounter UI, and program builder card
+  classes.
+- `git diff --check`: passed; Git reported CRLF normalization warnings only.
+- `npm run type-check`: passed.
+- `npm run lint`: passed with 32 warnings.
+- `npm run build`: passed.
+- Browser smoke: `npm run dev` required removing generated `.next` cache after a
+  local `readlink` diagnostic artifact error. The in-app Browser reached the dev
+  server after restart; `/clinic/dashboard`, `/clinic/agenda`,
+  `/clinic/patients/patient-001/encounter`, `/admin/tenants`, and
+  `/admin/webhooks` redirected to `/auth/login` because no authenticated test
+  session was available. The guarded login page rendered without framework error
+  or blank screen, but the protected route interiors were not visually exercised.
+- Skipped: Supabase `db push`, migrations, bootstraps, contract scripts, D4Sign
+  sandbox, and Asaas sandbox/provider checks. Reason: no explicitly authorized
+  target environment/command for mutating or provider-capable operations.
+- Residual risks: protected UI states still need authenticated browser smoke,
+  Supabase RLS/RPC contracts still need an authorized environment, and lint
+  warnings remain non-blocking.
+
 ## Environment Used
 
 - Date: 2026-05-19.

@@ -44,7 +44,6 @@ import {
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
 import { useParams } from 'next/navigation';
-import Icon from '@/components/ui/AppIcon';
 import { getTenantDetail } from '@/services/adminApi';
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
@@ -692,7 +691,7 @@ export default function TenantDetailContent() {
     'overview' | 'users' | 'units' | 'audit' | 'webhooks' | 'support' | 'breakglass'
   >('overview');
 
-  const [tenant, setTenant] = useState<TenantDetail>(mockTenantDetails[tenantId] ?? defaultTenant);
+  const [tenant, setTenant] = useState<TenantDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -701,7 +700,7 @@ export default function TenantDetailContent() {
     const fallback = (mockTenantDetails[tenantId] ?? defaultTenant) as TenantDetail;
     getTenantDetail(tenantId, fallback as any).then(({ data, error }) => {
       if (!mounted) return;
-      setTenant((data ?? fallback) as TenantDetail);
+      setTenant((data ?? null) as TenantDetail | null);
       setLoadError(error?.message ?? null);
       setIsLoading(false);
     });
@@ -739,6 +738,35 @@ export default function TenantDetailContent() {
       count: mockBreakGlass.filter((b) => b.status === 'pending').length,
     },
   ] as const;
+
+  if (isLoading || loadError || !tenant) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <NextLink
+          href="/admin/tenants"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft size={15} />
+          Voltar para tenants
+        </NextLink>
+        <div className="card-base mt-6 max-w-xl p-8 text-center">
+          {isLoading ? (
+            <div className="mx-auto h-7 w-7 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          ) : (
+            <AlertTriangle size={28} className="mx-auto text-red-600" />
+          )}
+          <h1 className="mt-4 text-lg font-bold text-foreground">
+            {isLoading ? 'Carregando tenant' : 'Tenant indisponivel'}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {isLoading
+              ? 'Buscando dados reais do tenant.'
+              : (loadError ?? 'Nao foi possivel encontrar este tenant.')}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">

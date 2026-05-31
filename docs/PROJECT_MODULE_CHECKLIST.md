@@ -28,9 +28,8 @@ Status usados:
   - `src/services/session/permissions.ts`
   - `src/services/session/roles.ts`
   - `src/services/mockSession.ts`
-  - `supabase/migrations/20260508110000_core_multitenant_foundation.sql`
-  - `supabase/migrations/20260508123000_core_role_model_upgrade.sql`
-  - `supabase/migrations/20260508133000_core_multitenant_rls_alignment.sql`
+  - `supabase/migrations/20260530120000_000_extensions_security.sql`
+  - `supabase/migrations/20260530121000_010_core_auth_rbac.sql`
   - `supabase/tests/core_rbac_smoke_tests.sql`
   - `scripts/supabase/bootstrap-core-auth.mjs`
 - Dependencias:
@@ -88,7 +87,7 @@ Status usados:
   - `src/domain/types.ts`
   - `src/services/mockApi.ts`
   - `src/data/mockData.ts`
-  - `supabase/migrations/20260508140000_patient360_clinical_foundation.sql`
+  - `supabase/migrations/20260530122000_020_clinical_patient360.sql`
 - Dependencias:
   - Supabase tables `patients`, `patient_pii`, `patient_care_team`,
     `patient_program_enrollments`, `measurements`, mock data.
@@ -154,7 +153,7 @@ Status usados:
   - `src/domain/types.ts`
   - `src/services/mockApi.ts`
   - `src/data/mockData.ts`
-  - `supabase/migrations/20260508140000_patient360_clinical_foundation.sql`
+  - `supabase/migrations/20260530122000_020_clinical_patient360.sql`
 - Dependencias:
   - Tabelas `appointments`, `queue_events`, permissao `agenda.read` e
     `agenda.write`, mock agenda/fila.
@@ -176,7 +175,7 @@ Status usados:
 - Arquivos existentes:
   - `src/app/clinic/patients/[patientId]/encounter/page.tsx`
   - `src/domain/types.ts`
-  - `supabase/migrations/20260508140000_patient360_clinical_foundation.sql`
+  - `supabase/migrations/20260530122000_020_clinical_patient360.sql`
   - `src/data/mockData.ts`
 - Dependencias:
   - Tabelas `encounters`, `appointments`, `measurements`, `soap_notes`,
@@ -199,7 +198,7 @@ Status usados:
 - Arquivos existentes:
   - `src/app/clinic/patients/[patientId]/encounter/page.tsx`
   - `src/domain/types.ts`
-  - `supabase/migrations/20260508140000_patient360_clinical_foundation.sql`
+  - `supabase/migrations/20260530122000_020_clinical_patient360.sql`
   - `scripts/supabase/bootstrap-patient360-demo.mjs`
 - Dependencias:
   - Tabela `soap_notes`, permissoes `soap.read` e `soap.write`, timeline
@@ -225,7 +224,7 @@ Status usados:
   - `src/app/paciente-360/components/tabs/TabTimeline.tsx`
   - `src/components/charts/WeightEvolutionChart.tsx`
   - `src/domain/types.ts`
-  - `supabase/migrations/20260508140000_patient360_clinical_foundation.sql`
+  - `supabase/migrations/20260530122000_020_clinical_patient360.sql`
   - `scripts/supabase/bootstrap-patient360-demo.mjs`
 - Dependencias:
   - Tabelas `measurements`, `bioimpedance_results`, `lab_orders`,
@@ -248,8 +247,7 @@ Status usados:
   - `src/app/clinic/documents/page.tsx`
   - `src/services/documentsApi.ts`
   - `src/components/DocumentStatusBadge.tsx`
-  - `supabase/migrations/20260508160000_storage_clinical_documents_foundation.sql`
-  - `supabase/migrations/20260508170000_documents_schema_foundation.sql`
+  - `supabase/migrations/20260530124000_040_documents_storage_d4sign.sql`
   - `supabase/functions/generate-document/index.ts`
   - `supabase/functions/patient-documents/index.ts`
   - `supabase/functions/document-signed-url/index.ts`
@@ -280,7 +278,7 @@ Status usados:
   - `src/services/documentsApi.ts`
   - `supabase/functions/d4sign-send-document/index.ts`
   - `supabase/functions/webhook-d4sign/index.ts`
-  - `supabase/migrations/20260508170000_documents_schema_foundation.sql`
+  - `supabase/migrations/20260530124000_040_documents_storage_d4sign.sql`
   - `docs/integrations/D4SIGN_RUNBOOK.md`
 - Dependencias:
   - D4Sign API, webhook HMAC, `signature_requests`, `signature_signers`,
@@ -306,7 +304,9 @@ Status usados:
   - `src/app/clinic/financeiro/components/ClinicFinanceiroContent.tsx`
   - `src/app/admin/billing/page.tsx`
   - `src/services/billingApi.ts`
-  - `supabase/migrations/20260509120000_billing_asaas_foundation.sql`
+  - `supabase/migrations/20260530125000_050_billing_asaas.sql`
+  - `supabase/migrations/20260530126000_060_contract_views_rpcs.sql`
+  - `supabase/migrations/20260531090000_070_billing_webhook_security_hardening.sql`
   - `supabase/functions/asaas-create-tenant-subaccount/index.ts`
   - `supabase/functions/asaas-create-patient-customer/index.ts`
   - `supabase/functions/asaas-create-patient-invoice/index.ts`
@@ -323,7 +323,7 @@ Status usados:
   - Funcoes Asaas externas podem chamar API real; exigem ambiente autorizado.
   - Webhook Asaas precisa validacao forte de autenticidade, idempotencia e
     conciliacao.
-  - UI financeira pode cair em mock fallback e mascarar falhas de backend.
+  - UI financeira ainda precisa de conciliacao visual e contrato real em ambiente autorizado.
 - Proximo passo:
   - Fechar contrato de billing em ambiente sandbox e mapear estados Asaas para
     estados internos.
@@ -454,7 +454,7 @@ Status usados:
   - `src/app/patient/page.tsx`
   - `src/domain/types.ts`
   - `src/data/mockData.ts`
-  - `supabase/migrations/20260508170000_documents_schema_foundation.sql`
+  - `supabase/migrations/20260530124000_040_documents_storage_d4sign.sql`
 - Dependencias:
   - Supabase Auth, futura ligacao usuario-paciente, documentos liberados,
     pagamentos, chat, check-ins e entitlements de programas.
@@ -512,7 +512,10 @@ Status usados:
   - `src/app/admin/webhooks/components/WebhookMonitorContent.tsx`
   - `src/app/admin/support/page.tsx`
   - `src/services/adminApi.ts`
-  - `supabase/migrations/20260508110000_core_multitenant_foundation.sql`
+  - `supabase/migrations/20260530120000_000_extensions_security.sql`
+  - `supabase/migrations/20260530121000_010_core_auth_rbac.sql`
+  - `supabase/migrations/20260530125000_050_billing_asaas.sql`
+  - `supabase/migrations/20260531090000_070_billing_webhook_security_hardening.sql`
   - `supabase/functions/webhook-d4sign/index.ts`
   - `supabase/functions/webhook-asaas/index.ts`
 - Dependencias:
