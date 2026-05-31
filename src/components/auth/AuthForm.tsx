@@ -4,34 +4,51 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
+type AppSessionResponse = {
+  authenticated: boolean;
+  targetRoute?: string;
+};
+
 export default function AuthForm() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setSubmitting(true);
 
     const supabase = createClient();
     if (!supabase) {
-      setError('Supabase não está configurado para login neste ambiente.');
+      setError('Supabase nao esta configurado para login neste ambiente.');
+      setSubmitting(false);
       return;
     }
 
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (signInError) {
-      setError(signInError.message ?? 'Falha no login.');
+      setError('Nao foi possivel entrar com essas credenciais.');
+      setSubmitting(false);
       return;
     }
 
-    router.push('/');
-    router.refresh();
+    try {
+      const sessionResponse = await fetch('/api/auth/app-session', { cache: 'no-store' });
+      const session = (await sessionResponse.json()) as AppSessionResponse;
+
+      router.push(session.authenticated ? (session.targetRoute ?? '/') : '/auth/login');
+      router.refresh();
+    } catch {
+      setError('Login realizado, mas nao foi possivel validar o destino da sessao.');
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -41,27 +58,38 @@ export default function AuthForm() {
     >
       <h1 className="text-xl font-semibold text-foreground">Entrar</h1>
       <input
+        id="login-email"
         type="email"
         required
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        onChange={(event) => setEmail(event.target.value)}
         placeholder="E-mail"
-        className="w-full rounded-xl border border-border bg-background p-3 outline-none"
+        autoComplete="email"
+        disabled={submitting}
+        className="w-full rounded-xl border border-border bg-background p-3 outline-none disabled:cursor-not-allowed disabled:opacity-60"
       />
       <input
+        id="login-password"
         type="password"
         required
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        onChange={(event) => setPassword(event.target.value)}
         placeholder="Senha"
-        className="w-full rounded-xl border border-border bg-background p-3 outline-none"
+        autoComplete="current-password"
+        disabled={submitting}
+        className="w-full rounded-xl border border-border bg-background p-3 outline-none disabled:cursor-not-allowed disabled:opacity-60"
       />
-      {error ? <p className="text-sm text-red-500">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-sm text-red-500">
+          {error}
+        </p>
+      ) : null}
       <button
         type="submit"
-        className="w-full rounded-xl bg-primary text-primary-foreground py-3 font-medium"
+        disabled={submitting}
+        className="w-full rounded-xl bg-primary text-primary-foreground py-3 font-medium disabled:cursor-not-allowed disabled:opacity-60"
       >
-        Entrar
+        {submitting ? 'Entrando...' : 'Entrar'}
       </button>
     </form>
   );

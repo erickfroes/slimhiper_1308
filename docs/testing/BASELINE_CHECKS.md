@@ -5,41 +5,39 @@ results, pending items, and environment details for the current repository state
 
 ## Latest Implementation Validation
 
-- Date: 2026-05-30 22:57 -03:00.
+- Date: 2026-05-31 07:34 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
-- Commit: `5d1244b`.
-- Touched paths: `.github/workflows/ci.yml`,
-  `docs/PROJECT_COMPLETION_CHECKPOINTS.md`,
-  `docs/testing/BASELINE_CHECKS.md`, and
-  `docs/testing/BROWSER_SMOKE_CHECKLIST.md`.
-- `npm install`: passed; dependencies were already up to date and no
-  `package.json`/`package-lock.json` diff was produced. NPM still reports 2
-  vulnerabilities, 1 moderate and 1 critical.
-- `git diff --check`: passed.
+- Commit base: `34cfd43`.
+- Touched paths: auth/session route handling, root layout, clinic shell,
+  no-workspace actions, patient portal fail-closed page, patient list safety,
+  `docs/PROJECT_COMPLETION_CHECKPOINTS.md`, and this baseline.
 - `npm run type-check`: passed.
-- `npm run lint`: passed with 32 warnings.
+- `npm run lint`: passed with 29 warnings.
 - `npm run build`: passed; Next generated 26 app routes.
 - Local fixture contracts passed:
   `node scripts/supabase/test-patient360-contract.mjs --mode=fixture`,
   `node scripts/supabase/test-d4sign-fixtures.mjs`, and
   `node scripts/supabase/test-billing-fixtures.mjs`.
-- Browser smoke: checklist added at
-  `docs/testing/BROWSER_SMOKE_CHECKLIST.md`. No authenticated browser smoke was
-  executed in this documentation/CI fixture pass.
-- Skipped: Supabase `db push`, migrations, bootstraps, contract scripts, D4Sign
-  sandbox, and Asaas sandbox/provider checks. Reason: no explicitly authorized
-  target environment/command for mutating or provider-capable operations.
-- Residual risks: protected UI states still need authenticated browser smoke,
+- Local HTTP smoke with `npm run dev` on port `4028`: `/auth/login` and
+  `/no-workspace` returned 200; `/patient`, `/clinic/patients?search=ana`, and
+  `/admin` returned 307 to `/auth/login` without an authenticated session.
+- Browser plugin smoke was not available in this session, so the local smoke was
+  HTTP-level only and did not exercise visual interactions.
+- Skipped: `.env` real inspection, Supabase `db push`, migrations, bootstraps,
+  real/sandbox contract scripts, D4Sign sandbox, and Asaas sandbox/provider
+  checks. Reason: local-safe execution only and no authorized mutable/provider
+  environment.
+- Residual risks: authenticated UI states still need browser smoke,
   Supabase RLS/RPC contracts still need an authorized environment, dependency
   audit findings need a dedicated package task, and lint warnings remain
   non-blocking.
 
 ## Environment Used
 
-- Date: 2026-05-30 22:57 -03:00.
+- Date: 2026-05-31 07:34 -03:00.
 - Repo path: local `slimhiper_1308` workspace.
 - Branch: `test/asaas-billing-contract-hardening`.
-- Commit: `5d1244b`.
+- Commit base: `34cfd43`.
 - Shell: PowerShell.
 - Node: `v24.15.0`.
 - npm: `11.12.1`.
@@ -78,11 +76,12 @@ now uses ESLint CLI over `src/**/*.{ts,tsx}` instead of `next lint`.
 | `npm install`        | Passed               | Dependencies were already up to date; npm audited 534 packages and produced no package diff.        |
 | `npm run type-check` | Passed               | `tsc --noEmit` exited successfully.                                                                 |
 | `npm run build`      | Passed               | `next build` compiled successfully and generated 26 app routes.                                      |
-| `npm run lint`       | Passed with warnings | ESLint CLI exited with code 0; existing 32 warnings remain.                                         |
+| `npm run lint`       | Passed with warnings | ESLint CLI exited with code 0; existing 29 warnings remain.                                         |
 | `git diff --check`   | Passed               | No whitespace errors reported.                                                                      |
 | Patient 360 fixture  | Passed               | Summary, timeline, category filter, forbidden, and cross-tenant fixtures passed.                    |
 | D4Sign fixture       | Passed               | Valid webhook, invalid fail-closed behavior, document summary, and HMAC strategy passed.            |
 | Billing fixture      | Passed               | Confirmed, overdue, cancelled, duplicated, tenant resolution, and invalid-token fixtures passed.    |
+| Local HTTP smoke     | Passed limited       | Unauthenticated routes behaved fail-closed; visual/authenticated interactions remain blocked.       |
 
 ## Lint Warning Categories
 
