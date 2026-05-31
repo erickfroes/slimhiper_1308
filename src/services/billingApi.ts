@@ -1,6 +1,5 @@
 import type { PatientFinancialSummary } from '@/domain/types';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
-import { getPatient360 } from '@/services/mockApi';
 
 export interface SafeServiceError {
   message: string;
@@ -40,6 +39,11 @@ export interface ClinicFinanceOverview {
 
 function isMockEnabled() {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+}
+
+async function getMockPatient360(patientId: string) {
+  const { getPatient360 } = await import('@/services/mockApi');
+  return getPatient360(patientId);
 }
 
 function unwrap<T>(response: unknown): { data: T | null; error: SafeServiceError | null } {
@@ -96,7 +100,7 @@ export async function getPatientFinancialSummary(patientId: string) {
   }
 
   if (isMockEnabled()) {
-    const p = await getPatient360(patientId);
+    const p = await getMockPatient360(patientId);
     return { data: p?.financial ?? null, error: null as SafeServiceError | null };
   }
   const supabase = createBrowserSupabaseClient();

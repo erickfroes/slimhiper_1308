@@ -5,6 +5,110 @@ results, pending items, and environment details for the current repository state
 
 ## Latest Implementation Validation
 
+- Date: 2026-05-31 15:09 -03:00.
+- Branch: `test/asaas-billing-contract-hardening`.
+- Commit base: `bb190f1`.
+- Touched paths in this pass: `src/app/clinic/documents/page.tsx`,
+  `src/app/clinic/documents/components/ClinicDocumentsContent.tsx`,
+  `src/services/clinicDocumentsApi.ts`, `src/services/documentsApi.ts`,
+  `supabase/functions/generate-document/index.ts`,
+  `supabase/functions/document-signed-url/index.ts`,
+  `supabase/functions/d4sign-send-document/index.ts`,
+  `supabase/migrations/20260531152000_120_patient_document_read_scope.sql`,
+  `supabase/config.toml`, `scripts/supabase/test-documents-phase4-local-smoke.mjs`,
+  `scripts/supabase/bootstrap-document-templates-demo.mjs`, `.env.example`,
+  and document/runbook updates.
+- Phase 4 result: document workflows are complete for MVP local evidence except
+  the real D4Sign sandbox send. The clinic documents page now uses real data,
+  generates PDFs through `generate-document`, limits custom variables to
+  template-owned non-protected keys, releases/withdraws patient access, requests
+  short-lived signed URLs, and shows a pending/failed document monitor.
+- Local migration applied: `npx supabase migration up --local --include-all`
+  applied `20260531152000_120_patient_document_read_scope.sql`.
+- Local documents smoke passed:
+  `node scripts/supabase/test-documents-phase4-local-smoke.mjs`. It re-ran core
+  auth, Patient 360, cross-tenant, and document-template bootstraps locally,
+  confirmed protected variable overrides fail closed, generated PDF documents,
+  confirmed patient and guardian released-document RLS, confirmed cross-tenant
+  denial, confirmed `document-signed-url` for patient/guardian, and confirmed
+  D4Sign webhook HMAC/idempotency/audit/timeline.
+- Supabase Edge runtime was restarted locally with `[edge_runtime.secrets]`
+  mapping in `supabase/config.toml`. `supabase/functions/.env` was rewritten as
+  UTF-8 without BOM; no secret values were printed. Docker/Supabase containers
+  returned healthy/running states after restart.
+- `npm run type-check`: passed.
+- `npm run lint`: passed with the same 24 warnings already tracked in unrelated
+  files.
+- `npm run build`: passed; Next generated 26 app routes including
+  `/clinic/documents`.
+- Local fixture contracts passed:
+  `node scripts/supabase/test-patient360-contract.mjs --mode=fixture`,
+  `node scripts/supabase/test-d4sign-fixtures.mjs`, and
+  `node scripts/supabase/test-billing-fixtures.mjs`.
+- `git diff --check`: passed with CRLF conversion warnings only.
+- Local HTTP smoke with the existing dev server on port `4028`: `/auth/login`
+  returned 200; `/clinic/documents` returned 307 to `/auth/login` without an
+  authenticated session.
+- Skipped/blocked: real D4Sign sandbox send was not run because
+  `D4SIGN_SAFE_UUID` is absent; `RUN_D4SIGN_SANDBOX_SEND=true` is available in
+  the local smoke once the safe/cofre UUID is configured. Authenticated visual
+  Browser traversal was not available in this pass; local Edge/RLS smoke covers
+  the data contract and HTTP smoke covers fail-closed routing.
+- Residual risks: real provider send must be tested in D4Sign sandbox with
+  `D4SIGN_SAFE_UUID`, and broad authenticated browser smoke should still verify
+  the new documents UI before release.
+
+## Previous Implementation Validation - Phase 3
+
+- Date: 2026-05-31 14:35 -03:00.
+- Branch: `test/asaas-billing-contract-hardening`.
+- Commit base: `bb190f1`.
+- Touched paths in this pass: `src/services/patient360Api.ts`,
+  `src/services/documentsApi.ts`, `src/services/nutritionApi.ts`,
+  `src/services/chatApi.ts`, `src/services/agendaApi.ts`,
+  `src/services/billingApi.ts`,
+  `supabase/functions/patient-360-summary/index.ts`,
+  `supabase/functions/patient-timeline/index.ts`,
+  `scripts/supabase/test-patient360-local-real-smoke.mjs`,
+  `docs/PROJECT_COMPLETION_CHECKPOINTS.md`,
+  `docs/testing/BASELINE_CHECKS.md`,
+  `docs/testing/CONTRACT_TESTS.md`, and
+  `docs/supabase/PATIENT360_RUNBOOK.md`.
+- Phase 3 result: Patient 360 is complete for MVP local evidence. Edge
+  Functions now preserve `exame_solicitado` and
+  `exame_resultado_recebido`; Patient 360-related services load mock data only
+  inside the explicit `NEXT_PUBLIC_USE_MOCK_DATA=true` branch; production paths
+  remain Edge/RLS/RPC based.
+- Local real Patient 360 smoke passed:
+  `node scripts/supabase/test-patient360-local-real-smoke.mjs`. It re-ran core
+  auth, Patient 360 demo, and tenant B bootstraps locally, signed in a real
+  staff user plus a user without `patients.read`, ran
+  `test-patient360-contract.mjs --mode=real`, confirmed forbidden 403 and
+  cross-tenant status 404, and validated documents, nutrition, reports,
+  consultas, pacotes, prescricoes, financeiro, chat, and new timeline event
+  types through Edge Functions, RLS, and RPC.
+- `npm run type-check`: passed.
+- `npm run lint`: passed with the same 24 warnings already tracked in unrelated
+  files.
+- `npm run build`: passed; Next generated 26 app routes.
+- Local fixture contracts passed:
+  `node scripts/supabase/test-patient360-contract.mjs --mode=fixture`,
+  `node scripts/supabase/test-d4sign-fixtures.mjs`, and
+  `node scripts/supabase/test-billing-fixtures.mjs`.
+- Local HTTP smoke with the existing dev server on port `4028`: `/auth/login`
+  returned 200; Patient 360 deep-links for `timeline`, `documentos`,
+  `financeiro`, `nutricao`, `chat`, and `relatorios` returned 307 to
+  `/auth/login` without an authenticated session.
+- Skipped/blocked: visual authenticated Browser tab traversal was not rerun in
+  this pass; the local-real script covers authenticated data contracts for all
+  Patient 360 MVP tabs, and anonymous HTTP smoke covers fail-closed routing.
+  Asaas/D4Sign provider sandbox calls were not needed for Phase 3.
+- Residual risks: broad authenticated visual smoke for all Patient 360 tabs
+  remains a release gate, alongside the existing lint warning cleanup and
+  dependency audit follow-ups.
+
+## Previous Implementation Validation - Phase 2
+
 - Date: 2026-05-31 14:18 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
 - Commit base: `bb190f1`.
@@ -262,8 +366,8 @@ results, pending items, and environment details for the current repository state
   was not called; documents contract passed through the local gated path.
 - Residual risks: authenticated Browser smoke remains needed for
   `/clinic/settings` once Browser input/clipboard works, team invite and role
-  mutation require audited backend contracts, authenticated UI smoke remains
-  needed for the remaining Patient 360 tabs, portal UI and scoped patient data
+  mutation require audited backend contracts, authenticated visual UI smoke
+  remains a release gate for Patient 360 tabs, portal UI and scoped patient data
   contracts remain pending before `/patient` can open, Asaas/D4Sign provider
   sandbox needs segregated Edge secrets/base URLs, dependency audit
   findings need a dedicated package task, and lint warnings remain non-blocking.
@@ -307,6 +411,7 @@ node scripts/supabase/bootstrap-patient360-demo.mjs
 node scripts/supabase/bootstrap-document-templates-demo.mjs
 node scripts/supabase/bootstrap-billing-demo.mjs
 node scripts/supabase/test-patient360-contract.mjs --mode=real
+node scripts/supabase/test-patient360-local-real-smoke.mjs
 node scripts/supabase/test-documents-contract.mjs
 node scripts/supabase/test-rls-cross-tenant-contract.mjs
 node scripts/supabase/test-patient-linkage-contract.mjs
@@ -318,27 +423,27 @@ now uses ESLint CLI over `src/**/*.{ts,tsx}` instead of `next lint`.
 
 ## Results From This Run
 
-| Command              | Result               | Notes                                                                                                            |
-| -------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `npm install`        | Not run this pass    | Dependency graph was not changed.                                                                                |
-| `npm run type-check` | Passed               | `tsc --noEmit` exited successfully.                                                                              |
-| `npm run build`      | Passed               | `next build` compiled successfully and generated 26 app routes.                                                  |
-| `npm run lint`       | Passed with warnings | ESLint CLI exited with code 0; 24 warnings remain.                                                               |
-| `git diff --check`   | Passed               | No whitespace errors reported.                                                                                   |
-| Patient 360 fixture  | Passed               | Summary, timeline, category filter, forbidden, and cross-tenant fixtures passed.                                 |
-| D4Sign fixture       | Passed               | Valid webhook, invalid fail-closed behavior, document summary, and HMAC strategy passed.                         |
-| Billing fixture      | Passed               | Confirmed, overdue, cancelled, duplicated, tenant resolution, and invalid-token fixtures passed.                 |
-| Supabase migrations  | Passed local         | Local DB applied migrations through `20260531135000_110_patient_guardian_linkage_rls.sql`.                       |
-| Local bootstraps     | Passed               | Core auth, Patient 360 demo, document templates, and billing demo bootstraps completed.                          |
-| Patient 360 real     | Passed local         | Staff-token real mode passed summary, timeline, and category filter; forbidden/cross-tenant real were skipped.   |
-| Documents real       | Passed local         | Generated document, signed URL, and gated D4Sign send contract passed against local Supabase.                    |
-| Settings real        | Passed local         | Snapshot/update/unit RPCs passed with `clinic.admin@example.com`; `/clinic/settings` returned 200 by HTTP.       |
-| Clinic guard         | Passed local         | Anonymous, no-workspace, valid clinic, forbidden, and inactive-profile states returned expected outcomes.        |
-| RLS cross-tenant     | Passed local         | Tenant A/B demo users proved isolation for patients, PII, documents, invoices, chat, reports, and cross writes.  |
-| Patient linkage      | Passed local         | Linked patient/guardian users read only own active linkage rows and still cannot read `patients` directly.       |
-| Billing real         | Blocked local        | Local Edge returned 500 before provider work because `ASAAS_*`/sandbox base URL are not loaded in runtime.       |
-| Local HTTP smoke     | Passed local         | Anonymous fail-closed plus authenticated clinic routes/settings/patient demo returned expected 200/307 statuses. |
-| Browser smoke        | Passed limited       | Anonymous login/guards passed; credential typing remains blocked by Browser clipboard limitation.                |
+| Command              | Result               | Notes                                                                                                                                                                   |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm install`        | Not run this pass    | Dependency graph was not changed.                                                                                                                                       |
+| `npm run type-check` | Passed               | `tsc --noEmit` exited successfully.                                                                                                                                     |
+| `npm run build`      | Passed               | `next build` compiled successfully and generated 26 app routes.                                                                                                         |
+| `npm run lint`       | Passed with warnings | ESLint CLI exited with code 0; 24 warnings remain.                                                                                                                      |
+| `git diff --check`   | Passed               | No whitespace errors reported.                                                                                                                                          |
+| Patient 360 fixture  | Passed               | Summary, timeline, category filter, forbidden, and cross-tenant fixtures passed.                                                                                        |
+| D4Sign fixture       | Passed               | Valid webhook, invalid fail-closed behavior, document summary, and HMAC strategy passed.                                                                                |
+| Billing fixture      | Passed               | Confirmed, overdue, cancelled, duplicated, tenant resolution, and invalid-token fixtures passed.                                                                        |
+| Supabase migrations  | Passed local         | Local DB applied migrations through `20260531135000_110_patient_guardian_linkage_rls.sql`.                                                                              |
+| Local bootstraps     | Passed               | Core auth, Patient 360 demo, document templates, and billing demo bootstraps completed.                                                                                 |
+| Patient 360 real     | Passed local         | Local-real smoke passed staff summary/timeline, forbidden 403, cross-tenant 404, all MVP tab contracts, and new lab timeline event types.                               |
+| Documents real       | Passed local         | Generated document, signed URL, and gated D4Sign send contract passed against local Supabase.                                                                           |
+| Settings real        | Passed local         | Snapshot/update/unit RPCs passed with `clinic.admin@example.com`; `/clinic/settings` returned 200 by HTTP.                                                              |
+| Clinic guard         | Passed local         | Anonymous, no-workspace, valid clinic, forbidden, and inactive-profile states returned expected outcomes.                                                               |
+| RLS cross-tenant     | Passed local         | Tenant A/B demo users proved isolation for patients, PII, documents, invoices, chat, reports, and cross writes.                                                         |
+| Patient linkage      | Passed local         | Linked patient/guardian users read only own active linkage rows and still cannot read `patients` directly.                                                              |
+| Billing real         | Blocked local        | Local Edge returned 500 before provider work because `ASAAS_*`/sandbox base URL are not loaded in runtime.                                                              |
+| Local HTTP smoke     | Passed local         | Anonymous fail-closed plus authenticated clinic routes/settings/patient demo returned expected 200/307 statuses; Phase 3 rechecked Patient 360 tab deep-links to login. |
+| Browser smoke        | Passed limited       | Anonymous login/guards passed; credential typing remains blocked by Browser clipboard limitation.                                                                       |
 
 ## Lint Warning Categories
 
@@ -390,11 +495,12 @@ is to stabilize checks without changing product behavior.
 
 The executable local baseline is green by exit code for type-check, build, lint,
 fixture-only Patient 360, D4Sign, Billing contracts, local migrations,
-bootstraps, local authenticated Patient 360/documents contracts, limited HTTP
-smoke, authenticated Browser smoke for finance/Paciente 360 financeiro, local
-settings RPC/HTTP smoke, clinic guard states, scripted local RLS cross-tenant
-coverage, and patient/guardian linkage RLS coverage. Asaas provider sandbox
-remains blocked by runtime configuration, not by a passed provider test.
+bootstraps, local authenticated Patient 360/documents contracts, the Patient 360
+local-real all-tab smoke, limited HTTP smoke, authenticated Browser smoke for
+finance/Paciente 360 financeiro, local settings RPC/HTTP smoke, clinic guard
+states, scripted local RLS cross-tenant coverage, and patient/guardian linkage
+RLS coverage. Asaas provider sandbox remains blocked by runtime configuration,
+not by a passed provider test.
 Authenticated Browser smoke for settings is blocked by Browser input/clipboard
 support, not by a route/build failure. Remaining issues are warning/dependency
 audit cleanup items and unfinished module coverage, not blocking command failures

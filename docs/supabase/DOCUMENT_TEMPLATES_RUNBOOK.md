@@ -11,7 +11,7 @@ Run only after authorized migrations and core auth bootstrap:
 node scripts/supabase/bootstrap-document-templates-demo.mjs
 ```
 
-This script seeds six development-safe `document_templates` rows for tenant
+This script upserts six development-safe `document_templates` rows for tenant
 `demo-clinic` using only placeholder variables:
 
 - `{{patient_name}}`
@@ -20,7 +20,14 @@ This script seeds six development-safe `document_templates` rows for tenant
 - `{{date}}`
 - `{{professional_name}}`
 
-It does not call D4Sign and does not upload files.
+It does not call D4Sign and does not upload files. It intentionally uses upsert
+by `tenant_id,name` instead of deleting/reinserting rows, so generated document
+history can keep foreign-key references to existing templates.
+
+`generate-document` can generate only templates with `status='active'`. It
+accepts custom values only for template variables that are not protected system
+variables. Protected values such as patient name, clinic name, date and
+professional name are resolved server-side by the Edge Function.
 
 ## Relationship To Other Runbooks
 

@@ -13,7 +13,9 @@ Relevant files include:
 - `supabase/functions/generate-document`
 - `supabase/functions/patient-documents`
 - `src/services/documentsApi.ts`
+- `src/services/clinicDocumentsApi.ts`
 - `scripts/supabase/test-documents-contract.mjs`
+- `scripts/supabase/test-documents-phase4-local-smoke.mjs`
 - `scripts/supabase/test-d4sign-fixtures.mjs`
 - `scripts/supabase/bootstrap-document-templates-demo.mjs`
 - `tests/fixtures/d4sign-webhook-valid.json`
@@ -100,7 +102,23 @@ For day-to-day local validation, prefer:
 
 ```bash
 node scripts/supabase/test-d4sign-fixtures.mjs
+node scripts/supabase/test-documents-phase4-local-smoke.mjs
 ```
+
+The Phase 4 local smoke validates Supabase and Edge contracts without calling
+D4Sign by default. It checks active-template generation, protected variable
+gating, PDF storage, released-document patient/guardian RLS, short-lived signed
+URLs, D4Sign webhook HMAC, idempotency, audit rows, document status, signer
+status, and timeline.
+
+To include the real D4Sign sandbox send, configure the safe/cofre UUID and run:
+
+```bash
+RUN_D4SIGN_SANDBOX_SEND=true node scripts/supabase/test-documents-phase4-local-smoke.mjs
+```
+
+Do this only in an approved sandbox. The current MVP local checkpoint keeps the
+provider send blocked until `D4SIGN_SAFE_UUID` is configured.
 
 ## Edge Function Secrets
 
@@ -110,6 +128,8 @@ Edge Function environments:
 - `D4SIGN_TOKEN_API`
 - `D4SIGN_CRYPT_KEY`
 - `D4SIGN_BASE_URL`
+- `D4SIGN_SAFE_UUID`
+- `D4SIGN_FOLDER_UUID` when documents should land in a specific D4Sign folder
 - D4Sign webhook token or HMAC secret used by `webhook-d4sign`
 - `SUPABASE_SERVICE_ROLE_KEY` where required by trusted Edge Functions
 
@@ -121,14 +141,20 @@ Use placeholders in docs and examples. Never commit real values.
   document bucket allow-list.
 - Direct storage downloads are intentionally blocked by policy.
 - `generate-document` validates the caller JWT, active tenant membership, and
-  `documents.write` with the user-scoped client, then writes the rendered object,
+  `documents.write` with the user-scoped client, accepts only active templates,
+  blocks protected variable overrides, then writes a generated PDF object,
   generated document row, and timeline event with the service-role client. This
   keeps storage writes backend-owned while preserving user authorization.
 - Users request short-lived URLs through `document-signed-url`, which checks
-  tenant membership, `documents.read`, the bucket allow-list, and the canonical
-  storage path shape before using the service-role storage client.
+  either staff `documents.read` or an active patient/guardian linkage for a
+  released document, the bucket allow-list, and the canonical storage path shape
+  before using the service-role storage client.
 - Upload/update remains limited to users with `documents.write` in the document
   tenant context.
+- Patient/guardian document metadata access is scoped by
+  `can_read_own_patient_document` and only applies to
+  `generated_documents.released_to_patient=true`. Direct storage reads remain
+  blocked.
 
 ## Patient 360 Signature Gating
 
@@ -138,12 +164,16 @@ Use placeholders in docs and examples. Never commit real values.
 - `src/services/documentsApi.ts` invokes only `d4sign-send-document`; browser
   code does not receive D4Sign tokens or provider credentials.
 - `supabase/functions/d4sign-send-document` validates tenant membership and
-  `documents.write`, rejects medical prescription categories, blocks duplicate
-  pending signature requests, and derives the signer from `patient_pii`
-  (`full_name` plus email or phone) when the request does not include explicit
-  signers.
+  `documents.write`, rejects medical prescription categories, requires a
+  provider-supported file, blocks duplicate pending signature requests, and
+  derives the signer from `patient_pii` (`full_name` plus email) when the request
+  does not include explicit signers.
 - If no real signer can be derived, the function returns
   `missing_patient_signer` and does not call D4Sign.
+- The provider call path downloads the private generated PDF with service role,
+  uploads it to the configured D4Sign safe/cofre, creates the signer list, and
+  sends to signer. Tokens, raw provider responses, and storage paths are never
+  returned to browser code.
 - `supabase/functions/patient-documents` exposes only safe UI hints:
   `canRequestSignature` and `signatureDisabledReason`. It must not expose
   storage paths, signed URLs, raw provider payloads, or signer PII.

@@ -43,6 +43,8 @@ Patient 360 can be validated with:
 
 - `supabase/tests/patient360_contract_checks.md` as a manual checklist.
 - `scripts/supabase/test-patient360-contract.mjs` as scripted smoke checks.
+- `scripts/supabase/test-patient360-local-real-smoke.mjs` as the local
+  all-tab authenticated smoke with forbidden and cross-tenant evidence.
 - `scripts/supabase/test-clinical-core-contract.mjs` as the local mutating
   clinical core smoke for patients, agenda, encounter/SOAP, measurements,
   bioimpedance, labs, timeline, and audit rows.
@@ -81,13 +83,29 @@ dataset, validates appointment queue events, encounter/SOAP, measurements,
 bioimpedance, lab orders/results, timeline and audit rows, then deletes the
 temporary tenant during cleanup.
 
-2026-05-31 local validation: real mode passed against the local Supabase stack
-with a staff token after running local migrations and demo bootstraps. Optional
-forbidden and cross-tenant real checks were skipped because the corresponding
-negative token / tenant B patient id were not provided in that pass. The
-clinical core smoke also passed locally after Phase 2 completion, including
-patient CRUD contracts, appointment queue events, SOAP, measurements,
-bioimpedance, labs, timeline, and audit rows.
+Run the local-real Patient 360 smoke only against local Supabase or an approved
+sandbox:
+
+```bash
+node scripts/supabase/test-patient360-local-real-smoke.mjs
+```
+
+The script refuses non-local targets unless
+`ALLOW_REMOTE_PATIENT360_SMOKE=true`, runs the core auth, Patient 360 demo, and
+cross-tenant demo bootstraps, creates local smoke users, signs in through the
+anon key, and executes `test-patient360-contract.mjs --mode=real` with
+forbidden and cross-tenant checks enabled. It also seeds and validates tab data
+for documents, nutrition, reports, consultas, pacotes, prescricoes, financeiro,
+chat, and timeline lab events.
+
+2026-05-31 local validation: `test-patient360-local-real-smoke.mjs` passed
+against the local Supabase stack. It confirmed staff summary/timeline real
+contract, 403 for a user without `patients.read`, cross-tenant block with
+status 404, Patient 360 tab contracts through Edge/RLS/RPC, and timeline event
+types `exame_solicitado` and `exame_resultado_recebido`. The clinical core
+smoke also passed locally after Phase 2 completion, including patient CRUD
+contracts, appointment queue events, SOAP, measurements, bioimpedance, labs,
+timeline, and audit rows.
 
 ## What Is Validated
 
@@ -124,6 +142,8 @@ Additional Patient 360 tab services call:
   `20260531112000_080_patient360_nutrition_contracts.sql`.
 - `patient-reports` with `{ patient_id }`, backed by active
   `report_definitions`.
+- `patient-documents` with `{ patient_id }`, backed by generated document
+  metadata and signature request status.
 
 Both Edge Functions return an envelope:
 
@@ -154,6 +174,9 @@ Known normalization points:
 - `patient-reports` returns report definitions only. Report execution/export is
   intentionally disabled in the Patient 360 UI until a separate report-run Edge
   Function/RPC exists.
+- Patient 360 service facades load mock data only inside the explicit
+  `NEXT_PUBLIC_USE_MOCK_DATA=true` branch. Production paths must return Edge,
+  RLS, or RPC errors visibly instead of falling back to mock data.
 
 ## Required Environment Variables
 
@@ -257,6 +280,8 @@ this repository baseline is green by running:
   authorized.
 - `node scripts/supabase/test-patient360-contract.mjs --mode=real` only when
   explicitly authorized.
+- `node scripts/supabase/test-patient360-local-real-smoke.mjs` only when
+  explicitly authorized for local Supabase or an approved sandbox.
 
 Recommended checkpoint label:
 

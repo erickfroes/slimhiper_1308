@@ -41,6 +41,76 @@ function interpolateTemplate(templateBody: string, variables: Record<string, unk
   });
 }
 
+function normalizePdfText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, '?');
+}
+
+function escapePdfText(value: string) {
+  return normalizePdfText(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+
+function wrapPdfLine(value: string, maxLength = 88) {
+  const line = normalizePdfText(value).replace(/\s+/g, ' ').trim();
+  if (!line) return [''];
+
+  const wrapped: string[] = [];
+  let remaining = line;
+  while (remaining.length > maxLength) {
+    const index = remaining.lastIndexOf(' ', maxLength);
+    const splitAt = index > 24 ? index : maxLength;
+    wrapped.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+  wrapped.push(remaining);
+  return wrapped;
+}
+
+function createPdfBytes(title: string, content: string) {
+  const lines = [
+    ...wrapPdfLine(title, 76),
+    '',
+    ...content.split(/\r?\n/).flatMap((line) => wrapPdfLine(line, 88)),
+  ].slice(0, 52);
+
+  const textStream = [
+    'BT',
+    '/F1 11 Tf',
+    '50 792 Td',
+    '14 TL',
+    ...lines.map((line, index) => `${index === 0 ? '' : 'T* '}(${escapePdfText(line)}) Tj`),
+    'ET',
+  ].join('\n');
+
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n',
+    `4 0 obj\n<< /Length ${textStream.length} >>\nstream\n${textStream}\nendstream\nendobj\n`,
+    '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = objects.map((object) => {
+    const offset = pdf.length;
+    pdf += object;
+    return offset;
+  });
+
+  const xrefStart = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += '0000000000 65535 f \n';
+  for (const offset of offsets) {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
+  pdf += `startxref\n${xrefStart}\n%%EOF\n`;
+
+  return new TextEncoder().encode(pdf);
+}
+
 function isUuidLike(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -55,6 +125,56 @@ function isValidStoragePath(path: string, tenantId: string, patientId: string, d
     parts[2] === documentId &&
     parts[3].length > 0
   );
+}
+
+const PROTECTED_VARIABLE_KEYS = new Set([
+  'patient_id',
+  'patient_name',
+  'patient_email',
+  'patient_phone',
+  'patient_cpf_masked',
+  'patient_birth_date',
+  'patient_sex_gender',
+  'clinic_name',
+  'date',
+  'generated_at',
+  'generated_by_user_id',
+  'professional_name',
+]);
+
+function sanitizeVariableOverrides(
+  overrides: Record<string, unknown>,
+  templateVariables: Record<string, unknown>
+) {
+  const allowedKeys = new Set(
+    Object.keys(templateVariables).filter((key) => !PROTECTED_VARIABLE_KEYS.has(key))
+  );
+  const sanitized: Record<string, string | number | boolean> = {};
+  const invalidKeys: string[] = [];
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (!allowedKeys.has(key)) {
+      invalidKeys.push(key);
+      continue;
+    }
+    if (value === null || value === undefined || value === '') continue;
+    if (typeof value === 'string') {
+      if (value.length > 500) invalidKeys.push(key);
+      else sanitized[key] = value;
+      continue;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      sanitized[key] = value;
+      continue;
+    }
+    if (typeof value === 'boolean') {
+      sanitized[key] = value;
+      continue;
+    }
+    invalidKeys.push(key);
+  }
+
+  return { sanitized, invalidKeys };
 }
 
 Deno.serve(async (req) => {
@@ -189,6 +309,16 @@ Deno.serve(async (req) => {
         meta: { timestamp, tenantId },
       });
     }
+    if (template.status !== 'active') {
+      return jsonResponse(422, {
+        ok: false,
+        error: {
+          code: 'inactive_template',
+          message: 'Only active document templates can be generated.',
+        },
+        meta: { timestamp, tenantId },
+      });
+    }
 
     const { data: patientPii, error: piiError } = await supabase
       .from('patient_pii')
@@ -200,6 +330,31 @@ Deno.serve(async (req) => {
     if (piiError) throw piiError;
 
     const defaultVariables = toRecord(template.variables);
+    const { sanitized: safeOverrides, invalidKeys } = sanitizeVariableOverrides(
+      variablesOverride,
+      defaultVariables
+    );
+    if (invalidKeys.length > 0) {
+      return jsonResponse(400, {
+        ok: false,
+        error: {
+          code: 'invalid_template_variables',
+          message: 'Document variables include keys that are not allowed for this template.',
+          invalid_keys: invalidKeys,
+        },
+        meta: { timestamp, tenantId },
+      });
+    }
+
+    const [{ data: tenant }, { data: profile }] = await Promise.all([
+      serviceSupabase.from('tenants').select('name').eq('id', tenantId).maybeSingle(),
+      serviceSupabase
+        .from('profiles')
+        .select('full_name,email')
+        .eq('id', authData.user.id)
+        .maybeSingle(),
+    ]);
+
     const systemVariables: Record<string, unknown> = {
       patient_id: patient.id,
       patient_name: patientPii?.full_name ?? patient.preferred_name ?? '',
@@ -208,14 +363,17 @@ Deno.serve(async (req) => {
       patient_cpf_masked: patientPii?.cpf_masked ?? '',
       patient_birth_date: patientPii?.birth_date ?? '',
       patient_sex_gender: patientPii?.sex_gender ?? '',
+      clinic_name: tenant?.name ?? '',
+      date: new Date(timestamp).toLocaleDateString('pt-BR'),
       generated_at: timestamp,
       generated_by_user_id: authData.user.id,
+      professional_name: profile?.full_name ?? profile?.email ?? authData.user.email ?? '',
     };
 
     const mergedVariables = {
       ...defaultVariables,
+      ...safeOverrides,
       ...systemVariables,
-      ...variablesOverride,
     };
 
     const templateBody = typeof template.template_body === 'string' ? template.template_body : '';
@@ -230,7 +388,7 @@ Deno.serve(async (req) => {
       });
     }
     const storageBucket = 'patient-documents';
-    const storagePath = `${tenantId}/${patientId}/${generatedDocumentId}/document.html`;
+    const storagePath = `${tenantId}/${patientId}/${generatedDocumentId}/document.pdf`;
     if (!isValidStoragePath(storagePath, tenantId, patientId, generatedDocumentId)) {
       return jsonResponse(500, {
         ok: false,
@@ -239,12 +397,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const uploadContent = new Blob([renderedContent], { type: 'text/html; charset=utf-8' });
+    const pdfBytes = createPdfBytes(template.name ?? 'Documento SlimHiper', renderedContent);
+    const uploadContent = new Blob([pdfBytes], { type: 'application/pdf' });
     const { error: uploadError } = await serviceSupabase.storage
       .from(storageBucket)
       .upload(storagePath, uploadContent, {
         upsert: true,
-        contentType: 'text/html; charset=utf-8',
+        contentType: 'application/pdf',
       });
     if (uploadError) throw uploadError;
 

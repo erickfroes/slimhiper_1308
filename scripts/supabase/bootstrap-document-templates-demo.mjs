@@ -122,7 +122,9 @@ async function run() {
 
   if (tenantError) throw tenantError;
   if (!tenant) {
-    throw new Error(`Tenant with slug "${tenantSlug}" was not found. Run bootstrap-core-auth first.`);
+    throw new Error(
+      `Tenant with slug "${tenantSlug}" was not found. Run bootstrap-core-auth first.`
+    );
   }
 
   const payload = templates.map((template) => ({
@@ -135,17 +137,9 @@ async function run() {
     d4sign_enabled: false,
   }));
 
-  const templateNames = templates.map((template) => template.name);
-
-  const { error: deleteError } = await supabase
+  const { error: insertError } = await supabase
     .from('document_templates')
-    .delete()
-    .eq('tenant_id', tenant.id)
-    .in('name', templateNames);
-
-  if (deleteError) throw deleteError;
-
-  const { error: insertError } = await supabase.from('document_templates').insert(payload);
+    .upsert(payload, { onConflict: 'tenant_id,name' });
 
   if (insertError) throw insertError;
 

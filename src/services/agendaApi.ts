@@ -5,7 +5,6 @@ import type {
   WaitingQueueEntry,
 } from '@/domain/types';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
-import { getPatient360 } from '@/services/mockApi';
 
 export interface AgendaDayData {
   appointments: AppointmentSummary[];
@@ -97,6 +96,11 @@ const APPOINTMENT_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = 
 
 function isMockExplicitlyEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+}
+
+async function getMockPatient360(patientId: string) {
+  const { getPatient360 } = await import('@/services/mockApi');
+  return getPatient360(patientId);
 }
 
 function canUseMockAgendaProvider(): boolean {
@@ -600,7 +604,7 @@ export async function getPatientAppointments(
 
   try {
     if (isMockExplicitlyEnabled()) {
-      const patient = await getPatient360(patientId);
+      const patient = await getMockPatient360(patientId);
       return { data: patient?.upcomingAppointments ?? [], error: null };
     }
 

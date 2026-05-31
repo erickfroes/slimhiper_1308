@@ -19,24 +19,40 @@ comparativo competitivo e ordem de finalizacao.
 
 ## Execucao Atual
 
-- Data: 2026-05-31 14:18 -03:00.
+- Data: 2026-05-31 15:09 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
 - Commit base: `bb190f1`.
 - Alvo aprovado: MVP clinico.
 - Ambiente aprovado: local seguro com migrations/bootstraps e sandbox provider
   autorizados quando o alvo estiver segregado.
-- Lote concluido: Fase 2 - Core clinico com dados reais. `patientsApi` agora
-  possui CRUD, snapshot de edicao, PII em `patient_pii`, paginacao/filtros por
-  tenant/status/busca/unidade via metadata; `/clinic/patients` habilita novo
-  paciente e edicao. Dashboard usa KPIs reais para programas ativos e unread
-  de chat. `agendaApi` e `/clinic/agenda` criam, editam, cancelam e movem
-  consultas; eventos de fila gravam status valido em `queue_events`. Encounter
-  SOAP valida finalizacao, salva rascunho/final, e a tela de atendimento cria
-  medidas, bioimpedancia e solicitacao de exames via `clinicalRecordsApi`, com
-  audit log e timeline clinica. Smoke local mutavel
+- Lote em andamento: Fase 4 - Documentos/D4Sign para MVP local. A tela
+  `/clinic/documents` deixou de ser placeholder e agora usa services reais para
+  templates ativos, geracao, signed URL, release para paciente/guardian,
+  assinatura e monitor operacional. `generate-document` aceita somente templates
+  ativos, bloqueia override de variaveis protegidas e grava PDF em storage
+  privado. Migration `20260531152000_120_patient_document_read_scope.sql`
+  adiciona leitura propria de documentos liberados para `patient_accounts` e
+  `guardian_links`. `document-signed-url` aceita staff com `documents.read` ou
+  paciente/guardian vinculado, sempre com storage privado. Webhook D4Sign local
+  passou com HMAC, idempotencia, auditoria, status assinado e timeline; envio
+  sandbox D4Sign real segue blocked ate configurar `D4SIGN_SAFE_UUID`.
+- Lote concluido anteriormente: Fase 3 - Paciente 360 completo para MVP local.
+  As Edge Functions `patient-360-summary` e `patient-timeline` preservam eventos
+  `exame_solicitado` e `exame_resultado_recebido`; os services Patient 360,
+  documentos, nutricao, chat, agenda e billing carregam mocks somente quando
+  `NEXT_PUBLIC_USE_MOCK_DATA=true`. O smoke
+  `node scripts/supabase/test-patient360-local-real-smoke.mjs` semeia dados
+  locais deterministas, autentica staff e usuario sem `patients.read`, roda
+  `test-patient360-contract.mjs --mode=real` com forbidden e cross-tenant reais,
+  e valida abas resumo/timeline/consultas/documentos/financeiro/nutricao/
+  pacotes/prescricoes/relatorios/chat por Edge Functions, RLS e RPC.
+- Lote anterior: Fase 2 - Core clinico com dados reais. `patientsApi` possui
+  CRUD/snapshot/PII/paginacao/filtros, dashboard usa KPIs reais, agenda cria/
+  edita/cancela/move consultas, e Encounter/SOAP cria medidas, bioimpedancia,
+  exames, audit log e timeline clinica. Smoke local mutavel
   `node scripts/supabase/test-clinical-core-contract.mjs` passou e limpou os
-  dados ao final.
-- Lote anterior: Fase 1 - Auth/RBAC/guards/RLS. Fase 8/8 de Browser smoke
+  dados ao final. Fase 1 - Auth/RBAC/guards/RLS tambem esta concluida para MVP
+  local. Fase 8/8 de Browser smoke
   local foi registrada. Fase 7/8 de Admin/settings minimos ficou parcialmente
   implementada: settings clinicas agora
   usam snapshot RPC sanitizado, service real e UI sem mocks locais; unidade
@@ -47,10 +63,9 @@ comparativo competitivo e ordem de finalizacao.
   Supabase local; bootstrap core foi reexecutado localmente; contrato real local
   de settings passou por RPC/HTTP. Linkage paciente/guardian agora tem RLS
   propria para leitura do vinculo ativo e smoke local cross-patient; o portal
-  paciente segue fail-closed ate existir UI/contratos de dados scoped. Fase 2
-  segue parcialmente concluida.
+  paciente segue fail-closed ate existir UI/contratos de dados scoped.
 - Checks ja executados neste lote: `npx supabase migration up --local
---include-all --yes`, bootstrap core local, `npm run type-check`,
+--include-all`, bootstrap core local, `npm run type-check`,
   `npm run lint`, `npm run build`, `git diff --check`, fixtures locais
   Patient360/D4Sign/Billing, contrato real local Patient360, contrato real local
   documentos, contrato RPC local de settings (`get_clinic_settings_snapshot`,
@@ -67,7 +82,15 @@ comparativo competitivo e ordem de finalizacao.
   `test-patient-linkage-contract.mjs` para paciente/guardian,
   `node scripts/supabase/test-clinical-core-contract.mjs`, smoke HTTP anonimo
   de `/auth/login`, `/clinic/dashboard`, `/clinic/patients`, `/clinic/agenda`
-  e `/clinic/patients/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/encounter`.
+  e `/clinic/patients/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/encounter`. Neste
+  lote Fase 3 passaram o smoke local-real de Patient 360
+  (`scripts/supabase/test-patient360-local-real-smoke.mjs`) e
+  `npm run type-check` apos os ajustes de services/Edge Functions. Neste lote
+  Fase 4 passaram `npx supabase migration up --local --include-all`,
+  `node scripts/supabase/test-documents-phase4-local-smoke.mjs`,
+  fixtures Patient360/D4Sign/Billing, `npm run type-check`, `npm run lint`,
+  `npm run build`, `git diff --check`, e smoke HTTP local: `/auth/login` 200 e
+  `/clinic/documents` 307 para `/auth/login` sem sessao.
 - Skips deliberados: valores de secrets nao foram impressos; `.env` foi usado
   apenas em processo local para bootstrap/smoke sem exibir valores; Supabase
   remoto nao foi mutado; `supabase db push` remoto nao foi executado; Browser
@@ -76,6 +99,10 @@ comparativo competitivo e ordem de finalizacao.
   smoke HTTP autenticado com cookie SSR local. Teste visual de credencial
   invalida tambem ficou blocked pelo mesmo limite de input do Browser. Asaas/D4Sign
   sandbox provider nao foram chamados neste lote de settings/smoke/guard.
+  Neste lote Fase 4, envio D4Sign sandbox real foi skipped/blocked porque
+  `D4SIGN_SAFE_UUID` ainda nao existe no ambiente local; o smoke local validou
+  webhook/idempotencia/auditoria sem chamar D4Sign. O in-app Browser autenticado
+  nao foi usado; smoke visual ficou limitado a HTTP anonimo e build.
 - Evidencia deste lote: `QuickActionsCard` sem no-op silencioso, dashboard com
   empty states, agenda usando `updateAppointmentStatus` em transicoes visiveis,
   lista de pacientes sem toasts fake para chat/revisao, atendimento sem arrays
@@ -155,13 +182,26 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
   de `authenticated`, preserva `patients` fechado para contas linked, e
   `test-patient-linkage-contract.mjs` confirmou paciente A/responsavel A lendo
   apenas o proprio vinculo ativo, sem acesso ao vinculo B nem a `patients`.
+  Fase 3: `test-patient360-local-real-smoke.mjs` confirmou contrato real local
+  de staff, forbidden 403 sem `patients.read`, cross-tenant 404 tenant A/B,
+  abas do Paciente 360 por Edge/RLS/RPC e timeline com
+  `exame_solicitado`/`exame_resultado_recebido`.
+  Fase 4: `src/app/clinic/documents/components/ClinicDocumentsContent.tsx` le
+  dados reais via `clinicDocumentsApi`, gera documentos por Edge Function,
+  libera/oculta acesso paciente/guardian e mostra monitor de pendentes/falhas;
+  `generate-document` grava `document.pdf` com variaveis protegidas
+  server-side, `d4sign-send-document` exige PDF/safe UUID e nao expoe tokens,
+  `document-signed-url` emite URL curta para staff autorizado ou vinculo
+  paciente/guardian, e `test-documents-phase4-local-smoke.mjs` confirmou
+  geracao, RLS propria, signed URL, cross-tenant fail-closed, webhook HMAC,
+  idempotencia, auditoria e timeline.
 - Proximos bloqueios: convites de equipe via Auth Admin auditado, alteracao real
   de roles/permissoes por RPC, settings por usuario, admin plataforma com dados
   reais, UI/contratos scoped do portal paciente antes de abrir `/patient`,
-  executor/export real de relatorios, CRUD real de plano alimentar, painel
-  clinico de documentos ainda hardcoded, smokes autenticados amplos de navegador
-  para os novos modais da Fase 2, smoke sandbox Asaas e contratos sandbox
-  dependem de ambiente/credenciais autorizados.
+  executor/export real de relatorios, CRUD real de plano alimentar, smokes
+  autenticados amplos de navegador para os novos modais da Fase 2, smoke sandbox
+  Asaas, envio D4Sign sandbox com `D4SIGN_SAFE_UUID`/cofre configurado e
+  contratos sandbox dependem de ambiente/credenciais autorizados.
 - Docker local: Docker Engine respondeu (`29.2.1`); Docker Desktop foi ajustado
   via API local para expor `tcp://localhost:2375` (`ExposeDockerAPIOnTCP2375`
   em `settings-store.json`), com backup local do arquivo de configuracao;
@@ -198,8 +238,8 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 0 - Baseline, CI e higiene    | Fechada para MVP local   | `type-check`, `lint`, `build`, `git diff --check`, fixtures Patient360/D4Sign/Billing e baseline registrados.                                                                                                                                                                                                                                                                                                                  |
 | Fase 1 - Auth/RBAC/guards/RLS      | Concluida para MVP local | Guard clinico server-side implementado; `profiles.is_active=false` derruba sessao do app; smoke HTTP local passou para anonimo, workspace valido, no-workspace, forbidden e perfil inativo; smoke RLS cross-tenant automatizado passou para paciente, documentos, financeiro, chat e relatorios; linkage paciente/guardian possui leitura propria do vinculo ativo e smoke cross-patient. Portal segue fail-closed ate Fase 8. |
 | Fase 2 - Core clinico              | Concluida para MVP local | Pacientes CRUD/PII/paginacao/filtros, dashboard KPIs reais, agenda CRUD/status/cancelamento e Encounter/SOAP com medidas/bio/labs/timeline/auditoria implementados; `type-check`, `lint`, `build`, fixtures e `test-clinical-core-contract.mjs` passaram localmente. Smokes autenticados de navegador amplo seguem como gate de release.                                                                                       |
-| Fase 3 - Paciente 360              | Parcial avancada         | Contrato real local e tabs com loading/error/retry; faltam forbidden real por role, cross-tenant real e smokes autenticados de todas as tabs.                                                                                                                                                                                                                                                                                  |
-| Fase 4 - Documentos/D4Sign         | Parcial MVP local        | Fixtures e contrato local passaram; sandbox provider, monitor operacional e policy paciente/guardian seguem pendentes.                                                                                                                                                                                                                                                                                                         |
+| Fase 3 - Paciente 360              | Concluida para MVP local | Contrato real local passou com staff, forbidden real sem `patients.read`, cross-tenant tenant A/B, tab contracts por Edge/RLS/RPC e mocks carregados somente sob `NEXT_PUBLIC_USE_MOCK_DATA=true`; smokes visuais autenticados amplos seguem como gate de release, nao como bloqueio do MVP local.                                                                                                                             |
+| Fase 4 - Documentos/D4Sign         | Parcial MVP local        | Templates/UI, PDF local, variaveis permitidas, policy paciente/guardian, signed URL, monitor operacional e webhook/idempotencia/auditoria passaram em smoke local; envio D4Sign sandbox real segue blocked por `D4SIGN_SAFE_UUID` ausente.                                                                                                                                                                                     |
 | Fase 5 - Financeiro/Asaas          | Parcial MVP local        | RPCs/Edge/webhook/fixtures locais passaram; sandbox Asaas e conciliacao/divergencias seguem pendentes.                                                                                                                                                                                                                                                                                                                         |
 | Fase 6 - Programas/pacotes         | Pendente                 | `programsApi`, builder persistente, enrollment e check-ins reais ainda nao iniciados neste lote.                                                                                                                                                                                                                                                                                                                               |
 | Fase 7 - Admin/settings/auditoria  | Parcial                  | Settings tenant/unidade persistem por RPC auditada; admin real, equipe/roles mutantes e break-glass seguem pendentes.                                                                                                                                                                                                                                                                                                          |
@@ -499,18 +539,59 @@ Fontes externas consultadas:
 
 ### Fase 3 - Paciente 360 Completo
 
-- [x] Rodar contrato real autorizado com token de staff. Evidencia local: `node scripts/supabase/test-patient360-contract.mjs --mode=real` passou contra Supabase local com token de `clinic.admin@example.com`; forbidden e cross-tenant reais seguem em itens separados.
-- [ ] Rodar forbidden real com usuario sem `patients.read`.
-- [ ] Rodar cross-tenant real tenant A/B.
-- [ ] Completar tabs: resumo, timeline, consultas, documentos, financeiro, nutricao, pacotes, prescricoes, relatorios e chat. Parcial: navegacao por aba, loading/error/retry em tabs com fetch proprio, forbidden local por permissao, relatorios por `patient-reports`, chat real local, documentos com signed URL/assinatura via Edge e signatario real derivado no backend, consultas reais via `appointments`, pacote real via enrollment/programa, prescricoes com campos reais, nutricao por `patient-nutrition-plan`/`nutrition_plans` e fluxo seguro de criacao financeira foram estabilizados; aba financeiro teve smoke autenticado local com seed real; chat/consultas/pacotes/documentos/nutricao/relatorios e forbidden por role ainda precisam smoke autenticado real.
-- [ ] Remover mocks diretos apos fallback controlado. Parcial: `patient360Api`, `chatApi`, `agendaApi` para consultas, `nutritionApi` e `reportsApi` usam mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`.
+- [x] Rodar contrato real autorizado com token de staff. Evidencia local:
+      `node scripts/supabase/test-patient360-local-real-smoke.mjs` passou e
+      executou internamente `test-patient360-contract.mjs --mode=real` contra
+      Supabase local com token staff real.
+- [x] Rodar forbidden real com usuario sem `patients.read`. Evidencia local:
+      `test-patient360-local-real-smoke.mjs` autenticou
+      `patient360.forbidden.local@example.com` com role `patient` e confirmou
+      403 no contrato real.
+- [x] Rodar cross-tenant real tenant A/B. Evidencia local:
+      `test-patient360-local-real-smoke.mjs` semeou `demo-clinic-b`, usou
+      `PATIENT_ID_TENANT_B=9b5c6d6a-1f7e-4dbb-8eab-3d55a8a1f042` e confirmou
+      bloqueio cross-tenant com status 404.
+- [x] Completar tabs: resumo, timeline, consultas, documentos, financeiro,
+      nutricao, pacotes, prescricoes, relatorios e chat. Evidencia local:
+      smoke local-real validou summary/timeline por Edge Function,
+      `patient-documents`, `patient-nutrition-plan`, `patient-reports`,
+      consultas via `appointments`, financeiro via
+      `get_patient_financial_summary`, pacotes via
+      `patient_program_enrollments`, prescricoes via
+      `prescriptions_placeholder`, chat via
+      `patient_chat_threads`/`patient_chat_messages`, e tipos de timeline
+      `exame_solicitado`/`exame_resultado_recebido`.
+- [x] Remover mocks diretos apos fallback controlado. Evidencia local:
+      `patient360Api`, `documentsApi`, `nutritionApi`, `chatApi`, `agendaApi` e
+      `billingApi` usam import dinamico de mock apenas dentro do branch
+      `NEXT_PUBLIC_USE_MOCK_DATA=true`; producao segue Edge/RLS/RPC sem fallback
+      silencioso para mock.
 
 ### Fase 4 - Documentos E Assinatura
 
-- [ ] Finalizar templates, variaveis permitidas e geracao pela UI.
-- [ ] Implementar policy de leitura propria do paciente/guardian.
-- [ ] Finalizar D4Sign sandbox com envio, webhook, idempotencia e auditoria. Parcial MVP local: Patient 360 nao envia signatario fake; Edge Function deriva signatario de `patient_pii`, bloqueia prescricao/duplicidade/falta de signatario antes de provider e runbook foi atualizado. Sandbox real segue bloqueado ate ambiente autorizado.
-- [ ] Criar monitor operacional de documentos pendentes/falhados.
+- [x] Finalizar templates, variaveis permitidas e geracao pela UI. Evidencia
+      local: `/clinic/documents` usa `clinicDocumentsApi` para templates ativos,
+      pacientes e documentos reais; `generate-document` exige `documents.write`,
+      aceita somente template `active`, bloqueia override de variaveis protegidas
+      e grava `document.pdf` em storage privado.
+- [x] Implementar policy de leitura propria do paciente/guardian. Evidencia
+      local: migration `20260531152000_120_patient_document_read_scope.sql`
+      adiciona `can_read_own_patient_document`, policies para
+      `generated_documents`, `signature_requests` e `signature_signers` somente
+      quando `released_to_patient=true`; `test-documents-phase4-local-smoke.mjs`
+      confirmou paciente e guardian lendo documento proprio liberado e bloqueio
+      cross-tenant.
+- [ ] Finalizar D4Sign sandbox com envio, webhook, idempotencia e auditoria.
+      Parcial MVP local: `d4sign-send-document` agora exige arquivo suportado,
+      service role server-side para baixar PDF privado, envs D4Sign server-side
+      e `D4SIGN_SAFE_UUID` antes de provider; `webhook-d4sign` passou localmente
+      com HMAC, idempotencia, auditoria, status assinado e timeline. Envio
+      sandbox real nao foi chamado porque `D4SIGN_SAFE_UUID` ainda esta ausente.
+- [x] Criar monitor operacional de documentos pendentes/falhados. Evidencia
+      local: `/clinic/documents` exibe metricas, pendencias/falhas de documentos
+      e eventos recentes de `d4sign_events` por dados reais; provider errors em
+      `d4sign-send-document` marcam documento como `failed` sem expor payload
+      bruto.
 
 ### Fase 5 - Financeiro E Asaas
 
