@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   FileText,
   DollarSign,
@@ -14,9 +14,11 @@ import {
   Table2,
   Printer,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 import type { PatientReportDefinition } from '@/domain/types';
-import { mockReportDefinitions } from '@/data/mockData';
+import EmptyState from '@/components/EmptyState';
+import { getPatientReportDefinitions } from '@/services/reportsApi';
 
 // Map iconKey strings to Lucide components
 const iconMap: Record<string, React.ElementType> = {
@@ -41,12 +43,30 @@ const iconStyleMap: Record<string, { iconBg: string; iconColor: string }> = {
 };
 
 interface TabRelatoriosProps {
+  patientId: string;
   patientName: string;
 }
 
-export default function TabRelatorios({ patientName }: TabRelatoriosProps) {
+export default function TabRelatorios({ patientId, patientName }: TabRelatoriosProps) {
+  const [reports, setReports] = useState<PatientReportDefinition[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [viewingReport, setViewingReport] = useState<string | null>(null);
+
+  const loadReports = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    const { data, error } = await getPatientReportDefinitions(patientId);
+    setReports(data);
+    setLoadError(error?.message ?? null);
+    setIsLoading(false);
+  }, [patientId]);
+
+  useEffect(() => {
+    void loadReports();
+  }, [loadReports]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -86,91 +106,112 @@ export default function TabRelatorios({ patientName }: TabRelatoriosProps) {
           </p>
         </div>
         <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
-          {mockReportDefinitions.length} relatórios disponíveis
+          {reports.length} relatórios disponíveis
         </span>
       </div>
 
       {/* Report Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {mockReportDefinitions.map((card) => {
-          const IconComp = iconMap[card.iconKey] ?? FileText;
-          const { iconBg, iconColor } = iconStyleMap[card.iconKey] ?? {
-            iconBg: 'bg-gray-50',
-            iconColor: 'text-gray-600',
-          };
-          return (
-            <div
-              key={card.key}
-              className="card-base p-5 flex flex-col gap-3 hover:shadow-md transition-shadow"
-            >
-              {/* Card Header */}
-              <div className="flex items-start justify-between gap-2">
-                <div
-                  className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0`}
-                >
-                  <IconComp size={18} className={iconColor} />
+      {isLoading ? (
+        <div className="card-base p-8 text-sm text-muted-foreground">Carregando relatórios...</div>
+      ) : loadError ? (
+        <div className="card-base p-8 text-center">
+          <AlertTriangle size={24} className="mx-auto text-amber-600" />
+          <p className="mt-3 text-sm font-semibold text-foreground">Relatórios indisponíveis</p>
+          <p className="mt-1 text-xs text-muted-foreground">{loadError}</p>
+          <button type="button" onClick={() => void loadReports()} className="btn-secondary mt-4">
+            Tentar novamente
+          </button>
+        </div>
+      ) : reports.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="Nenhum relatório disponível"
+          description="Nenhum relatório clínico foi disponibilizado para este paciente."
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {reports.map((card) => {
+            const IconComp = iconMap[card.iconKey] ?? FileText;
+            const { iconBg, iconColor } = iconStyleMap[card.iconKey] ?? {
+              iconBg: 'bg-gray-50',
+              iconColor: 'text-gray-600',
+            };
+            return (
+              <div
+                key={card.key}
+                className="card-base p-5 flex flex-col gap-3 hover:shadow-md transition-shadow"
+              >
+                {/* Card Header */}
+                <div className="flex items-start justify-between gap-2">
+                  <div
+                    className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center flex-shrink-0`}
+                  >
+                    <IconComp size={18} className={iconColor} />
+                  </div>
+                  {card.badge && (
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${card.badgeColor}`}
+                    >
+                      {card.badge}
+                    </span>
+                  )}
                 </div>
-                {card.badge && (
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${card.badgeColor}`}
-                  >
-                    {card.badge}
-                  </span>
-                )}
-              </div>
 
-              {/* Card Body */}
-              <div>
-                <p className="text-sm font-semibold text-foreground mb-1">{card.label}</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">{card.description}</p>
-              </div>
+                {/* Card Body */}
+                <div>
+                  <p className="text-sm font-semibold text-foreground mb-1">{card.label}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {card.description}
+                  </p>
+                </div>
 
-              {/* Divider */}
-              <div className="border-t border-border" />
+                {/* Divider */}
+                <div className="border-t border-border" />
 
-              {/* Actions */}
-              <div className="flex flex-col gap-2">
-                {/* Primary action */}
-                <button
-                  onClick={() => handleVerRelatorio(card.label)}
-                  className="btn-primary text-xs w-full gap-1.5 justify-center"
-                >
-                  <Eye size={13} />
-                  Ver relatório completo
-                </button>
-
-                {/* Secondary actions */}
-                <div className="grid grid-cols-3 gap-1.5">
+                {/* Actions */}
+                <div className="flex flex-col gap-2">
+                  {/* Primary action */}
                   <button
-                    onClick={() => handleExportPDF(card)}
-                    className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5"
-                    title="Exportar PDF"
+                    onClick={() => handleVerRelatorio(card.label)}
+                    className="btn-primary text-xs w-full gap-1.5 justify-center"
                   >
-                    <FileDown size={12} />
-                    PDF
+                    <Eye size={13} />
+                    Ver relatório completo
                   </button>
-                  <button
-                    onClick={() => handleExportExcel(card)}
-                    className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5"
-                    title="Exportar Excel"
-                  >
-                    <Table2 size={12} />
-                    Excel
-                  </button>
-                  <button
-                    onClick={() => handleImprimir(card)}
-                    className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5"
-                    title="Imprimir"
-                  >
-                    <Printer size={12} />
-                    Imprimir
-                  </button>
+
+                  {/* Secondary actions */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      onClick={() => handleExportPDF(card)}
+                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5"
+                      title="Exportar PDF"
+                    >
+                      <FileDown size={12} />
+                      PDF
+                    </button>
+                    <button
+                      onClick={() => handleExportExcel(card)}
+                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5"
+                      title="Exportar Excel"
+                    >
+                      <Table2 size={12} />
+                      Excel
+                    </button>
+                    <button
+                      onClick={() => handleImprimir(card)}
+                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5"
+                      title="Imprimir"
+                    >
+                      <Printer size={12} />
+                      Imprimir
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Report Viewer Modal */}
       {viewingReport && (

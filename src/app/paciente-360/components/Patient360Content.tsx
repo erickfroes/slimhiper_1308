@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { getPatient360Summary } from '@/services/patient360Api';
 import type { Patient360Summary } from '@/domain/types';
@@ -20,7 +20,7 @@ export default function Patient360Content({ patientId, userContext }: Patient360
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadPatient360 = async () => {
+  const loadPatient360 = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -42,11 +42,11 @@ export default function Patient360Content({ patientId, userContext }: Patient360
     } finally {
       setLoading(false);
     }
-  };
+  }, [patientId]);
 
   useEffect(() => {
     void loadPatient360();
-  }, [patientId]);
+  }, [loadPatient360]);
 
   if (loading) {
     return (

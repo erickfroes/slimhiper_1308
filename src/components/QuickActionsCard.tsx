@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import {
   Plus,
   CalendarPlus,
@@ -7,7 +8,6 @@ import {
   CreditCard,
   ClipboardList,
 } from 'lucide-react';
-import Icon from '@/components/ui/AppIcon';
 
 interface QuickAction {
   key: string;
@@ -15,7 +15,8 @@ interface QuickAction {
   icon: React.ElementType;
   color: string;
   bg: string;
-  onClick?: () => void;
+  href?: string;
+  disabledReason?: string;
 }
 
 const defaultActions: QuickAction[] = [
@@ -25,6 +26,7 @@ const defaultActions: QuickAction[] = [
     icon: CalendarPlus,
     color: 'text-teal-700',
     bg: 'bg-teal-50 hover:bg-teal-100 border-teal-200',
+    href: '/clinic/agenda',
   },
   {
     key: 'qa-novo-paciente',
@@ -32,13 +34,15 @@ const defaultActions: QuickAction[] = [
     icon: Plus,
     color: 'text-indigo-700',
     bg: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200',
+    href: '/clinic/patients',
   },
   {
     key: 'qa-enviar-mensagem',
     label: 'Enviar Mensagem',
     icon: MessageSquare,
     color: 'text-sky-700',
-    bg: 'bg-sky-50 hover:bg-sky-100 border-sky-200',
+    bg: 'bg-sky-50 border-sky-200',
+    disabledReason: 'Chat real ainda não está liberado no MVP clínico.',
   },
   {
     key: 'qa-novo-documento',
@@ -46,6 +50,7 @@ const defaultActions: QuickAction[] = [
     icon: FileText,
     color: 'text-slate-700',
     bg: 'bg-slate-50 hover:bg-slate-100 border-slate-200',
+    href: '/clinic/documents',
   },
   {
     key: 'qa-cobrar',
@@ -53,6 +58,7 @@ const defaultActions: QuickAction[] = [
     icon: CreditCard,
     color: 'text-violet-700',
     bg: 'bg-violet-50 hover:bg-violet-100 border-violet-200',
+    href: '/clinic/financeiro',
   },
   {
     key: 'qa-protocolo',
@@ -60,6 +66,7 @@ const defaultActions: QuickAction[] = [
     icon: ClipboardList,
     color: 'text-amber-700',
     bg: 'bg-amber-50 hover:bg-amber-100 border-amber-200',
+    href: '/clinic/programs/builder',
   },
 ];
 
@@ -74,15 +81,29 @@ export default function QuickActionsCard({ actions = defaultActions }: QuickActi
       <div className="grid grid-cols-2 gap-2">
         {actions.map((action) => {
           const Icon = action.icon;
+          const className = [
+            'flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all duration-150',
+            action.disabledReason ? 'opacity-60 cursor-not-allowed' : 'active:scale-95',
+            action.color,
+            action.bg,
+          ].join(' ');
+
+          if (action.href) {
+            return (
+              <Link key={action.key} href={action.href} className={className}>
+                <Icon size={14} />
+                {action.label}
+              </Link>
+            );
+          }
+
           return (
             <button
               key={action.key}
-              onClick={action.onClick}
-              className={[
-                'flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all duration-150 active:scale-95',
-                action.color,
-                action.bg,
-              ].join(' ')}
+              type="button"
+              disabled
+              title={action.disabledReason}
+              className={className}
             >
               <Icon size={14} />
               {action.label}

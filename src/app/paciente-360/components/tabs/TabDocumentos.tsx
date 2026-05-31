@@ -121,30 +121,12 @@ function RowActions({ doc, patientId }: RowActionsProps) {
   const [open, setOpen] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
-  const handleAction = async (label: string) => {
-    if (label === 'Abrir' || label === 'Baixar') {
-      setLoadingAction(label);
-      const { data, error } = await getDocumentSignedUrl(doc.id, patientId);
-      setLoadingAction(null);
-      if (error || !data?.url)
-        return toast.error(error?.message ?? 'Falha ao abrir link temporário auditado.');
-      window.open(data.url, '_blank', 'noopener,noreferrer');
-      toast.success(`Link temporário auditado criado (${data.expiresInSeconds}s).`);
-      setOpen(false);
-      return;
-    }
-    if (label === 'Enviar para assinatura') {
-      toast.error(
-        'Cadastre um email ou telefone validado do paciente antes de enviar para assinatura.'
-      );
-      setOpen(false);
-      return;
-    }
-    toast.info('Acesso via link temporário auditado.');
-    setOpen(false);
-  };
-
-  const actions = [
+  const actions: Array<{
+    label: string;
+    icon: React.ReactNode;
+    always: boolean;
+    disabledReason?: string;
+  }> = [
     { label: 'Abrir', icon: <Eye size={13} />, always: true },
     { label: 'Baixar', icon: <Download size={13} />, always: true },
     { label: 'Ver detalhes', icon: <Info size={13} />, always: true },
@@ -157,9 +139,26 @@ function RowActions({ doc, patientId }: RowActionsProps) {
     {
       label: 'Enviar para assinatura',
       icon: <Send size={13} />,
-      always: doc.assinatura === 'pendente' || doc.assinatura === 'nao_requerido',
+      always: doc.assinatura === 'pendente',
+      disabledReason: 'Envio D4Sign exige signatário real validado para este paciente.',
     },
-  ].filter((a) => a.always);
+  ].filter((action) => action.always);
+
+  const handleAction = async (label: string) => {
+    if (label === 'Abrir' || label === 'Baixar') {
+      setLoadingAction(label);
+      const { data, error } = await getDocumentSignedUrl(doc.id, patientId);
+      setLoadingAction(null);
+      if (error || !data?.url)
+        return toast.error(error?.message ?? 'Falha ao abrir link temporário auditado.');
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+      toast.success(`Link temporário auditado criado (${data.expiresInSeconds}s).`);
+      setOpen(false);
+      return;
+    }
+    toast.info('Acesso via link temporário auditado.');
+    setOpen(false);
+  };
 
   return (
     <div className="relative">
@@ -175,9 +174,10 @@ function RowActions({ doc, patientId }: RowActionsProps) {
           {actions.map((action) => (
             <button
               key={action.label}
-              disabled={loadingAction !== null}
+              disabled={loadingAction !== null || Boolean(action.disabledReason)}
+              title={action.disabledReason}
               onClick={() => void handleAction(action.label)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-foreground hover:bg-muted/60 transition-colors text-left disabled:opacity-60"
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-foreground hover:bg-muted/60 transition-colors text-left disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="text-muted-foreground">{action.icon}</span>
               {loadingAction === action.label ? 'Processando...' : action.label}
