@@ -235,9 +235,17 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
   `test-programs-phase6-local-smoke.mjs` confirmou RPCs, permissoes
   `packages.read/write`, publish/archive/clone, enrollment, agenda, financeiro,
   documentos obrigatorios e Paciente 360.
+  Fase 7 parcial: migration `20260531203000_150_platform_admin_audit_contracts.sql`
+  adiciona RPCs sanitizados de admin plataforma (`list_platform_tenants`,
+  `get_platform_tenant_detail`, `list_platform_webhook_events`) e mutators
+  auditados de support/break-glass; `adminApi`, telas `/admin`, `/admin/tenants`,
+  `/admin/tenants/[tenantId]` e `/admin/webhooks` consomem os contratos reais sem
+  fixtures operacionais; e `test-platform-admin-phase7-local-smoke.mjs` cobre o
+  fluxo local autorizado. A migration/smoke ainda nao foram aplicados nesta
+  sessao.
 - Proximos bloqueios: convites de equipe via Auth Admin auditado, alteracao real
-  de roles/permissoes por RPC, settings por usuario, admin plataforma com dados
-  reais, UI/contratos scoped do portal paciente antes de abrir `/patient`,
+  de roles/permissoes por RPC, settings por usuario, aplicar/validar a migration
+  Fase 7 de admin plataforma, UI/contratos scoped do portal paciente antes de abrir `/patient`,
   executor/export real de relatorios, CRUD real de plano alimentar, smokes
   autenticados amplos de navegador para os novos modais da Fase 2, smoke sandbox
   Asaas, criacao/selecionamento de cofre D4Sign sandbox para obter
@@ -283,9 +291,9 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 2 - Core clinico              | Concluida para MVP local | Pacientes CRUD/PII/paginacao/filtros, dashboard KPIs reais, agenda CRUD/status/cancelamento e Encounter/SOAP com medidas/bio/labs/timeline/auditoria implementados; `type-check`, `lint`, `build`, fixtures e `test-clinical-core-contract.mjs` passaram localmente. Smokes autenticados de navegador amplo seguem como gate de release.                                                                                       |
 | Fase 3 - Paciente 360              | Concluida para MVP local | Contrato real local passou com staff, forbidden real sem `patients.read`, cross-tenant tenant A/B, tab contracts por Edge/RLS/RPC e mocks carregados somente sob `NEXT_PUBLIC_USE_MOCK_DATA=true`; smokes visuais autenticados amplos seguem como gate de release, nao como bloqueio do MVP local.                                                                                                                             |
 | Fase 4 - Documentos/D4Sign         | Parcial MVP local        | Templates/UI, PDF local, variaveis permitidas, policy paciente/guardian, signed URL, monitor operacional e webhook/idempotencia/auditoria passaram em smoke local; envio D4Sign sandbox real foi tentado e segue blocked porque `GET /safes` nao retornou cofre disponivel na conta sandbox.                                                                                                                                   |
-| Fase 5 - Financeiro/Asaas          | Concluida para MVP local | RPCs/Edge/webhook/fixtures locais, conciliacao/divergencias e Asaas sandbox estrito passaram; customer/invoice/subscription continuam gated por Edge Functions, JWT, `financial.write` e service-role backend apos autorizacao.                                                                                                                                                                                                 |
-| Fase 6 - Programas/pacotes         | Concluida para MVP local | `programsApi`, builder persistente, publish/archive/clone, enrollment, agenda inicial, invoice local, tarefas de documentos obrigatorios e `patient_program_checkins` reais passaram em smoke local; Patient 360 pacotes exibe check-ins gerados. Submissao portal de check-ins e chamadas provider derivadas da invoice/tarefas ficam pos-MVP.                                                                                 |
-| Fase 7 - Admin/settings/auditoria  | Parcial                  | Settings tenant/unidade persistem por RPC auditada; admin real, equipe/roles mutantes e break-glass seguem pendentes.                                                                                                                                                                                                                                                                                                          |
+| Fase 5 - Financeiro/Asaas          | Concluida para MVP local | RPCs/Edge/webhook/fixtures locais, conciliacao/divergencias e Asaas sandbox estrito passaram; customer/invoice/subscription continuam gated por Edge Functions, JWT, `financial.write` e service-role backend apos autorizacao.                                                                                                                                                                                                |
+| Fase 6 - Programas/pacotes         | Concluida para MVP local | `programsApi`, builder persistente, publish/archive/clone, enrollment, agenda inicial, invoice local, tarefas de documentos obrigatorios e `patient_program_checkins` reais passaram em smoke local; Patient 360 pacotes exibe check-ins gerados. Submissao portal de check-ins e chamadas provider derivadas da invoice/tarefas ficam pos-MVP.                                                                                |
+| Fase 7 - Admin/settings/auditoria  | Parcial em implementacao | Settings tenant/unidade persistem por RPC auditada; migration `150` adiciona RPCs sanitizados para admin tenants/detalhe/webhooks e mutators auditados de support/break-glass; telas admin passam a consumir `adminApi` real. Pendentes: aplicar/validar migration, smoke Fase 7, equipe/roles Auth Admin e encerramento/revogacao operacional de suporte.                                                                     |
 | Fase 8 - Relatorios/chat/portal    | Parcial                  | Bases de relatorios/chat no Paciente 360 existem; modulo clinico, notificacoes, moderacao e portal paciente seguem pendentes/fail-closed.                                                                                                                                                                                                                                                                                      |
 | Fase 9 - CRM/estoque               | Pos-MVP                  | Mantido fora do MVP inicial por decisao registrada.                                                                                                                                                                                                                                                                                                                                                                            |
 | Fase 10 - Producao/observabilidade | Pendente                 | CI/CD, monitoramento, backup/restore e revisao LGPD final ainda pendentes.                                                                                                                                                                                                                                                                                                                                                     |
@@ -656,10 +664,10 @@ Fontes externas consultadas:
 
 ### Fase 7 - Admin, Settings E Auditoria
 
-- [ ] Persistir settings clinicas e admin tenants/users/units. Parcial: settings clinicas de tenant/unidade persistem localmente por RPC auditada; admin tenants/users e mutators de equipe/roles seguem pendentes.
-- [ ] Fechar admin shell e guards de plataforma.
-- [ ] Implementar support/break-glass com auditoria forte.
-- [ ] Criar eventos auditaveis para fluxos sensiveis.
+- [ ] Persistir settings clinicas e admin tenants/users/units. Parcial: settings clinicas de tenant/unidade persistem localmente por RPC auditada; admin tenants/users/units agora leem contratos reais por `list_platform_tenants` e `get_platform_tenant_detail`; mutators de equipe/roles seguem pendentes.
+- [ ] Fechar admin shell e guards de plataforma. Parcial: shell admin/tenants/webhooks consome `adminApi` real e mantem guard de plataforma existente; falta validar em Browser depois de aplicar a migration Fase 7 no Supabase local.
+- [ ] Implementar support/break-glass com auditoria forte. Parcial: `request_platform_support_session`, `request_platform_break_glass` e `decide_platform_break_glass` exigem platform admin/support, justificativa, duracao limitada, bloqueio de autoaprovacao e audit log; falta aplicar migration e validar smoke local.
+- [ ] Criar eventos auditaveis para fluxos sensiveis. Parcial: support/break-glass registram `audit_logs`; webhooks/admin exibem resumos sanitizados; falta ampliar cobertura para login sensivel, troca de tenant, exportacoes e revogacao/encerramento operacional.
 
 ### Fase 8 - Relatorios, Chat, Notificacoes E Portal
 

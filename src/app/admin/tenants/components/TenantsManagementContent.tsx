@@ -1,342 +1,85 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
-  Building2,
-  Users,
-  Search,
-  Filter,
-  MoreHorizontal,
-  Ban,
-  Play,
-  CreditCard,
-  FileText,
-  Link2,
-  ChevronRight,
-  LogOut,
-  User,
-  Bell,
-  CheckCircle,
-  XCircle,
-  Clock,
-  X,
-  ExternalLink,
   Activity,
+  Ban,
+  Building2,
+  CheckCircle,
+  ChevronRight,
+  Clock,
+  CreditCard,
+  Filter,
+  HardDrive,
+  LogOut,
+  RefreshCw,
+  Search,
+  User,
+  Users,
+  Webhook,
+  X,
+  XCircle,
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
-import { listTenants } from '@/services/adminApi';
+import { listTenants, type AdminTenantRow } from '@/services/adminApi';
 
-// ─── MOCK DATA ────────────────────────────────────────────────────────────────
-
-interface TenantRow {
-  id: string;
-  clinicName: string;
-  owner: string;
-  email: string;
-  plan: 'starter' | 'professional' | 'enterprise';
-  status: 'active' | 'trial' | 'suspended' | 'cancelled';
-  users: number;
-  patients: number;
-  storageUsedGb: number;
-  storageCapacityGb: number;
-  apiCallsThisMonth: number;
-  apiLimitMonthly: number;
-  saasSubscriptionStatus: 'active' | 'trial' | 'past_due' | 'cancelled' | 'paused';
-  asaasSubaccountStatus: 'active' | 'pending' | 'blocked' | 'not_configured';
-  d4signStatus: 'active' | 'quota_exceeded' | 'error' | 'not_configured';
-  featureFlags: {
-    programs: boolean;
-    builder: boolean;
-    whatsapp: boolean;
-    aiAssistant: boolean;
-    customDomain: boolean;
-    advancedReports: boolean;
-  };
-  createdAt: string;
-  lastActivityAt: string;
+function currency(value: number) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
-const mockTenantRows: TenantRow[] = [
-  {
-    id: 'T001',
-    clinicName: 'Clínica Corpo & Saúde',
-    owner: 'Dr. Ricardo Alves',
-    email: 'ricardo@corposaude.com.br',
-    plan: 'enterprise',
-    status: 'active',
-    users: 28,
-    patients: 412,
-    storageUsedGb: 42.3,
-    storageCapacityGb: 100,
-    apiCallsThisMonth: 84200,
-    apiLimitMonthly: 200000,
-    saasSubscriptionStatus: 'active',
-    asaasSubaccountStatus: 'active',
-    d4signStatus: 'active',
-    featureFlags: {
-      programs: true,
-      builder: true,
-      whatsapp: true,
-      aiAssistant: true,
-      customDomain: true,
-      advancedReports: true,
-    },
-    createdAt: '2025-01-15',
-    lastActivityAt: '2026-05-07',
-  },
-  {
-    id: 'T002',
-    clinicName: 'NutriVita Clínicas',
-    owner: 'Dra. Camila Torres',
-    email: 'camila@nutrivita.com.br',
-    plan: 'professional',
-    status: 'active',
-    users: 14,
-    patients: 198,
-    storageUsedGb: 18.7,
-    storageCapacityGb: 50,
-    apiCallsThisMonth: 38100,
-    apiLimitMonthly: 100000,
-    saasSubscriptionStatus: 'active',
-    asaasSubaccountStatus: 'active',
-    d4signStatus: 'quota_exceeded',
-    featureFlags: {
-      programs: true,
-      builder: false,
-      whatsapp: true,
-      aiAssistant: false,
-      customDomain: false,
-      advancedReports: true,
-    },
-    createdAt: '2025-03-20',
-    lastActivityAt: '2026-05-07',
-  },
-  {
-    id: 'T003',
-    clinicName: 'SlimCenter Premium',
-    owner: 'Dr. Paulo Mendes',
-    email: 'paulo@slimcenter.com.br',
-    plan: 'professional',
-    status: 'trial',
-    users: 6,
-    patients: 34,
-    storageUsedGb: 3.2,
-    storageCapacityGb: 50,
-    apiCallsThisMonth: 4800,
-    apiLimitMonthly: 100000,
-    saasSubscriptionStatus: 'trial',
-    asaasSubaccountStatus: 'pending',
-    d4signStatus: 'not_configured',
-    featureFlags: {
-      programs: true,
-      builder: false,
-      whatsapp: false,
-      aiAssistant: false,
-      customDomain: false,
-      advancedReports: false,
-    },
-    createdAt: '2026-04-22',
-    lastActivityAt: '2026-05-06',
-  },
-  {
-    id: 'T004',
-    clinicName: 'Metabolic Health SP',
-    owner: 'Dra. Ana Rodrigues',
-    email: 'ana@metabolichealth.com.br',
-    plan: 'starter',
-    status: 'active',
-    users: 5,
-    patients: 67,
-    storageUsedGb: 7.1,
-    storageCapacityGb: 20,
-    apiCallsThisMonth: 9200,
-    apiLimitMonthly: 30000,
-    saasSubscriptionStatus: 'past_due',
-    asaasSubaccountStatus: 'blocked',
-    d4signStatus: 'error',
-    featureFlags: {
-      programs: false,
-      builder: false,
-      whatsapp: false,
-      aiAssistant: false,
-      customDomain: false,
-      advancedReports: false,
-    },
-    createdAt: '2025-06-10',
-    lastActivityAt: '2026-05-05',
-  },
-  {
-    id: 'T005',
-    clinicName: 'Longevidade Clínica',
-    owner: 'Dr. Marcos Faria',
-    email: 'marcos@longevidade.com.br',
-    plan: 'enterprise',
-    status: 'active',
-    users: 35,
-    patients: 589,
-    storageUsedGb: 67.8,
-    storageCapacityGb: 100,
-    apiCallsThisMonth: 142000,
-    apiLimitMonthly: 200000,
-    saasSubscriptionStatus: 'active',
-    asaasSubaccountStatus: 'active',
-    d4signStatus: 'active',
-    featureFlags: {
-      programs: true,
-      builder: true,
-      whatsapp: true,
-      aiAssistant: true,
-      customDomain: true,
-      advancedReports: true,
-    },
-    createdAt: '2024-11-05',
-    lastActivityAt: '2026-05-07',
-  },
-  {
-    id: 'T006',
-    clinicName: 'Forma & Vida',
-    owner: 'Nutr. Beatriz Costa',
-    email: 'beatriz@formavida.com.br',
-    plan: 'starter',
-    status: 'suspended',
-    users: 3,
-    patients: 41,
-    storageUsedGb: 5.4,
-    storageCapacityGb: 20,
-    apiCallsThisMonth: 0,
-    apiLimitMonthly: 30000,
-    saasSubscriptionStatus: 'paused',
-    asaasSubaccountStatus: 'blocked',
-    d4signStatus: 'not_configured',
-    featureFlags: {
-      programs: false,
-      builder: false,
-      whatsapp: false,
-      aiAssistant: false,
-      customDomain: false,
-      advancedReports: false,
-    },
-    createdAt: '2025-09-01',
-    lastActivityAt: '2026-04-15',
-  },
-  {
-    id: 'T007',
-    clinicName: 'BodyTransform RJ',
-    owner: 'Dr. Felipe Souza',
-    email: 'felipe@bodytransform.com.br',
-    plan: 'professional',
-    status: 'trial',
-    users: 8,
-    patients: 52,
-    storageUsedGb: 2.1,
-    storageCapacityGb: 50,
-    apiCallsThisMonth: 6300,
-    apiLimitMonthly: 100000,
-    saasSubscriptionStatus: 'trial',
-    asaasSubaccountStatus: 'pending',
-    d4signStatus: 'not_configured',
-    featureFlags: {
-      programs: true,
-      builder: false,
-      whatsapp: true,
-      aiAssistant: false,
-      customDomain: false,
-      advancedReports: false,
-    },
-    createdAt: '2026-04-28',
-    lastActivityAt: '2026-05-04',
-  },
-  {
-    id: 'T008',
-    clinicName: 'Clínica Emagrecimento Total',
-    owner: 'Dra. Lucia Ferreira',
-    email: 'lucia@emagrecimentototal.com.br',
-    plan: 'professional',
-    status: 'cancelled',
-    users: 0,
-    patients: 0,
-    storageUsedGb: 1.2,
-    storageCapacityGb: 50,
-    apiCallsThisMonth: 0,
-    apiLimitMonthly: 100000,
-    saasSubscriptionStatus: 'cancelled',
-    asaasSubaccountStatus: 'not_configured',
-    d4signStatus: 'not_configured',
-    featureFlags: {
-      programs: false,
-      builder: false,
-      whatsapp: false,
-      aiAssistant: false,
-      customDomain: false,
-      advancedReports: false,
-    },
-    createdAt: '2025-02-14',
-    lastActivityAt: '2026-03-01',
-  },
-];
+function formatK(value: number) {
+  return value >= 1000 ? `${Math.round(value / 1000)}k` : String(value);
+}
 
-// ─── BADGE COMPONENTS ─────────────────────────────────────────────────────────
-
-function TenantStatusBadge({ status }: { status: TenantRow['status'] }) {
-  const config: Record<string, { label: string; classes: string; icon: React.ElementType }> = {
+function TenantStatusBadge({ status }: { status: AdminTenantRow['status'] }) {
+  const config = {
     active: {
       label: 'Ativo',
       classes: 'bg-emerald-50 text-emerald-700 border-emerald-200',
       icon: CheckCircle,
     },
-    trial: { label: 'Trial', classes: 'bg-blue-50 text-blue-700 border-blue-200', icon: Clock },
-    suspended: { label: 'Suspenso', classes: 'bg-red-50 text-red-700 border-red-200', icon: Ban },
+    trial: {
+      label: 'Trial',
+      classes: 'bg-blue-50 text-blue-700 border-blue-200',
+      icon: Clock,
+    },
+    suspended: {
+      label: 'Suspenso',
+      classes: 'bg-red-50 text-red-700 border-red-200',
+      icon: Ban,
+    },
     cancelled: {
       label: 'Cancelado',
       classes: 'bg-slate-100 text-slate-600 border-slate-200',
       icon: XCircle,
     },
   };
-  const c = config[status] ?? config.active;
-  const IconComp = c.icon;
+  const item = config[status];
+  const Icon = item.icon;
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${item.classes}`}
     >
-      <IconComp size={10} />
-      {c.label}
+      <Icon size={10} />
+      {item.label}
     </span>
   );
 }
 
-function PlanBadge({ plan }: { plan: TenantRow['plan'] }) {
-  const config: Record<string, { label: string; classes: string }> = {
-    starter: { label: 'Starter', classes: 'bg-slate-100 text-slate-600 border-slate-200' },
-    professional: {
-      label: 'Professional',
-      classes: 'bg-violet-50 text-violet-700 border-violet-200',
-    },
-    enterprise: { label: 'Enterprise', classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+function PlanBadge({ plan }: { plan: AdminTenantRow['plan'] }) {
+  const config = {
+    starter: 'border-slate-200 bg-slate-100 text-slate-600',
+    professional: 'border-violet-200 bg-violet-50 text-violet-700',
+    enterprise: 'border-amber-200 bg-amber-50 text-amber-700',
   };
-  const c = config[plan] ?? config.starter;
   return (
-    <span
-      className={`inline-flex items-center rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}
-    >
-      {c.label}
-    </span>
-  );
-}
-
-function SaasSubBadge({ status }: { status: TenantRow['saasSubscriptionStatus'] }) {
-  const config: Record<string, { label: string; classes: string }> = {
-    active: { label: 'Ativo', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    trial: { label: 'Trial', classes: 'bg-blue-50 text-blue-700 border-blue-200' },
-    past_due: { label: 'Vencido', classes: 'bg-red-50 text-red-700 border-red-200' },
-    cancelled: { label: 'Cancelado', classes: 'bg-slate-100 text-slate-600 border-slate-200' },
-    paused: { label: 'Pausado', classes: 'bg-amber-50 text-amber-700 border-amber-200' },
-  };
-  const c = config[status] ?? config.active;
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border text-xs font-medium px-2 py-0.5 ${c.classes}`}
-    >
-      {c.label}
+    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${config[plan]}`}>
+      {plan}
     </span>
   );
 }
@@ -346,332 +89,210 @@ function IntegrationStatusDot({ status, label }: { status: string; label: string
     active: 'bg-emerald-500',
     pending: 'bg-amber-400',
     blocked: 'bg-red-500',
-    not_configured: 'bg-slate-300',
-    quota_exceeded: 'bg-orange-500',
     error: 'bg-red-500',
+    quota_exceeded: 'bg-orange-500',
+    not_configured: 'bg-slate-300',
   };
-  const dot = dotColor[status] ?? 'bg-slate-300';
   return (
     <div className="flex items-center gap-1.5">
-      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+      <span
+        className={`h-2 w-2 flex-shrink-0 rounded-full ${dotColor[status] ?? 'bg-slate-300'}`}
+      />
       <span className="text-xs text-muted-foreground">{label}</span>
     </div>
   );
 }
 
-function StorageBar({ used, capacity }: { used: number; capacity: number }) {
-  const pct = Math.min((used / capacity) * 100, 100);
-  const color = pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-amber-400' : 'bg-teal-500';
-  return (
-    <div className="flex flex-col gap-1 min-w-[80px]">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-foreground">{used.toFixed(1)} GB</span>
-        <span className="text-xs text-muted-foreground">{capacity} GB</span>
-      </div>
-      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function ApiUsageBar({ used, limit }: { used: number; limit: number }) {
-  const pct = Math.min((used / limit) * 100, 100);
+function UsageBar({ used, limit }: { used: number; limit: number }) {
+  const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
   const color = pct > 85 ? 'bg-red-500' : pct > 60 ? 'bg-amber-400' : 'bg-blue-500';
-  const formatK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(0)}k` : String(n));
   return (
-    <div className="flex flex-col gap-1 min-w-[80px]">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-foreground">{formatK(used)}</span>
-        <span className="text-xs text-muted-foreground">{formatK(limit)}</span>
+    <div className="flex min-w-[92px] flex-col gap-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-foreground">{formatK(used)}</span>
+        <span className="text-muted-foreground">{formatK(limit)}</span>
       </div>
-      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
 }
 
-// ─── FEATURE FLAGS CELL ───────────────────────────────────────────────────────
-
-const flagLabels: Record<string, string> = {
-  programs: 'Programas',
-  builder: 'Builder',
-  whatsapp: 'WhatsApp',
-  aiAssistant: 'IA',
-  customDomain: 'Domínio',
-  advancedReports: 'Relatórios+',
-};
-
-function FeatureFlagsCell({ flags }: { flags: TenantRow['featureFlags'] }) {
-  const entries = Object.entries(flags) as [keyof TenantRow['featureFlags'], boolean][];
-  const activeCount = entries.filter(([, v]) => v).length;
-  return (
-    <div className="flex flex-wrap gap-1 max-w-[160px]">
-      {entries.map(([key, enabled]) => (
-        <span
-          key={key}
-          className={`text-xs rounded px-1.5 py-0.5 font-medium border ${enabled ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-slate-50 text-slate-400 border-slate-200 line-through'}`}
-        >
-          {flagLabels[key]}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-// ─── ACTION MENU ──────────────────────────────────────────────────────────────
-
-function ActionMenu({ tenant, onClose }: { tenant: TenantRow; onClose: () => void }) {
-  const actions = [
-    {
-      label: 'Abrir',
-      icon: ExternalLink,
-      color: 'text-foreground',
-      onClick: () => {
-        window.location.href = `/admin/tenants/${tenant.id}`;
-        onClose();
-      },
-    },
-    {
-      label: 'Suspender',
-      icon: Ban,
-      color: 'text-red-600',
-      disabled: tenant.status === 'suspended' || tenant.status === 'cancelled',
-      onClick: () => {
-        alert(`Suspendendo ${tenant.clinicName}`);
-        onClose();
-      },
-    },
-    {
-      label: 'Reativar',
-      icon: Play,
-      color: 'text-emerald-600',
-      disabled: tenant.status === 'active' || tenant.status === 'trial',
-      onClick: () => {
-        alert(`Reativando ${tenant.clinicName}`);
-        onClose();
-      },
-    },
-    {
-      label: 'Gerenciar plano',
-      icon: CreditCard,
-      color: 'text-violet-600',
-      onClick: () => {
-        alert(`Gerenciando plano de ${tenant.clinicName}`);
-        onClose();
-      },
-    },
-    {
-      label: 'Ver logs',
-      icon: FileText,
-      color: 'text-blue-600',
-      onClick: () => {
-        alert(`Logs de ${tenant.clinicName}`);
-        onClose();
-      },
-    },
-    {
-      label: 'Ver integrações',
-      icon: Link2,
-      color: 'text-teal-600',
-      onClick: () => {
-        alert(`Integrações de ${tenant.clinicName}`);
-        onClose();
-      },
-    },
+function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+  const navItems = [
+    { key: 'overview', label: 'Visao Geral', href: '/admin', icon: Activity },
+    { key: 'tenants', label: 'Gestao de Tenants', href: '/admin/tenants', icon: Building2 },
+    { key: 'webhooks', label: 'Webhooks', href: '/admin/webhooks', icon: Webhook },
   ];
 
   return (
-    <div className="absolute right-0 top-8 z-50 w-48 bg-card border border-border rounded-xl shadow-lg py-1 overflow-hidden">
-      {actions.map((action) => {
-        const ActionIcon = action.icon;
-        return (
-          <button
-            key={action.label}
-            onClick={action.disabled ? undefined : action.onClick}
-            disabled={action.disabled}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium transition-colors ${action.disabled ? 'opacity-40 cursor-not-allowed text-muted-foreground' : `${action.color} hover:bg-muted`}`}
-          >
-            <ActionIcon size={13} />
-            {action.label}
-          </button>
-        );
-      })}
-    </div>
+    <aside
+      className={`flex flex-shrink-0 flex-col border-r border-border bg-card sidebar-transition ${collapsed ? 'w-16' : 'w-56'}`}
+    >
+      <div
+        className={`flex items-center border-b border-border py-4 ${collapsed ? 'justify-center px-2' : 'gap-2 px-4'}`}
+      >
+        <AppLogo size={28} />
+        {!collapsed ? (
+          <div className="flex flex-col leading-none">
+            <span className="text-xs font-bold tracking-tight text-foreground">SlimHiper</span>
+            <span className="text-xs font-semibold text-primary">Admin</span>
+          </div>
+        ) : null}
+      </div>
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3 scrollbar-thin">
+        {navItems.map((item) => {
+          const ItemIcon = item.icon;
+          const active = item.key === 'tenants';
+          return (
+            <Link
+              key={item.key}
+              href={item.href}
+              className={`group relative flex w-full items-center rounded-xl transition-all ${
+                collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
+              } ${
+                active
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
+              }`}
+            >
+              <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
+              {!collapsed ? (
+                <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>
+                  {item.label}
+                </span>
+              ) : null}
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="border-t border-border p-2">
+        {!collapsed ? (
+          <div className="mb-1 flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 hover:bg-muted">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+              <User size={12} className="text-primary" />
+            </div>
+            <div className="flex min-w-0 flex-col leading-none">
+              <span className="truncate text-xs font-semibold text-foreground">Platform Admin</span>
+              <span className="text-xs text-muted-foreground">Operacoes</span>
+            </div>
+            <LogOut size={12} className="ml-auto text-muted-foreground" />
+          </div>
+        ) : null}
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center justify-center gap-1 rounded-xl py-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
+        >
+          <ChevronRight size={14} className={collapsed ? '' : 'rotate-180'} />
+          {!collapsed ? 'Recolher' : null}
+        </button>
+      </div>
+    </aside>
   );
 }
-
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function TenantsManagementContent() {
   const [search, setSearch] = useState('');
-  const [tenantRows, setTenantRows] = useState<TenantRow[]>([]);
+  const [tenantRows, setTenantRows] = useState<AdminTenantRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | AdminTenantRow['status']>('all');
+  const [planFilter, setPlanFilter] = useState<'all' | AdminTenantRow['plan']>('all');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    listTenants(mockTenantRows).then(({ data, error }) => {
-      if (!mounted) return;
-      setTenantRows((data ?? []) as TenantRow[]);
+  const loadRows = useCallback(() => {
+    setIsLoading(true);
+    setLoadError(null);
+    listTenants().then(({ data, error }) => {
+      setTenantRows(data);
       setLoadError(error?.message ?? null);
       setIsLoading(false);
     });
-    return () => {
-      mounted = false;
-    };
   }, []);
-  const [statusFilter, setStatusFilter] = useState<'all' | TenantRow['status']>('all');
-  const [planFilter, setPlanFilter] = useState<'all' | TenantRow['plan']>('all');
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const navItems = [
-    { key: 'overview', label: 'Visão Geral', href: '/admin', icon: LayoutDashboardIcon },
-    { key: 'tenants', label: 'Gestão de Tenants', href: '/admin/tenants', icon: Building2 },
-  ];
+  useEffect(() => {
+    loadRows();
+  }, [loadRows]);
 
-  const filtered = tenantRows.filter((t) => {
-    const matchSearch =
-      !search ||
-      t.clinicName.toLowerCase().includes(search.toLowerCase()) ||
-      t.owner.toLowerCase().includes(search.toLowerCase()) ||
-      t.id.toLowerCase().includes(search.toLowerCase()) ||
-      t.email.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || t.status === statusFilter;
-    const matchPlan = planFilter === 'all' || t.plan === planFilter;
-    return matchSearch && matchStatus && matchPlan;
-  });
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return tenantRows.filter((tenant) => {
+      const matchSearch =
+        !q ||
+        tenant.clinicName.toLowerCase().includes(q) ||
+        tenant.owner.toLowerCase().includes(q) ||
+        tenant.email.toLowerCase().includes(q) ||
+        tenant.id.toLowerCase().includes(q);
+      const matchStatus = statusFilter === 'all' || tenant.status === statusFilter;
+      const matchPlan = planFilter === 'all' || tenant.plan === planFilter;
+      return matchSearch && matchStatus && matchPlan;
+    });
+  }, [tenantRows, search, statusFilter, planFilter]);
 
-  const stats = {
-    total: tenantRows.length,
-    active: tenantRows.filter((t) => t.status === 'active').length,
-    trial: tenantRows.filter((t) => t.status === 'trial').length,
-    suspended: tenantRows.filter((t) => t.status === 'suspended').length,
-    totalUsers: tenantRows.reduce((s, t) => s + t.users, 0),
-  };
+  const stats = useMemo(
+    () => ({
+      total: tenantRows.length,
+      active: tenantRows.filter((tenant) => tenant.status === 'active').length,
+      trial: tenantRows.filter((tenant) => tenant.status === 'trial').length,
+      suspended: tenantRows.filter((tenant) => tenant.status === 'suspended').length,
+      totalUsers: tenantRows.reduce((sum, tenant) => sum + tenant.users, 0),
+    }),
+    [tenantRows]
+  );
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      {/* Sidebar */}
-      <aside
-        className={`flex flex-col bg-card border-r border-border flex-shrink-0 sidebar-transition ${sidebarCollapsed ? 'w-16' : 'w-56'}`}
-      >
-        <div
-          className={`flex items-center border-b border-border py-4 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-4'}`}
-        >
-          <AppLogo size={28} />
-          {!sidebarCollapsed && (
-            <div className="flex flex-col leading-none">
-              <span className="font-bold text-xs text-foreground tracking-tight">SlimHiper</span>
-              <span className="text-xs text-primary font-semibold">Admin</span>
-            </div>
-          )}
-        </div>
-        <nav className="flex-1 overflow-y-auto scrollbar-thin py-3 px-2 space-y-0.5">
-          {navItems.map((item) => {
-            const ItemIcon = item.icon;
-            const active = item.key === 'tenants';
-            return (
-              <a
-                key={item.key}
-                href={item.href}
-                title={sidebarCollapsed ? item.label : undefined}
-                className={`relative w-full flex items-center rounded-xl transition-all duration-150 group ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'} ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'}`}
-              >
-                <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
-                {!sidebarCollapsed && (
-                  <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>
-                    {item.label}
-                  </span>
-                )}
-                {sidebarCollapsed && (
-                  <span className="absolute left-full ml-2 px-2 py-1 bg-foreground text-background text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-                    {item.label}
-                  </span>
-                )}
-              </a>
-            );
-          })}
-        </nav>
-        <div className="border-t border-border p-2">
-          {!sidebarCollapsed && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-muted cursor-pointer mb-1">
-              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                <User size={12} className="text-primary" />
-              </div>
-              <div className="flex flex-col leading-none min-w-0">
-                <span className="text-xs font-semibold text-foreground truncate">Admin Carlos</span>
-                <span className="text-xs text-muted-foreground">Platform Owner</span>
-              </div>
-              <LogOut size={12} className="ml-auto text-muted-foreground" />
-            </div>
-          )}
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="flex items-center justify-center w-full py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all text-xs font-medium gap-1"
-          >
-            {sidebarCollapsed ? (
-              <ChevronRight size={14} />
-            ) : (
-              <>
-                <ChevronRight size={14} className="rotate-180" /> Recolher
-              </>
-            )}
-          </button>
-        </div>
-      </aside>
+    <div className="flex h-screen overflow-hidden bg-background">
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((value) => !value)}
+      />
 
-      {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Topbar */}
-        <header className="flex items-center gap-3 px-6 py-3 bg-card border-b border-border flex-shrink-0">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex flex-shrink-0 items-center gap-3 border-b border-border bg-card px-6 py-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <a href="/admin" className="hover:text-primary transition-colors">
+            <Link href="/admin" className="hover:text-primary">
               Admin
-            </a>
+            </Link>
             <ChevronRight size={12} />
-            <span className="text-foreground font-medium">Gestão de Tenants</span>
+            <span className="font-medium text-foreground">Gestao de Tenants</span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <button className="relative btn-ghost p-2">
-              <Bell size={16} />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
-            </button>
-            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-              <User size={13} className="text-primary" />
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={loadRows}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          >
+            <RefreshCw size={12} />
+            Atualizar
+          </button>
         </header>
 
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto scrollbar-thin p-6">
-          {/* Page Header */}
+        <main className="flex-1 overflow-y-auto p-6 scrollbar-thin">
           <div className="mb-6">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="mb-1 flex items-center gap-2">
               <Building2 size={20} className="text-primary" />
-              <h1 className="text-xl font-bold text-foreground">Gestão de Tenants</h1>
+              <h1 className="text-xl font-bold text-foreground">Gestao de Tenants</h1>
             </div>
             <p className="text-sm text-muted-foreground">
-              Gerencie todas as clínicas cadastradas na plataforma
+              Dados reais via RPC sanitizada de plataforma. Payloads e identificadores sensiveis
+              ficam redigidos.
             </p>
           </div>
 
-          {isLoading && (
-            <div className="card-base p-4 mb-4 text-sm text-muted-foreground">
+          {isLoading ? (
+            <div className="card-base mb-4 p-4 text-sm text-muted-foreground">
               Carregando tenants...
             </div>
-          )}
+          ) : null}
 
-          {loadError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 mb-4 text-sm text-red-700">
-              Nao foi possivel carregar tenants. {loadError}
+          {loadError ? (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {loadError}
             </div>
-          )}
+          ) : null}
 
-          {/* KPI Row */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
             {[
               {
                 label: 'Total de Tenants',
@@ -698,7 +319,7 @@ export default function TenantsManagementContent() {
                 color: 'bg-red-50 text-red-600',
               },
               {
-                label: 'Total de Usuários',
+                label: 'Usuarios',
                 value: stats.totalUsers,
                 icon: Users,
                 color: 'bg-violet-50 text-violet-600',
@@ -708,12 +329,12 @@ export default function TenantsManagementContent() {
               return (
                 <div key={kpi.label} className="stat-card flex items-center gap-3">
                   <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${kpi.color}`}
+                    className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${kpi.color}`}
                   >
                     <KpiIcon size={16} />
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-foreground tabular-nums">{kpi.value}</p>
+                    <p className="text-xl font-bold tabular-nums text-foreground">{kpi.value}</p>
                     <p className="text-xs text-muted-foreground">{kpi.label}</p>
                   </div>
                 </div>
@@ -721,36 +342,36 @@ export default function TenantsManagementContent() {
             })}
           </div>
 
-          {/* Filters */}
-          <div className="card-base p-4 mb-4">
+          <div className="card-base mb-4 p-4">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[200px]">
+              <div className="relative min-w-[220px] flex-1">
                 <Search
                   size={14}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                 />
                 <input
                   type="text"
-                  placeholder="Buscar por clínica, owner, ID ou e-mail..."
+                  placeholder="Buscar por clinica, owner, ID ou email..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 text-sm bg-muted border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="input-base w-full pl-8 text-sm"
                 />
-                {search && (
+                {search ? (
                   <button
+                    type="button"
                     onClick={() => setSearch('')}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
                     <X size={13} />
                   </button>
-                )}
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 <Filter size={13} className="text-muted-foreground" />
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                  className="text-xs bg-muted border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary text-foreground"
+                  onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+                  className="input-base text-xs"
                 >
                   <option value="all">Todos os status</option>
                   <option value="active">Ativo</option>
@@ -760,8 +381,8 @@ export default function TenantsManagementContent() {
                 </select>
                 <select
                   value={planFilter}
-                  onChange={(e) => setPlanFilter(e.target.value as typeof planFilter)}
-                  className="text-xs bg-muted border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary text-foreground"
+                  onChange={(event) => setPlanFilter(event.target.value as typeof planFilter)}
+                  className="input-base text-xs"
                 >
                   <option value="all">Todos os planos</option>
                   <option value="starter">Starter</option>
@@ -769,192 +390,148 @@ export default function TenantsManagementContent() {
                   <option value="enterprise">Enterprise</option>
                 </select>
               </div>
-              <span className="text-xs text-muted-foreground ml-auto">
+              <span className="ml-auto text-xs text-muted-foreground">
                 {filtered.length} tenant{filtered.length !== 1 ? 's' : ''}
               </span>
             </div>
           </div>
 
-          {/* Table */}
           <div className="card-base overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
-                      Clínica / Tenant ID
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                      Clinica / ID
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
                       Owner
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
                       Plano
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
                       Status
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
-                      Usuários
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                      Usuarios
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
                       Pacientes
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
-                      Armazenamento
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                      Storage
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
-                      API (mês)
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                      API mes
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
-                      Assinatura SaaS
-                    </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">MRR</th>
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
                       Asaas
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
+                    <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
                       D4Sign
                     </th>
-                    <th className="text-left px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
-                      Feature Flags
-                    </th>
-                    <th className="text-right px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">
-                      Ações
+                    <th className="px-4 py-3 text-right font-semibold text-muted-foreground">
+                      Acoes
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="text-center py-12 text-muted-foreground">
+                      <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground">
                         <Building2 size={32} className="mx-auto mb-2 opacity-30" />
                         <p className="font-medium">Nenhum tenant encontrado</p>
-                        <p className="text-xs mt-1">Tente ajustar os filtros de busca</p>
+                        <p className="mt-1 text-xs">Tente ajustar os filtros de busca</p>
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((tenant, idx) => (
+                    filtered.map((tenant, index) => (
                       <tr
                         key={tenant.id}
-                        className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${idx % 2 === 0 ? '' : 'bg-muted/10'}`}
+                        className={`border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${index % 2 ? 'bg-muted/10' : ''}`}
                       >
-                        {/* Clinic + ID */}
                         <td className="px-4 py-3">
-                          <a
+                          <Link
                             href={`/admin/tenants/${tenant.id}`}
-                            className="flex flex-col gap-0.5 group"
+                            className="group flex flex-col gap-0.5"
                           >
-                            <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                            <span className="font-semibold text-foreground transition-colors group-hover:text-primary">
                               {tenant.clinicName}
                             </span>
-                            <span className="text-muted-foreground font-mono text-xs">
+                            <span className="font-mono text-xs text-muted-foreground">
                               {tenant.id}
                             </span>
-                          </a>
+                          </Link>
                         </td>
-                        {/* Owner */}
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-0.5">
                             <span className="font-medium text-foreground">{tenant.owner}</span>
-                            <span className="text-muted-foreground truncate max-w-[140px]">
+                            <span className="max-w-[160px] truncate text-muted-foreground">
                               {tenant.email}
                             </span>
                           </div>
                         </td>
-                        {/* Plan */}
                         <td className="px-4 py-3">
                           <PlanBadge plan={tenant.plan} />
                         </td>
-                        {/* Status */}
                         <td className="px-4 py-3">
                           <TenantStatusBadge status={tenant.status} />
                         </td>
-                        {/* Users */}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             <Users size={12} className="text-muted-foreground" />
                             <span className="font-medium text-foreground">{tenant.users}</span>
+                            <span className="text-muted-foreground">/ {tenant.usersLimit}</span>
                           </div>
                         </td>
-                        {/* Patients — count only, no clinical data */}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
                             <Activity size={12} className="text-muted-foreground" />
                             <span className="font-medium text-foreground">{tenant.patients}</span>
                           </div>
                         </td>
-                        {/* Storage */}
                         <td className="px-4 py-3">
-                          <StorageBar
-                            used={tenant.storageUsedGb}
-                            capacity={tenant.storageCapacityGb}
-                          />
+                          <div className="flex items-center gap-2">
+                            <HardDrive size={12} className="text-muted-foreground" />
+                            <UsageBar
+                              used={tenant.storageUsedGb}
+                              limit={tenant.storageCapacityGb}
+                            />
+                          </div>
                         </td>
-                        {/* API Usage */}
                         <td className="px-4 py-3">
-                          <ApiUsageBar
+                          <UsageBar
                             used={tenant.apiCallsThisMonth}
                             limit={tenant.apiLimitMonthly}
                           />
                         </td>
-                        {/* SaaS Subscription */}
-                        <td className="px-4 py-3">
-                          <SaasSubBadge status={tenant.saasSubscriptionStatus} />
+                        <td className="px-4 py-3 font-semibold tabular-nums text-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <CreditCard size={12} className="text-muted-foreground" />
+                            {currency(tenant.mrr)}
+                          </div>
                         </td>
-                        {/* Asaas */}
                         <td className="px-4 py-3">
                           <IntegrationStatusDot
                             status={tenant.asaasSubaccountStatus}
-                            label={
-                              tenant.asaasSubaccountStatus === 'active'
-                                ? 'Ativo'
-                                : tenant.asaasSubaccountStatus === 'pending'
-                                  ? 'Pendente'
-                                  : tenant.asaasSubaccountStatus === 'blocked'
-                                    ? 'Bloqueado'
-                                    : 'N/C'
-                            }
+                            label={tenant.asaasSubaccountStatus}
                           />
                         </td>
-                        {/* D4Sign */}
                         <td className="px-4 py-3">
                           <IntegrationStatusDot
                             status={tenant.d4signStatus}
-                            label={
-                              tenant.d4signStatus === 'active'
-                                ? 'Ativo'
-                                : tenant.d4signStatus === 'quota_exceeded'
-                                  ? 'Cota'
-                                  : tenant.d4signStatus === 'error'
-                                    ? 'Erro'
-                                    : 'N/C'
-                            }
+                            label={tenant.d4signStatus}
                           />
                         </td>
-                        {/* Feature Flags */}
-                        <td className="px-4 py-3">
-                          <FeatureFlagsCell flags={tenant.featureFlags} />
-                        </td>
-                        {/* Actions */}
                         <td className="px-4 py-3 text-right">
-                          <div className="relative inline-block">
-                            <button
-                              onClick={() =>
-                                setOpenMenuId(openMenuId === tenant.id ? null : tenant.id)
-                              }
-                              className="btn-ghost p-1.5 rounded-lg"
-                            >
-                              <MoreHorizontal size={15} />
-                            </button>
-                            {openMenuId === tenant.id && (
-                              <>
-                                <div
-                                  className="fixed inset-0 z-40"
-                                  onClick={() => setOpenMenuId(null)}
-                                />
-                                <ActionMenu tenant={tenant} onClose={() => setOpenMenuId(null)} />
-                              </>
-                            )}
-                          </div>
+                          <Link
+                            href={`/admin/tenants/${tenant.id}`}
+                            className="text-xs font-semibold text-primary"
+                          >
+                            Abrir
+                          </Link>
                         </td>
                       </tr>
                     ))
@@ -966,30 +543,5 @@ export default function TenantsManagementContent() {
         </main>
       </div>
     </div>
-  );
-}
-
-// Placeholder icon
-function LayoutDashboardIcon(
-  props: React.SVGProps<SVGSVGElement> & { size?: number; strokeWidth?: number }
-) {
-  const { size = 16, strokeWidth = 2, ...rest } = props;
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...rest}
-    >
-      <rect width="7" height="9" x="3" y="3" rx="1" />
-      <rect width="7" height="5" x="14" y="3" rx="1" />
-      <rect width="7" height="9" x="14" y="12" rx="1" />
-      <rect width="7" height="5" x="3" y="16" rx="1" />
-    </svg>
   );
 }
