@@ -97,6 +97,7 @@ export interface PatientPackageSummary {
   packageEntitlements?: PatientPackageEntitlement[];
   serviceUsage?: PatientPackageServiceUsage[];
   packageLimits?: PatientPackageLimit[];
+  checkins?: PatientPackageCheckin[];
 }
 
 export interface PatientMeasurementSummary {
@@ -671,6 +672,15 @@ export interface PatientPackageLimit {
   value: string;
 }
 
+export interface PatientPackageCheckin {
+  id: string;
+  title: string;
+  status: 'scheduled' | 'sent' | 'completed' | 'overdue' | 'canceled';
+  dueDate: string;
+  completedAt?: string;
+  channel?: 'app' | 'whatsapp' | 'email' | 'presencial';
+}
+
 // ─── Report definition types ──────────────────────────────────────────────────
 
 export interface PatientReportDefinition {
@@ -724,8 +734,11 @@ export interface ClinicProgram {
   checkInFrequency: string;
   appEntitlements: ProgramAppEntitlement[];
   requiredDocuments: ProgramRequiredDocument[];
+  checkinTemplates?: ProgramBuilderCheckinTemplate[];
+  team?: ProgramBuilderTeamMember[];
   paymentModel: ProgramPaymentModel;
   paymentDescription: string;
+  financialConfig?: ProgramBuilderFinancialConfig;
   activePatients: number;
   createdAt: string;
   updatedAt: string;
@@ -775,6 +788,7 @@ export interface ProgramBuilderFinancialConfig {
 }
 
 export interface ProgramBuilderDraft {
+  id?: string;
   name: string;
   programType: ProgramType | '';
   objective: string;

@@ -19,24 +19,21 @@ comparativo competitivo e ordem de finalizacao.
 
 ## Execucao Atual
 
-- Data: 2026-05-31 18:36 -03:00.
+- Data: 2026-05-31 19:25 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
 - Commit base: `bb190f1`.
 - Alvo aprovado: MVP clinico.
 - Ambiente aprovado: local seguro com migrations/bootstraps e sandbox provider
   autorizados quando o alvo estiver segregado.
-- Lote em andamento: Fase 5 - Financeiro/Asaas. A RPC
-  `get_clinic_finance_reconciliation()` foi criada por migration nova
-  (`20260531165000_130_billing_reconciliation_contract.sql`) e retorna resumo,
-  divergencias e eventos Asaas recentes sem IDs provider. `/clinic/financeiro`
-  agora exibe conciliacao e divergencias com loading/error/empty states. As Edge
-  Functions Asaas continuam validando JWT/membership/`financial.write`, mas
-  persistem customer/invoice/subscription com service-role apos autorizacao
-  local para respeitar a hardening migration `070`, que remove escrita direta
-  do browser em tabelas provider-owned. Customer Asaas aceita CPF/CNPJ no body,
-  envia ao provider e persiste apenas `cpf_cnpj_last4` em metadata local. O
-  sandbox Asaas estrito passou com customer, invoice e subscription 200 via Edge
-  Functions.
+- Lote em andamento: Fase 6 - Programas/pacotes concluida para MVP local. As
+  migrations novas `20260531180000_140_programs_builder_contract.sql` e
+  `20260531181000_141_program_checkin_template_fk_fix.sql` adicionam metadados
+  do builder em `programs`, `program_team_members`, `patient_program_checkins`,
+  RLS e RPCs para listar opcoes, salvar/publicar, arquivar, clonar e matricular
+  paciente em programa. `/clinic/programs` agora usa `programsApi`; o builder
+  persiste rascunho/publicacao por RPC e le equipe e templates reais do tenant;
+  `patient-360-summary` retorna check-ins reais do enrollment e `TabPacotes` os
+  exibe. Smoke local Fase 6 passou com `test-programs-phase6-local-smoke.mjs`.
 - Lote concluido anteriormente: Fase 3 - Paciente 360 completo para MVP local.
   As Edge Functions `patient-360-summary` e `patient-timeline` preservam eventos
   `exame_solicitado` e `exame_resultado_recebido`; os services Patient 360,
@@ -103,6 +100,13 @@ comparativo competitivo e ordem de finalizacao.
   scripts/supabase/test-billing-contract.mjs` com paciente local novo e
   `TEST_PATIENT_CPF_CNPJ` dummy, validando customer, invoice e subscription 200
   contra sandbox Asaas sem expor IDs provider.
+- Neste lote Fase 6 passaram `npx supabase migration up --local --include-all`,
+  `node scripts/supabase/test-programs-phase6-local-smoke.mjs`,
+  `node scripts/supabase/test-patient360-local-real-smoke.mjs`, fixtures
+  Patient360/D4Sign/Billing, `node --check` dos scripts tocados,
+  `npm run type-check`, `npm run lint`, `npm run build` e Browser smoke anonimo
+  de `/auth/login`, `/clinic/programs`, `/clinic/programs/builder` e Paciente
+  360 pacotes com redirect fail-closed para `/auth/login`.
 - Skips deliberados: valores de secrets nao foram impressos; `.env` foi usado
   apenas em processo local para bootstrap/smoke sem exibir valores; Supabase
   remoto nao foi mutado; `supabase db push` remoto nao foi executado; Browser
@@ -212,14 +216,23 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
   idempotencia, auditoria e timeline; smoke sandbox real falhou com
   `provider_safe_not_found`, confirmando que falta criar/selecionar um cofre na
   conta D4Sign sandbox.
+  Fase 6: `programsApi` centraliza lista, opcoes do builder, salvar/publicar,
+  arquivar, clonar e enrollment; `ProgramsContent` deixou de importar
+  `mockClinicPrograms`; `ProgramBuilderContent` deixou de importar
+  `mockBuilderData` e persiste pelo RPC `upsert_program_from_builder`;
+  `patient_program_checkins` registra check-ins gerados por enrollment;
+  `patient-360-summary` e `TabPacotes` exibem esses check-ins reais; e
+  `test-programs-phase6-local-smoke.mjs` confirmou RPCs, permissoes
+  `packages.read/write`, publish/archive/clone, enrollment e Paciente 360.
 - Proximos bloqueios: convites de equipe via Auth Admin auditado, alteracao real
   de roles/permissoes por RPC, settings por usuario, admin plataforma com dados
   reais, UI/contratos scoped do portal paciente antes de abrir `/patient`,
   executor/export real de relatorios, CRUD real de plano alimentar, smokes
   autenticados amplos de navegador para os novos modais da Fase 2, smoke sandbox
   Asaas, criacao/selecionamento de cofre D4Sign sandbox para obter
-  `D4SIGN_SAFE_UUID`, e contratos sandbox dependem de ambiente/credenciais
-  autorizados.
+  `D4SIGN_SAFE_UUID`, submissao de check-in pelo paciente com RLS portal-scoped,
+  e criacao automatica de cobranca/documentos a partir de enrollment.
+  Contratos sandbox dependem de ambiente/credenciais autorizados.
 - Docker local: Docker Engine respondeu (`29.2.1`); Docker Desktop foi ajustado
   via API local para expor `tcp://localhost:2375` (`ExposeDockerAPIOnTCP2375`
   em `settings-store.json`), com backup local do arquivo de configuracao;
@@ -259,7 +272,7 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 3 - Paciente 360              | Concluida para MVP local | Contrato real local passou com staff, forbidden real sem `patients.read`, cross-tenant tenant A/B, tab contracts por Edge/RLS/RPC e mocks carregados somente sob `NEXT_PUBLIC_USE_MOCK_DATA=true`; smokes visuais autenticados amplos seguem como gate de release, nao como bloqueio do MVP local.                                                                                                                             |
 | Fase 4 - Documentos/D4Sign         | Parcial MVP local        | Templates/UI, PDF local, variaveis permitidas, policy paciente/guardian, signed URL, monitor operacional e webhook/idempotencia/auditoria passaram em smoke local; envio D4Sign sandbox real foi tentado e segue blocked porque `GET /safes` nao retornou cofre disponivel na conta sandbox.                                                                                                                                   |
 | Fase 5 - Financeiro/Asaas          | Concluida para MVP local | RPCs/Edge/webhook/fixtures locais, conciliacao/divergencias e Asaas sandbox estrito passaram; customer/invoice/subscription continuam gated por Edge Functions, JWT, `financial.write` e service-role backend apos autorizacao.                                                                                                                                                                                                 |
-| Fase 6 - Programas/pacotes         | Pendente                 | `programsApi`, builder persistente, enrollment e check-ins reais ainda nao iniciados neste lote.                                                                                                                                                                                                                                                                                                                               |
+| Fase 6 - Programas/pacotes         | Concluida para MVP local | `programsApi`, builder persistente, publish/archive/clone, enrollment e `patient_program_checkins` reais passaram em smoke local; Patient 360 pacotes exibe check-ins gerados. Criacao automatica de cobranca/documentos no enrollment e submissao portal de check-ins ficam pos-MVP.                                                                                                                                          |
 | Fase 7 - Admin/settings/auditoria  | Parcial                  | Settings tenant/unidade persistem por RPC auditada; admin real, equipe/roles mutantes e break-glass seguem pendentes.                                                                                                                                                                                                                                                                                                          |
 | Fase 8 - Relatorios/chat/portal    | Parcial                  | Bases de relatorios/chat no Paciente 360 existem; modulo clinico, notificacoes, moderacao e portal paciente seguem pendentes/fail-closed.                                                                                                                                                                                                                                                                                      |
 | Fase 9 - CRM/estoque               | Pos-MVP                  | Mantido fora do MVP inicial por decisao registrada.                                                                                                                                                                                                                                                                                                                                                                            |
@@ -455,11 +468,11 @@ Fontes externas consultadas:
 
 ### Programas E Pacotes
 
-- [ ] `src/app/clinic/programs/components/ProgramsContent.tsx`: substituir `mockClinicPrograms` por `programsApi`.
-- [ ] `src/app/clinic/programs/builder`: substituir `mockBuilderData` por dados reais de fases, servicos, checkins e equipe.
-- [ ] Persistir rascunho, publicar, arquivar e clonar programa.
-- [ ] Enrollment de paciente deve refletir no Paciente 360, agenda e financeiro.
-- [ ] Validar permissoes para criar/publicar programas.
+- [x] `src/app/clinic/programs/components/ProgramsContent.tsx`: substituir `mockClinicPrograms` por `programsApi`. Evidencia local: lista, resumo, filtros e acoes chamam `get_clinic_programs`, `update_program_status` e `clone_program`; mock so existe no service sob `NEXT_PUBLIC_USE_MOCK_DATA=true`.
+- [x] `src/app/clinic/programs/builder`: substituir `mockBuilderData` por dados reais de fases, servicos, checkins e equipe. Evidencia local: `ProgramBuilderContent` usa `programsApi`, carrega equipe e templates por `get_program_builder_options`, edita programa por `?programId=...` e salva/publica por `upsert_program_from_builder`.
+- [x] Persistir rascunho, publicar, arquivar e clonar programa. Evidencia local: RPCs `upsert_program_from_builder`, `update_program_status` e `clone_program` passaram em `test-programs-phase6-local-smoke.mjs`.
+- [ ] Enrollment de paciente deve refletir no Paciente 360, agenda e financeiro. Parcial MVP: `enroll_patient_in_program` cria enrollment, deriva totais de servico, gera `patient_program_checkins`, escreve timeline e Paciente 360 pacotes exibe check-ins; criacao automatica de cobranca/documentos e reflexo em agenda ficam pos-MVP.
+- [x] Validar permissoes para criar/publicar programas. Evidencia local: RPCs exigem `packages.read`/`packages.write`, bootstrap core inclui `packages.read/write` para `clinic_admin`, e smoke local autenticado confirmou publicar/arquivar/clonar/enrollar por usuario permitido.
 
 ### Configuracoes Clinicas
 
@@ -491,7 +504,7 @@ Fontes externas consultadas:
 - [ ] `src/services/mockApi.ts`: manter apenas para desenvolvimento explicito e fixtures, nunca fallback de producao.
 - [ ] `src/services/mockSession.ts`: remover do fluxo real apos session/guards fechados.
 - [ ] `src/data/mockData.ts`: separar fixtures de desenvolvimento de dados operacionais.
-- [ ] `src/data/mockBuilderData.ts`: substituir por API de programas/builder.
+- [ ] `src/data/mockBuilderData.ts`: manter apenas como fixture/dev sob `NEXT_PUBLIC_USE_MOCK_DATA=true`; caminho real ja usa `programsApi`.
 - [ ] `src/services/adminApi.ts`: nao retornar mock quando backend falha em producao.
 - [ ] `src/services/patientsApi.ts`: mock so com `NEXT_PUBLIC_USE_MOCK_DATA=true`.
 - [ ] `src/services/dashboardApi.ts`: provider mock somente com `NEXT_PUBLIC_USE_MOCK_DATA=true`.
@@ -502,8 +515,8 @@ Fontes externas consultadas:
 - [ ] `src/app/admin/tenants/[tenantId]/components/TenantDetailContent.tsx`: remover dados internos mockados.
 - [ ] `src/app/admin/webhooks/components/WebhookMonitorContent.tsx`: remover eventos mockados como fallback de producao.
 - [x] `src/app/clinic/settings/components/ClinicSettingsContent.tsx`: remover settings locais/mock. Evidencia local: tela reescrita para `clinicSettingsApi`, snapshot RPC real, loading/error/retry, equipe/RBAC/unidades reais e sem arrays `mock*`.
-- [ ] `src/app/clinic/programs/components/ProgramsContent.tsx`: remover `mockClinicPrograms`.
-- [ ] `src/app/clinic/programs/builder`: remover `mockBuilderData`.
+- [x] `src/app/clinic/programs/components/ProgramsContent.tsx`: remover `mockClinicPrograms`. Evidencia local: import direto removido; mock fica somente no branch explicito de `programsApi`.
+- [x] `src/app/clinic/programs/builder`: remover `mockBuilderData`. Evidencia local: builder importa `BUILDER_STEPS`, draft inicial e persistencia de `programsApi`; checkins/equipe chegam por RPC.
 - [x] `src/app/paciente-360/components/tabs/TabRelatorios.tsx`: remover `mockReportDefinitions`.
 - [ ] `src/app/clinic/patients/[patientId]/encounter/page.tsx`: substituir mocks laterais por dados reais. Parcial: arrays `mock*` removidos da UI; sintomas ainda ficam como empty state ate existir contrato real.
 
@@ -624,10 +637,10 @@ Fontes externas consultadas:
 
 ### Fase 6 - Programas, Pacotes E Jornadas
 
-- [ ] Criar `programsApi` e persistir builder.
-- [ ] Ligar enrollment a paciente, agenda, financeiro e documentos obrigatorios.
-- [ ] Criar check-ins reais e visiveis no Paciente 360.
-- [ ] Validar permissao para publicacao/arquivamento.
+- [x] Criar `programsApi` e persistir builder. Evidencia local: `src/services/programsApi.ts` chama RPCs reais, `ProgramBuilderContent` salva/publica via `upsert_program_from_builder`, e `test-programs-phase6-local-smoke.mjs` confirmou draft/publicacao.
+- [ ] Ligar enrollment a paciente, agenda, financeiro e documentos obrigatorios. Parcial MVP: `enroll_patient_in_program` cria enrollment, timeline e check-ins por paciente; documentos obrigatorios aparecem no contrato do programa/Paciente 360; agenda, cobranca automatica e geracao de documentos no ato do enrollment ficam pos-MVP.
+- [x] Criar check-ins reais e visiveis no Paciente 360. Evidencia local: tabela `patient_program_checkins`, geracao por enrollment, `patient-360-summary` e `TabPacotes`; smokes `test-programs-phase6-local-smoke.mjs` e `test-patient360-local-real-smoke.mjs` passaram.
+- [x] Validar permissao para publicacao/arquivamento. Evidencia local: RPCs exigem `packages.write`, lista/opcoes exigem `packages.read`, bootstrap core inclui `packages.read/write` para `clinic_admin`, e smoke local autenticado validou publicar/arquivar/clonar/enrollar.
 
 ### Fase 7 - Admin, Settings E Auditoria
 
@@ -671,7 +684,7 @@ Fontes externas consultadas:
 - [ ] `feat/document-workspace-and-patient-policy`
 - [ ] `feat/d4sign-sandbox-operational-flow`
 - [ ] `feat/billing-rpcs-and-asaas-reconciliation`
-- [ ] `feat/programs-builder-persistence`
+- [x] `feat/programs-builder-persistence`
 - [ ] `feat/clinic-settings-persistence`
 - [ ] `feat/platform-admin-real-data`
 - [ ] `feat/reports-clinic-module`

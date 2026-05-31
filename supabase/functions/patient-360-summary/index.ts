@@ -766,12 +766,18 @@ async function buildAndReturnSummary({
   if (queryErrors.length) throw queryErrors[0];
 
   const packageEnrollment = packageEnrollmentRes.data ?? null;
-  const [packageProgramRes, packageServicesRes, packageEntitlementsRes] =
+  const [
+    packageProgramRes,
+    packageServicesRes,
+    packageEntitlementsRes,
+    packageCheckinsRes,
+    packageRequiredDocumentsRes,
+  ] =
     packageEnrollment?.program_id && tenantPermissions.has('packages.read')
       ? await Promise.all([
           supabase
             .from('programs')
-            .select('id, name, program_type, duration_weeks, updated_at')
+            .select('id, name, program_type, duration_weeks, checkins_total, checkin_frequency, updated_at')
             .eq('id', packageEnrollment.program_id)
             .eq('tenant_id', patient.tenant_id)
             .maybeSingle(),
@@ -787,21 +793,53 @@ async function buildAndReturnSummary({
             .eq('program_id', packageEnrollment.program_id)
             .eq('tenant_id', patient.tenant_id)
             .order('created_at', { ascending: true }),
+          supabase
+            .from('patient_program_checkins')
+            .select('id, title, status, due_date, completed_at, channel')
+            .eq('enrollment_id', packageEnrollment.id)
+            .eq('patient_id', patientId)
+            .eq('tenant_id', patient.tenant_id)
+            .order('due_date', { ascending: false })
+            .limit(12),
+          supabase
+            .from('program_required_documents')
+            .select('id, label, required')
+            .eq('program_id', packageEnrollment.program_id)
+            .eq('tenant_id', patient.tenant_id)
+            .order('created_at', { ascending: true }),
         ])
       : [
           { data: null, error: null },
           { data: [], error: null },
           { data: [], error: null },
+          { data: [], error: null },
+          { data: [], error: null },
         ];
 
-  if (packageProgramRes.error || packageServicesRes.error || packageEntitlementsRes.error) {
-    throw packageProgramRes.error ?? packageServicesRes.error ?? packageEntitlementsRes.error;
+  if (
+    packageProgramRes.error ||
+    packageServicesRes.error ||
+    packageEntitlementsRes.error ||
+    packageCheckinsRes.error ||
+    packageRequiredDocumentsRes.error
+  ) {
+    throw (
+      packageProgramRes.error ??
+      packageServicesRes.error ??
+      packageEntitlementsRes.error ??
+      packageCheckinsRes.error ??
+      packageRequiredDocumentsRes.error
+    );
   }
 
   const packageProgram = packageProgramRes.data ?? null;
   const packageServices = Array.isArray(packageServicesRes.data) ? packageServicesRes.data : [];
   const packageEntitlements = Array.isArray(packageEntitlementsRes.data)
     ? packageEntitlementsRes.data
+    : [];
+  const packageCheckins = Array.isArray(packageCheckinsRes.data) ? packageCheckinsRes.data : [];
+  const packageRequiredDocuments = Array.isArray(packageRequiredDocumentsRes.data)
+    ? packageRequiredDocumentsRes.data
     : [];
   const nutritionPlanRow = nutritionPlanRes.data ?? null;
 
@@ -950,6 +988,24 @@ async function buildAndReturnSummary({
             key: String(entitlement.key ?? entitlement.id),
             label: String(entitlement.label ?? entitlement.key ?? 'Acesso'),
             enabled: entitlement.enabled !== false,
+          })),
+          packageLimits: [
+            {
+              label: 'Check-ins planejados',
+              value: `${packageCheckins.length}/${asNumber(packageProgram.checkins_total)} gerados`,
+            },
+            ...packageRequiredDocuments.map((document) => ({
+              label: String(document.label ?? 'Documento'),
+              value: document.required === false ? 'Opcional' : 'Obrigatorio',
+            })),
+          ],
+          checkins: packageCheckins.map((checkin) => ({
+            id: checkin.id,
+            title: String(checkin.title ?? 'Check-in'),
+            status: checkin.status ?? 'scheduled',
+            dueDate: checkin.due_date,
+            completedAt: checkin.completed_at ?? undefined,
+            channel: checkin.channel ?? undefined,
           })),
         }
       : {

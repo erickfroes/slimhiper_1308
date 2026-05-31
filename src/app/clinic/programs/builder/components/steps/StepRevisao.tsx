@@ -14,7 +14,6 @@ import {
   Users,
 } from 'lucide-react';
 import type { ProgramBuilderDraft } from '@/domain/types';
-import Icon from '@/components/ui/AppIcon';
 
 interface Props {
   draft: ProgramBuilderDraft;

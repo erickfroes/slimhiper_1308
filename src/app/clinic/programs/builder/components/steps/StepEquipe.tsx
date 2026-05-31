@@ -3,10 +3,10 @@
 import React from 'react';
 import { UserPlus, X, User } from 'lucide-react';
 import type { ProgramBuilderDraft, ProgramBuilderTeamMember } from '@/domain/types';
-import { mockBuilderTeamMembers } from '@/data/mockBuilderData';
 
 interface Props {
   draft: ProgramBuilderDraft;
+  teamMembers: ProgramBuilderTeamMember[];
   onChange: (patch: Partial<ProgramBuilderDraft>) => void;
 }
 
@@ -18,7 +18,7 @@ const roleColors: Record<string, string> = {
   Psicóloga: 'bg-amber-50 text-amber-700',
 };
 
-export default function StepEquipe({ draft, onChange }: Props) {
+export default function StepEquipe({ draft, teamMembers, onChange }: Props) {
   const selectedIds = draft.team.map((m) => m.id);
 
   const toggleMember = (member: ProgramBuilderTeamMember) => {
@@ -61,7 +61,7 @@ export default function StepEquipe({ draft, onChange }: Props) {
       {/* Available members */}
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-foreground">Profissionais disponíveis</h3>
-        {mockBuilderTeamMembers.map((member) => {
+        {teamMembers.map((member) => {
           const selected = selectedIds.includes(member.id);
           const roleColor = roleColors[member.role] ?? 'bg-muted text-muted-foreground';
           return (
@@ -111,6 +111,11 @@ export default function StepEquipe({ draft, onChange }: Props) {
             </div>
           );
         })}
+        {teamMembers.length === 0 && (
+          <div className="card-base p-4 text-xs text-muted-foreground">
+            Nenhum profissional ativo com permissao foi retornado para este tenant.
+          </div>
+        )}
       </div>
 
       {draft.team.length === 0 && (

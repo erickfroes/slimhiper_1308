@@ -57,6 +57,8 @@ const permissionMatrix = {
     'agenda.write',
     'financial.read',
     'financial.write',
+    'packages.read',
+    'packages.write',
     'settings.read',
     'settings.write',
   ],

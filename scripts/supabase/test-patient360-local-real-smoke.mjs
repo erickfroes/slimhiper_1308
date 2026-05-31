@@ -31,6 +31,9 @@ const IDS = {
   programService: '71000000-0000-4000-8000-0000000000a2',
   programEntitlement: '71000000-0000-4000-8000-0000000000a3',
   enrollment: '71000000-0000-4000-8000-0000000000a4',
+  programDocument: '71000000-0000-4000-8000-0000000000d1',
+  programCheckinTemplate: '71000000-0000-4000-8000-0000000000c1',
+  programCheckin: '71000000-0000-4000-8000-0000000000e1',
   generatedDocument: '72000000-0000-4000-8000-0000000000a1',
   signatureRequest: '72000000-0000-4000-8000-0000000000a2',
   report: '73000000-0000-4000-8000-0000000000a1',
@@ -227,6 +230,14 @@ async function seedPatient360TabData(tenantId, patientId, userId) {
         status: 'ativo',
         payment_model: 'parcelado',
         payment_description: 'Local smoke payment plan',
+        checkins_total: 12,
+        checkin_frequency: 'Semanal via app',
+        financial_config: {
+          paymentModel: 'parcelado',
+          basePrice: 2400,
+          installments: 12,
+          description: 'Local smoke payment plan',
+        },
         created_by: userId,
       },
       { onConflict: 'id' }
@@ -264,6 +275,36 @@ async function seedPatient360TabData(tenantId, patientId, userId) {
     .throwOnError();
 
   await admin
+    .from('program_required_documents')
+    .upsert(
+      {
+        id: IDS.programDocument,
+        tenant_id: tenantId,
+        program_id: IDS.program,
+        label: 'Termo local Patient 360',
+        required: true,
+      },
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  await admin
+    .from('program_checkin_templates')
+    .upsert(
+      {
+        id: IDS.programCheckinTemplate,
+        tenant_id: tenantId,
+        program_id: IDS.program,
+        label: 'Check-in semanal local',
+        frequency: 'Semanal',
+        channel: 'app',
+        questions: ['Como foi sua adesao nesta semana?'],
+      },
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  await admin
     .from('patient_program_enrollments')
     .upsert(
       {
@@ -279,6 +320,28 @@ async function seedPatient360TabData(tenantId, patientId, userId) {
         total_nutrition_sessions: 3,
         used_nutrition_sessions: 1,
         metadata: { seeded_by: 'test-patient360-local-real-smoke' },
+      },
+      { onConflict: 'id' }
+    )
+    .throwOnError();
+
+  await admin
+    .from('patient_program_checkins')
+    .upsert(
+      {
+        id: IDS.programCheckin,
+        tenant_id: tenantId,
+        patient_id: patientId,
+        enrollment_id: IDS.enrollment,
+        program_id: IDS.program,
+        template_id: IDS.programCheckinTemplate,
+        title: 'Check-in semanal local #1',
+        channel: 'app',
+        due_date: '2026-05-08',
+        status: 'completed',
+        questions: ['Como foi sua adesao nesta semana?'],
+        responses: { adherence: 84 },
+        completed_at: now,
       },
       { onConflict: 'id' }
     )
@@ -599,6 +662,12 @@ async function run() {
   await runRealContract(staffSession.token, forbiddenSession.token);
 
   currentStep = 'checking tab contracts through Edge Functions';
+  await expectFunctionOk('patient-360-summary', staffSession.token, { patient_id: IDS.patientA }, (data) => {
+    ok(
+      Array.isArray(data?.activePackage?.checkins) && data.activePackage.checkins.length >= 1,
+      'patient-360-summary: expected package checkins array'
+    );
+  });
   await expectFunctionOk('patient-documents', staffSession.token, { patient_id: IDS.patientA }, (data) => {
     ok(Array.isArray(data?.documents), 'patient-documents: expected documents array');
     ok(data.documents.length >= 1, 'patient-documents: expected seeded document');
@@ -615,6 +684,9 @@ async function run() {
   currentStep = 'checking tab contracts through RLS/RPC';
   await expectCount(staffSession.client, 'consultas tab', 'appointments', { patient_id: IDS.patientA });
   await expectCount(staffSession.client, 'pacotes tab', 'patient_program_enrollments', {
+    patient_id: IDS.patientA,
+  });
+  await expectCount(staffSession.client, 'pacotes tab checkins', 'patient_program_checkins', {
     patient_id: IDS.patientA,
   });
   await expectCount(staffSession.client, 'prescricoes tab', 'prescriptions_placeholder', {

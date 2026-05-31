@@ -402,6 +402,9 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
         ? (asRecord(raw?.activePackage)
             ?.packageLimits as Patient360Summary['activePackage']['packageLimits'])
         : undefined,
+      checkins: Array.isArray(asRecord(raw?.activePackage)?.checkins)
+        ? (asRecord(raw?.activePackage)?.checkins as Patient360Summary['activePackage']['checkins'])
+        : undefined,
     },
     clinicalStatus: {
       currentWeightKg: asNumber(asRecord(raw?.clinicalStatus)?.currentWeightKg),
