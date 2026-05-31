@@ -20,6 +20,10 @@ export interface ChargeActionResult {
   invoiceUrl?: string | null;
 }
 
+export interface PatientBillingIdentityInput {
+  cpfCnpj?: string;
+}
+
 export interface ClinicFinanceOverview {
   metrics: {
     monthlyRevenue: number;
@@ -35,6 +39,53 @@ export interface ClinicFinanceOverview {
     dueDate: string;
     status: 'pendente' | 'pago' | 'vencido' | 'cancelado';
   }>;
+}
+
+export interface ClinicFinanceDivergence {
+  id: string;
+  kind:
+    | 'amount_mismatch'
+    | 'paid_invoice_without_paid_payment'
+    | 'paid_payment_unpaid_invoice'
+    | 'overdue_invoice_without_overdue_payment'
+    | 'orphan_payment'
+    | 'webhook_unresolved';
+  severity: 'high' | 'medium' | 'low';
+  patientId: string | null;
+  patientName: string;
+  invoiceId: string | null;
+  paymentId: string | null;
+  description: string;
+  expectedStatus: string | null;
+  actualStatus: string | null;
+  expectedAmount: number | null;
+  actualAmount: number | null;
+  dueDate: string | null;
+  createdAt: string;
+}
+
+export interface ClinicFinanceEvent {
+  id: string;
+  eventType: string;
+  status: 'received' | 'processed' | 'failed' | 'ignored';
+  errorMessage: string | null;
+  createdAt: string;
+  processedAt: string | null;
+}
+
+export interface ClinicFinanceReconciliation {
+  summary: {
+    divergences: number;
+    highSeverity: number;
+    mediumSeverity: number;
+    failedWebhookEvents: number;
+    pendingInvoices: number;
+    overdueInvoices: number;
+    unmatchedPayments: number;
+    lastCheckedAt: string;
+  };
+  divergences: ClinicFinanceDivergence[];
+  recentEvents: ClinicFinanceEvent[];
 }
 
 function isMockEnabled() {
@@ -129,20 +180,27 @@ async function invoke<T>(fn: string, body: Record<string, unknown>) {
   return unwrap<T>(data);
 }
 
-export async function createPatientCustomer(patientId: string) {
+export async function createPatientCustomer(
+  patientId: string,
+  billingIdentity?: PatientBillingIdentityInput
+) {
   if (!patientId.trim()) {
     return { data: null, error: { message: 'Paciente invalido para criar customer.' } };
   }
   if (isMockEnabled())
     return { data: { id: `mock-customer-${patientId}` }, error: null as SafeServiceError | null };
-  return invoke<{ id: string }>('asaas-create-patient-customer', { patient_id: patientId });
+  return invoke<{ id: string }>('asaas-create-patient-customer', {
+    patient_id: patientId,
+    ...(billingIdentity?.cpfCnpj ? { cpf_cnpj: billingIdentity.cpfCnpj } : {}),
+  });
 }
 
 export async function createPatientInvoice(
   patientId: string,
   amount: number,
   description: string,
-  dueDate: string
+  dueDate: string,
+  billingIdentity?: PatientBillingIdentityInput
 ) {
   if (!patientId.trim()) {
     return { data: null, error: { message: 'Paciente invalido para criar cobranca.' } };
@@ -168,7 +226,7 @@ export async function createPatientInvoice(
       error: null as SafeServiceError | null,
     };
 
-  const customer = await createPatientCustomer(patientId);
+  const customer = await createPatientCustomer(patientId, billingIdentity);
   if (customer.error) return { data: null, error: customer.error };
 
   const payload = {
@@ -192,7 +250,8 @@ export async function createPatientSubscription(
   patientId: string,
   packageId: string,
   amount: number,
-  interval: string
+  interval: string,
+  billingIdentity?: PatientBillingIdentityInput
 ) {
   if (!patientId.trim()) {
     return { data: null, error: { message: 'Paciente invalido para criar assinatura.' } };
@@ -212,7 +271,7 @@ export async function createPatientSubscription(
       error: null as SafeServiceError | null,
     };
 
-  const customer = await createPatientCustomer(patientId);
+  const customer = await createPatientCustomer(patientId, billingIdentity);
   if (customer.error) return { data: null, error: customer.error };
 
   const payload = {
@@ -273,4 +332,80 @@ export async function getClinicFinanceOverview() {
       error: { message: error.message, code: error.code },
     };
   return { data: data as ClinicFinanceOverview, error: null as SafeServiceError | null };
+}
+
+export async function getClinicFinanceReconciliation() {
+  if (isMockEnabled()) {
+    return {
+      data: {
+        summary: {
+          divergences: 2,
+          highSeverity: 1,
+          mediumSeverity: 1,
+          failedWebhookEvents: 1,
+          pendingInvoices: 4,
+          overdueInvoices: 2,
+          unmatchedPayments: 1,
+          lastCheckedAt: new Date().toISOString(),
+        },
+        divergences: [
+          {
+            id: 'mock-amount-mismatch',
+            kind: 'amount_mismatch',
+            severity: 'high',
+            patientId: 'mock-patient-1',
+            patientName: 'Juliana Pereira',
+            invoiceId: 'mock-invoice-1',
+            paymentId: 'mock-payment-1',
+            description: 'Valor do pagamento conciliado difere da cobranca local.',
+            expectedStatus: 'pendente',
+            actualStatus: 'pending',
+            expectedAmount: 400,
+            actualAmount: 390,
+            dueDate: '2026-06-01',
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: 'mock-webhook-unresolved',
+            kind: 'webhook_unresolved',
+            severity: 'medium',
+            patientId: null,
+            patientName: 'Webhook Asaas',
+            invoiceId: null,
+            paymentId: null,
+            description: 'Evento Asaas exige revisao operacional.',
+            expectedStatus: 'processed',
+            actualStatus: 'ignored',
+            expectedAmount: null,
+            actualAmount: null,
+            dueDate: null,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        recentEvents: [
+          {
+            id: 'mock-event-1',
+            eventType: 'PAYMENT_CONFIRMED',
+            status: 'processed',
+            errorMessage: null,
+            createdAt: new Date().toISOString(),
+            processedAt: new Date().toISOString(),
+          },
+        ],
+      } as ClinicFinanceReconciliation,
+      error: null as SafeServiceError | null,
+    };
+  }
+
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc('get_clinic_finance_reconciliation');
+  if (error)
+    return {
+      data: null as ClinicFinanceReconciliation | null,
+      error: { message: error.message, code: error.code },
+    };
+  return {
+    data: data as ClinicFinanceReconciliation,
+    error: null as SafeServiceError | null,
+  };
 }

@@ -46,6 +46,14 @@ function bearerToken(req: Request) {
   return auth.startsWith('Bearer ') ? auth.slice(7) : '';
 }
 
+function safeErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message);
+  }
+  return String(error);
+}
+
 function normalizeBillingType(value: unknown) {
   const normalized = String(value ?? 'PIX').toUpperCase();
   if (['PIX', 'BOLETO', 'CREDIT_CARD', 'UNDEFINED'].includes(normalized)) return normalized;
@@ -137,10 +145,11 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const asaasKey = Deno.env.get('ASAAS_API_KEY');
     const asaasBase = Deno.env.get('ASAAS_BASE_URL');
 
-    if (!supabaseUrl || !anonKey || !asaasKey || !asaasBase) {
+    if (!supabaseUrl || !anonKey || !serviceRoleKey || !asaasKey || !asaasBase) {
       console.error('[asaas-create-patient-subscription] missing environment configuration');
       return jsonResponse(500, {
         ok: false,
@@ -151,6 +160,9 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const {
@@ -187,7 +199,7 @@ Deno.serve(async (req) => {
     if (tenantResolution.error) return tenantResolution.error;
     const tenantId = tenantResolution.tenantId as string;
 
-    const { data: customer, error: customerError } = await supabase
+    const { data: customer, error: customerError } = await admin
       .from('patient_customers')
       .select('id, asaas_customer_id')
       .eq('tenant_id', tenantId)
@@ -241,7 +253,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: subscription, error: insertError } = await supabase
+    const { data: subscription, error: insertError } = await admin
       .from('patient_subscriptions')
       .insert({
         tenant_id: tenantId,
@@ -266,7 +278,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('[asaas-create-patient-subscription] unexpected_error', {
-      message: error instanceof Error ? error.message : String(error),
+      message: safeErrorMessage(error),
     });
 
     return jsonResponse(500, {

@@ -339,15 +339,32 @@ node scripts/supabase/test-billing-contract.mjs
 Billing contract scripts may call Asaas-related functions and can create
 provider-side customers, invoices, or subscriptions depending on configuration.
 
+Strict provider-success mode for an authorized Asaas sandbox:
+
+```bash
+REQUIRE_ASAAS_PROVIDER_SUCCESS=true \
+TEST_PATIENT_CPF_CNPJ=12345678909 \
+node scripts/supabase/test-billing-contract.mjs
+```
+
+Use a fresh sandbox/local `TEST_PATIENT_ID` with billing identity seeded before
+running strict mode. The script requires customer, invoice, and subscription to
+return 200, verifies safe `{ ok, data/error }` envelopes, verifies unauthenticated
+requests fail closed, and rejects provider IDs in browser response data.
+
 Local fixture test:
 
 ```bash
 node scripts/supabase/test-billing-fixtures.mjs
+node scripts/supabase/test-billing-reconciliation-local-smoke.mjs
 ```
 
 This fixture test validates event-to-status mapping, idempotency hash strategy,
 tenant resolution expectations, duplicated payload behavior, and invalid token
-handling without calling Asaas.
+handling without calling Asaas. The reconciliation smoke seeds deterministic
+local divergence scenarios, calls `get_clinic_finance_reconciliation()`, checks
+safe summary/divergence/event envelopes, and confirms unauthenticated access
+fails closed.
 
 ## CI Workflows
 

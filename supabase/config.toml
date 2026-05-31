@@ -395,6 +395,15 @@ D4SIGN_TOKEN_API = "env(D4SIGN_TOKEN_API)"
 D4SIGN_WEBHOOK_HMAC_SECRET = "env(D4SIGN_WEBHOOK_HMAC_SECRET)"
 D4SIGN_WEBHOOK_TOKEN = "env(D4SIGN_WEBHOOK_TOKEN)"
 
+[functions.asaas-create-patient-customer]
+verify_jwt = false
+
+[functions.asaas-create-patient-invoice]
+verify_jwt = false
+
+[functions.asaas-create-patient-subscription]
+verify_jwt = false
+
 [functions.webhook-asaas]
 verify_jwt = false
 

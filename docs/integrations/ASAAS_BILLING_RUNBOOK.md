@@ -179,6 +179,12 @@ Current local-safe contract:
 - `financial.write` is required before any provider request is attempted.
 - Request payloads validate patient id, amount, due date, cycle, and
   description before calling Asaas.
+- Direct browser writes to provider-owned billing tables remain blocked. After
+  JWT, tenant, membership, and permission checks pass, customer, invoice, and
+  subscription rows are persisted by the Edge Function with service-role.
+- Creating a new Asaas-ready customer requires `cpf_cnpj`/`cpfCnpj` in the Edge
+  Function body. The value is sent to Asaas, but the local database stores only
+  `cpf_cnpj_last4` in metadata, not the raw document number.
 - Provider errors are redacted to safe codes/messages; raw Asaas error bodies
   are not returned to the browser.
 - Browser responses return local IDs and safe links/status only. They do not
@@ -187,10 +193,29 @@ Current local-safe contract:
 - The real/sandbox `test-billing-contract.mjs` script asserts the safe envelope
   and rejects provider IDs in response data, but it must run only after explicit
   authorization because it can call Edge Functions that may call Asaas.
-- In the 2026-05-31 local validation pass, the script was not completed because
-  the local Edge Runtime did not expose `ASAAS_*` secrets and the repo `.env`
-  did not classify `ASAAS_BASE_URL` as sandbox. Treat that as a configuration
-  block, not a provider pass.
+- In the 2026-05-31 local validation pass, Asaas sandbox was classified before
+  the call, the Edge Runtime was restarted with values redacted, and
+  `REQUIRE_ASAAS_PROVIDER_SUCCESS=true node scripts/supabase/test-billing-contract.mjs`
+  passed with a fresh local patient plus dummy `TEST_PATIENT_CPF_CNPJ`. Customer,
+  invoice, and subscription all returned 200 through Edge Functions without
+  exposing provider IDs to the browser contract.
+
+## Reconciliation Contract
+
+`get_clinic_finance_reconciliation()` returns a safe clinic dashboard contract
+after `financial.read` authorization:
+
+- `summary`: divergence counts, failed webhook count, pending/overdue invoice
+  counts, unmatched payment count, and `lastCheckedAt`.
+- `divergences`: local invoice/payment inconsistencies such as amount mismatch,
+  paid invoice without paid payment, paid payment with unpaid invoice, overdue
+  invoice without overdue payment, orphan payment, and unresolved Asaas event.
+- `recentEvents`: recent Asaas event type/status/error summary for the active
+  tenant.
+
+The contract intentionally returns local IDs only and does not include
+`asaas_*_id`, wallet IDs, API keys, tokens, or raw provider payloads. It is
+consumed by `/clinic/financeiro`.
 
 `asaas-create-tenant-subaccount` follows the same safe-envelope pattern for
 tenant billing account creation: it resolves the active tenant from the
@@ -211,6 +236,18 @@ Contract test:
 node scripts/supabase/test-billing-contract.mjs
 ```
 
+Strict sandbox provider mode:
+
+```bash
+REQUIRE_ASAAS_PROVIDER_SUCCESS=true \
+TEST_PATIENT_CPF_CNPJ=12345678909 \
+node scripts/supabase/test-billing-contract.mjs
+```
+
+Use a fresh local/sandbox `TEST_PATIENT_ID` without an existing customer when
+you need to prove customer creation. The CPF/CNPJ above is dummy test data; do
+not use real patient documents in shared logs.
+
 Only run these commands when authorized. Billing tests may create provider-side
 customers, invoices, or subscriptions depending on configuration.
 
@@ -218,6 +255,7 @@ For local contract validation, prefer:
 
 ```bash
 node scripts/supabase/test-billing-fixtures.mjs
+node scripts/supabase/test-billing-reconciliation-local-smoke.mjs
 ```
 
 ## Security Notes

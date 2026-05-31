@@ -27,9 +27,22 @@ function safePhone(value: unknown) {
   return digits.length >= 10 ? digits : undefined;
 }
 
+function safeCpfCnpj(value: unknown) {
+  const digits = asString(value).replace(/\D/g, '');
+  return digits.length === 11 || digits.length === 14 ? digits : undefined;
+}
+
 function bearerToken(req: Request) {
   const auth = req.headers.get('Authorization') ?? '';
   return auth.startsWith('Bearer ') ? auth.slice(7) : '';
+}
+
+function safeErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message);
+  }
+  return String(error);
 }
 
 async function resolvePatientTenant(params: {
@@ -110,10 +123,11 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const asaasKey = Deno.env.get('ASAAS_API_KEY');
     const asaasBase = Deno.env.get('ASAAS_BASE_URL');
 
-    if (!supabaseUrl || !anonKey || !asaasKey || !asaasBase) {
+    if (!supabaseUrl || !anonKey || !serviceRoleKey || !asaasKey || !asaasBase) {
       console.error('[asaas-create-patient-customer] missing environment configuration');
       return jsonResponse(500, {
         ok: false,
@@ -124,6 +138,9 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const {
@@ -140,6 +157,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => null);
     const patientId = asString(body?.patient_id);
+    const cpfCnpj = safeCpfCnpj(body?.cpf_cnpj ?? body?.cpfCnpj);
     if (!patientId) {
       return jsonResponse(400, {
         ok: false,
@@ -152,7 +170,7 @@ Deno.serve(async (req) => {
     if (tenantResolution.error) return tenantResolution.error;
     const tenantId = tenantResolution.tenantId as string;
 
-    const { data: existingCustomer, error: existingError } = await supabase
+    const { data: existingCustomer, error: existingError } = await admin
       .from('patient_customers')
       .select('id, status')
       .eq('tenant_id', tenantId)
@@ -165,6 +183,17 @@ Deno.serve(async (req) => {
         ok: true,
         data: { id: existingCustomer.id, status: existingCustomer.status ?? 'active' },
         meta: { tenantId, timestamp, reused: true },
+      });
+    }
+
+    if (!cpfCnpj) {
+      return jsonResponse(422, {
+        ok: false,
+        error: {
+          code: 'missing_patient_billing_document',
+          message: 'CPF/CNPJ is required to create an Asaas-ready billing customer.',
+        },
+        meta: { tenantId, timestamp },
       });
     }
 
@@ -195,6 +224,7 @@ Deno.serve(async (req) => {
         name: patientName,
         email: asString(pii?.email) || undefined,
         mobilePhone: safePhone(pii?.phone),
+        cpfCnpj,
         externalReference: patientId,
       }),
     });
@@ -220,7 +250,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: customer, error: upsertError } = await supabase
+    const { data: customer, error: upsertError } = await admin
       .from('patient_customers')
       .upsert(
         {
@@ -228,7 +258,7 @@ Deno.serve(async (req) => {
           patient_id: patientId,
           asaas_customer_id: providerCustomerId,
           status: 'active',
-          metadata: { provider: 'asaas' },
+          metadata: { provider: 'asaas', cpf_cnpj_last4: cpfCnpj.slice(-4) },
         },
         { onConflict: 'tenant_id,patient_id' }
       )
@@ -244,7 +274,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('[asaas-create-patient-customer] unexpected_error', {
-      message: error instanceof Error ? error.message : String(error),
+      message: safeErrorMessage(error),
     });
 
     return jsonResponse(500, {
