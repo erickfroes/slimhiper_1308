@@ -382,8 +382,17 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+[edge_runtime.secrets]
+ASAAS_API_KEY = "env(ASAAS_API_KEY)"
+ASAAS_BASE_URL = "env(ASAAS_BASE_URL)"
+ASAAS_WEBHOOK_TOKEN = "env(ASAAS_WEBHOOK_TOKEN)"
+D4SIGN_BASE_URL = "env(D4SIGN_BASE_URL)"
+D4SIGN_CRYPT_KEY = "env(D4SIGN_CRYPT_KEY)"
+D4SIGN_FOLDER_UUID = "env(D4SIGN_FOLDER_UUID)"
+D4SIGN_SAFE_UUID = "env(D4SIGN_SAFE_UUID)"
+D4SIGN_TOKEN_API = "env(D4SIGN_TOKEN_API)"
+D4SIGN_WEBHOOK_HMAC_SECRET = "env(D4SIGN_WEBHOOK_HMAC_SECRET)"
+D4SIGN_WEBHOOK_TOKEN = "env(D4SIGN_WEBHOOK_TOKEN)"
 
 [functions.webhook-asaas]
 verify_jwt = false

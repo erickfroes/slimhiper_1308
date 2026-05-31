@@ -8,7 +8,6 @@ import type {
   PatientNutritionPlanSummary,
 } from '@/domain/types';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
-import { getPatient360 } from '@/services/mockApi';
 
 interface SafeServiceError {
   message: string;
@@ -27,6 +26,11 @@ type EdgeResponseEnvelope<T> = {
 
 const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 const getSupabaseClient = () => createBrowserSupabaseClient();
+
+async function getMockPatient360(patientId: string) {
+  const { getPatient360 } = await import('@/services/mockApi');
+  return getPatient360(patientId);
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -221,7 +225,7 @@ export async function getPatientNutritionPlan(
 
   try {
     if (isMockEnabled()) {
-      const summary = await getPatient360(patientId);
+      const summary = await getMockPatient360(patientId);
       return { data: summary?.nutritionPlan ?? null, error: null };
     }
 

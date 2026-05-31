@@ -1,6 +1,5 @@
 import type { PatientDocument360Item, PatientDocumentSignatureStatus } from '@/domain/types';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
-import { getPatientDocuments360 } from '@/services/mockApi';
 
 interface SafeServiceError {
   message: string;
@@ -26,6 +25,11 @@ const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 const getSupabaseClient = () => createBrowserSupabaseClient();
 const safeError = (error: unknown, fallback: string): SafeServiceError =>
   error instanceof Error ? { message: error.message || fallback } : { message: fallback };
+
+async function getMockPatientDocuments360(patientId: string) {
+  const { getPatientDocuments360 } = await import('@/services/mockApi');
+  return getPatientDocuments360(patientId);
+}
 
 async function invokeSafe<T>(
   fn: string,
@@ -61,7 +65,7 @@ export async function getPatientDocuments(
   patientId: string
 ): Promise<{ data: PatientDocument360Item[]; error: SafeServiceError | null }> {
   try {
-    if (isMockEnabled()) return { data: await getPatientDocuments360(patientId), error: null };
+    if (isMockEnabled()) return { data: await getMockPatientDocuments360(patientId), error: null };
     const res = await invokeSafe<{ documents: PatientDocument360Item[] }>('patient-documents', {
       patient_id: patientId,
     });
@@ -79,12 +83,13 @@ export async function getPatientDocuments(
 
 export async function generatePatientDocument(
   patientId: string,
-  templateId: string
+  templateId: string,
+  variables: Record<string, unknown> = {}
 ): Promise<{ data: GeneratedDocumentResult | null; error: SafeServiceError | null }> {
   try {
     const res = await invokeSafe<{ generatedDocument: { id: string; status: string } }>(
       'generate-document',
-      { patient_id: patientId, template_id: templateId }
+      { patient_id: patientId, template_id: templateId, variables }
     );
     if (res.error) return { data: null, error: res.error };
     return {

@@ -1,6 +1,5 @@
 import type { PatientChatMessage, PatientChatSummary, PatientChatThread } from '@/domain/types';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
-import { getPatient360 } from '@/services/mockApi';
 
 export interface SafeServiceError {
   message: string;
@@ -36,6 +35,11 @@ type PatientTenantRow = {
 
 const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 const getSupabaseClient = () => createBrowserSupabaseClient();
+
+async function getMockPatient360(patientId: string) {
+  const { getPatient360 } = await import('@/services/mockApi');
+  return getPatient360(patientId);
+}
 
 function safeError(error: unknown, fallback: string): SafeServiceError {
   if (error instanceof Error) return { message: error.message || fallback };
@@ -199,7 +203,7 @@ export async function getPatientChat(
 
   try {
     if (isMockEnabled()) {
-      const patient = await getPatient360(patientId);
+      const patient = await getMockPatient360(patientId);
       return { data: patient?.chat ?? null, error: null };
     }
 
@@ -218,7 +222,7 @@ export async function openPatientChatThread(
 
   try {
     if (isMockEnabled()) {
-      const patient = await getPatient360(patientId);
+      const patient = await getMockPatient360(patientId);
       return { data: patient?.chat ?? null, error: null };
     }
 
@@ -287,7 +291,7 @@ export async function sendPatientChatMessage(
 
   try {
     if (isMockEnabled()) {
-      const patient = await getPatient360(patientId);
+      const patient = await getMockPatient360(patientId);
       if (!patient?.chat) return { data: null, error: null };
       return {
         data: {
@@ -380,7 +384,7 @@ export async function markPatientChatAsAnswered(
 
   try {
     if (isMockEnabled()) {
-      const patient = await getPatient360(patientId);
+      const patient = await getMockPatient360(patientId);
       return {
         data: patient?.chat ? { ...patient.chat, unreadCount: 0 } : null,
         error: null,

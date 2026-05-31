@@ -30,6 +30,8 @@ type TimelineEventType =
   | 'anamnese_preenchida'
   | 'soap_atualizado'
   | 'medida_registrada'
+  | 'exame_solicitado'
+  | 'exame_resultado_recebido'
   | 'plano_alimentar_publicado'
   | 'prescricao_emitida'
   | 'documento_gerado'
@@ -71,6 +73,8 @@ const VALID_EVENT_TYPES: Set<TimelineEventType> = new Set([
   'anamnese_preenchida',
   'soap_atualizado',
   'medida_registrada',
+  'exame_solicitado',
+  'exame_resultado_recebido',
   'plano_alimentar_publicado',
   'prescricao_emitida',
   'documento_gerado',

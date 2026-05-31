@@ -11,7 +11,6 @@ import type {
   TimelineEventType,
 } from '@/domain/types';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
-import { getPatient360 } from '@/services/mockApi';
 
 export interface PatientTimelineFilters {
   category?: TimelineEventCategory;
@@ -65,6 +64,11 @@ function unwrapEdgeResponse<T>(response: unknown): {
 
 function isMockEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+}
+
+async function getMockPatient360(patientId: string) {
+  const { getPatient360 } = await import('@/services/mockApi');
+  return getPatient360(patientId);
 }
 
 function normalizeTimelineEvent(event: unknown): PatientTimelineEvent | null {
@@ -547,7 +551,7 @@ export async function getPatient360Summary(
 ): Promise<{ data: Patient360Summary | null; error: SafeServiceError | null }> {
   try {
     if (isMockEnabled()) {
-      const summary = await getPatient360(patientId);
+      const summary = await getMockPatient360(patientId);
       return { data: summary, error: null };
     }
 
@@ -585,7 +589,7 @@ export async function getPatientTimeline(
 ): Promise<{ data: PatientTimelineEvent[]; error: SafeServiceError | null }> {
   try {
     if (isMockEnabled()) {
-      const summary = await getPatient360(patientId);
+      const summary = await getMockPatient360(patientId);
       const events = summary?.recentTimeline ?? [];
       return { data: applyTimelineFilters(events, filters), error: null };
     }

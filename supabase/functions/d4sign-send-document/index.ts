@@ -15,6 +15,17 @@ type SendDocumentRequest = {
   signers?: SignerInput[];
 };
 
+type GeneratedDocumentRecord = {
+  id: string;
+  tenant_id: string;
+  patient_id: string;
+  name: string;
+  category: string | null;
+  status: string | null;
+  storage_bucket: string;
+  storage_path: string;
+};
+
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void;
   env: {
@@ -28,6 +39,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+const allowedBuckets = new Set([
+  'patient-documents',
+  'signed-documents',
+  'clinical-attachments',
+  'evidence-packages',
+]);
 
 function jsonResponse(status: number, payload: Json) {
   return new Response(JSON.stringify(payload), { status, headers: corsHeaders });
@@ -67,6 +85,59 @@ function signerFromPatientPii(value: Record<string, unknown> | null | undefined)
   ]);
 }
 
+function isValidStoragePath(path: string, tenantId: string, patientId: string, documentId: string) {
+  const parts = path.split('/');
+  return (
+    parts.length === 4 &&
+    parts[0] === tenantId &&
+    parts[1] === patientId &&
+    parts[2] === documentId &&
+    parts[3].length > 0
+  );
+}
+
+function isProviderSupportedDocument(path: string) {
+  return /\.(pdf|doc|docx|jpg|jpeg|png|bmp)$/i.test(path);
+}
+
+function sanitizeFileName(value: string) {
+  const name = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return name || 'documento-slimhiper';
+}
+
+function d4signUrl(baseUrl: string, path: string, params: Record<string, string>) {
+  const url = new URL(`${baseUrl.replace(/\/$/, '')}${path}`);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+async function markDocumentFailed(
+  supabase: ReturnType<typeof createClient>,
+  generatedDocument: GeneratedDocumentRecord
+) {
+  await supabase
+    .from('generated_documents')
+    .update({ status: 'failed' })
+    .eq('id', generatedDocument.id)
+    .eq('tenant_id', generatedDocument.tenant_id)
+    .eq('patient_id', generatedDocument.patient_id);
+}
+
+function providerErrorResponse(timestamp: string, providerStep: string, providerStatus: number) {
+  return jsonResponse(502, {
+    ok: false,
+    error: { code: 'provider_error', message: 'Unable to send document to D4Sign.' },
+    meta: { timestamp, provider_step: providerStep, provider_status: providerStatus },
+  });
+}
+
 Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
 
@@ -93,8 +164,9 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    if (!supabaseUrl || !anonKey) {
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       return jsonResponse(500, {
         ok: false,
         error: { code: 'server_misconfigured', message: 'Server configuration error.' },
@@ -104,6 +176,9 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -196,12 +271,12 @@ Deno.serve(async (req) => {
       signerSource = 'patient_pii';
     }
 
-    if (signers.length === 0) {
+    if (signers.length === 0 || signers.some((signer) => !signer.email)) {
       return jsonResponse(422, {
         ok: false,
         error: {
           code: 'missing_patient_signer',
-          message: 'Patient needs a real name and email or phone before D4Sign can be requested.',
+          message: 'Patient needs a real name and email before D4Sign can be requested.',
         },
         meta: { timestamp, tenantId, patient_id: patientId },
       });
@@ -209,7 +284,7 @@ Deno.serve(async (req) => {
 
     const { data: generatedDocument, error: generatedDocumentError } = await supabase
       .from('generated_documents')
-      .select('id, tenant_id, patient_id, name, category, status')
+      .select('id, tenant_id, patient_id, name, category, status, storage_bucket, storage_path')
       .eq('id', generatedDocumentId)
       .eq('tenant_id', tenantId)
       .eq('patient_id', patientId)
@@ -224,7 +299,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (isPrescriptionCategory(generatedDocument.category ?? '')) {
+    const documentRecord = generatedDocument as GeneratedDocumentRecord;
+
+    if (isPrescriptionCategory(documentRecord.category ?? '')) {
       return jsonResponse(422, {
         ok: false,
         error: {
@@ -235,12 +312,39 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (!allowedBuckets.has(documentRecord.storage_bucket)) {
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'invalid_storage_bucket', message: 'Document storage bucket is invalid.' },
+        meta: { timestamp },
+      });
+    }
+
+    if (!isValidStoragePath(documentRecord.storage_path, tenantId, patientId, documentRecord.id)) {
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'invalid_storage_path', message: 'Document storage path is invalid.' },
+        meta: { timestamp },
+      });
+    }
+
+    if (!isProviderSupportedDocument(documentRecord.storage_path)) {
+      return jsonResponse(422, {
+        ok: false,
+        error: {
+          code: 'unsupported_document_format',
+          message: 'D4Sign accepts PDF, DOC, DOCX, JPG, PNG or BMP documents only.',
+        },
+        meta: { timestamp },
+      });
+    }
+
     const { data: existingSignatureRequest, error: existingSignatureRequestError } = await supabase
       .from('signature_requests')
       .select('id, status')
       .eq('tenant_id', tenantId)
       .eq('patient_id', patientId)
-      .eq('generated_document_id', generatedDocument.id)
+      .eq('generated_document_id', documentRecord.id)
       .in('status', ['sent', 'viewed', 'pending'])
       .limit(1)
       .maybeSingle();
@@ -257,11 +361,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const d4signTokenApi = Deno.env.get('D4SIGN_TOKEN_API');
-    const d4signCryptKey = Deno.env.get('D4SIGN_CRYPT_KEY');
-    const d4signBaseUrl = Deno.env.get('D4SIGN_BASE_URL');
+    const d4signTokenApi = Deno.env.get('D4SIGN_TOKEN_API')?.trim();
+    const d4signCryptKey = Deno.env.get('D4SIGN_CRYPT_KEY')?.trim();
+    const d4signBaseUrl = Deno.env.get('D4SIGN_BASE_URL')?.trim();
+    const d4signSafeUuid = Deno.env.get('D4SIGN_SAFE_UUID')?.trim();
+    const d4signFolderUuid = Deno.env.get('D4SIGN_FOLDER_UUID')?.trim();
 
-    if (!d4signTokenApi || !d4signCryptKey || !d4signBaseUrl) {
+    if (!d4signTokenApi || !d4signCryptKey || !d4signBaseUrl || !d4signSafeUuid) {
       return jsonResponse(500, {
         ok: false,
         error: { code: 'server_misconfigured', message: 'D4Sign environment is not configured.' },
@@ -269,48 +375,116 @@ Deno.serve(async (req) => {
       });
     }
 
-    const d4signPayload = {
-      generated_document_id: generatedDocument.id,
-      name: generatedDocument.name,
-      signers,
-    };
-
-    const providerResponse = await fetch(`${d4signBaseUrl.replace(/\/$/, '')}/documents`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${d4signTokenApi}`,
-        'X-Crypt-Key': d4signCryptKey,
-      },
-      body: JSON.stringify(d4signPayload),
-    });
-
-    if (!providerResponse.ok) {
-      await providerResponse.text();
-      return jsonResponse(502, {
+    const { data: documentBlob, error: downloadError } = await admin.storage
+      .from(documentRecord.storage_bucket)
+      .download(documentRecord.storage_path);
+    if (downloadError) throw downloadError;
+    if (!documentBlob) {
+      return jsonResponse(500, {
         ok: false,
-        error: { code: 'provider_error', message: 'Unable to send document to D4Sign.' },
-        // Intentionally omit provider raw payload to avoid leaking sensitive data.
-        meta: { timestamp, provider_status: providerResponse.status },
+        error: { code: 'document_storage_unavailable', message: 'Generated file was not found.' },
+        meta: { timestamp },
       });
     }
 
-    const providerData = (await providerResponse.json().catch(() => ({}))) as Record<
-      string,
-      unknown
-    >;
-    const providerDocumentId = safeString(
-      providerData.document_id ?? providerData.uuid ?? providerData.id
+    const formData = new FormData();
+    formData.append('file', documentBlob, `${sanitizeFileName(documentRecord.name)}.pdf`);
+    formData.append('workflow', '2');
+    if (d4signFolderUuid) formData.append('uuid_folder', d4signFolderUuid);
+
+    const uploadResponse = await fetch(
+      d4signUrl(d4signBaseUrl, `/documents/${d4signSafeUuid}/upload`, {
+        cryptKey: d4signCryptKey,
+      }),
+      {
+        method: 'POST',
+        headers: { tokenAPI: d4signTokenApi },
+        body: formData,
+      }
     );
+
+    if (!uploadResponse.ok) {
+      await markDocumentFailed(supabase, documentRecord);
+      await uploadResponse.text();
+      return providerErrorResponse(timestamp, 'upload', uploadResponse.status);
+    }
+
+    const uploadData = (await uploadResponse.json().catch(() => ({}))) as Record<string, unknown>;
+    const providerDocumentId = safeString(uploadData.uuid ?? uploadData.uuidDoc ?? uploadData.id);
+    if (!providerDocumentId) {
+      await markDocumentFailed(supabase, documentRecord);
+      return jsonResponse(502, {
+        ok: false,
+        error: { code: 'provider_contract_error', message: 'D4Sign did not return document id.' },
+        meta: { timestamp, provider_step: 'upload' },
+      });
+    }
+
+    const signerPayload = {
+      signers: signers.map((signer) => ({
+        email: signer.email,
+        act: '1',
+        foreign: '0',
+        certificadoicpbr: '0',
+        assinatura_presencial: '0',
+        docauth: '0',
+        docauthandselfie: '0',
+        embed_methodauth: 'email',
+        embed_smsnumber: '',
+        upload_allow: '0',
+        skipemail: '0',
+      })),
+    };
+
+    const signerResponse = await fetch(
+      d4signUrl(d4signBaseUrl, `/documents/${providerDocumentId}/createlist`, {
+        tokenAPI: d4signTokenApi,
+        cryptKey: d4signCryptKey,
+      }),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signerPayload),
+      }
+    );
+
+    if (!signerResponse.ok) {
+      await markDocumentFailed(supabase, documentRecord);
+      await signerResponse.text();
+      return providerErrorResponse(timestamp, 'create_signers', signerResponse.status);
+    }
+
+    const sendResponse = await fetch(
+      d4signUrl(d4signBaseUrl, `/documents/${providerDocumentId}/sendtosigner`, {
+        tokenAPI: d4signTokenApi,
+        cryptKey: d4signCryptKey,
+      }),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Documento disponivel para assinatura.',
+          skip_email: '0',
+          workflow: '0',
+          tokenAPI: d4signTokenApi,
+        }),
+      }
+    );
+
+    if (!sendResponse.ok) {
+      await markDocumentFailed(supabase, documentRecord);
+      await sendResponse.text();
+      return providerErrorResponse(timestamp, 'send_to_signer', sendResponse.status);
+    }
 
     const { data: signatureRequest, error: signatureRequestError } = await supabase
       .from('signature_requests')
       .insert({
         tenant_id: tenantId,
         patient_id: patientId,
-        generated_document_id: generatedDocument.id,
+        generated_document_id: documentRecord.id,
         provider: 'd4sign',
-        provider_document_id: providerDocumentId || null,
+        provider_document_id: providerDocumentId,
         status: 'sent',
         sent_at: timestamp,
       })
@@ -323,7 +497,7 @@ Deno.serve(async (req) => {
       tenant_id: tenantId,
       signature_request_id: signatureRequest.id,
       name: signer.name,
-      email: signer.email || null,
+      email: signer.email,
       phone: signer.phone || null,
       role: signer.role,
       status: 'pending',
@@ -337,7 +511,7 @@ Deno.serve(async (req) => {
     const { error: updateDocumentError } = await supabase
       .from('generated_documents')
       .update({ status: 'sent_for_signature' })
-      .eq('id', generatedDocument.id)
+      .eq('id', documentRecord.id)
       .eq('tenant_id', tenantId)
       .eq('patient_id', patientId);
 
@@ -349,14 +523,14 @@ Deno.serve(async (req) => {
       event_type: 'documento_assinado',
       category: 'documents',
       status: 'pending',
-      title: `Documento enviado para assinatura: ${generatedDocument.name}`,
+      title: `Documento enviado para assinatura: ${documentRecord.name}`,
       description: 'Documento enviado para assinatura digital via D4Sign.',
-      actor_name: authData.user.email ?? 'Usuário do sistema',
+      actor_name: authData.user.email ?? 'Usuario do sistema',
       status_label: 'Enviado',
       action_label: 'Acompanhar assinatura',
       details_href: `/paciente-360?patient=${patientId}&tab=documentos`,
       payload: {
-        generated_document_id: generatedDocument.id,
+        generated_document_id: documentRecord.id,
         signature_request_id: signatureRequest.id,
         provider: 'd4sign',
         signer_count: signerRows.length,

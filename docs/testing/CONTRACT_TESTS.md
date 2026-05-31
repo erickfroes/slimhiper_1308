@@ -142,6 +142,7 @@ Manual checklist:
 Scripted smoke checks:
 
 - `scripts/supabase/test-patient360-contract.mjs`
+- `scripts/supabase/test-patient360-local-real-smoke.mjs`
 
 Local fixture mode does not require Supabase credentials:
 
@@ -216,11 +217,34 @@ SUPABASE_URL=https://<project-ref>.supabase.co TOKEN_WITH_PATIENTS_READ=<access_
 
 If optional vars are not provided, optional checks are reported as skipped.
 
+Local all-tab authenticated smoke:
+
+```bash
+node scripts/supabase/test-patient360-local-real-smoke.mjs
+```
+
+Required local/sandbox variables:
+
+```bash
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=<local anon key>
+SUPABASE_SERVICE_ROLE_KEY=<local service role JWT>
+SUPABASE_BOOTSTRAP_PASSWORD=<local demo password>
+```
+
+This script refuses non-local targets unless
+`ALLOW_REMOTE_PATIENT360_SMOKE=true`. It seeds deterministic demo data, signs in
+staff and forbidden users through the anon key, runs the real summary/timeline
+contract with forbidden and cross-tenant checks, and validates the MVP Patient
+360 tab contracts for documents, nutrition, reports, consultas, pacotes,
+prescricoes, financeiro, chat, and clinical timeline lab events.
+
 ## Documents Contract Test
 
-Script:
+Scripts:
 
 - `scripts/supabase/test-documents-contract.mjs`
+- `scripts/supabase/test-documents-phase4-local-smoke.mjs`
 
 Typical setup:
 
@@ -249,6 +273,40 @@ node scripts/supabase/test-documents-contract.mjs
 
 Only run when authorized. The script may generate documents, request signed
 URLs, and invoke D4Sign-related functions.
+
+Local Phase 4 smoke:
+
+```bash
+node scripts/supabase/test-documents-phase4-local-smoke.mjs
+```
+
+Required local/sandbox variables:
+
+```bash
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=<local anon key>
+SUPABASE_SERVICE_ROLE_KEY=<local service role JWT>
+SUPABASE_BOOTSTRAP_PASSWORD=<local demo password>
+D4SIGN_WEBHOOK_HMAC_SECRET=<webhook hmac secret>
+```
+
+This script refuses non-local targets unless
+`ALLOW_REMOTE_DOCUMENTS_PHASE4_SMOKE=true`. It seeds deterministic demo data,
+confirms active-template generation and protected variable gating, confirms PDF
+storage, confirms patient/guardian released-document read scope, confirms
+cross-tenant denial, confirms `document-signed-url`, and posts a local D4Sign
+webhook with HMAC to validate idempotency, audit rows, document status, signer
+status, and timeline.
+
+Optional real D4Sign sandbox send:
+
+```bash
+RUN_D4SIGN_SANDBOX_SEND=true node scripts/supabase/test-documents-phase4-local-smoke.mjs
+```
+
+Only enable this after configuring `D4SIGN_TOKEN_API`, `D4SIGN_CRYPT_KEY`,
+`D4SIGN_BASE_URL`, and `D4SIGN_SAFE_UUID` in the trusted Edge Function
+environment. The script does not print provider secrets or signed URLs.
 
 ## D4Sign Fixture Test
 
