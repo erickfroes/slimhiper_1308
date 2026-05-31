@@ -7,6 +7,7 @@ type MiddlewareUserContext = {
   canAccessClinicWorkspace: boolean;
   hasActiveTenantMembership: boolean;
   canAccessPatientPortal: boolean;
+  sessionError: boolean;
 };
 
 function getTargetRoute(context: MiddlewareUserContext) {
@@ -58,6 +59,7 @@ export async function middleware(request: NextRequest) {
       canAccessClinicWorkspace: appSession?.canAccessClinicWorkspace() ?? false,
       hasActiveTenantMembership,
       canAccessPatientPortal: false,
+      sessionError: false,
     };
   } catch {
     context = {
@@ -65,6 +67,7 @@ export async function middleware(request: NextRequest) {
       canAccessClinicWorkspace: false,
       hasActiveTenantMembership: false,
       canAccessPatientPortal: false,
+      sessionError: true,
     };
   }
 
@@ -80,6 +83,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/clinic') &&
     !(context.canAccessClinicWorkspace && context.hasActiveTenantMembership)
   ) {
+    if (context.sessionError || context.hasActiveTenantMembership) {
+      return response;
+    }
     return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
   }
 

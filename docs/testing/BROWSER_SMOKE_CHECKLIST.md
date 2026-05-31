@@ -31,6 +31,13 @@ para o resumo do PR.
 - `blocked`: falta sessao, seed, permissao ou ambiente autorizado.
 - `skipped`: fora do escopo do PR, com justificativa registrada.
 
+## Limites Conhecidos
+
+- Se o in-app Browser nao conseguir digitar por falta do clipboard virtual,
+  marcar interacoes de login/formulario como `blocked` e complementar com
+  smoke HTTP/RPC autenticado local. Nao marcar a interacao visual como `pass`
+  ate ela ser executada no Browser.
+
 ## Rotas Clinicas
 
 | Rota | Perfil minimo | Validar |
@@ -44,7 +51,7 @@ para o resumo do PR.
 | `/clinic/documents` | `documents.read` | Templates, gerar documento, signed URL, erro de permissao e falha provider sem payload sensivel. |
 | `/clinic/financeiro` | `financial.read` | Resumo, cobrancas, inadimplencia, conciliacao, loading/error/forbidden. |
 | `/clinic/programs` | `packages.read` | Lista, empty/error, builder, publicar/enrollment quando habilitado. |
-| `/clinic/settings` | tenant admin | Salvar unidade/equipe/roles/integracoes, rollback e segredo nunca exibido. |
+| `/clinic/settings` | tenant admin | Snapshot real, salvar unidade, salvar preferencias/integracoes sem secrets, equipe/roles reais em leitura; convite e alteracao de role ficam blocked ate mutators auditados. |
 
 ## Rotas Admin E Portal
 

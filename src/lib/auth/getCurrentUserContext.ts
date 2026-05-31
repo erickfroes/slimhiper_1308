@@ -2,10 +2,15 @@ import { getCurrentAppSession, type AppSession } from '@/services/session/getCur
 
 type AppSessionWithoutComputedBooleans = Omit<
   AppSession,
+  | 'isPlatformAdmin'
+  | 'isPlatformSupport'
+  | 'isClinicUser'
+  | 'isPatient'
   | 'canAccessPlatformAdmin'
   | 'canAccessClinicWorkspace'
   | 'canViewFinancial'
   | 'canViewMedicalPrescriptions'
+  | 'canManageTenantUsers'
 >;
 
 export type UserContext = AppSessionWithoutComputedBooleans & {
@@ -24,10 +29,15 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
 
   const memberships = session.tenantMemberships;
   const {
+    isPlatformAdmin: _isPlatformAdmin,
+    isPlatformSupport: _isPlatformSupport,
+    isClinicUser: _isClinicUser,
+    isPatient: _isPatient,
     canAccessPlatformAdmin,
     canAccessClinicWorkspace,
     canViewFinancial,
     canViewMedicalPrescriptions,
+    canManageTenantUsers: _canManageTenantUsers,
     ...rest
   } = session;
 

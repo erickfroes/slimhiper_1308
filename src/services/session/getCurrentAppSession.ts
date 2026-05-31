@@ -72,6 +72,10 @@ export async function getCurrentAppSession(
   const membershipRows = membershipResult.data;
 
   const profile = asRecord(profileRow);
+  if (profileRow && profile.is_active === false) {
+    return null;
+  }
+
   const platformRole =
     normalizeString(profile.platform_role) ?? normalizeString(user.app_metadata?.role);
   const fullName = normalizeString(profile.full_name);

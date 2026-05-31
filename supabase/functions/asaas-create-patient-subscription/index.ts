@@ -1,19 +1,278 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void;
-  env: {
-    get: (key: string) => string | undefined;
-  };
+  env: { get: (key: string) => string | undefined };
 };
-const h={'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS'};
-const j=(s:number,p:Record<string,unknown>)=>new Response(JSON.stringify(p),{status:s,headers:h});
-Deno.serve(async(req)=>{if(req.method==='OPTIONS')return new Response('ok',{headers:h});if(req.method!=='POST')return j(405,{ok:false});
-const t=(req.headers.get('Authorization')||'').replace('Bearer ',''); if(!t) return j(401,{ok:false}); const sb=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_ANON_KEY')!,{global:{headers:{Authorization:`Bearer ${t}`}}});
-const u=(await sb.auth.getUser()).data.user; if(!u) return j(401,{ok:false}); const m=await sb.from('tenant_memberships').select('tenant_id').eq('user_id',u.id).eq('status','active').limit(1).single(); if(m.error)return j(403,{ok:false}); const tenantId=m.data.tenant_id;
-if((await sb.rpc('has_permission',{p_tenant_id:tenantId,p_permission:'financial.write'})).data!==true) return j(403,{ok:false}); const b=await req.json();
-const c=await sb.from('patient_customers').select('id,asaas_customer_id').eq('tenant_id',tenantId).eq('patient_id',b.patient_id).single(); if(c.error) return j(404,{ok:false});
-const asaas=await fetch(`${Deno.env.get('ASAAS_BASE_URL')||'https://api.asaas.com/v3'}/subscriptions`,{method:'POST',headers:{'Content-Type':'application/json',access_token:Deno.env.get('ASAAS_API_KEY')!},body:JSON.stringify({customer:c.data.asaas_customer_id,billingType:b.billing_type||'PIX',value:(b.amount_cents||0)/100,nextDueDate:b.next_due_date,cycle:b.cycle||'MONTHLY',description:b.description,externalReference:b.patient_id})});
-if(!asaas.ok) return j(502,{ok:false,error:'asaas_error'}); const d=await asaas.json();
-await sb.from('patient_subscriptions').insert({tenant_id:tenantId,patient_id:b.patient_id,patient_customer_id:c.data.id,asaas_subscription_id:d.id,status:(d.status||'ACTIVE').toLowerCase(),cycle:(b.cycle||'monthly').toLowerCase(),amount_cents:b.amount_cents,next_due_date:b.next_due_date,metadata:{description:b.description}});
-return j(200,{ok:true,data:{asaas_subscription_id:d.id,status:d.status}});
+
+type Json = Record<string, unknown>;
+
+const corsHeaders = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+const cycleMap: Record<string, { local: string; provider: string }> = {
+  weekly: { local: 'weekly', provider: 'WEEKLY' },
+  biweekly: { local: 'biweekly', provider: 'BIWEEKLY' },
+  monthly: { local: 'monthly', provider: 'MONTHLY' },
+  quarterly: { local: 'quarterly', provider: 'QUARTERLY' },
+  yearly: { local: 'yearly', provider: 'YEARLY' },
+};
+
+function jsonResponse(status: number, payload: Json) {
+  return new Response(JSON.stringify(payload), { status, headers: corsHeaders });
+}
+
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function asPositiveInteger(value: unknown): number | null {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
+function isDateInput(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime());
+}
+
+function bearerToken(req: Request) {
+  const auth = req.headers.get('Authorization') ?? '';
+  return auth.startsWith('Bearer ') ? auth.slice(7) : '';
+}
+
+function normalizeBillingType(value: unknown) {
+  const normalized = String(value ?? 'PIX').toUpperCase();
+  if (['PIX', 'BOLETO', 'CREDIT_CARD', 'UNDEFINED'].includes(normalized)) return normalized;
+  return 'PIX';
+}
+
+function normalizeSubscriptionStatus(value: unknown) {
+  const normalized = String(value ?? '').toLowerCase();
+  if (['active', 'ativo'].includes(normalized)) return 'active';
+  if (['paused', 'pause'].includes(normalized)) return 'paused';
+  if (['cancelled', 'canceled', 'inactive', 'expired'].includes(normalized)) return 'canceled';
+  return 'active';
+}
+
+async function resolvePatientTenant(params: {
+  supabase: ReturnType<typeof createClient>;
+  userId: string;
+  patientId: string;
+}) {
+  const { supabase, userId, patientId } = params;
+  const { data: patient, error: patientError } = await supabase
+    .from('patients')
+    .select('id, tenant_id')
+    .eq('id', patientId)
+    .maybeSingle();
+
+  if (patientError) throw patientError;
+  if (!patient) return { error: jsonResponse(404, { ok: false, error: { code: 'not_found' } }) };
+
+  const tenantId = String(patient.tenant_id ?? '');
+  const { data: membership, error: membershipError } = await supabase
+    .from('tenant_memberships')
+    .select('tenant_id')
+    .eq('tenant_id', tenantId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (membershipError) throw membershipError;
+  if (!membership) {
+    return {
+      error: jsonResponse(403, {
+        ok: false,
+        error: { code: 'forbidden', message: 'No active tenant membership.' },
+      }),
+    };
+  }
+
+  const { data: canWrite, error: permissionError } = await supabase.rpc('has_permission', {
+    p_tenant_id: tenantId,
+    p_permission: 'financial.write',
+  });
+
+  if (permissionError) throw permissionError;
+  if (canWrite !== true) {
+    return {
+      error: jsonResponse(403, {
+        ok: false,
+        error: { code: 'forbidden', message: 'Missing financial.write permission.' },
+      }),
+    };
+  }
+
+  return { tenantId };
+}
+
+Deno.serve(async (req) => {
+  const timestamp = new Date().toISOString();
+
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  if (req.method !== 'POST') {
+    return jsonResponse(405, {
+      ok: false,
+      error: { code: 'method_not_allowed', message: 'Only POST is allowed.' },
+      meta: { timestamp },
+    });
+  }
+
+  try {
+    const token = bearerToken(req);
+    if (!token) {
+      return jsonResponse(401, {
+        ok: false,
+        error: { code: 'unauthorized', message: 'Missing bearer token.' },
+        meta: { timestamp },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const asaasKey = Deno.env.get('ASAAS_API_KEY');
+    const asaasBase = Deno.env.get('ASAAS_BASE_URL');
+
+    if (!supabaseUrl || !anonKey || !asaasKey || !asaasBase) {
+      console.error('[asaas-create-patient-subscription] missing environment configuration');
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'server_misconfigured', message: 'Billing provider is not configured.' },
+        meta: { timestamp },
+      });
+    }
+
+    const supabase = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return jsonResponse(401, {
+        ok: false,
+        error: { code: 'unauthorized', message: 'Invalid or expired token.' },
+        meta: { timestamp },
+      });
+    }
+
+    const body = await req.json().catch(() => null);
+    const patientId = asString(body?.patient_id);
+    const amountCents = asPositiveInteger(body?.amount_cents);
+    const nextDueDate = asString(body?.next_due_date);
+    const description = asString(body?.description, 'Assinatura SlimHiper').slice(0, 240);
+    const cycle = cycleMap[String(body?.cycle ?? 'monthly').toLowerCase()] ?? cycleMap.monthly;
+
+    if (!patientId || !amountCents || !nextDueDate || !isDateInput(nextDueDate)) {
+      return jsonResponse(400, {
+        ok: false,
+        error: {
+          code: 'invalid_request',
+          message: 'patient_id, amount_cents and next_due_date are required.',
+        },
+        meta: { timestamp },
+      });
+    }
+
+    const tenantResolution = await resolvePatientTenant({ supabase, userId: user.id, patientId });
+    if (tenantResolution.error) return tenantResolution.error;
+    const tenantId = tenantResolution.tenantId as string;
+
+    const { data: customer, error: customerError } = await supabase
+      .from('patient_customers')
+      .select('id, asaas_customer_id')
+      .eq('tenant_id', tenantId)
+      .eq('patient_id', patientId)
+      .maybeSingle();
+
+    if (customerError) throw customerError;
+    if (!customer?.asaas_customer_id) {
+      return jsonResponse(409, {
+        ok: false,
+        error: {
+          code: 'customer_required',
+          message: 'Create the patient billing customer before creating subscriptions.',
+        },
+        meta: { tenantId, timestamp },
+      });
+    }
+
+    const providerResponse = await fetch(`${asaasBase}/subscriptions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', access_token: asaasKey },
+      body: JSON.stringify({
+        customer: customer.asaas_customer_id,
+        billingType: normalizeBillingType(body?.billing_type),
+        value: amountCents / 100,
+        nextDueDate,
+        cycle: cycle.provider,
+        description,
+        externalReference: patientId,
+      }),
+    });
+
+    if (!providerResponse.ok) {
+      console.error('[asaas-create-patient-subscription] provider_error', {
+        status: providerResponse.status,
+      });
+      return jsonResponse(502, {
+        ok: false,
+        error: { code: 'asaas_error', message: 'Billing provider request failed.' },
+        meta: { tenantId, timestamp },
+      });
+    }
+
+    const providerData = await providerResponse.json().catch(() => ({}));
+    const providerSubscriptionId = asString(providerData.id);
+    if (!providerSubscriptionId) {
+      return jsonResponse(502, {
+        ok: false,
+        error: { code: 'asaas_invalid_response', message: 'Billing provider response invalid.' },
+        meta: { tenantId, timestamp },
+      });
+    }
+
+    const { data: subscription, error: insertError } = await supabase
+      .from('patient_subscriptions')
+      .insert({
+        tenant_id: tenantId,
+        patient_id: patientId,
+        patient_customer_id: customer.id,
+        asaas_subscription_id: providerSubscriptionId,
+        status: normalizeSubscriptionStatus(providerData.status),
+        cycle: cycle.local,
+        amount_cents: amountCents,
+        next_due_date: nextDueDate,
+        metadata: { provider: 'asaas', description },
+      })
+      .select('id, status')
+      .single();
+
+    if (insertError) throw insertError;
+
+    return jsonResponse(200, {
+      ok: true,
+      data: { id: subscription.id, status: subscription.status },
+      meta: { tenantId, timestamp },
+    });
+  } catch (error) {
+    console.error('[asaas-create-patient-subscription] unexpected_error', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+
+    return jsonResponse(500, {
+      ok: false,
+      error: { code: 'internal_error', message: 'Unexpected server error.' },
+      meta: { timestamp },
+    });
+  }
 });

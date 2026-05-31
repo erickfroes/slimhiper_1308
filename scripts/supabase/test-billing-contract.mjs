@@ -1,14 +1,92 @@
 #!/usr/bin/env node
-const url=process.env.SUPABASE_URL; const key=process.env.SUPABASE_ANON_KEY; const token=process.env.TEST_ACCESS_TOKEN; const patientId=process.env.TEST_PATIENT_ID;
-if(!url||!key||!token||!patientId){console.error('Missing envs');process.exit(1)}
-const invoke=(fn,body,auth=true)=>fetch(`${url}/functions/v1/${fn}`,{method:'POST',headers:{apikey:key,...(auth?{Authorization:`Bearer ${token}`}:{}) ,'Content-Type':'application/json'},body:JSON.stringify(body)}).then(async r=>({status:r.status,body:await r.json().catch(()=>null)}));
-const assertEnvelope=(name,r)=>{ if(!r.body||typeof r.body!=='object'||typeof r.body.ok!=='boolean'){ throw new Error(`${name} did not return safe envelope`) } };
-for (const [name, body] of [
-  ['asaas-create-patient-customer',{patient_id:patientId}],
-  ['asaas-create-patient-invoice',{patient_id:patientId,amount_cents:1000,due_date:'2026-05-31',description:'Demo'}],
-  ['asaas-create-patient-subscription',{patient_id:patientId,amount_cents:1000,next_due_date:'2026-05-31',cycle:'monthly'}],
-]) {
-  const okRes=await invoke(name,body,true); if(![200,401,403,404,502].includes(okRes.status)) throw new Error(`${name} unexpected status ${okRes.status}`); assertEnvelope(name,okRes);
-  const unauth=await invoke(name,body,false); if(![401,403].includes(unauth.status)) throw new Error(`${name} should enforce auth`);
+
+const url = process.env.SUPABASE_URL;
+const key = process.env.SUPABASE_ANON_KEY;
+const token = process.env.TEST_ACCESS_TOKEN;
+const patientId = process.env.TEST_PATIENT_ID;
+
+if (!url || !key || !token || !patientId) {
+  console.error('Missing envs');
+  process.exit(1);
 }
+
+const allowedStatuses = new Set([200, 401, 403, 404, 409, 422, 502]);
+const forbiddenBrowserFields = new Set([
+  'asaas_customer_id',
+  'asaas_invoice_id',
+  'asaas_subscription_id',
+  'asaas_account_id',
+]);
+
+async function invoke(fn, body, auth = true) {
+  const response = await fetch(`${url}/functions/v1/${fn}`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      ...(auth ? { Authorization: `Bearer ${token}` } : {}),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  return {
+    status: response.status,
+    body: await response.json().catch(() => null),
+  };
+}
+
+function assertEnvelope(name, result) {
+  if (!result.body || typeof result.body !== 'object' || typeof result.body.ok !== 'boolean') {
+    throw new Error(`${name} did not return safe envelope`);
+  }
+}
+
+function assertNoProviderIds(name, result) {
+  const data = result.body?.data;
+  if (!data || typeof data !== 'object') return;
+
+  for (const field of forbiddenBrowserFields) {
+    if (Object.prototype.hasOwnProperty.call(data, field)) {
+      throw new Error(`${name} exposed provider field ${field} to the browser contract`);
+    }
+  }
+}
+
+const checks = [
+  ['asaas-create-patient-customer', { patient_id: patientId }],
+  [
+    'asaas-create-patient-invoice',
+    {
+      patient_id: patientId,
+      amount_cents: 1000,
+      due_date: '2026-05-31',
+      description: 'Demo',
+    },
+  ],
+  [
+    'asaas-create-patient-subscription',
+    {
+      patient_id: patientId,
+      amount_cents: 1000,
+      next_due_date: '2026-05-31',
+      cycle: 'monthly',
+    },
+  ],
+];
+
+for (const [name, body] of checks) {
+  const okRes = await invoke(name, body, true);
+  if (!allowedStatuses.has(okRes.status)) {
+    throw new Error(`${name} unexpected status ${okRes.status}`);
+  }
+  assertEnvelope(name, okRes);
+  assertNoProviderIds(name, okRes);
+
+  const unauth = await invoke(name, body, false);
+  if (![401, 403].includes(unauth.status)) {
+    throw new Error(`${name} should enforce auth`);
+  }
+  assertEnvelope(`${name} unauth`, unauth);
+}
+
 console.log('Billing contract checks passed');

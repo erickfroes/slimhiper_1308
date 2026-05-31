@@ -8,30 +8,98 @@ declare const Deno: {
 type Json = Record<string, unknown>;
 
 type TimelineEventType =
-  | 'consulta' |'nutricao' |'medicamento' |'medida' |'documento' |'pagamento' |'alerta' |'mensagem' |'inicio_programa' |'meta_atingida' |'lead_criado' |'lead_convertido' |'pacote_vendido' |'contrato_assinado' |'paciente_cadastrado' |'consulta_agendada' |'checkin_realizado' |'atendimento_iniciado' |'atendimento_concluido' |'anamnese_preenchida' |'soap_atualizado' |'medida_registrada' |'plano_alimentar_publicado' |'prescricao_emitida' |'documento_gerado' |'documento_assinado' |'pagamento_recebido' |'pagamento_atrasado' |'mensagem_enviada' |'checkin_semanal_enviado';
+  | 'consulta'
+  | 'nutricao'
+  | 'medicamento'
+  | 'medida'
+  | 'documento'
+  | 'pagamento'
+  | 'alerta'
+  | 'mensagem'
+  | 'inicio_programa'
+  | 'meta_atingida'
+  | 'lead_criado'
+  | 'lead_convertido'
+  | 'pacote_vendido'
+  | 'contrato_assinado'
+  | 'paciente_cadastrado'
+  | 'consulta_agendada'
+  | 'checkin_realizado'
+  | 'atendimento_iniciado'
+  | 'atendimento_concluido'
+  | 'anamnese_preenchida'
+  | 'soap_atualizado'
+  | 'medida_registrada'
+  | 'plano_alimentar_publicado'
+  | 'prescricao_emitida'
+  | 'documento_gerado'
+  | 'documento_assinado'
+  | 'pagamento_recebido'
+  | 'pagamento_atrasado'
+  | 'mensagem_enviada'
+  | 'checkin_semanal_enviado';
 
 type TimelineEventCategory =
-  | 'clinical' |'financial' |'documents' |'agenda' |'communication' |'patient_app' |'commercial';
+  | 'clinical'
+  | 'financial'
+  | 'documents'
+  | 'agenda'
+  | 'communication'
+  | 'patient_app'
+  | 'commercial';
 
 const VALID_EVENT_TYPES: Set<TimelineEventType> = new Set([
-  'consulta', 'nutricao', 'medicamento', 'medida', 'documento', 'pagamento', 'alerta', 'mensagem',
-  'inicio_programa', 'meta_atingida', 'lead_criado', 'lead_convertido', 'pacote_vendido', 'contrato_assinado',
-  'paciente_cadastrado', 'consulta_agendada', 'checkin_realizado', 'atendimento_iniciado', 'atendimento_concluido',
-  'anamnese_preenchida', 'soap_atualizado', 'medida_registrada', 'plano_alimentar_publicado', 'prescricao_emitida',
-  'documento_gerado', 'documento_assinado', 'pagamento_recebido', 'pagamento_atrasado', 'mensagem_enviada', 'checkin_semanal_enviado',
+  'consulta',
+  'nutricao',
+  'medicamento',
+  'medida',
+  'documento',
+  'pagamento',
+  'alerta',
+  'mensagem',
+  'inicio_programa',
+  'meta_atingida',
+  'lead_criado',
+  'lead_convertido',
+  'pacote_vendido',
+  'contrato_assinado',
+  'paciente_cadastrado',
+  'consulta_agendada',
+  'checkin_realizado',
+  'atendimento_iniciado',
+  'atendimento_concluido',
+  'anamnese_preenchida',
+  'soap_atualizado',
+  'medida_registrada',
+  'plano_alimentar_publicado',
+  'prescricao_emitida',
+  'documento_gerado',
+  'documento_assinado',
+  'pagamento_recebido',
+  'pagamento_atrasado',
+  'mensagem_enviada',
+  'checkin_semanal_enviado',
 ]);
 
 const VALID_EVENT_CATEGORIES: Set<TimelineEventCategory> = new Set([
-  'clinical', 'financial', 'documents', 'agenda', 'communication', 'patient_app', 'commercial',
+  'clinical',
+  'financial',
+  'documents',
+  'agenda',
+  'communication',
+  'patient_app',
+  'commercial',
 ]);
 
 function mapEventType(value: unknown): TimelineEventType {
-  if (typeof value === 'string' && VALID_EVENT_TYPES.has(value as TimelineEventType)) return value as TimelineEventType;
+  if (typeof value === 'string' && VALID_EVENT_TYPES.has(value as TimelineEventType))
+    return value as TimelineEventType;
   return 'mensagem';
 }
 
 function mapEventCategory(value: unknown): TimelineEventCategory {
-  if (typeof value === 'string' && VALID_EVENT_CATEGORIES.has(value as TimelineEventCategory)) return value as TimelineEventCategory;
+  if (typeof value === 'string' && VALID_EVENT_CATEGORIES.has(value as TimelineEventCategory))
+    return value as TimelineEventCategory;
   return 'clinical';
 }
 
@@ -45,7 +113,6 @@ function safeDate(input: unknown): string | null {
 function mapEventDate(eventAt: unknown, createdAt: unknown): string {
   return safeDate(eventAt) ?? safeDate(createdAt) ?? new Date(0).toISOString();
 }
-
 
 const corsHeaders = {
   'Content-Type': 'application/json',
@@ -69,6 +136,288 @@ function calculateAge(birthDate: string | null | undefined): number | null {
   const dayDiff = today.getUTCDate() - birth.getUTCDate();
   if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) age -= 1;
   return age >= 0 ? age : null;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  const numberValue = Number(value ?? fallback);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function mapAppointmentType(value: unknown): string {
+  const normalized = String(value ?? '').toLowerCase();
+  if (normalized === 'retorno' || normalized === 'follow_up') return 'retorno';
+  if (normalized === 'nutricao' || normalized === 'consulta_nutricao') return 'nutricao';
+  if (normalized === 'avaliacao_inicial' || normalized === 'initial_assessment') {
+    return 'avaliacao_inicial';
+  }
+  if (normalized === 'bioimpedancia' || normalized === 'bioimpedance') return 'bioimpedancia';
+  if (normalized === 'checkup') return 'checkup';
+  return 'consulta_medica';
+}
+
+function mapAppointmentStatus(value: unknown): string {
+  const normalized = String(value ?? '').toLowerCase();
+  if (normalized === 'scheduled' || normalized === 'agendado') return 'agendado';
+  if (normalized === 'arrived' || normalized === 'chegou') return 'chegou';
+  if (normalized === 'triage' || normalized === 'triagem') return 'triagem';
+  if (normalized === 'measurements' || normalized === 'medidas') return 'medidas';
+  if (normalized === 'bioimpedance' || normalized === 'bioimpedancia') return 'bioimpedancia';
+  if (normalized === 'waiting_doctor' || normalized === 'aguardando_medico') {
+    return 'aguardando_medico';
+  }
+  if (normalized === 'in_consultation' || normalized === 'em_consulta') return 'em_consulta';
+  if (normalized === 'checkout') return 'checkout';
+  if (normalized === 'completed' || normalized === 'concluido') return 'concluido';
+  if (normalized === 'no_show' || normalized === 'falta') return 'falta';
+  if (normalized === 'cancelled' || normalized === 'canceled' || normalized === 'cancelado') {
+    return 'cancelado';
+  }
+  return 'agendado';
+}
+
+function mapProgramType(value: unknown): string {
+  const normalized = String(value ?? '').toLowerCase();
+  if (
+    ['emagrecimento', 'hipertrofia', 'recomposicao', 'saude_metabolica', 'longevidade'].includes(
+      normalized
+    )
+  ) {
+    return normalized;
+  }
+  return 'saude_metabolica';
+}
+
+function mapPackageStatus(value: unknown): string {
+  const normalized = String(value ?? '').toLowerCase();
+  if (['ativo', 'pausado', 'concluido', 'cancelado', 'aguardando'].includes(normalized)) {
+    return normalized;
+  }
+  return 'aguardando';
+}
+
+function mapPrescriptionStatus(value: unknown): string {
+  const normalized = String(value ?? '').toLowerCase();
+  if (normalized === 'final' || normalized === 'active' || normalized === 'ativo') return 'ativo';
+  if (normalized === 'cancelled' || normalized === 'canceled' || normalized === 'cancelado') {
+    return 'cancelado';
+  }
+  return 'rascunho';
+}
+
+function mapPrescriptionSummary(row: Record<string, unknown>, patientId: string) {
+  const status = String(row.status ?? '');
+  const prescriptionText = typeof row.prescription_text === 'string' ? row.prescription_text : '';
+  const instructions = typeof row.instructions === 'string' ? row.instructions : '';
+
+  return {
+    id: String(row.id ?? ''),
+    patientId,
+    medicationName:
+      typeof row.medication_name === 'string' && row.medication_name.trim()
+        ? row.medication_name
+        : 'Prescricao registrada',
+    dosage:
+      typeof row.dosage === 'string' && row.dosage.trim()
+        ? row.dosage
+        : prescriptionText || 'Conforme orientacao',
+    frequency:
+      typeof row.frequency === 'string' && row.frequency.trim()
+        ? row.frequency
+        : 'Conforme orientacao',
+    startDate:
+      typeof row.start_date === 'string'
+        ? row.start_date
+        : typeof row.created_at === 'string'
+          ? row.created_at
+          : new Date(0).toISOString(),
+    endDate: typeof row.end_date === 'string' ? row.end_date : undefined,
+    prescribedBy: 'Equipe medica',
+    isActive: status === 'final',
+    notes: instructions || prescriptionText || undefined,
+    status: mapPrescriptionStatus(status),
+    issueDate: typeof row.created_at === 'string' ? row.created_at : undefined,
+    validity: typeof row.end_date === 'string' ? row.end_date : undefined,
+    signatureStatus: 'nao_requerido',
+  };
+}
+
+function mapFoodCategory(value: unknown): string {
+  const normalized = String(value ?? '').toLowerCase();
+  if (
+    ['fonte_proteica', 'carboidrato', 'vegetais', 'gorduras_boas', 'frutas', 'liquidos'].includes(
+      normalized
+    )
+  ) {
+    return normalized;
+  }
+  return 'vegetais';
+}
+
+function mapNutritionMeal(value: unknown, index: number) {
+  const row = asRecord(value);
+  return {
+    id: asString(row.id, `meal-${index + 1}`),
+    name: asString(row.name, `Refeicao ${index + 1}`),
+    time: asString(row.time),
+    targetCalories: asNumber(row.targetCalories ?? row.target_calories),
+    targetProteinG: asNumber(row.targetProteinG ?? row.target_protein_g),
+    targetCarbsG: asNumber(row.targetCarbsG ?? row.target_carbs_g),
+    targetFatG: asNumber(row.targetFatG ?? row.target_fat_g),
+    description: asString(row.description) || undefined,
+  };
+}
+
+function mapNutritionFoodGroup(value: unknown) {
+  const row = asRecord(value);
+  return {
+    label: asString(row.label, 'Grupo alimentar'),
+    category: mapFoodCategory(row.category),
+    portionDescription: asString(row.portionDescription ?? row.portion_description),
+    dailyServings: asNumber(row.dailyServings ?? row.daily_servings),
+    examples: asArray(row.examples)
+      .map((item) => String(item))
+      .filter(Boolean),
+  };
+}
+
+function mapNutritionAdherence(value: unknown, index: number) {
+  const row = asRecord(value);
+  const adherencePercent = Math.max(
+    0,
+    Math.min(100, asNumber(row.adherencePercent ?? row.adherence_percent))
+  );
+  return {
+    week: asNumber(row.week, index + 1),
+    label: asString(row.label, `S${index + 1}`),
+    adherencePercent,
+    mealsLogged: Math.max(0, asNumber(row.mealsLogged ?? row.meals_logged)),
+    mealsTotal: Math.max(0, asNumber(row.mealsTotal ?? row.meals_total)),
+  };
+}
+
+function mapNutritionHistoryStatus(value: unknown): string {
+  const normalized = String(value ?? '').toLowerCase();
+  if (normalized === 'active') return 'ativo';
+  if (normalized === 'draft') return 'duplicado';
+  return 'arquivado';
+}
+
+function mapNutritionPlanHistory(row: Record<string, unknown>) {
+  const metadata = asRecord(row.metadata);
+  return {
+    id: String(row.id ?? ''),
+    planName: asString(row.name, 'Plano alimentar'),
+    createdAt: asString(row.created_at, new Date(0).toISOString()),
+    archivedAt: asString(row.archived_at) || undefined,
+    nutritionistName: asString(
+      metadata.nutritionistName ?? metadata.nutritionist_name,
+      'Equipe de Nutricao'
+    ),
+    targetCalories: asNumber(row.target_calories),
+    status: mapNutritionHistoryStatus(row.status),
+    notes: asString(metadata.notes ?? metadata.summary) || undefined,
+  };
+}
+
+function mapNutritionTeamNote(row: Record<string, unknown>) {
+  return {
+    id: String(row.id ?? ''),
+    authorName: asString(row.author_name, 'Equipe de Nutricao'),
+    authorRole: asString(row.author_role, 'Nutricionista'),
+    content: asString(row.content),
+    createdAt: asString(row.created_at, new Date(0).toISOString()),
+    isInternal: asBoolean(row.is_internal, true),
+  };
+}
+
+function mapNutritionPlan(params: {
+  row: Record<string, unknown> | null;
+  patientId: string;
+  patientCreatedAt: string;
+  lastUpdate: string;
+  historyRows: Record<string, unknown>[];
+  noteRows: Record<string, unknown>[];
+}) {
+  const { row, patientId, patientCreatedAt, lastUpdate, historyRows, noteRows } = params;
+
+  if (!row) {
+    return {
+      id: `nutrition-${patientId}`,
+      patientId,
+      planName: 'Sem plano alimentar ativo',
+      targetCalories: 0,
+      targetProteinG: 0,
+      targetCarbsG: 0,
+      targetFatG: 0,
+      createdAt: patientCreatedAt,
+      updatedAt: lastUpdate,
+      nutritionistName: 'Equipe de Nutricao',
+      isActive: false,
+      meals: [],
+      foodGroups: [],
+      planHistory: historyRows.map(mapNutritionPlanHistory),
+      mealAdherence: [],
+      mealPhotos: [],
+      teamNotes: [],
+    };
+  }
+
+  const metadata = asRecord(row.metadata);
+  const mealAdherence = asArray(row.meal_adherence).map(mapNutritionAdherence);
+  const adherencePercent =
+    typeof metadata.adherencePercent === 'number' || typeof metadata.adherence_percent === 'number'
+      ? Math.max(
+          0,
+          Math.min(100, asNumber(metadata.adherencePercent ?? metadata.adherence_percent))
+        )
+      : mealAdherence.length
+        ? Math.round(
+            mealAdherence.reduce((sum, entry) => sum + entry.adherencePercent, 0) /
+              mealAdherence.length
+          )
+        : undefined;
+
+  return {
+    id: String(row.id ?? ''),
+    patientId,
+    planName: asString(row.name, 'Plano alimentar'),
+    targetCalories: asNumber(row.target_calories),
+    targetProteinG: asNumber(row.target_protein_g),
+    targetCarbsG: asNumber(row.target_carbs_g),
+    targetFatG: asNumber(row.target_fat_g),
+    createdAt: asString(row.created_at, patientCreatedAt),
+    updatedAt: asString(row.updated_at, lastUpdate),
+    nutritionistName: asString(
+      metadata.nutritionistName ?? metadata.nutritionist_name,
+      'Equipe de Nutricao'
+    ),
+    isActive: row.status === 'active',
+    adherencePercent,
+    meals: asArray(row.meals).map(mapNutritionMeal),
+    foodGroups: asArray(row.food_groups).map(mapNutritionFoodGroup),
+    planHistory: historyRows.map(mapNutritionPlanHistory),
+    mealAdherence,
+    mealPhotos: [],
+    teamNotes: noteRows.map(mapNutritionTeamNote).filter((note) => note.content),
+  };
 }
 
 function safeTimelinePayload(payload: unknown): Record<string, unknown> | null {
@@ -175,20 +524,48 @@ Deno.serve(async (req) => {
       const checks = await Promise.all([
         supabase.rpc('has_permission', { p_tenant_id: tenantId, p_permission: 'patients.read' }),
         supabase.rpc('has_permission', { p_tenant_id: tenantId, p_permission: 'soap.read' }),
-        supabase.rpc('has_permission', { p_tenant_id: tenantId, p_permission: 'prescriptions.read' }),
+        supabase.rpc('has_permission', {
+          p_tenant_id: tenantId,
+          p_permission: 'prescriptions.read',
+        }),
+        supabase.rpc('has_permission', { p_tenant_id: tenantId, p_permission: 'packages.read' }),
+        supabase.rpc('has_permission', { p_tenant_id: tenantId, p_permission: 'chat.read' }),
+        supabase.rpc('has_clinical_permission', {
+          p_tenant_id: tenantId,
+          p_permission: 'nutrition.read',
+        }),
       ]);
 
       const set = new Set<string>();
-      if (checks[0].error || checks[1].error || checks[2].error) {
-        throw checks[0].error ?? checks[1].error ?? checks[2].error;
+      if (
+        checks[0].error ||
+        checks[1].error ||
+        checks[2].error ||
+        checks[3].error ||
+        checks[4].error ||
+        checks[5].error
+      ) {
+        throw (
+          checks[0].error ??
+          checks[1].error ??
+          checks[2].error ??
+          checks[3].error ??
+          checks[4].error ??
+          checks[5].error
+        );
       }
       if (checks[0].data === true) set.add('patients.read');
       if (checks[1].data === true) set.add('soap.read');
       if (checks[2].data === true) set.add('prescriptions.read');
+      if (checks[3].data === true) set.add('packages.read');
+      if (checks[4].data === true) set.add('chat.read');
+      if (checks[5].data === true) set.add('nutrition.read');
       permissionsByTenant.set(tenantId, set);
     }
 
-    const readableTenants = tenantIds.filter((t) => permissionsByTenant.get(t)?.has('patients.read'));
+    const readableTenants = tenantIds.filter((t) =>
+      permissionsByTenant.get(t)?.has('patients.read')
+    );
     if (!readableTenants.length) {
       return jsonResponse(403, {
         ok: false,
@@ -235,11 +612,30 @@ async function buildAndReturnSummary({
   tenantPermissions,
 }: {
   supabase: ReturnType<typeof createClient>;
-  patient: { id: string; tenant_id: string; status: string; preferred_name: string | null; created_at: string; updated_at: string };
+  patient: {
+    id: string;
+    tenant_id: string;
+    status: string;
+    preferred_name: string | null;
+    created_at: string;
+    updated_at: string;
+  };
   patientId: string;
   tenantPermissions: Set<string>;
 }) {
-  const [piiRes, alertsRes, tasksRes, appointmentsRes, timelineRes, latestSoapRes, prescriptionsRes] = await Promise.all([
+  const [
+    piiRes,
+    alertsRes,
+    tasksRes,
+    appointmentsRes,
+    timelineRes,
+    latestSoapRes,
+    prescriptionsRes,
+    packageEnrollmentRes,
+    chatThreadRes,
+    latestChatMessageRes,
+    nutritionPlanRes,
+  ] = await Promise.all([
     supabase
       .from('patient_pii')
       .select('full_name, email, phone, cpf_masked, birth_date, sex_gender, updated_at')
@@ -248,7 +644,9 @@ async function buildAndReturnSummary({
       .maybeSingle(),
     supabase
       .from('patient_alerts')
-      .select('id, alert_type, title, description, severity, starts_at, ends_at, status, updated_at')
+      .select(
+        'id, alert_type, title, description, severity, starts_at, ends_at, status, updated_at'
+      )
       .eq('patient_id', patientId)
       .eq('tenant_id', patient.tenant_id)
       .eq('status', 'active')
@@ -263,7 +661,9 @@ async function buildAndReturnSummary({
       .limit(20),
     supabase
       .from('appointments')
-      .select('id, scheduled_at, duration_minutes, status, location, practitioner_id, notes, updated_at')
+      .select(
+        'id, scheduled_at, duration_minutes, status, location, practitioner_id, notes, updated_at'
+      )
       .eq('patient_id', patientId)
       .eq('tenant_id', patient.tenant_id)
       .gte('scheduled_at', new Date().toISOString())
@@ -271,7 +671,9 @@ async function buildAndReturnSummary({
       .limit(10),
     supabase
       .from('patient_timeline_events')
-      .select('id, patient_id, event_type, category, title, description, actor_name, status, status_label, action_label, details_href, event_at, created_at, payload, updated_at')
+      .select(
+        'id, patient_id, event_type, category, title, description, actor_name, status, status_label, action_label, details_href, event_at, created_at, payload, updated_at'
+      )
       .eq('patient_id', patientId)
       .eq('tenant_id', patient.tenant_id)
       .order('event_at', { ascending: false })
@@ -279,7 +681,9 @@ async function buildAndReturnSummary({
     tenantPermissions.has('soap.read')
       ? supabase
           .from('soap_notes')
-          .select('id, status, subjective, objective, assessment, plan, authored_by, updated_at, created_at')
+          .select(
+            'id, status, subjective, objective, assessment, plan, authored_by, updated_at, created_at'
+          )
           .eq('patient_id', patientId)
           .eq('tenant_id', patient.tenant_id)
           .order('created_at', { ascending: false })
@@ -289,40 +693,204 @@ async function buildAndReturnSummary({
     tenantPermissions.has('prescriptions.read')
       ? supabase
           .from('prescriptions_placeholder')
-          .select('id, status, prescription_text, created_by, created_at, updated_at')
+          .select(
+            'id, status, prescription_text, medication_name, dosage, frequency, instructions, start_date, end_date, created_by, created_at, updated_at'
+          )
           .eq('patient_id', patientId)
           .eq('tenant_id', patient.tenant_id)
           .order('created_at', { ascending: false })
           .limit(10)
       : Promise.resolve({ data: null, error: null }),
+    tenantPermissions.has('packages.read')
+      ? supabase
+          .from('patient_program_enrollments')
+          .select(
+            'id, program_id, status, start_date, end_date, current_week, total_consultations, used_consultations, total_nutrition_sessions, used_nutrition_sessions, metadata, created_at, updated_at'
+          )
+          .eq('patient_id', patientId)
+          .eq('tenant_id', patient.tenant_id)
+          .in('status', ['ativo', 'pausado', 'aguardando'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    tenantPermissions.has('chat.read')
+      ? supabase
+          .from('patient_chat_threads')
+          .select('id, status, last_message_at, unread_count, metadata, created_at, updated_at')
+          .eq('patient_id', patientId)
+          .eq('tenant_id', patient.tenant_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    tenantPermissions.has('chat.read')
+      ? supabase
+          .from('patient_chat_messages')
+          .select('id, sender_label, body, metadata, created_at')
+          .eq('patient_id', patientId)
+          .eq('tenant_id', patient.tenant_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+      : Promise.resolve({ data: null, error: null }),
+    tenantPermissions.has('nutrition.read')
+      ? supabase
+          .from('nutrition_plans')
+          .select(
+            'id,tenant_id,patient_id,status,name,target_calories,target_protein_g,target_carbs_g,target_fat_g,meals,food_groups,meal_adherence,metadata,created_at,updated_at,archived_at'
+          )
+          .eq('patient_id', patientId)
+          .eq('tenant_id', patient.tenant_id)
+          .eq('status', 'active')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
-  const queryErrors = [piiRes.error, alertsRes.error, tasksRes.error, appointmentsRes.error, timelineRes.error, latestSoapRes.error, prescriptionsRes.error].filter(Boolean);
+  const queryErrors = [
+    piiRes.error,
+    alertsRes.error,
+    tasksRes.error,
+    appointmentsRes.error,
+    timelineRes.error,
+    latestSoapRes.error,
+    prescriptionsRes.error,
+    packageEnrollmentRes.error,
+    chatThreadRes.error,
+    latestChatMessageRes.error,
+    nutritionPlanRes.error,
+  ].filter(Boolean);
   if (queryErrors.length) throw queryErrors[0];
 
-  const lastUpdate = [
-    patient.updated_at,
-    piiRes.data?.updated_at,
-    ...((alertsRes.data ?? []).map((a) => a.updated_at)),
-    ...((tasksRes.data ?? []).map((t) => t.updated_at)),
-    ...((appointmentsRes.data ?? []).map((a) => a.updated_at)),
-    ...((timelineRes.data ?? []).map((t) => t.updated_at)),
-    latestSoapRes.data?.updated_at,
-  ]
-    .filter(Boolean)
-    .sort()
-    .at(-1) ?? patient.updated_at;
+  const packageEnrollment = packageEnrollmentRes.data ?? null;
+  const [packageProgramRes, packageServicesRes, packageEntitlementsRes] =
+    packageEnrollment?.program_id && tenantPermissions.has('packages.read')
+      ? await Promise.all([
+          supabase
+            .from('programs')
+            .select('id, name, program_type, duration_weeks, updated_at')
+            .eq('id', packageEnrollment.program_id)
+            .eq('tenant_id', patient.tenant_id)
+            .maybeSingle(),
+          supabase
+            .from('program_services')
+            .select('id, label, quantity, unit, metadata')
+            .eq('program_id', packageEnrollment.program_id)
+            .eq('tenant_id', patient.tenant_id)
+            .order('created_at', { ascending: true }),
+          supabase
+            .from('program_entitlements')
+            .select('id, key, label, enabled')
+            .eq('program_id', packageEnrollment.program_id)
+            .eq('tenant_id', patient.tenant_id)
+            .order('created_at', { ascending: true }),
+        ])
+      : [
+          { data: null, error: null },
+          { data: [], error: null },
+          { data: [], error: null },
+        ];
+
+  if (packageProgramRes.error || packageServicesRes.error || packageEntitlementsRes.error) {
+    throw packageProgramRes.error ?? packageServicesRes.error ?? packageEntitlementsRes.error;
+  }
+
+  const packageProgram = packageProgramRes.data ?? null;
+  const packageServices = Array.isArray(packageServicesRes.data) ? packageServicesRes.data : [];
+  const packageEntitlements = Array.isArray(packageEntitlementsRes.data)
+    ? packageEntitlementsRes.data
+    : [];
+  const nutritionPlanRow = nutritionPlanRes.data ?? null;
+
+  const [nutritionHistoryRes, nutritionNotesRes] = tenantPermissions.has('nutrition.read')
+    ? await Promise.all([
+        supabase
+          .from('nutrition_plans')
+          .select('id,status,name,target_calories,metadata,created_at,updated_at,archived_at')
+          .eq('patient_id', patientId)
+          .eq('tenant_id', patient.tenant_id)
+          .order('created_at', { ascending: false })
+          .limit(6),
+        nutritionPlanRow?.id
+          ? supabase
+              .from('nutrition_plan_notes')
+              .select('id,author_name,author_role,content,is_internal,created_at')
+              .eq('tenant_id', patient.tenant_id)
+              .eq('patient_id', patientId)
+              .eq('nutrition_plan_id', nutritionPlanRow.id)
+              .order('created_at', { ascending: false })
+              .limit(10)
+          : Promise.resolve({ data: [], error: null }),
+      ])
+    : [
+        { data: [], error: null },
+        { data: [], error: null },
+      ];
+
+  if (nutritionHistoryRes.error || nutritionNotesRes.error) {
+    throw nutritionHistoryRes.error ?? nutritionNotesRes.error;
+  }
+
+  const nutritionHistoryRows = Array.isArray(nutritionHistoryRes.data)
+    ? (nutritionHistoryRes.data as Record<string, unknown>[])
+    : [];
+  const nutritionNoteRows = Array.isArray(nutritionNotesRes.data)
+    ? (nutritionNotesRes.data as Record<string, unknown>[])
+    : [];
+
+  const lastUpdate =
+    [
+      patient.updated_at,
+      piiRes.data?.updated_at,
+      ...(alertsRes.data ?? []).map((a) => a.updated_at),
+      ...(tasksRes.data ?? []).map((t) => t.updated_at),
+      ...(appointmentsRes.data ?? []).map((a) => a.updated_at),
+      ...(timelineRes.data ?? []).map((t) => t.updated_at),
+      latestSoapRes.data?.updated_at,
+      packageEnrollment?.updated_at,
+      packageProgram?.updated_at,
+      nutritionPlanRow?.updated_at,
+      ...(nutritionHistoryRows ?? []).map((plan) => plan.updated_at),
+      ...(nutritionNoteRows ?? []).map((note) => note.created_at),
+      chatThreadRes.data?.updated_at,
+      ...(Array.isArray(latestChatMessageRes.data)
+        ? latestChatMessageRes.data.map((message) => message.created_at)
+        : []),
+    ]
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? patient.updated_at;
+
+  const latestChatMessage = Array.isArray(latestChatMessageRes.data)
+    ? (latestChatMessageRes.data[0] ?? null)
+    : null;
+  const latestChatMetadata =
+    latestChatMessage?.metadata &&
+    typeof latestChatMessage.metadata === 'object' &&
+    !Array.isArray(latestChatMessage.metadata)
+      ? (latestChatMessage.metadata as Record<string, unknown>)
+      : {};
+  const latestChatSenderType = String(
+    latestChatMetadata.sender_type ?? latestChatMetadata.from ?? ''
+  ).toLowerCase();
+  const latestChatSender =
+    typeof latestChatMessage?.sender_label === 'string' && latestChatMessage.sender_label.trim()
+      ? latestChatMessage.sender_label
+      : latestChatSenderType === 'patient'
+        ? 'Paciente'
+        : 'Equipe';
 
   const upcomingAppointments = (appointmentsRes.data ?? []).map((appointment) => ({
     id: appointment.id,
     patientId,
     patientName: piiRes.data?.full_name ?? patient.preferred_name ?? 'Paciente',
-    type: 'consulta_medica',
-    status: 'agendado',
+    type: mapAppointmentType(appointment.type),
+    status: mapAppointmentStatus(appointment.status),
     scheduledAt: appointment.scheduled_at,
     durationMinutes: appointment.duration_minutes ?? 30,
-    professionalName: appointment.practitioner_id ?? 'Equipe SlimHiper',
-    professionalRole: 'Profissional de saúde',
+    professionalName: 'Equipe SlimHiper',
+    professionalRole: 'Profissional de saude',
+    roomName: appointment.location ?? undefined,
+    notes: appointment.notes ?? undefined,
   }));
 
   const recentTimeline = (timelineRes.data ?? []).map((event) => {
@@ -332,7 +900,12 @@ async function buildAndReturnSummary({
       patientId: event.patient_id ?? patientId,
       type: mapEventType(event.event_type),
       title: String(event.title ?? payload?.title ?? 'Atualização do paciente'),
-      description: String(event.description ?? payload?.description ?? payload?.summary ?? 'Evento registrado no prontuário do paciente.'),
+      description: String(
+        event.description ??
+          payload?.description ??
+          payload?.summary ??
+          'Evento registrado no prontuário do paciente.'
+      ),
       date: mapEventDate(event.event_at, event.created_at),
       category: mapEventCategory(event.category ?? payload?.category),
       actorName: event.actor_name ?? payload?.professionalName ?? 'Equipe clínica',
@@ -342,6 +915,72 @@ async function buildAndReturnSummary({
       metadata: payload ?? undefined,
     };
   });
+
+  const activePackage =
+    packageEnrollment && packageProgram
+      ? {
+          id: packageEnrollment.id,
+          patientId,
+          programName: packageProgram.name ?? 'Programa SlimHiper',
+          programType: mapProgramType(packageProgram.program_type),
+          totalWeeks: asNumber(packageProgram.duration_weeks),
+          currentWeek: asNumber(packageEnrollment.current_week),
+          startDate: packageEnrollment.start_date ?? packageEnrollment.created_at,
+          endDate:
+            packageEnrollment.end_date ??
+            packageEnrollment.start_date ??
+            packageEnrollment.created_at,
+          status: mapPackageStatus(packageEnrollment.status),
+          totalConsultations: asNumber(packageEnrollment.total_consultations),
+          usedConsultations: asNumber(packageEnrollment.used_consultations),
+          totalNutritionSessions: asNumber(packageEnrollment.total_nutrition_sessions),
+          usedNutritionSessions: asNumber(packageEnrollment.used_nutrition_sessions),
+          serviceUsage: packageServices.map((service) => ({
+            label: String(service.label ?? 'Servico'),
+            used: 0,
+            total: asNumber(service.quantity),
+            color: 'bg-teal-500',
+            bgColor: 'bg-teal-50 text-teal-700',
+          })),
+          packageEntitlements: packageEntitlements.map((entitlement) => ({
+            key: String(entitlement.key ?? entitlement.id),
+            label: String(entitlement.label ?? entitlement.key ?? 'Acesso'),
+            enabled: entitlement.enabled !== false,
+          })),
+        }
+      : {
+          id: `pkg-${patientId}`,
+          patientId,
+          programName: 'Sem pacote ativo',
+          programType: 'saude_metabolica',
+          totalWeeks: 0,
+          currentWeek: 0,
+          startDate: patient.created_at,
+          endDate: patient.created_at,
+          status: 'aguardando',
+          totalConsultations: 0,
+          usedConsultations: 0,
+          totalNutritionSessions: 0,
+          usedNutritionSessions: 0,
+        };
+
+  const nutritionPlan = tenantPermissions.has('nutrition.read')
+    ? mapNutritionPlan({
+        row: nutritionPlanRow ? (nutritionPlanRow as Record<string, unknown>) : null,
+        patientId,
+        patientCreatedAt: patient.created_at,
+        lastUpdate,
+        historyRows: nutritionHistoryRows,
+        noteRows: nutritionNoteRows,
+      })
+    : mapNutritionPlan({
+        row: null,
+        patientId,
+        patientCreatedAt: patient.created_at,
+        lastUpdate,
+        historyRows: [],
+        noteRows: [],
+      });
 
   const data = {
     profile: {
@@ -358,21 +997,7 @@ async function buildAndReturnSummary({
       careTeam: [],
       createdAt: patient.created_at,
     },
-    activePackage: {
-      id: `pkg-${patientId}`,
-      patientId,
-      programName: 'Programa SlimHiper',
-      programType: 'saude_metabolica',
-      totalWeeks: 12,
-      currentWeek: 1,
-      startDate: patient.created_at,
-      endDate: patient.created_at,
-      status: 'aguardando',
-      totalConsultations: 0,
-      usedConsultations: 0,
-      totalNutritionSessions: 0,
-      usedNutritionSessions: 0,
-    },
+    activePackage,
     clinicalStatus: {
       currentWeightKg: 0,
       goalWeightKg: 0,
@@ -436,29 +1061,22 @@ async function buildAndReturnSummary({
           notes: prescription.prescription_text ?? undefined,
           status: 'ativo',
           issueDate: prescription.created_at,
+          ...mapPrescriptionSummary(prescription as Record<string, unknown>, patientId),
         }))
       : [],
-    nutritionPlan: {
-      id: `nutrition-${patientId}`,
-      patientId,
-      planName: 'Plano nutricional inicial',
-      targetCalories: 0,
-      targetProteinG: 0,
-      targetCarbsG: 0,
-      targetFatG: 0,
-      createdAt: patient.created_at,
-      updatedAt: lastUpdate,
-      nutritionistName: 'Equipe de Nutrição',
-      isActive: false,
-    },
+    nutritionPlan,
     chat: {
-      id: `chat-${patientId}`,
+      id: chatThreadRes.data?.id ?? `chat-${patientId}`,
       patientId,
-      lastMessageAt: lastUpdate,
-      lastMessagePreview: 'Sem mensagens recentes.',
-      lastMessageFrom: 'staff',
-      unreadCount: 0,
-      isOpen: true,
+      lastMessageAt:
+        latestChatMessage?.created_at ??
+        chatThreadRes.data?.last_message_at ??
+        chatThreadRes.data?.updated_at ??
+        lastUpdate,
+      lastMessagePreview: latestChatMessage?.body ?? 'Sem mensagens recentes.',
+      lastMessageFrom: latestChatSender,
+      unreadCount: Math.max(0, Number(chatThreadRes.data?.unread_count ?? 0)),
+      isOpen: chatThreadRes.data?.status === 'open',
     },
     mainUnit: null,
     responsibleProfessional: null,
@@ -475,6 +1093,8 @@ async function buildAndReturnSummary({
         patientsRead: tenantPermissions.has('patients.read'),
         soapRead: tenantPermissions.has('soap.read'),
         prescriptionsRead: tenantPermissions.has('prescriptions.read'),
+        packagesRead: tenantPermissions.has('packages.read'),
+        nutritionRead: tenantPermissions.has('nutrition.read'),
       },
       timestamp: new Date().toISOString(),
     },

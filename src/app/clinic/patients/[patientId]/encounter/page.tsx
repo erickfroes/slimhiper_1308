@@ -4,7 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import DashboardShell from '@/components/DashboardShell';
 import { finalizeEncounterSoap, getEncounterContext, saveSoapDraft } from '@/services/encounterApi';
-import { getPatientClinicalRecords, type ClinicalRecordsData } from '@/services/clinicalRecordsApi';
+import {
+  createBioimpedanceResult,
+  createLabOrder,
+  createMeasurement,
+  getPatientClinicalRecords,
+  type ClinicalRecordsData,
+} from '@/services/clinicalRecordsApi';
 import type { Patient360Summary } from '@/domain/types';
 import {
   ArrowLeft,
@@ -136,6 +142,64 @@ function SOAPField({
   );
 }
 
+type MeasurementFormState = {
+  weightKg: string;
+  heightCm: string;
+  bodyFatPercent: string;
+  waistCm: string;
+  hipCm: string;
+  notes: string;
+};
+
+type BioimpedanceFormState = {
+  leanMassKg: string;
+  fatMassKg: string;
+  bodyWaterLiters: string;
+  phaseAngleDeg: string;
+};
+
+type LabOrderFormState = {
+  panelName: string;
+  tests: string;
+  urgency: string;
+  note: string;
+};
+
+function emptyMeasurementForm(): MeasurementFormState {
+  return {
+    weightKg: '',
+    heightCm: '',
+    bodyFatPercent: '',
+    waistCm: '',
+    hipCm: '',
+    notes: '',
+  };
+}
+
+function emptyBioimpedanceForm(): BioimpedanceFormState {
+  return {
+    leanMassKg: '',
+    fatMassKg: '',
+    bodyWaterLiters: '',
+    phaseAngleDeg: '',
+  };
+}
+
+function emptyLabOrderForm(): LabOrderFormState {
+  return {
+    panelName: '',
+    tests: '',
+    urgency: 'routine',
+    note: '',
+  };
+}
+
+function parseNumericInput(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value.replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function EncounterPage() {
@@ -156,6 +220,16 @@ export default function EncounterPage() {
   const [finalized, setFinalized] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [clinicalActionError, setClinicalActionError] = useState<string | null>(null);
+  const [clinicalActionSuccess, setClinicalActionSuccess] = useState<string | null>(null);
+  const [clinicalActionSaving, setClinicalActionSaving] = useState(false);
+  const [measurementForm, setMeasurementForm] = useState<MeasurementFormState>(() =>
+    emptyMeasurementForm()
+  );
+  const [bioimpedanceForm, setBioimpedanceForm] = useState<BioimpedanceFormState>(() =>
+    emptyBioimpedanceForm()
+  );
+  const [labOrderForm, setLabOrderForm] = useState<LabOrderFormState>(() => emptyLabOrderForm());
 
   useEffect(() => {
     let isMounted = true;
@@ -256,6 +330,144 @@ export default function EncounterPage() {
     setFinalized(true);
   };
 
+  const reloadClinicalRecords = async () => {
+    const recordsResult = await getPatientClinicalRecords(patientId);
+    setClinicalRecords(recordsResult.data);
+    setClinicalRecordsError(recordsResult.error?.message ?? null);
+  };
+
+  const ensureDraftEncounter = async () => {
+    if (encounterId) return encounterId;
+
+    const result = await saveSoapDraft({
+      patientId,
+      encounterId,
+      soapNoteId,
+      subjective: soap.S,
+      objective: soap.O,
+      assessment: soap.A,
+      plan: soap.P,
+    });
+
+    if (result.error || !result.data) {
+      throw new Error(result.error?.message ?? 'Nao foi possivel abrir atendimento.');
+    }
+
+    setEncounterId(result.data.encounterId);
+    setSoapNoteId(result.data.soapNoteId);
+    return result.data.encounterId;
+  };
+
+  const handleCreateMeasurement = async () => {
+    setClinicalActionSaving(true);
+    setClinicalActionError(null);
+    setClinicalActionSuccess(null);
+
+    try {
+      const activeEncounterId = await ensureDraftEncounter();
+      const result = await createMeasurement({
+        patientId,
+        encounterId: activeEncounterId,
+        weightKg: parseNumericInput(measurementForm.weightKg),
+        heightCm: parseNumericInput(measurementForm.heightCm),
+        bodyFatPercent: parseNumericInput(measurementForm.bodyFatPercent),
+        waistCm: parseNumericInput(measurementForm.waistCm),
+        hipCm: parseNumericInput(measurementForm.hipCm),
+        notes: measurementForm.notes,
+      });
+
+      if (result.error || !result.data) {
+        throw new Error(result.error?.message ?? 'Nao foi possivel registrar medidas.');
+      }
+
+      setMeasurementForm(emptyMeasurementForm());
+      setClinicalActionSuccess('Medidas registradas.');
+      await reloadClinicalRecords();
+    } catch (error) {
+      setClinicalActionError(
+        error instanceof Error ? error.message : 'Nao foi possivel registrar medidas.'
+      );
+    } finally {
+      setClinicalActionSaving(false);
+    }
+  };
+
+  const handleCreateBioimpedance = async () => {
+    setClinicalActionSaving(true);
+    setClinicalActionError(null);
+    setClinicalActionSuccess(null);
+
+    try {
+      const activeEncounterId = await ensureDraftEncounter();
+      const result = await createBioimpedanceResult({
+        patientId,
+        encounterId: activeEncounterId,
+        payload: {
+          lean_mass_kg: parseNumericInput(bioimpedanceForm.leanMassKg),
+          fat_mass_kg: parseNumericInput(bioimpedanceForm.fatMassKg),
+          total_body_water_l: parseNumericInput(bioimpedanceForm.bodyWaterLiters),
+          phase_angle_deg: parseNumericInput(bioimpedanceForm.phaseAngleDeg),
+          source: 'clinic_encounter',
+        },
+      });
+
+      if (result.error || !result.data) {
+        throw new Error(result.error?.message ?? 'Nao foi possivel registrar bioimpedancia.');
+      }
+
+      setBioimpedanceForm(emptyBioimpedanceForm());
+      setClinicalActionSuccess('Bioimpedancia registrada.');
+      await reloadClinicalRecords();
+    } catch (error) {
+      setClinicalActionError(
+        error instanceof Error ? error.message : 'Nao foi possivel registrar bioimpedancia.'
+      );
+    } finally {
+      setClinicalActionSaving(false);
+    }
+  };
+
+  const handleCreateLabOrder = async () => {
+    setClinicalActionSaving(true);
+    setClinicalActionError(null);
+    setClinicalActionSuccess(null);
+
+    try {
+      const activeEncounterId = await ensureDraftEncounter();
+      const tests = labOrderForm.tests
+        .split(',')
+        .map((test) => test.trim())
+        .filter(Boolean);
+
+      if (!labOrderForm.panelName.trim() || tests.length === 0) {
+        throw new Error('Informe o painel e ao menos um exame.');
+      }
+
+      const result = await createLabOrder({
+        patientId,
+        encounterId: activeEncounterId,
+        panelName: labOrderForm.panelName,
+        tests,
+        urgency: labOrderForm.urgency,
+        note: labOrderForm.note,
+      });
+
+      if (result.error || !result.data) {
+        throw new Error(result.error?.message ?? 'Nao foi possivel solicitar exames.');
+      }
+
+      setLabOrderForm(emptyLabOrderForm());
+      setClinicalActionSuccess('Exames solicitados.');
+      await reloadClinicalRecords();
+    } catch (error) {
+      setClinicalActionError(
+        error instanceof Error ? error.message : 'Nao foi possivel solicitar exames.'
+      );
+    } finally {
+      setClinicalActionSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <DashboardShell>
@@ -317,6 +529,8 @@ export default function EncounterPage() {
           'atendimento_concluido',
           'soap_atualizado',
           'medida_registrada',
+          'exame_solicitado',
+          'exame_resultado_recebido',
           'prescricao_emitida',
         ].includes(event.type)
     )
@@ -348,9 +562,14 @@ export default function EncounterPage() {
           {/* Action buttons */}
           <div className="flex items-center gap-2 flex-wrap justify-end">
             <button
-              disabled
-              title="Solicitacao de exames sera habilitada apos contrato backend."
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground opacity-60 cursor-not-allowed"
+              type="button"
+              onClick={() =>
+                document.getElementById('encounter-clinical-records')?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                })
+              }
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
             >
               <FlaskConical size={13} />
               Solicitar Exames
@@ -583,6 +802,204 @@ export default function EncounterPage() {
               placeholder="Conduta, prescrições, solicitação de exames, orientações, retorno, encaminhamentos, ajustes no programa..."
               rows={6}
             />
+
+            <div
+              id="encounter-clinical-records"
+              className="rounded-2xl border border-border bg-card p-4"
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Registros clinicos do atendimento
+                  </h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Medidas, bioimpedancia e exames ficam vinculados ao atendimento em aberto.
+                  </p>
+                </div>
+                {clinicalActionSaving && (
+                  <span className="text-xs font-medium text-muted-foreground">Salvando...</span>
+                )}
+              </div>
+
+              {clinicalActionError && (
+                <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {clinicalActionError}
+                </div>
+              )}
+              {clinicalActionSuccess && (
+                <div className="mb-3 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+                  {clinicalActionSuccess}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleCreateMeasurement();
+                  }}
+                  className="rounded-xl border border-border bg-background p-3"
+                >
+                  <div className="mb-3 flex items-center gap-2">
+                    <ClipboardList size={14} className="text-primary" />
+                    <span className="text-xs font-semibold text-foreground">Medidas</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      ['weightKg', 'Peso kg'],
+                      ['heightCm', 'Altura cm'],
+                      ['bodyFatPercent', 'Gordura %'],
+                      ['waistCm', 'Cintura cm'],
+                      ['hipCm', 'Quadril cm'],
+                    ].map(([key, label]) => (
+                      <label key={key} className="flex flex-col gap-1 text-xs text-foreground">
+                        {label}
+                        <input
+                          value={measurementForm[key as keyof MeasurementFormState]}
+                          onChange={(event) =>
+                            setMeasurementForm((current) => ({
+                              ...current,
+                              [key]: event.target.value,
+                            }))
+                          }
+                          className="input-base text-xs"
+                          inputMode="decimal"
+                        />
+                      </label>
+                    ))}
+                    <label className="col-span-2 flex flex-col gap-1 text-xs text-foreground">
+                      Observacao
+                      <input
+                        value={measurementForm.notes}
+                        onChange={(event) =>
+                          setMeasurementForm((current) => ({
+                            ...current,
+                            notes: event.target.value,
+                          }))
+                        }
+                        className="input-base text-xs"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={clinicalActionSaving}
+                    className="btn-secondary mt-3 w-full justify-center text-xs disabled:opacity-60"
+                  >
+                    Registrar medidas
+                  </button>
+                </form>
+
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleCreateBioimpedance();
+                  }}
+                  className="rounded-xl border border-border bg-background p-3"
+                >
+                  <div className="mb-3 flex items-center gap-2">
+                    <Zap size={14} className="text-primary" />
+                    <span className="text-xs font-semibold text-foreground">Bioimpedancia</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      ['leanMassKg', 'Massa magra kg'],
+                      ['fatMassKg', 'Massa gorda kg'],
+                      ['bodyWaterLiters', 'Agua L'],
+                      ['phaseAngleDeg', 'Angulo fase'],
+                    ].map(([key, label]) => (
+                      <label key={key} className="flex flex-col gap-1 text-xs text-foreground">
+                        {label}
+                        <input
+                          value={bioimpedanceForm[key as keyof BioimpedanceFormState]}
+                          onChange={(event) =>
+                            setBioimpedanceForm((current) => ({
+                              ...current,
+                              [key]: event.target.value,
+                            }))
+                          }
+                          className="input-base text-xs"
+                          inputMode="decimal"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={clinicalActionSaving}
+                    className="btn-secondary mt-3 w-full justify-center text-xs disabled:opacity-60"
+                  >
+                    Registrar bioimpedancia
+                  </button>
+                </form>
+
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleCreateLabOrder();
+                  }}
+                  className="rounded-xl border border-border bg-background p-3"
+                >
+                  <div className="mb-3 flex items-center gap-2">
+                    <FlaskConical size={14} className="text-primary" />
+                    <span className="text-xs font-semibold text-foreground">Exames</span>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="flex flex-col gap-1 text-xs text-foreground">
+                      Painel
+                      <input
+                        value={labOrderForm.panelName}
+                        onChange={(event) =>
+                          setLabOrderForm((current) => ({
+                            ...current,
+                            panelName: event.target.value,
+                          }))
+                        }
+                        className="input-base text-xs"
+                        placeholder="Checkup metabolico"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-foreground">
+                      Exames
+                      <input
+                        value={labOrderForm.tests}
+                        onChange={(event) =>
+                          setLabOrderForm((current) => ({
+                            ...current,
+                            tests: event.target.value,
+                          }))
+                        }
+                        className="input-base text-xs"
+                        placeholder="Hemograma, glicemia, lipidograma"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-foreground">
+                      Urgencia
+                      <select
+                        value={labOrderForm.urgency}
+                        onChange={(event) =>
+                          setLabOrderForm((current) => ({
+                            ...current,
+                            urgency: event.target.value,
+                          }))
+                        }
+                        className="input-base text-xs"
+                      >
+                        <option value="routine">Rotina</option>
+                        <option value="priority">Prioritario</option>
+                      </select>
+                    </label>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={clinicalActionSaving}
+                    className="btn-secondary mt-3 w-full justify-center text-xs disabled:opacity-60"
+                  >
+                    Solicitar exames
+                  </button>
+                </form>
+              </div>
+            </div>
 
             {/* Bottom action row */}
             <div className="flex items-center gap-3 pt-2 border-t border-border">

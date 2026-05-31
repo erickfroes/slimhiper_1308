@@ -1,4 +1,10 @@
 import type {
+  MealAdherenceEntry,
+  MealPhoto,
+  NutritionFoodGroup,
+  NutritionMeal,
+  NutritionPlanHistory,
+  NutritionTeamNote,
   Patient360Summary,
   PatientTimelineEvent,
   TimelineEventCategory,
@@ -101,6 +107,20 @@ function normalizeSummary(payload: unknown): Patient360Summary {
   return normalizePatient360Summary(payload);
 }
 
+function patientSummaryContractError(): SafeServiceError {
+  return {
+    message: 'Invalid patient summary contract returned by Edge Function.',
+    code: 'invalid_patient360_contract',
+  };
+}
+
+function patientTimelineContractError(): SafeServiceError {
+  return {
+    message: 'Invalid patient timeline contract returned by Edge Function.',
+    code: 'invalid_patient_timeline_contract',
+  };
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
 }
@@ -115,6 +135,19 @@ function asNumber(value: unknown, fallback = 0): number {
 
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback;
+}
+
+function hasPatientSummaryIdentity(payload: unknown): boolean {
+  const raw = asRecord(payload);
+  const rawProfile = asRecord(raw?.profile);
+  return typeof rawProfile?.id === 'string' && rawProfile.id.trim().length > 0;
+}
+
+function getTimelineItems(payload: unknown): unknown[] | null {
+  if (Array.isArray(payload)) return payload;
+  const record = asRecord(payload);
+  if (Array.isArray(record?.events)) return record.events;
+  return null;
 }
 
 function normalizeAppointment(
@@ -187,6 +220,105 @@ function normalizePrescription(
   };
 }
 
+function normalizeNutritionMeal(item: unknown): NutritionMeal | null {
+  const record = asRecord(item);
+  const id = asString(record?.id);
+  const name = asString(record?.name);
+  if (!record || !id || !name) return null;
+
+  return {
+    id,
+    name,
+    time: asString(record.time),
+    targetCalories: asNumber(record.targetCalories),
+    targetProteinG: asNumber(record.targetProteinG),
+    targetCarbsG: asNumber(record.targetCarbsG),
+    targetFatG: asNumber(record.targetFatG),
+    description: typeof record.description === 'string' ? record.description : undefined,
+  };
+}
+
+function normalizeNutritionFoodGroup(item: unknown): NutritionFoodGroup | null {
+  const record = asRecord(item);
+  const label = asString(record?.label);
+  const category = asString(record?.category);
+  if (!record || !label || !category) return null;
+
+  return {
+    label,
+    category: category as NutritionFoodGroup['category'],
+    portionDescription: asString(record.portionDescription),
+    dailyServings: asNumber(record.dailyServings),
+    examples: Array.isArray(record.examples)
+      ? record.examples.filter((example): example is string => typeof example === 'string')
+      : [],
+  };
+}
+
+function normalizeNutritionHistory(item: unknown): NutritionPlanHistory | null {
+  const record = asRecord(item);
+  const id = asString(record?.id);
+  if (!record || !id) return null;
+
+  return {
+    id,
+    planName: asString(record.planName),
+    createdAt: asString(record.createdAt),
+    archivedAt: typeof record.archivedAt === 'string' ? record.archivedAt : undefined,
+    nutritionistName: asString(record.nutritionistName),
+    targetCalories: asNumber(record.targetCalories),
+    status: asString(record.status, 'arquivado') as NutritionPlanHistory['status'],
+    notes: typeof record.notes === 'string' ? record.notes : undefined,
+  };
+}
+
+function normalizeMealAdherence(item: unknown): MealAdherenceEntry | null {
+  const record = asRecord(item);
+  const week = asNumber(record?.week);
+  if (!record || week <= 0) return null;
+
+  return {
+    week,
+    label: asString(record.label),
+    adherencePercent: asNumber(record.adherencePercent),
+    mealsLogged: asNumber(record.mealsLogged),
+    mealsTotal: asNumber(record.mealsTotal),
+  };
+}
+
+function normalizeMealPhoto(item: unknown): MealPhoto | null {
+  const record = asRecord(item);
+  const id = asString(record?.id);
+  const photoUrl = asString(record?.photoUrl);
+  if (!record || !id || !photoUrl) return null;
+
+  return {
+    id,
+    mealName: asString(record.mealName),
+    photoUrl,
+    submittedAt: asString(record.submittedAt),
+    note: typeof record.note === 'string' ? record.note : undefined,
+    reviewedBy: typeof record.reviewedBy === 'string' ? record.reviewedBy : undefined,
+    reviewNote: typeof record.reviewNote === 'string' ? record.reviewNote : undefined,
+  };
+}
+
+function normalizeNutritionTeamNote(item: unknown): NutritionTeamNote | null {
+  const record = asRecord(item);
+  const id = asString(record?.id);
+  const content = asString(record?.content);
+  if (!record || !id || !content) return null;
+
+  return {
+    id,
+    authorName: asString(record.authorName),
+    authorRole: asString(record.authorRole),
+    content,
+    createdAt: asString(record.createdAt),
+    isInternal: asBoolean(record.isInternal, true),
+  };
+}
+
 function normalizePatient360Summary(payload: unknown): Patient360Summary {
   const raw = asRecord(payload);
   const rawProfile = asRecord(raw?.profile);
@@ -250,6 +382,22 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       usedConsultations: asNumber(asRecord(raw?.activePackage)?.usedConsultations),
       totalNutritionSessions: asNumber(asRecord(raw?.activePackage)?.totalNutritionSessions),
       usedNutritionSessions: asNumber(asRecord(raw?.activePackage)?.usedNutritionSessions),
+      packageHistory: Array.isArray(asRecord(raw?.activePackage)?.packageHistory)
+        ? (asRecord(raw?.activePackage)
+            ?.packageHistory as Patient360Summary['activePackage']['packageHistory'])
+        : undefined,
+      packageEntitlements: Array.isArray(asRecord(raw?.activePackage)?.packageEntitlements)
+        ? (asRecord(raw?.activePackage)
+            ?.packageEntitlements as Patient360Summary['activePackage']['packageEntitlements'])
+        : undefined,
+      serviceUsage: Array.isArray(asRecord(raw?.activePackage)?.serviceUsage)
+        ? (asRecord(raw?.activePackage)
+            ?.serviceUsage as Patient360Summary['activePackage']['serviceUsage'])
+        : undefined,
+      packageLimits: Array.isArray(asRecord(raw?.activePackage)?.packageLimits)
+        ? (asRecord(raw?.activePackage)
+            ?.packageLimits as Patient360Summary['activePackage']['packageLimits'])
+        : undefined,
     },
     clinicalStatus: {
       currentWeightKg: asNumber(asRecord(raw?.clinicalStatus)?.currentWeightKg),
@@ -312,6 +460,40 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       updatedAt: asString(asRecord(raw?.nutritionPlan)?.updatedAt),
       nutritionistName: asString(asRecord(raw?.nutritionPlan)?.nutritionistName),
       isActive: asBoolean(asRecord(raw?.nutritionPlan)?.isActive),
+      adherencePercent:
+        typeof asRecord(raw?.nutritionPlan)?.adherencePercent === 'number'
+          ? (asRecord(raw?.nutritionPlan)?.adherencePercent as number)
+          : undefined,
+      meals: Array.isArray(asRecord(raw?.nutritionPlan)?.meals)
+        ? (asRecord(raw?.nutritionPlan)?.meals as unknown[])
+            .map(normalizeNutritionMeal)
+            .filter((item): item is NutritionMeal => Boolean(item))
+        : [],
+      foodGroups: Array.isArray(asRecord(raw?.nutritionPlan)?.foodGroups)
+        ? (asRecord(raw?.nutritionPlan)?.foodGroups as unknown[])
+            .map(normalizeNutritionFoodGroup)
+            .filter((item): item is NutritionFoodGroup => Boolean(item))
+        : [],
+      planHistory: Array.isArray(asRecord(raw?.nutritionPlan)?.planHistory)
+        ? (asRecord(raw?.nutritionPlan)?.planHistory as unknown[])
+            .map(normalizeNutritionHistory)
+            .filter((item): item is NutritionPlanHistory => Boolean(item))
+        : [],
+      mealAdherence: Array.isArray(asRecord(raw?.nutritionPlan)?.mealAdherence)
+        ? (asRecord(raw?.nutritionPlan)?.mealAdherence as unknown[])
+            .map(normalizeMealAdherence)
+            .filter((item): item is MealAdherenceEntry => Boolean(item))
+        : [],
+      mealPhotos: Array.isArray(asRecord(raw?.nutritionPlan)?.mealPhotos)
+        ? (asRecord(raw?.nutritionPlan)?.mealPhotos as unknown[])
+            .map(normalizeMealPhoto)
+            .filter((item): item is MealPhoto => Boolean(item))
+        : [],
+      teamNotes: Array.isArray(asRecord(raw?.nutritionPlan)?.teamNotes)
+        ? (asRecord(raw?.nutritionPlan)?.teamNotes as unknown[])
+            .map(normalizeNutritionTeamNote)
+            .filter((item): item is NutritionTeamNote => Boolean(item))
+        : [],
     },
     chat: {
       id: asString(asRecord(raw?.chat)?.id),
@@ -385,8 +567,11 @@ export async function getPatient360Summary(
       };
     }
 
-    const unwrapped = unwrapEdgeResponse<Patient360Summary>(data);
+    const unwrapped = unwrapEdgeResponse<unknown>(data);
     if (unwrapped.error) return { data: null, error: unwrapped.error };
+    if (!hasPatientSummaryIdentity(unwrapped.data)) {
+      return { data: null, error: patientSummaryContractError() };
+    }
 
     return { data: normalizeSummary(unwrapped.data), error: null };
   } catch (error) {
@@ -428,18 +613,26 @@ export async function getPatientTimeline(
       };
     }
 
-    const unwrapped = unwrapEdgeResponse<{ events?: unknown[] } | unknown[]>(data);
+    const unwrapped = unwrapEdgeResponse<unknown>(data);
     if (unwrapped.error) return { data: [], error: unwrapped.error };
 
-    const timelineData = unwrapped.data;
-    const list = Array.isArray(timelineData)
-      ? timelineData
-      : ((timelineData as { events?: unknown[] } | null)?.events ?? []);
-    const normalized = list
-      .map(normalizeTimelineEvent)
-      .filter((item): item is PatientTimelineEvent => Boolean(item));
+    const list = getTimelineItems(unwrapped.data);
+    if (!list) {
+      return { data: [], error: patientTimelineContractError() };
+    }
 
-    return { data: applyTimelineFilters(normalized, filters), error: null };
+    const normalized = list.map(normalizeTimelineEvent);
+    if (normalized.some((item) => !item)) {
+      return { data: [], error: patientTimelineContractError() };
+    }
+
+    return {
+      data: applyTimelineFilters(
+        normalized.filter((item): item is PatientTimelineEvent => Boolean(item)),
+        filters
+      ),
+      error: null,
+    };
   } catch (error) {
     return { data: [], error: safeError(error, 'Unable to load patient timeline right now.') };
   }

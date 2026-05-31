@@ -55,6 +55,18 @@ function isPrescriptionCategory(category: string) {
   return normalized.includes('prescri');
 }
 
+function signerFromPatientPii(value: Record<string, unknown> | null | undefined) {
+  if (!value) return [];
+  return sanitizeSigners([
+    {
+      name: safeString(value.full_name),
+      email: safeString(value.email),
+      phone: safeString(value.phone),
+      role: 'patient',
+    },
+  ]);
+}
+
 Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
 
@@ -106,14 +118,15 @@ Deno.serve(async (req) => {
     const body = (await req.json().catch(() => null)) as SendDocumentRequest | null;
     const generatedDocumentId = safeString(body?.generated_document_id);
     const patientId = safeString(body?.patient_id);
-    const signers = sanitizeSigners(body?.signers);
+    let signers = sanitizeSigners(body?.signers);
+    let signerSource = signers.length > 0 ? 'request' : 'patient_pii';
 
-    if (!generatedDocumentId || !patientId || signers.length === 0) {
+    if (!generatedDocumentId || !patientId) {
       return jsonResponse(400, {
         ok: false,
         error: {
           code: 'invalid_request',
-          message: 'generated_document_id, patient_id and at least one valid signer are required.',
+          message: 'generated_document_id and patient_id are required.',
         },
         meta: { timestamp },
       });
@@ -153,10 +166,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: canWriteDocuments, error: permissionError } = await supabase.rpc('has_clinical_permission', {
-      p_tenant_id: tenantId,
-      p_permission: 'documents.write',
-    });
+    const { data: canWriteDocuments, error: permissionError } = await supabase.rpc(
+      'has_clinical_permission',
+      {
+        p_tenant_id: tenantId,
+        p_permission: 'documents.write',
+      }
+    );
 
     if (permissionError) throw permissionError;
     if (canWriteDocuments !== true) {
@@ -164,6 +180,30 @@ Deno.serve(async (req) => {
         ok: false,
         error: { code: 'forbidden', message: 'Missing documents.write permission.' },
         meta: { timestamp, tenantId },
+      });
+    }
+
+    if (signers.length === 0) {
+      const { data: patientPii, error: patientPiiError } = await supabase
+        .from('patient_pii')
+        .select('full_name, email, phone')
+        .eq('tenant_id', tenantId)
+        .eq('patient_id', patientId)
+        .maybeSingle();
+
+      if (patientPiiError) throw patientPiiError;
+      signers = signerFromPatientPii(patientPii as Record<string, unknown> | null);
+      signerSource = 'patient_pii';
+    }
+
+    if (signers.length === 0) {
+      return jsonResponse(422, {
+        ok: false,
+        error: {
+          code: 'missing_patient_signer',
+          message: 'Patient needs a real name and email or phone before D4Sign can be requested.',
+        },
+        meta: { timestamp, tenantId, patient_id: patientId },
       });
     }
 
@@ -192,6 +232,28 @@ Deno.serve(async (req) => {
           message: 'D4Sign must not be used for medical prescriptions.',
         },
         meta: { timestamp },
+      });
+    }
+
+    const { data: existingSignatureRequest, error: existingSignatureRequestError } = await supabase
+      .from('signature_requests')
+      .select('id, status')
+      .eq('tenant_id', tenantId)
+      .eq('patient_id', patientId)
+      .eq('generated_document_id', generatedDocument.id)
+      .in('status', ['sent', 'viewed', 'pending'])
+      .limit(1)
+      .maybeSingle();
+
+    if (existingSignatureRequestError) throw existingSignatureRequestError;
+    if (existingSignatureRequest) {
+      return jsonResponse(409, {
+        ok: false,
+        error: {
+          code: 'signature_already_pending',
+          message: 'This document already has a pending signature request.',
+        },
+        meta: { timestamp, tenantId, patient_id: patientId },
       });
     }
 
@@ -233,8 +295,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const providerData = (await providerResponse.json().catch(() => ({}))) as Record<string, unknown>;
-    const providerDocumentId = safeString(providerData.document_id ?? providerData.uuid ?? providerData.id);
+    const providerData = (await providerResponse.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    const providerDocumentId = safeString(
+      providerData.document_id ?? providerData.uuid ?? providerData.id
+    );
 
     const { data: signatureRequest, error: signatureRequestError } = await supabase
       .from('signature_requests')
@@ -262,7 +329,9 @@ Deno.serve(async (req) => {
       status: 'pending',
     }));
 
-    const { error: signerInsertError } = await supabase.from('signature_signers').insert(signerRows);
+    const { error: signerInsertError } = await supabase
+      .from('signature_signers')
+      .insert(signerRows);
     if (signerInsertError) throw signerInsertError;
 
     const { error: updateDocumentError } = await supabase
@@ -291,6 +360,7 @@ Deno.serve(async (req) => {
         signature_request_id: signatureRequest.id,
         provider: 'd4sign',
         signer_count: signerRows.length,
+        signer_source: signerSource,
       },
     });
 
@@ -302,6 +372,7 @@ Deno.serve(async (req) => {
         provider_document_id: signatureRequest.provider_document_id,
         signature_request_id: signatureRequest.id,
         status: signatureRequest.status,
+        signer_source: signerSource,
       },
       meta: { timestamp, tenant_id: tenantId, patient_id: patientId },
     });

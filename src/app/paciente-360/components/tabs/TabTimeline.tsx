@@ -37,6 +37,7 @@ import {
   Send,
   Smartphone,
   ExternalLink,
+  FlaskConical,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
 import { getPatientTimeline } from '@/services/patient360Api';
@@ -188,6 +189,18 @@ const eventTypeConfig: Record<TimelineEventType, EventConfig> = {
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
     label: 'Medida registrada',
+  },
+  exame_solicitado: {
+    icon: FlaskConical,
+    iconColor: 'text-cyan-600',
+    iconBg: 'bg-cyan-50',
+    label: 'Exame solicitado',
+  },
+  exame_resultado_recebido: {
+    icon: ClipboardList,
+    iconColor: 'text-teal-600',
+    iconBg: 'bg-teal-50',
+    label: 'Resultado de exame',
   },
   plano_alimentar_publicado: {
     icon: Utensils,
@@ -417,6 +430,7 @@ export default function TabTimeline({ events, patientId }: TabTimelineProps) {
   const [timelineEvents, setTimelineEvents] = useState<PatientTimelineEvent[]>(events);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -434,21 +448,33 @@ export default function TabTimeline({ events, patientId }: TabTimelineProps) {
     setIsLoading(true);
     setError(null);
 
-    void getPatientTimeline(patientId, { category }).then(({ data, error: timelineError }) => {
-      if (!isActive) return;
-      if (timelineError) {
-        setTimelineEvents([]);
-        setError('Falha ao carregar timeline. Tente novamente.');
-      } else {
+    const loadTimeline = async () => {
+      try {
+        const { data, error: timelineError } = await getPatientTimeline(patientId, { category });
+        if (!isActive) return;
+        if (timelineError) {
+          setTimelineEvents([]);
+          setError(timelineError.message || 'Falha ao carregar timeline. Tente novamente.');
+          return;
+        }
         setTimelineEvents(data);
+      } catch (loadError) {
+        if (!isActive) return;
+        setTimelineEvents([]);
+        setError(
+          loadError instanceof Error ? loadError.message : 'Falha inesperada ao carregar timeline.'
+        );
+      } finally {
+        if (isActive) setIsLoading(false);
       }
-      setIsLoading(false);
-    });
+    };
+
+    void loadTimeline();
 
     return () => {
       isActive = false;
     };
-  }, [activeCategory, events, patientId]);
+  }, [activeCategory, events, patientId, reloadToken]);
 
   const filtered = useMemo(
     () =>
@@ -492,8 +518,15 @@ export default function TabTimeline({ events, patientId }: TabTimelineProps) {
           <p className="text-sm text-muted-foreground">Carregando timeline...</p>
         </div>
       ) : error ? (
-        <div className="card-base p-5">
+        <div className="card-base p-5 space-y-3">
           <EmptyState icon={AlertTriangle} title="Erro ao carregar timeline" description={error} />
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            onClick={() => setReloadToken((value) => value + 1)}
+          >
+            Tentar novamente
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="card-base p-5">

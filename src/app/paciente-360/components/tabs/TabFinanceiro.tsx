@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { PatientFinancialSummary } from '@/domain/types';
 import {
   ShieldOff,
@@ -375,23 +375,24 @@ export default function TabFinanceiro({
     }
   };
 
-  useEffect(() => {
-    const load = async () => {
-      if (!patientId || !canViewFinancial) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await getPatientFinancialSummary(patientId);
-        if (res.error) setError(res.error.message);
-        if (res.data) setLiveFinancial(res.data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro inesperado ao carregar financeiro.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
+  const loadFinancial = useCallback(async () => {
+    if (!patientId || !canViewFinancial) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getPatientFinancialSummary(patientId);
+      if (res.error) setError(res.error.message);
+      if (res.data) setLiveFinancial(res.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro inesperado ao carregar financeiro.');
+    } finally {
+      setLoading(false);
+    }
   }, [patientId, canViewFinancial]);
+
+  useEffect(() => {
+    void loadFinancial();
+  }, [loadFinancial]);
   // Permission gate
   if (!canViewFinancial) {
     return <SemPermissaoFinanceira />;
@@ -403,7 +404,16 @@ export default function TabFinanceiro({
     );
   if (error)
     return (
-      <div className="card-base p-5 text-sm text-red-600">Erro ao carregar financeiro: {error}</div>
+      <div className="card-base p-5 space-y-3">
+        <p className="text-sm text-red-600">Erro ao carregar financeiro: {error}</p>
+        <button
+          type="button"
+          className="btn-secondary text-xs"
+          onClick={() => void loadFinancial()}
+        >
+          Tentar novamente
+        </button>
+      </div>
     );
   if (!liveFinancial) {
     return (

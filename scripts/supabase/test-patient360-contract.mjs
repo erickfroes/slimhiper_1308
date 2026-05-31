@@ -33,7 +33,13 @@ const defaultFixturePath = path.join(
 const args = parseArgs(process.argv.slice(2));
 const mode = args.mode ?? 'real';
 
-const VALID_PACKAGE_STATUSES = new Set(['ativo', 'pausado', 'concluido', 'cancelado', 'aguardando']);
+const VALID_PACKAGE_STATUSES = new Set([
+  'ativo',
+  'pausado',
+  'concluido',
+  'cancelado',
+  'aguardando',
+]);
 const VALID_PATIENT_STATUSES = new Set(['ativo', 'inativo', 'pausado', 'concluido', 'cancelado']);
 const VALID_PROGRAM_TYPES = new Set([
   'emagrecimento',
@@ -88,6 +94,8 @@ const VALID_EVENT_TYPES = new Set([
   'anamnese_preenchida',
   'soap_atualizado',
   'medida_registrada',
+  'exame_solicitado',
+  'exame_resultado_recebido',
   'plano_alimentar_publicado',
   'prescricao_emitida',
   'documento_gerado',
@@ -253,7 +261,11 @@ function assertTimelineEventShape(event, index, checkNumber) {
   const prefix = `${checkNumber}) timeline event[${index}]`;
   ok(isSafeFallbackString(event?.id), `${prefix}.id must exist`);
   ok(isSafeFallbackString(event?.patientId), `${prefix}.patientId must exist`);
-  assertEnum(event?.type, VALID_EVENT_TYPES, `${prefix}.type must be a valid frontend TimelineEventType`);
+  assertEnum(
+    event?.type,
+    VALID_EVENT_TYPES,
+    `${prefix}.type must be a valid frontend TimelineEventType`
+  );
   ok(isSafeFallbackString(event?.title), `${prefix}.title must exist`);
   ok(isSafeFallbackString(event?.description), `${prefix}.description must exist`);
   ok(isSafeFallbackString(event?.date), `${prefix}.date must exist`);
@@ -328,7 +340,10 @@ function assertSummaryContract(summary, results) {
   );
 
   const clinicalStatus = data.clinicalStatus;
-  assertNumber(clinicalStatus?.currentWeightKg, '6) clinicalStatus.currentWeightKg must be a number');
+  assertNumber(
+    clinicalStatus?.currentWeightKg,
+    '6) clinicalStatus.currentWeightKg must be a number'
+  );
   assertNumber(clinicalStatus?.goalWeightKg, '6) clinicalStatus.goalWeightKg must be a number');
   assertNumber(clinicalStatus?.startWeightKg, '6) clinicalStatus.startWeightKg must be a number');
   assertNumber(clinicalStatus?.currentBmi, '6) clinicalStatus.currentBmi must be a number');
@@ -343,14 +358,23 @@ function assertSummaryContract(summary, results) {
   );
   assertNumber(clinicalStatus?.weightLostKg, '6) clinicalStatus.weightLostKg must be a number');
   assertNumber(clinicalStatus?.weightToGoKg, '6) clinicalStatus.weightToGoKg must be a number');
-  assertNumber(clinicalStatus?.progressPercent, '6) clinicalStatus.progressPercent must be a number');
+  assertNumber(
+    clinicalStatus?.progressPercent,
+    '6) clinicalStatus.progressPercent must be a number'
+  );
   assertString(clinicalStatus?.lastMeasuredAt, '6) clinicalStatus.lastMeasuredAt must exist');
   ok(isArray(clinicalStatus?.weightHistory), '6) clinicalStatus.weightHistory must be an array');
-  ok(isArray(clinicalStatus?.adherenceHistory), '6) clinicalStatus.adherenceHistory must be an array');
+  ok(
+    isArray(clinicalStatus?.adherenceHistory),
+    '6) clinicalStatus.adherenceHistory must be an array'
+  );
 
   const financial = data.financial;
   assertEnum(financial?.status, VALID_FINANCIAL_STATUSES, '7) data.financial.status must be valid');
-  assertNumber(financial?.totalContractValue, '7) data.financial.totalContractValue must be a number');
+  assertNumber(
+    financial?.totalContractValue,
+    '7) data.financial.totalContractValue must be a number'
+  );
   assertNumber(financial?.totalPaid, '7) data.financial.totalPaid must be a number');
   assertNumber(financial?.totalPending, '8) data.financial.totalPending must be a number');
   assertNumber(financial?.totalOverdue, '8) data.financial.totalOverdue must be a number');
@@ -414,8 +438,14 @@ function assertSummaryContract(summary, results) {
   assertString(nutritionPlan?.id, '14) data.nutritionPlan.id must exist');
   assertString(nutritionPlan?.patientId, '14) data.nutritionPlan.patientId must exist');
   assertString(nutritionPlan?.planName, '14) data.nutritionPlan.planName must exist');
-  assertNumber(nutritionPlan?.targetCalories, '14) data.nutritionPlan.targetCalories must be a number');
-  ok(typeof nutritionPlan?.isActive === 'boolean', '14) data.nutritionPlan.isActive must be boolean');
+  assertNumber(
+    nutritionPlan?.targetCalories,
+    '14) data.nutritionPlan.targetCalories must be a number'
+  );
+  ok(
+    typeof nutritionPlan?.isActive === 'boolean',
+    '14) data.nutritionPlan.isActive must be boolean'
+  );
 
   const chat = data.chat;
   assertString(chat?.id, '15) data.chat.id must exist');
@@ -449,7 +479,9 @@ function assertTimelineContract(timeline, results, label = 'patient-timeline') {
   ok(isInteger(timeline.json?.data?.page), `${label}.data.page must be integer`);
   ok(isInteger(timeline.json?.data?.page_size), `${label}.data.page_size must be integer`);
   ok(isInteger(timeline.json?.data?.total), `${label}.data.total must be integer`);
-  timeline.json.data.events.forEach((event, index) => assertTimelineEventShape(event, index, label));
+  timeline.json.data.events.forEach((event, index) =>
+    assertTimelineEventShape(event, index, label)
+  );
   results.push(`${label} payload passed`);
 }
 
@@ -481,7 +513,10 @@ async function runFixture() {
   }
 
   if (fixture.crossTenant) {
-    ok(fixture.crossTenant.status !== 200, `cross-tenant fetch should fail, got ${fixture.crossTenant.status}`);
+    ok(
+      fixture.crossTenant.status !== 200,
+      `cross-tenant fetch should fail, got ${fixture.crossTenant.status}`
+    );
     results.push(`cross-tenant fixture passed (status ${fixture.crossTenant.status})`);
   }
 

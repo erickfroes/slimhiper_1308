@@ -66,6 +66,10 @@ type AlertRow = {
   created_at: string;
 };
 
+type ChatThreadUnreadRow = {
+  unread_count: number | null;
+};
+
 function todayRange() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -205,16 +209,17 @@ const supabaseDashboardProvider: DashboardProvider = {
     ];
 
     const [
-      activePatientsResult,
+      activeProgramsResult,
       activeAlertsResult,
       pendingDocumentsResult,
       overdueInvoicesResult,
+      unreadThreadsResult,
     ] = await Promise.all([
       supabase
-        .from('patients')
+        .from('patient_program_enrollments')
         .select('id', { count: 'exact', head: true })
         .eq('tenant_id', tenantId)
-        .eq('status', 'active'),
+        .eq('status', 'ativo'),
       supabase
         .from('patient_alerts')
         .select('id', { count: 'exact', head: true })
@@ -230,16 +235,27 @@ const supabaseDashboardProvider: DashboardProvider = {
         .select('id', { count: 'exact', head: true })
         .eq('tenant_id', tenantId)
         .in('status', ['OVERDUE', 'overdue', 'vencido']),
+      supabase
+        .from('patient_chat_threads')
+        .select('unread_count')
+        .eq('tenant_id', tenantId)
+        .gt('unread_count', 0),
     ]);
 
     for (const result of [
-      activePatientsResult,
+      activeProgramsResult,
       activeAlertsResult,
       pendingDocumentsResult,
       overdueInvoicesResult,
+      unreadThreadsResult,
     ]) {
       if (result.error) throw result.error;
     }
+
+    const unreadMessages = ((unreadThreadsResult.data ?? []) as ChatThreadUnreadRow[]).reduce(
+      (sum, row) => sum + (row.unread_count ?? 0),
+      0
+    );
 
     return {
       consultasHoje: todayAppointments.length,
@@ -247,9 +263,9 @@ const supabaseDashboardProvider: DashboardProvider = {
       filaEspera: todayAppointments.filter((appointment) =>
         queueStatuses.includes(mapAppointmentStatus(appointment.status))
       ).length,
-      programasAtivos: activePatientsResult.count ?? 0,
+      programasAtivos: activeProgramsResult.count ?? 0,
       alertasClinicos: activeAlertsResult.count ?? 0,
-      mensagensNaoLidas: 0,
+      mensagensNaoLidas: unreadMessages,
       documentosPendentes: pendingDocumentsResult.count ?? 0,
       inadimplentes: overdueInvoicesResult.count ?? 0,
       taxaOcupacao: todayAppointments.length

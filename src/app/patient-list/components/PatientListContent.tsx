@@ -19,13 +19,26 @@ import {
   ChevronRight,
   Users,
   Phone,
+  Pencil,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import EmptyState from '@/components/EmptyState';
 import { SkeletonTableRow } from '@/components/LoadingSkeleton';
-import { getPatientList } from '@/services/patientsApi';
-import type { PatientListRow, ProgramType, FinancialStatus, AdherenceLevel } from '@/domain/types';
+import {
+  createPatient,
+  getPatientFormSnapshot,
+  getPatientList,
+  updatePatient,
+  type PatientMutationInput,
+} from '@/services/patientsApi';
+import type {
+  PatientListRow,
+  ProgramType,
+  FinancialStatus,
+  AdherenceLevel,
+  PatientStatus,
+} from '@/domain/types';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
@@ -83,6 +96,206 @@ function AdherenceBar({ value, level }: { value: number; level: AdherenceLevel }
 }
 
 // ─── Sort Header ──────────────────────────────────────────────────────────────
+
+type PatientFormState = {
+  fullName: string;
+  preferredName: string;
+  email: string;
+  phone: string;
+  cpfMasked: string;
+  birthDate: string;
+  sexGender: string;
+  status: PatientStatus;
+};
+
+function emptyPatientForm(): PatientFormState {
+  return {
+    fullName: '',
+    preferredName: '',
+    email: '',
+    phone: '',
+    cpfMasked: '',
+    birthDate: '',
+    sexGender: '',
+    status: 'ativo',
+  };
+}
+
+function toPatientMutationInput(form: PatientFormState): PatientMutationInput {
+  return {
+    fullName: form.fullName,
+    preferredName: form.preferredName,
+    email: form.email,
+    phone: form.phone,
+    cpfMasked: form.cpfMasked,
+    birthDate: form.birthDate,
+    sexGender: form.sexGender,
+    status: form.status,
+  };
+}
+
+function PatientFormModal({
+  mode,
+  form,
+  error,
+  submitting,
+  loading,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  mode: 'create' | 'edit';
+  form: PatientFormState;
+  error: string | null;
+  submitting: boolean;
+  loading: boolean;
+  onChange: (patch: Partial<PatientFormState>) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const title = mode === 'create' ? 'Novo paciente' : 'Editar paciente';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">{title}</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Dados sensiveis sao gravados em patient_pii e protegidos por RLS.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            aria-label="Fechar"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+          className="space-y-4 px-5 py-5"
+        >
+          {loading ? (
+            <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+              Carregando dados do paciente...
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Nome completo
+                  <input
+                    value={form.fullName}
+                    onChange={(event) => onChange({ fullName: event.target.value })}
+                    className="input-base text-sm"
+                    required
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Nome social/apelido
+                  <input
+                    value={form.preferredName}
+                    onChange={(event) => onChange({ preferredName: event.target.value })}
+                    className="input-base text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Email
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => onChange({ email: event.target.value })}
+                    className="input-base text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Telefone
+                  <input
+                    value={form.phone}
+                    onChange={(event) => onChange({ phone: event.target.value })}
+                    className="input-base text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  CPF mascarado
+                  <input
+                    value={form.cpfMasked}
+                    onChange={(event) => onChange({ cpfMasked: event.target.value })}
+                    className="input-base text-sm"
+                    placeholder="***.***.***-**"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Nascimento
+                  <input
+                    type="date"
+                    value={form.birthDate}
+                    onChange={(event) => onChange({ birthDate: event.target.value })}
+                    className="input-base text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Genero/sexo
+                  <input
+                    value={form.sexGender}
+                    onChange={(event) => onChange({ sexGender: event.target.value })}
+                    className="input-base text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Status
+                  <select
+                    value={form.status}
+                    onChange={(event) => onChange({ status: event.target.value as PatientStatus })}
+                    className="input-base text-sm"
+                  >
+                    <option value="ativo">Ativo</option>
+                    <option value="pausado">Pausado</option>
+                    <option value="inativo">Inativo</option>
+                    <option value="concluido">Concluido</option>
+                    <option value="cancelado">Cancelado</option>
+                  </select>
+                </label>
+              </div>
+
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="btn-secondary text-sm disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading || submitting}
+              className="btn-primary text-sm disabled:opacity-60"
+            >
+              {submitting ? 'Salvando...' : mode === 'create' ? 'Cadastrar paciente' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 function SortableHeader({
   label,
@@ -142,6 +355,12 @@ export default function PatientListContent() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [patientFormMode, setPatientFormMode] = useState<'create' | 'edit' | null>(null);
+  const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
+  const [patientForm, setPatientForm] = useState<PatientFormState>(() => emptyPatientForm());
+  const [patientFormError, setPatientFormError] = useState<string | null>(null);
+  const [patientFormLoading, setPatientFormLoading] = useState(false);
+  const [patientFormSubmitting, setPatientFormSubmitting] = useState(false);
 
   const loadPatients = useCallback(async () => {
     setLoading(true);
@@ -230,20 +449,94 @@ export default function PatientListContent() {
     setPage(1);
   };
 
+  const closePatientForm = () => {
+    if (patientFormSubmitting) return;
+    setPatientFormMode(null);
+    setEditingPatientId(null);
+    setPatientForm(emptyPatientForm());
+    setPatientFormError(null);
+    setPatientFormLoading(false);
+  };
+
+  const openCreatePatient = () => {
+    setPatientFormMode('create');
+    setEditingPatientId(null);
+    setPatientForm(emptyPatientForm());
+    setPatientFormError(null);
+    setPatientFormLoading(false);
+  };
+
+  const openEditPatient = async (patientId: string) => {
+    setPatientFormMode('edit');
+    setEditingPatientId(patientId);
+    setPatientForm(emptyPatientForm());
+    setPatientFormError(null);
+    setPatientFormLoading(true);
+
+    const result = await getPatientFormSnapshot(patientId);
+    setPatientFormLoading(false);
+
+    if (result.error || !result.data) {
+      setPatientFormError(result.error?.message ?? 'Falha ao carregar paciente.');
+      return;
+    }
+
+    setPatientForm({
+      fullName: result.data.fullName,
+      preferredName: result.data.preferredName,
+      email: result.data.email,
+      phone: result.data.phone,
+      cpfMasked: result.data.cpfMasked,
+      birthDate: result.data.birthDate,
+      sexGender: result.data.sexGender,
+      status: result.data.status,
+    });
+  };
+
+  const handleSubmitPatientForm = async () => {
+    setPatientFormSubmitting(true);
+    setPatientFormError(null);
+
+    const input = toPatientMutationInput(patientForm);
+    const result =
+      patientFormMode === 'edit' && editingPatientId
+        ? await updatePatient(editingPatientId, input)
+        : await createPatient(input);
+
+    setPatientFormSubmitting(false);
+
+    if (result.error || !result.data) {
+      setPatientFormError(result.error?.message ?? 'Nao foi possivel salvar paciente.');
+      return;
+    }
+
+    toast.success(patientFormMode === 'edit' ? 'Paciente atualizado.' : 'Paciente cadastrado.');
+    closePatientForm();
+    await loadPatients();
+  };
+
   const activeFilters = [filterProgram, filterFinancial, filterAdherence].filter(Boolean).length;
 
   return (
     <div className="p-6 xl:p-8 max-w-screen-2xl mx-auto">
+      {patientFormMode && (
+        <PatientFormModal
+          mode={patientFormMode}
+          form={patientForm}
+          error={patientFormError}
+          submitting={patientFormSubmitting}
+          loading={patientFormLoading}
+          onChange={(patch) => setPatientForm((current) => ({ ...current, ...patch }))}
+          onClose={closePatientForm}
+          onSubmit={handleSubmitPatientForm}
+        />
+      )}
+
       <PageHeader
         title="Pacientes"
         subtitle={`${patients.length} pacientes cadastrados · ${patients.filter((p) => p.status === 'ativo').length} ativos`}
         actions={
-          <button
-            type="button"
-            disabled
-            title="Criação de paciente depende do service real com validação de PII."
-            className="btn-primary text-sm"
-          >
+          <button type="button" onClick={openCreatePatient} className="btn-primary text-sm">
             <Users size={15} />
             Novo Paciente
           </button>
@@ -621,6 +914,17 @@ export default function PatientListContent() {
                         >
                           <Eye size={14} />
                         </Link>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void openEditPatient(patient.id);
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                          title="Editar paciente"
+                        >
+                          <Pencil size={14} />
+                        </button>
                         <button
                           type="button"
                           disabled

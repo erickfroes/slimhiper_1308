@@ -97,11 +97,17 @@ target.
 Configure server-side only:
 
 - `ASAAS_API_KEY`
-- `ASAAS_BASE_URL` (optional, default `https://api.asaas.com/v3`)
+- `ASAAS_BASE_URL`
 - `ASAAS_WEBHOOK_TOKEN`
 - `SUPABASE_SERVICE_ROLE_KEY` (webhook only)
 
 Never place these in `NEXT_PUBLIC_*`.
+
+For sandbox validation, set `ASAAS_BASE_URL` to the Asaas sandbox API base URL
+before running any real/sandbox contract. Do not run
+`scripts/supabase/test-billing-contract.mjs` when the target cannot be
+classified as sandbox or when the local Edge Runtime does not expose the
+required `ASAAS_*` secrets by name.
 
 ## Deploy Functions
 
@@ -135,13 +141,13 @@ payload hash.
 
 Local fixtures assert this minimum provider-to-internal mapping:
 
-| Asaas event | Invoice status | Payment status | Financial state | Timeline event |
-| --- | --- | --- | --- | --- |
-| `PAYMENT_CONFIRMED` | `pago` | `paid` | `em_dia` | `pagamento_recebido` |
-| `PAYMENT_RECEIVED` | `pago` | `paid` | `em_dia` | `pagamento_recebido` |
-| `PAYMENT_OVERDUE` | `vencido` | `overdue` | `pagamento_atrasado` | `pagamento_atrasado` |
-| `PAYMENT_CREATED` | `pendente` | `pending` | `cobranca_pendente` | `pagamento` |
-| `PAYMENT_DELETED` / `PAYMENT_CANCELLED` | `cancelado` | `canceled` | `cobranca_pendente` | none |
+| Asaas event                             | Invoice status | Payment status | Financial state      | Timeline event       |
+| --------------------------------------- | -------------- | -------------- | -------------------- | -------------------- |
+| `PAYMENT_CONFIRMED`                     | `pago`         | `paid`         | `em_dia`             | `pagamento_recebido` |
+| `PAYMENT_RECEIVED`                      | `pago`         | `paid`         | `em_dia`             | `pagamento_recebido` |
+| `PAYMENT_OVERDUE`                       | `vencido`      | `overdue`      | `pagamento_atrasado` | `pagamento_atrasado` |
+| `PAYMENT_CREATED`                       | `pendente`     | `pending`      | `cobranca_pendente`  | `pagamento`          |
+| `PAYMENT_DELETED` / `PAYMENT_CANCELLED` | `cancelado`    | `canceled`     | `cobranca_pendente`  | none                 |
 
 Implementation note: `webhook-asaas` records an append-only webhook audit row
 with a minimized operational payload, deduplicates by SHA-256 event hash,
@@ -153,6 +159,43 @@ financial rows but intentionally do not emit a new timeline event.
 The database stores provider-normalized statuses such as `pending`, `paid`,
 `overdue`, and `cancelled`. The frontend contract maps these to Portuguese
 domain statuses through `get_patient_financial_summary(...)`.
+
+## Patient Billing Edge Function Contract
+
+Patient billing mutations are browser-accessible only through Edge Functions:
+
+- `asaas-create-patient-customer`
+- `asaas-create-patient-invoice`
+- `asaas-create-patient-subscription`
+
+The frontend `billingApi` calls `asaas-create-patient-customer` before creating
+an invoice or subscription so customer creation is explicit and idempotent.
+
+Current local-safe contract:
+
+- The Edge Function derives tenant context from the requested patient and the
+  authenticated user's active membership, not from a tenant id supplied by the
+  browser.
+- `financial.write` is required before any provider request is attempted.
+- Request payloads validate patient id, amount, due date, cycle, and
+  description before calling Asaas.
+- Provider errors are redacted to safe codes/messages; raw Asaas error bodies
+  are not returned to the browser.
+- Browser responses return local IDs and safe links/status only. They do not
+  return `asaas_customer_id`, `asaas_invoice_id`, `asaas_subscription_id`, API
+  keys, tokens, or raw provider payloads.
+- The real/sandbox `test-billing-contract.mjs` script asserts the safe envelope
+  and rejects provider IDs in response data, but it must run only after explicit
+  authorization because it can call Edge Functions that may call Asaas.
+- In the 2026-05-31 local validation pass, the script was not completed because
+  the local Edge Runtime did not expose `ASAAS_*` secrets and the repo `.env`
+  did not classify `ASAAS_BASE_URL` as sandbox. Treat that as a configuration
+  block, not a provider pass.
+
+`asaas-create-tenant-subaccount` follows the same safe-envelope pattern for
+tenant billing account creation: it resolves the active tenant from the
+authenticated user, requires `financial.write`, reuses an existing subaccount
+when present, and returns only local subaccount id/status plus masked wallet id.
 
 ## Seed And Contract Test
 

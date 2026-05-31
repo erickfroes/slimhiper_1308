@@ -304,6 +304,38 @@ async function insertAuditLog(input: {
   if (error) throw error;
 }
 
+async function insertClinicalTimelineEvent(input: {
+  patientId: string;
+  tenantId: string;
+  eventType: string;
+  title: string;
+  description: string;
+  entityId: string;
+  href?: string;
+  payload?: Record<string, unknown>;
+}) {
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.from('patient_timeline_events').insert({
+    tenant_id: input.tenantId,
+    patient_id: input.patientId,
+    event_type: input.eventType,
+    category: 'clinical',
+    status: 'recorded',
+    title: input.title,
+    description: input.description,
+    actor_name: 'Equipe clinica',
+    status_label: 'Registrado',
+    details_href: input.href ?? `/clinic/patients/${input.patientId}/encounter`,
+    event_at: new Date().toISOString(),
+    payload: {
+      entityId: input.entityId,
+      ...input.payload,
+    },
+  });
+
+  if (error) throw error;
+}
+
 export async function getPatientClinicalRecords(
   patientId: string
 ): Promise<{ data: ClinicalRecordsData | null; error: SafeServiceError | null }> {
@@ -409,6 +441,15 @@ export async function createMeasurement(
       action: 'measurement_created',
       entityType: 'measurement',
       entityId: data.id,
+    });
+    await insertClinicalTimelineEvent({
+      patientId,
+      tenantId,
+      eventType: 'medida_registrada',
+      title: 'Medidas registradas',
+      description: 'Novas medidas corporais foram registradas no atendimento.',
+      entityId: data.id,
+      payload: { encounterId: input.encounterId ?? null },
     });
 
     return { data: { id: data.id }, error: null };
@@ -520,6 +561,15 @@ export async function createBioimpedanceResult(
       entityType: 'bioimpedance_result',
       entityId: data.id,
     });
+    await insertClinicalTimelineEvent({
+      patientId,
+      tenantId,
+      eventType: 'medida_registrada',
+      title: 'Bioimpedancia registrada',
+      description: 'Resultado de bioimpedancia registrado no atendimento.',
+      entityId: data.id,
+      payload: { encounterId: input.encounterId ?? null },
+    });
 
     return { data: { id: data.id }, error: null };
   } catch (error) {
@@ -562,6 +612,15 @@ export async function createLabOrder(
       entityType: 'lab_order',
       entityId: data.id,
     });
+    await insertClinicalTimelineEvent({
+      patientId,
+      tenantId,
+      eventType: 'exame_solicitado',
+      title: 'Exames solicitados',
+      description: `Painel ${input.panelName} solicitado no atendimento.`,
+      entityId: data.id,
+      payload: { encounterId: input.encounterId ?? null, tests: input.tests },
+    });
 
     return { data: { id: data.id }, error: null };
   } catch (error) {
@@ -601,6 +660,15 @@ export async function recordLabResult(
       action: 'lab_result_recorded',
       entityType: 'lab_result',
       entityId: data.id,
+    });
+    await insertClinicalTimelineEvent({
+      patientId,
+      tenantId,
+      eventType: 'exame_resultado_recebido',
+      title: 'Resultado de exame recebido',
+      description: 'Resultado laboratorial registrado no prontuario.',
+      entityId: data.id,
+      payload: { labOrderId: input.labOrderId ?? null },
     });
 
     return { data: { id: data.id }, error: null };

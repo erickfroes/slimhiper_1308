@@ -58,10 +58,13 @@ function unwrap<T>(response: unknown): { data: T | null; error: SafeServiceError
   return { data: response as T, error: null };
 }
 
-function asChargeResult(payload: unknown): ChargeActionResult {
+function asChargeResult(payload: unknown): ChargeActionResult | null {
   const r = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
+  const id = typeof r.id === 'string' && r.id.trim() ? r.id : null;
+  if (!id) return null;
+
   return {
-    id: String(r.id ?? r.invoice_id ?? r.subscription_id ?? crypto.randomUUID()),
+    id,
     status: typeof r.status === 'string' ? r.status : undefined,
     paymentLink:
       typeof r.payment_link === 'string'
@@ -73,7 +76,25 @@ function asChargeResult(payload: unknown): ChargeActionResult {
   };
 }
 
+function isValidDateInput(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime());
+}
+
+function validateAmountCents(amount: number): number | null {
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return Math.round(amount * 100);
+}
+
 export async function getPatientFinancialSummary(patientId: string) {
+  if (!patientId.trim()) {
+    return {
+      data: null as PatientFinancialSummary | null,
+      error: { message: 'Paciente invalido para carregar financeiro.' },
+    };
+  }
+
   if (isMockEnabled()) {
     const p = await getPatient360(patientId);
     return { data: p?.financial ?? null, error: null as SafeServiceError | null };
@@ -105,6 +126,9 @@ async function invoke<T>(fn: string, body: Record<string, unknown>) {
 }
 
 export async function createPatientCustomer(patientId: string) {
+  if (!patientId.trim()) {
+    return { data: null, error: { message: 'Paciente invalido para criar customer.' } };
+  }
   if (isMockEnabled())
     return { data: { id: `mock-customer-${patientId}` }, error: null as SafeServiceError | null };
   return invoke<{ id: string }>('asaas-create-patient-customer', { patient_id: patientId });
@@ -116,19 +140,48 @@ export async function createPatientInvoice(
   description: string,
   dueDate: string
 ) {
+  if (!patientId.trim()) {
+    return { data: null, error: { message: 'Paciente invalido para criar cobranca.' } };
+  }
+  const amountCents = validateAmountCents(amount);
+  if (!amountCents) {
+    return { data: null, error: { message: 'Valor invalido para criar cobranca.' } };
+  }
+  if (!description.trim()) {
+    return { data: null, error: { message: 'Descricao obrigatoria para criar cobranca.' } };
+  }
+  if (!isValidDateInput(dueDate)) {
+    return { data: null, error: { message: 'Data de vencimento invalida.' } };
+  }
+
   if (isMockEnabled())
     return {
-      data: { id: `mock-invoice-${Date.now()}`, paymentLink: `https://mock.pay/${patientId}` },
+      data: {
+        id: `mock-invoice-${Date.now()}`,
+        paymentLink: `https://mock.pay/${patientId}`,
+        invoiceUrl: null,
+      },
       error: null as SafeServiceError | null,
     };
+
+  const customer = await createPatientCustomer(patientId);
+  if (customer.error) return { data: null, error: customer.error };
+
   const payload = {
     patient_id: patientId,
-    amount_cents: Math.round(amount * 100),
-    description,
+    amount_cents: amountCents,
+    description: description.trim(),
     due_date: dueDate,
   };
   const res = await invoke<unknown>('asaas-create-patient-invoice', payload);
-  return { data: res.data ? asChargeResult(res.data) : null, error: res.error };
+  if (res.error) return { data: null, error: res.error };
+  const charge = asChargeResult(res.data);
+  return {
+    data: charge,
+    error: charge
+      ? null
+      : { message: 'Contrato invalido retornado pela Edge Function de cobranca.' },
+  };
 }
 
 export async function createPatientSubscription(
@@ -137,20 +190,43 @@ export async function createPatientSubscription(
   amount: number,
   interval: string
 ) {
+  if (!patientId.trim()) {
+    return { data: null, error: { message: 'Paciente invalido para criar assinatura.' } };
+  }
+  const amountCents = validateAmountCents(amount);
+  if (!amountCents) {
+    return { data: null, error: { message: 'Valor invalido para criar assinatura.' } };
+  }
+
   if (isMockEnabled())
     return {
-      data: { id: `mock-sub-${Date.now()}`, paymentLink: `https://mock.pay/sub/${patientId}` },
+      data: {
+        id: `mock-sub-${Date.now()}`,
+        paymentLink: `https://mock.pay/sub/${patientId}`,
+        invoiceUrl: null,
+      },
       error: null as SafeServiceError | null,
     };
+
+  const customer = await createPatientCustomer(patientId);
+  if (customer.error) return { data: null, error: customer.error };
+
   const payload = {
     patient_id: patientId,
     package_id: packageId,
-    amount_cents: Math.round(amount * 100),
+    amount_cents: amountCents,
     cycle: interval,
     next_due_date: new Date().toISOString().slice(0, 10),
   };
   const res = await invoke<unknown>('asaas-create-patient-subscription', payload);
-  return { data: res.data ? asChargeResult(res.data) : null, error: res.error };
+  if (res.error) return { data: null, error: res.error };
+  const charge = asChargeResult(res.data);
+  return {
+    data: charge,
+    error: charge
+      ? null
+      : { message: 'Contrato invalido retornado pela Edge Function de assinatura.' },
+  };
 }
 
 export async function getClinicFinanceOverview() {
