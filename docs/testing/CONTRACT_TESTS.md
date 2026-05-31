@@ -234,9 +234,10 @@ handling without calling Asaas.
 ## CI Workflows
 
 - `.github/workflows/ci.yml`: automatic baseline on pull requests and `main`
-  pushes using `npm ci`, `git diff --check`, type-check, lint, and build.
-  It uses safe public placeholder Supabase values only for static build
-  compilation; it does not use service-role credentials or provider secrets.
+  pushes using `npm ci`, `git diff --check`, type-check, lint, build, and
+  fixture-only Patient 360, D4Sign, and Billing checks. It uses safe public
+  placeholder Supabase values only for static build compilation; it does not use
+  service-role credentials or provider secrets.
 - `.github/workflows/contract-fixtures.yml`: manual fixture-only contract checks
   with no provider secrets.
 

@@ -32,6 +32,7 @@ comparativo competitivo e ordem de finalizacao.
 | Asaas | `docs/integrations/ASAAS_BILLING_RUNBOOK.md` | Billing, fixtures, sandbox e reconciliacao. |
 | Env hygiene | `docs/security/ENV_HYGIENE.md` | Variaveis publicas, server-only e placeholders seguros. |
 | Testes | `docs/testing/CONTRACT_TESTS.md` | Matriz de testes locais, Supabase autorizado e providers. |
+| Browser smoke | `docs/testing/BROWSER_SMOKE_CHECKLIST.md` | Roteiro operacional para validar rotas criticas no navegador. |
 | Baseline | `docs/testing/BASELINE_CHECKS.md` | Snapshot de checks, pendencias e ambiente usado. |
 
 ## Benchmark De Mercado
@@ -71,11 +72,11 @@ Fontes externas consultadas:
 
 ## Gates Globais Nao Negociaveis
 
-- [ ] `.env` real nao esta versionado e `.env.example` possui apenas chaves vazias ou placeholders seguros.
-- [ ] `package-lock.json` esta versionado e `npm install` nao gera diff inesperado.
-- [ ] `rocketCritical` e scripts Rocket externos nao foram removidos sem task especifica.
+- [x] `.env` real nao esta versionado e `.env.example` possui apenas chaves vazias ou placeholders seguros.
+- [x] `package-lock.json` esta versionado e `npm install` nao gera diff inesperado.
+- [x] `rocketCritical` e scripts Rocket externos nao foram removidos sem task especifica.
 - [ ] `NEXT_PUBLIC_*` contem apenas valores publicos seguros.
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` aparece somente em scripts server-side, Edge Functions ou backend confiavel.
+- [x] `SUPABASE_SERVICE_ROLE_KEY` aparece somente em scripts server-side, Edge Functions ou backend confiavel.
 - [ ] Nenhuma tela de producao cai em mock silencioso quando backend/RLS falha.
 - [ ] Todas as rotas clinicas/admin/paciente possuem guard, loading, empty, error e forbidden quando aplicavel.
 - [ ] Todas as tabelas expostas em `public` possuem RLS habilitado e policies explicitas.
@@ -83,10 +84,10 @@ Fontes externas consultadas:
 - [ ] Webhooks D4Sign/Asaas sao fail-closed, idempotentes e nao logam payload sensivel.
 - [ ] Documentos privados usam signed URL curta gerada server-side ou Edge Function, nunca URL publica direta.
 - [ ] Dados de saude e financeiros possuem minimizacao, retencao, auditoria e base de acesso documentadas.
-- [ ] `git diff --check`, `npm run type-check`, `npm run lint` e `npm run build` passam no branch antes de merge.
-- [ ] Contratos locais passam: Patient360 fixture, D4Sign fixtures e Billing fixtures.
+- [x] `git diff --check`, `npm run type-check`, `npm run lint` e `npm run build` passam no branch antes de merge.
+- [x] Contratos locais passam: Patient360 fixture, D4Sign fixtures e Billing fixtures.
 - [ ] Contratos reais/sandbox so rodam com autorizacao explicita e ambiente segregado.
-- [ ] O ultimo baseline verde esta registrado em `docs/testing/BASELINE_CHECKS.md` com data, branch, commit, caminhos tocados, skips, riscos e limitacoes.
+- [x] O ultimo baseline verde esta registrado em `docs/testing/BASELINE_CHECKS.md` com data, branch, commit, caminhos tocados, skips, riscos e limitacoes.
 
 ## Gates De Seguranca E LGPD
 
@@ -261,11 +262,11 @@ Fontes externas consultadas:
 
 ### Fase 0 - Baseline, CI E Higiene
 
-- [ ] Atualizar `docs/testing/BASELINE_CHECKS.md` com commit/branch atual.
-- [ ] Garantir `git diff --check`, `npm run type-check`, `npm run lint` e `npm run build` verdes.
-- [ ] Rodar fixtures locais em CI de PR: Patient360, D4Sign e Billing.
+- [x] Atualizar `docs/testing/BASELINE_CHECKS.md` com commit/branch atual.
+- [x] Garantir `git diff --check`, `npm run type-check`, `npm run lint` e `npm run build` verdes.
+- [x] Rodar fixtures locais em CI de PR: Patient360, D4Sign e Billing.
 - [ ] Registrar ambiente Supabase local green sem secrets.
-- [ ] Adicionar checklist de browser smoke para rotas criticas.
+- [x] Adicionar checklist de browser smoke para rotas criticas.
 
 ### Fase 1 - Auth, RBAC, Guards E RLS
 

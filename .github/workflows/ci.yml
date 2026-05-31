@@ -51,3 +51,12 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Patient 360 fixture contract
+        run: node scripts/supabase/test-patient360-contract.mjs --mode=fixture
+
+      - name: D4Sign fixture contract
+        run: node scripts/supabase/test-d4sign-fixtures.mjs
+
+      - name: Billing fixture contract
+        run: node scripts/supabase/test-billing-fixtures.mjs

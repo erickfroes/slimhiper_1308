@@ -5,35 +5,41 @@ results, pending items, and environment details for the current repository state
 
 ## Latest Implementation Validation
 
-- Date: 2026-05-31.
-- Branch: local working tree.
-- Touched paths: README/checkpoint/runbooks, Supabase config/functions/migration,
-  admin services/screens, dashboard/agenda/patient services, Patient 360
-  documents redirect/action handling, encounter UI, and program builder card
-  classes.
-- `git diff --check`: passed; Git reported CRLF normalization warnings only.
+- Date: 2026-05-30 22:57 -03:00.
+- Branch: `test/asaas-billing-contract-hardening`.
+- Commit: `5d1244b`.
+- Touched paths: `.github/workflows/ci.yml`,
+  `docs/PROJECT_COMPLETION_CHECKPOINTS.md`,
+  `docs/testing/BASELINE_CHECKS.md`, and
+  `docs/testing/BROWSER_SMOKE_CHECKLIST.md`.
+- `npm install`: passed; dependencies were already up to date and no
+  `package.json`/`package-lock.json` diff was produced. NPM still reports 2
+  vulnerabilities, 1 moderate and 1 critical.
+- `git diff --check`: passed.
 - `npm run type-check`: passed.
 - `npm run lint`: passed with 32 warnings.
-- `npm run build`: passed.
-- Browser smoke: `npm run dev` required removing generated `.next` cache after a
-  local `readlink` diagnostic artifact error. The in-app Browser reached the dev
-  server after restart; `/clinic/dashboard`, `/clinic/agenda`,
-  `/clinic/patients/patient-001/encounter`, `/admin/tenants`, and
-  `/admin/webhooks` redirected to `/auth/login` because no authenticated test
-  session was available. The guarded login page rendered without framework error
-  or blank screen, but the protected route interiors were not visually exercised.
+- `npm run build`: passed; Next generated 26 app routes.
+- Local fixture contracts passed:
+  `node scripts/supabase/test-patient360-contract.mjs --mode=fixture`,
+  `node scripts/supabase/test-d4sign-fixtures.mjs`, and
+  `node scripts/supabase/test-billing-fixtures.mjs`.
+- Browser smoke: checklist added at
+  `docs/testing/BROWSER_SMOKE_CHECKLIST.md`. No authenticated browser smoke was
+  executed in this documentation/CI fixture pass.
 - Skipped: Supabase `db push`, migrations, bootstraps, contract scripts, D4Sign
   sandbox, and Asaas sandbox/provider checks. Reason: no explicitly authorized
   target environment/command for mutating or provider-capable operations.
 - Residual risks: protected UI states still need authenticated browser smoke,
-  Supabase RLS/RPC contracts still need an authorized environment, and lint
-  warnings remain non-blocking.
+  Supabase RLS/RPC contracts still need an authorized environment, dependency
+  audit findings need a dedicated package task, and lint warnings remain
+  non-blocking.
 
 ## Environment Used
 
-- Date: 2026-05-19.
+- Date: 2026-05-30 22:57 -03:00.
 - Repo path: local `slimhiper_1308` workspace.
-- Branch: `test/baseline-green-checks`.
+- Branch: `test/asaas-billing-contract-hardening`.
+- Commit: `5d1244b`.
 - Shell: PowerShell.
 - Node: `v24.15.0`.
 - npm: `11.12.1`.
@@ -56,6 +62,9 @@ npm run type-check
 npm run build
 npm run lint
 git diff --check
+node scripts/supabase/test-patient360-contract.mjs --mode=fixture
+node scripts/supabase/test-d4sign-fixtures.mjs
+node scripts/supabase/test-billing-fixtures.mjs
 ```
 
 For docs-only changes, `git diff --check` is the minimum required check. For UI,
@@ -64,13 +73,16 @@ now uses ESLint CLI over `src/**/*.{ts,tsx}` instead of `next lint`.
 
 ## Results From This Run
 
-| Command              | Result               | Notes                                                                                                                                                    |
-| -------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm install`        | Passed               | Dependencies were already up to date; npm audited 534 packages.                                                                                          |
-| `npm run type-check` | Passed               | `tsc --noEmit` exited successfully.                                                                                                                      |
-| `npm run build`      | Passed               | First final rerun hit an ignored `.next` diagnostics artifact readlink error; after removing `.next`, `next build` compiled and generated 25 app routes. |
-| `npm run lint`       | Passed with warnings | ESLint CLI exits with code 0 after line-ending formatting; existing warnings remain.                                                                     |
-| `git diff --check`   | Passed               | No whitespace errors reported.                                                                                                                           |
+| Command              | Result               | Notes                                                                                               |
+| -------------------- | -------------------- | --------------------------------------------------------------------------------------------------- |
+| `npm install`        | Passed               | Dependencies were already up to date; npm audited 534 packages and produced no package diff.        |
+| `npm run type-check` | Passed               | `tsc --noEmit` exited successfully.                                                                 |
+| `npm run build`      | Passed               | `next build` compiled successfully and generated 26 app routes.                                      |
+| `npm run lint`       | Passed with warnings | ESLint CLI exited with code 0; existing 32 warnings remain.                                         |
+| `git diff --check`   | Passed               | No whitespace errors reported.                                                                      |
+| Patient 360 fixture  | Passed               | Summary, timeline, category filter, forbidden, and cross-tenant fixtures passed.                    |
+| D4Sign fixture       | Passed               | Valid webhook, invalid fail-closed behavior, document summary, and HMAC strategy passed.            |
+| Billing fixture      | Passed               | Confirmed, overdue, cancelled, duplicated, tenant resolution, and invalid-token fixtures passed.    |
 
 ## Lint Warning Categories
 
@@ -94,7 +106,7 @@ is to stabilize checks without changing product behavior.
   critical. Do not run `npm audit fix --force` without a dependency update task.
 - Prefer `npm ci` for a clean reproducibility check when resetting
   `node_modules` is acceptable.
-- CI or preview builds must provide safe public Supabase values:
+- CI or preview builds must continue to provide safe public Supabase values:
   `NEXT_PUBLIC_SUPABASE_URL` plus `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 - `next/font/google` depends on Google font resolution during build. If CI has
@@ -105,9 +117,10 @@ is to stabilize checks without changing product behavior.
 - Continue to avoid Supabase/provider commands unless explicitly authorized.
 - Keep `.github/workflows/ci.yml` free of provider secrets and real contract
   calls.
-- Use `.github/workflows/contract-fixtures.yml` for manual local fixture checks;
-  real Supabase/D4Sign/Asaas contracts still require explicit authorization and
-  sandbox credentials.
+- Automatic CI now runs fixture-only Patient 360, D4Sign, and Billing checks
+  without provider secrets. Keep `.github/workflows/contract-fixtures.yml` as a
+  manual fixture rerun path. Real Supabase/D4Sign/Asaas contracts still require
+  explicit authorization and sandbox credentials.
 
 ## Known Coverage Limits
 
@@ -120,6 +133,7 @@ is to stabilize checks without changing product behavior.
 
 ## Baseline Status
 
-The executable local baseline is green by exit code for install, type-check,
-build, and lint. Remaining issues are warning/dependency-audit cleanup items,
-not blocking command failures.
+The executable local baseline is green by exit code for install, diff check,
+type-check, build, lint, and fixture-only Patient 360, D4Sign, and Billing
+contracts. Remaining issues are warning/dependency-audit cleanup items, not
+blocking command failures.
