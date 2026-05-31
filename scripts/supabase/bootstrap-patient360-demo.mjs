@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js';
+import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
 
 const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
-const missing = requiredEnv.filter((key) => !process.env[key]);
-if (missing.length) {
-  console.error(`Missing required env vars: ${missing.join(', ')}`);
+
+let supabase;
+try {
+  requireEnv(requiredEnv);
+  supabase = createClient(process.env.SUPABASE_URL, getRequiredServiceRoleKey(), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
 
 const IDS = {
   patient: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -359,7 +362,7 @@ async function run() {
   ];
 
   await supabase.from('patients').upsert([patientRow], { onConflict: 'id' }).throwOnError();
-  await supabase.from('patient_pii').upsert([patientPiiRow], { onConflict: 'patient_id' }).throwOnError();
+  await supabase.from('patient_pii').upsert([patientPiiRow], { onConflict: 'tenant_id,patient_id' }).throwOnError();
   await supabase.from('appointments').upsert(appointments, { onConflict: 'id' }).throwOnError();
   await supabase.from('encounters').upsert(encounters, { onConflict: 'id' }).throwOnError();
   await supabase.from('soap_notes').upsert(soapNotes, { onConflict: 'id' }).throwOnError();

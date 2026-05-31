@@ -8,6 +8,7 @@ declare const Deno: {
 type Json = Record<string, unknown>;
 const corsHeaders={'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS'};
 const jsonResponse=(status:number,payload:Json)=>new Response(JSON.stringify(payload),{status,headers:corsHeaders});
+const allowedBuckets=new Set(['patient-documents','signed-documents','clinical-attachments','evidence-packages']);
 const isValidStoragePath=(path:string,tenantId:string,patientId:string,documentId:string)=>{const parts=path.split('/');return parts.length===4&&parts[0]===tenantId&&parts[1]===patientId&&parts[2]===documentId&&parts[3].length>0;};
 
 Deno.serve(async(req)=>{const timestamp=new Date().toISOString(); if(req.method==='OPTIONS') return new Response('ok',{headers:corsHeaders}); if(req.method!=='POST') return jsonResponse(405,{ok:false,error:{code:'method_not_allowed'},meta:{timestamp}});
@@ -20,6 +21,7 @@ try{
  if(!generatedDocumentId||!patientId) return jsonResponse(400,{ok:false,error:{code:'invalid_request'},meta:{timestamp}});
  const {data:doc}=await supabase.from('generated_documents').select('id,tenant_id,patient_id,storage_bucket,storage_path').eq('id',generatedDocumentId).eq('patient_id',patientId).maybeSingle();
  if(!doc) return jsonResponse(404,{ok:false,error:{code:'not_found'},meta:{timestamp}});
+ if(!allowedBuckets.has(String(doc.storage_bucket))) return jsonResponse(500,{ok:false,error:{code:'invalid_storage_bucket'},meta:{timestamp}});
  if(!isValidStoragePath(String(doc.storage_path),String(doc.tenant_id),String(doc.patient_id),String(doc.id))) return jsonResponse(500,{ok:false,error:{code:'invalid_storage_path'},meta:{timestamp}});
  const {data:membership}=await supabase.from('tenant_memberships').select('tenant_id').eq('tenant_id',doc.tenant_id).eq('user_id',user.id).eq('status','active').maybeSingle(); if(!membership) return jsonResponse(403,{ok:false,error:{code:'forbidden'},meta:{timestamp}});
  const {data:canRead}=await supabase.rpc('has_clinical_permission',{p_tenant_id:doc.tenant_id,p_permission:'documents.read'}); if(canRead!==true) return jsonResponse(403,{ok:false,error:{code:'forbidden'},meta:{timestamp}});

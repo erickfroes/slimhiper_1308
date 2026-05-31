@@ -115,6 +115,17 @@ Edge Function environments:
 
 Use placeholders in docs and examples. Never commit real values.
 
+## Storage Contract
+
+- `generated_documents.storage_bucket` is constrained to the clinical
+  document bucket allow-list.
+- Direct storage downloads are intentionally blocked by policy.
+- Users request short-lived URLs through `document-signed-url`, which checks
+  tenant membership, `documents.read`, the bucket allow-list, and the canonical
+  storage path shape before using the service-role storage client.
+- Upload/update remains limited to users with `documents.write` in the document
+  tenant context.
+
 ## Security Rules
 
 - D4Sign APIs must not be called without explicit authorization.

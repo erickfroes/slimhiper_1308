@@ -281,12 +281,12 @@ Deno.serve(async (req) => {
       .select(selectColumns, { count: 'exact' })
       .eq('patient_id', patientId)
       .eq('tenant_id', patient.tenant_id)
-      .order('created_at', { ascending: false })
+      .order('event_at', { ascending: false })
       .range(from, to);
 
     if (category !== 'all') query = query.eq('category', category);
-    if (dateStart) query = query.gte('created_at', dateStart);
-    if (dateEnd) query = query.lte('created_at', dateEnd);
+    if (dateStart) query = query.gte('event_at', dateStart);
+    if (dateEnd) query = query.lte('event_at', dateEnd);
 
     const { data: eventsData, error: eventsError, count } = await query;
     if (eventsError) throw eventsError;

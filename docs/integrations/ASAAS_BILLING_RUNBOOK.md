@@ -57,14 +57,18 @@ Never reuse fixture placeholders as real provider secrets.
 
 ## Setup Flow
 
-Apply migration:
+Apply the clean schema and bootstrap app data in this order:
 
 ```bash
 supabase db push
+node scripts/supabase/bootstrap-core-auth.mjs
+node scripts/supabase/bootstrap-patient360-demo.mjs
+node scripts/supabase/bootstrap-document-templates-demo.mjs
+node scripts/supabase/bootstrap-billing-demo.mjs
 ```
 
-Do not run this command unless the task explicitly authorizes database changes
-against the selected Supabase project.
+Do not run these commands unless the task explicitly authorizes database changes
+or data mutations against the selected Supabase project.
 
 ## Local Versus Sandbox/Real
 
@@ -134,11 +138,16 @@ Local fixtures assert this minimum provider-to-internal mapping:
 | `PAYMENT_CREATED` | `pendente` | `pending` | `cobranca_pendente` | `pagamento` |
 | `PAYMENT_DELETED` / `PAYMENT_CANCELLED` | `cancelado` | `canceled` | `cobranca_pendente` | none |
 
-Current implementation note: `webhook-asaas` records the webhook and emits
-timeline rows for confirmed/received, overdue, and created events. It does not
-yet update `patient_invoices`/`payments` status rows or emit a cancelled-payment
-timeline event. Treat those as next hardening work for the real webhook
-implementation, not as fixture-only behavior.
+Implementation note: `webhook-asaas` records an append-only webhook audit row,
+deduplicates by SHA-256 event hash, resolves tenant/patient from
+`patient_invoices.asaas_invoice_id`, updates `patient_invoices`, upserts
+`payments`, and emits timeline rows for created/received/confirmed/overdue
+events. Cancelled/deleted payments update financial rows but intentionally do
+not emit a new timeline event.
+
+The database stores provider-normalized statuses such as `pending`, `paid`,
+`overdue`, and `cancelled`. The frontend contract maps these to Portuguese
+domain statuses through `get_patient_financial_summary(...)`.
 
 ## Seed And Contract Test
 

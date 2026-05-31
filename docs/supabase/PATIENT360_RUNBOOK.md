@@ -28,6 +28,15 @@ This script seeds development-safe Patient 360 clinical data for tenant
 
 Do not run this against a production or sensitive environment.
 
+Optional cross-tenant smoke seed:
+
+```bash
+node scripts/supabase/bootstrap-cross-tenant-demo.mjs
+```
+
+This creates a second demo tenant and deterministic tenant B patient ID for
+negative access tests. It does not create a tenant B user.
+
 ## Contract Checks
 
 Patient 360 can be validated with:
@@ -152,7 +161,19 @@ node scripts/supabase/bootstrap-patient360-demo.mjs
 node scripts/supabase/bootstrap-document-templates-demo.mjs
 ```
 
-5. Obtain a test access token (`TOKEN_WITH_PATIENTS_READ`) for a seeded user.
+5. Bootstrap billing demo records:
+
+```bash
+node scripts/supabase/bootstrap-billing-demo.mjs
+```
+
+6. Optional: seed a tenant B patient for cross-tenant negative checks:
+
+```bash
+node scripts/supabase/bootstrap-cross-tenant-demo.mjs
+```
+
+7. Obtain a test access token (`TOKEN_WITH_PATIENTS_READ`) for a seeded user.
 
 Example using Supabase Auth password sign-in API:
 
@@ -168,7 +189,7 @@ curl -s "$SUPABASE_URL/auth/v1/token?grant_type=password" \
 
 From the JSON response, copy `access_token`.
 
-6. Run the Patient 360 contract script:
+8. Run the Patient 360 contract script:
 
 ```bash
 SUPABASE_URL=https://<project-ref>.supabase.co TOKEN_WITH_PATIENTS_READ=<access_token> PATIENT_ID_TENANT_A=<tenant-a-patient-id> node scripts/supabase/test-patient360-contract.mjs --mode=real
@@ -191,6 +212,10 @@ this repository baseline is green by running:
   authorized.
 - `node scripts/supabase/bootstrap-document-templates-demo.mjs` only when
   explicitly authorized.
+- `node scripts/supabase/bootstrap-billing-demo.mjs` only when explicitly
+  authorized.
+- `node scripts/supabase/bootstrap-cross-tenant-demo.mjs` only when explicitly
+  authorized.
 - `node scripts/supabase/test-patient360-contract.mjs --mode=real` only when
   explicitly authorized.
 

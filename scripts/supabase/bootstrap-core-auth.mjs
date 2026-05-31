@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js';
+import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
 
 const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_BOOTSTRAP_PASSWORD'];
 
-const missing = requiredEnv.filter((key) => !process.env[key]);
-if (missing.length) {
-  console.error(`Missing required env vars: ${missing.join(', ')}`);
+let supabase;
+try {
+  requireEnv(requiredEnv);
+  supabase = createClient(process.env.SUPABASE_URL, getRequiredServiceRoleKey(), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
 
 const CLINIC_MEMBERSHIP_ROLE_CODES = [
   'clinic_admin',
