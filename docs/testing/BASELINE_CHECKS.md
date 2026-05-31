@@ -453,13 +453,13 @@ now uses ESLint CLI over `src/**/*.{ts,tsx}` instead of `next lint`.
 | -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npm install`        | Not run this pass    | Dependency graph was not changed.                                                                                                                                       |
 | `npm run type-check` | Passed               | `tsc --noEmit` exited successfully.                                                                                                                                     |
-| `npm run build`      | Passed               | `next build` compiled successfully and generated 26 app routes.                                                                                                         |
+| `npm run build`      | Passed               | `next build` compiled successfully and generated 26 app routes; `/clinic/financeiro` included the reconciliation UI bundle.                                             |
 | `npm run lint`       | Passed with warnings | ESLint CLI exited with code 0; 24 warnings remain.                                                                                                                      |
 | `git diff --check`   | Passed               | No whitespace errors reported.                                                                                                                                          |
 | Patient 360 fixture  | Passed               | Summary, timeline, category filter, forbidden, and cross-tenant fixtures passed.                                                                                        |
 | D4Sign fixture       | Passed               | Valid webhook, invalid fail-closed behavior, document summary, and HMAC strategy passed.                                                                                |
 | Billing fixture      | Passed               | Confirmed, overdue, cancelled, duplicated, tenant resolution, and invalid-token fixtures passed.                                                                        |
-| Supabase migrations  | Passed local         | Local DB applied migrations through `20260531135000_110_patient_guardian_linkage_rls.sql`.                                                                              |
+| Supabase migrations  | Passed local         | Local DB applied migrations through `20260531165000_130_billing_reconciliation_contract.sql`.                                                                           |
 | Local bootstraps     | Passed               | Core auth, Patient 360 demo, document templates, and billing demo bootstraps completed.                                                                                 |
 | Patient 360 real     | Passed local         | Local-real smoke passed staff summary/timeline, forbidden 403, cross-tenant 404, all MVP tab contracts, and new lab timeline event types.                               |
 | Documents real       | Passed local         | Generated document, signed URL, and gated D4Sign send contract passed against local Supabase.                                                                           |
@@ -467,9 +467,9 @@ now uses ESLint CLI over `src/**/*.{ts,tsx}` instead of `next lint`.
 | Clinic guard         | Passed local         | Anonymous, no-workspace, valid clinic, forbidden, and inactive-profile states returned expected outcomes.                                                               |
 | RLS cross-tenant     | Passed local         | Tenant A/B demo users proved isolation for patients, PII, documents, invoices, chat, reports, and cross writes.                                                         |
 | Patient linkage      | Passed local         | Linked patient/guardian users read only own active linkage rows and still cannot read `patients` directly.                                                              |
-| Billing real         | Blocked local        | Local Edge returned 500 before provider work because `ASAAS_*`/sandbox base URL are not loaded in runtime.                                                              |
-| Local HTTP smoke     | Passed local         | Anonymous fail-closed plus authenticated clinic routes/settings/patient demo returned expected 200/307 statuses; Phase 3 rechecked Patient 360 tab deep-links to login. |
-| Browser smoke        | Passed limited       | Anonymous login/guards passed; credential typing remains blocked by Browser clipboard limitation.                                                                       |
+| Billing real         | Passed sandbox       | Local reconciliation smoke passed; strict Asaas sandbox contract passed with fresh local patient, dummy `TEST_PATIENT_CPF_CNPJ`, and customer/invoice/subscription 200. |
+| Local HTTP smoke     | Passed local         | `/auth/login` returned 200; anonymous `/clinic/financeiro` and Paciente 360 financial deep-link redirected 307 to `/auth/login`.                                        |
+| Browser smoke        | Passed limited       | In-app Browser confirmed `/auth/login` rendered styled login UI with no console errors/overlays and `/clinic/financeiro` anon redirected to login.                      |
 
 ## Lint Warning Categories
 
@@ -520,14 +520,15 @@ is to stabilize checks without changing product behavior.
 ## Baseline Status
 
 The executable local baseline is green by exit code for type-check, build, lint,
-fixture-only Patient 360, D4Sign, Billing contracts, local migrations,
-bootstraps, local authenticated Patient 360/documents contracts, the Patient 360
-local-real all-tab smoke, limited HTTP smoke, authenticated Browser smoke for
-finance/Paciente 360 financeiro, local settings RPC/HTTP smoke, clinic guard
-states, scripted local RLS cross-tenant coverage, and patient/guardian linkage
-RLS coverage. Asaas provider sandbox remains blocked by runtime configuration,
-not by a passed provider test.
-Authenticated Browser smoke for settings is blocked by Browser input/clipboard
-support, not by a route/build failure. Remaining issues are warning/dependency
-audit cleanup items and unfinished module coverage, not blocking command failures
-for this lote.
+fixture-only Patient 360, D4Sign, Billing contracts, local migrations through
+billing reconciliation, bootstraps, local authenticated Patient 360/documents
+contracts, Patient 360 local-real all-tab smoke, limited HTTP smoke, Browser
+anon login/guard smoke, local settings RPC/HTTP smoke, clinic guard states,
+scripted local RLS cross-tenant coverage, patient/guardian linkage RLS coverage,
+billing reconciliation smoke, and strict Asaas sandbox customer/invoice/
+subscription contract. D4Sign provider sandbox remains blocked by missing cofre
+in the sandbox account, not by a local contract failure. Authenticated Browser
+smoke for settings/finance remains limited by Browser credential input support;
+RPC/HTTP/scripted authenticated coverage is the current substitute. Remaining
+issues are warning/dependency audit cleanup items and unfinished module coverage,
+not blocking command failures for this lote.

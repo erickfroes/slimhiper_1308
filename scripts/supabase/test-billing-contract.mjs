@@ -4,6 +4,8 @@ const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_ANON_KEY;
 const token = process.env.TEST_ACCESS_TOKEN;
 const patientId = process.env.TEST_PATIENT_ID;
+const cpfCnpj = process.env.TEST_PATIENT_CPF_CNPJ;
+const requireProviderSuccess = process.env.REQUIRE_ASAAS_PROVIDER_SUCCESS === 'true';
 
 if (!url || !key || !token || !patientId) {
   console.error('Missing envs');
@@ -17,6 +19,7 @@ const forbiddenBrowserFields = new Set([
   'asaas_subscription_id',
   'asaas_account_id',
 ]);
+const futureDueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 async function invoke(fn, body, auth = true) {
   const response = await fetch(`${url}/functions/v1/${fn}`, {
@@ -59,7 +62,7 @@ const checks = [
     {
       patient_id: patientId,
       amount_cents: 1000,
-      due_date: '2026-05-31',
+      due_date: futureDueDate,
       description: 'Demo',
     },
   ],
@@ -68,21 +71,26 @@ const checks = [
     {
       patient_id: patientId,
       amount_cents: 1000,
-      next_due_date: '2026-05-31',
+      next_due_date: futureDueDate,
       cycle: 'monthly',
     },
   ],
 ];
 
 for (const [name, body] of checks) {
-  const okRes = await invoke(name, body, true);
-  if (!allowedStatuses.has(okRes.status)) {
+  const requestBody =
+    name === 'asaas-create-patient-customer' && cpfCnpj ? { ...body, cpf_cnpj: cpfCnpj } : body;
+  const okRes = await invoke(name, requestBody, true);
+  if (requireProviderSuccess && okRes.status !== 200) {
+    throw new Error(`${name} expected provider success, received status ${okRes.status}`);
+  }
+  if (!requireProviderSuccess && !allowedStatuses.has(okRes.status)) {
     throw new Error(`${name} unexpected status ${okRes.status}`);
   }
   assertEnvelope(name, okRes);
   assertNoProviderIds(name, okRes);
 
-  const unauth = await invoke(name, body, false);
+  const unauth = await invoke(name, requestBody, false);
   if (![401, 403].includes(unauth.status)) {
     throw new Error(`${name} should enforce auth`);
   }

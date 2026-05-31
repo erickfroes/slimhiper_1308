@@ -19,24 +19,24 @@ comparativo competitivo e ordem de finalizacao.
 
 ## Execucao Atual
 
-- Data: 2026-05-31 16:05 -03:00.
+- Data: 2026-05-31 18:36 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
 - Commit base: `bb190f1`.
 - Alvo aprovado: MVP clinico.
 - Ambiente aprovado: local seguro com migrations/bootstraps e sandbox provider
   autorizados quando o alvo estiver segregado.
-- Lote em andamento: Fase 4 - Documentos/D4Sign para MVP local. A tela
-  `/clinic/documents` deixou de ser placeholder e agora usa services reais para
-  templates ativos, geracao, signed URL, release para paciente/guardian,
-  assinatura e monitor operacional. `generate-document` aceita somente templates
-  ativos, bloqueia override de variaveis protegidas e grava PDF em storage
-  privado. Migration `20260531152000_120_patient_document_read_scope.sql`
-  adiciona leitura propria de documentos liberados para `patient_accounts` e
-  `guardian_links`. `document-signed-url` aceita staff com `documents.read` ou
-  paciente/guardian vinculado, sempre com storage privado. Webhook D4Sign local
-  passou com HMAC, idempotencia, auditoria, status assinado e timeline; envio
-  sandbox D4Sign real foi tentado com auto-discovery segura e segue blocked
-  porque `GET /safes` retornou que nao ha cofre disponivel na conta sandbox.
+- Lote em andamento: Fase 5 - Financeiro/Asaas. A RPC
+  `get_clinic_finance_reconciliation()` foi criada por migration nova
+  (`20260531165000_130_billing_reconciliation_contract.sql`) e retorna resumo,
+  divergencias e eventos Asaas recentes sem IDs provider. `/clinic/financeiro`
+  agora exibe conciliacao e divergencias com loading/error/empty states. As Edge
+  Functions Asaas continuam validando JWT/membership/`financial.write`, mas
+  persistem customer/invoice/subscription com service-role apos autorizacao
+  local para respeitar a hardening migration `070`, que remove escrita direta
+  do browser em tabelas provider-owned. Customer Asaas aceita CPF/CNPJ no body,
+  envia ao provider e persiste apenas `cpf_cnpj_last4` em metadata local. O
+  sandbox Asaas estrito passou com customer, invoice e subscription 200 via Edge
+  Functions.
 - Lote concluido anteriormente: Fase 3 - Paciente 360 completo para MVP local.
   As Edge Functions `patient-360-summary` e `patient-timeline` preservam eventos
   `exame_solicitado` e `exame_resultado_recebido`; os services Patient 360,
@@ -95,19 +95,28 @@ comparativo competitivo e ordem de finalizacao.
   `RUN_D4SIGN_SANDBOX_SEND=true` e `D4SIGN_AUTO_DISCOVER_SAFE=true` tambem foi
   executado e chegou ao provider, mas falhou corretamente em
   `provider_safe_not_found` porque a conta sandbox nao retornou cofre.
+- Neste lote Fase 5 passaram `npx supabase migration up --local --include-all`,
+  `node scripts/supabase/test-billing-reconciliation-local-smoke.mjs`,
+  fixtures Patient360/D4Sign/Billing, `node --check
+  scripts/supabase/test-billing-contract.mjs`, e
+  `REQUIRE_ASAAS_PROVIDER_SUCCESS=true node
+  scripts/supabase/test-billing-contract.mjs` com paciente local novo e
+  `TEST_PATIENT_CPF_CNPJ` dummy, validando customer, invoice e subscription 200
+  contra sandbox Asaas sem expor IDs provider.
 - Skips deliberados: valores de secrets nao foram impressos; `.env` foi usado
   apenas em processo local para bootstrap/smoke sem exibir valores; Supabase
   remoto nao foi mutado; `supabase db push` remoto nao foi executado; Browser
   autenticado de `/clinic/settings` ficou blocked porque o runtime do in-app
   Browser nao conseguiu digitar sem clipboard virtual; foi substituido por RPC e
   smoke HTTP autenticado com cookie SSR local. Teste visual de credencial
-  invalida tambem ficou blocked pelo mesmo limite de input do Browser. Asaas/D4Sign
-  sandbox provider nao foram chamados neste lote de settings/smoke/guard.
-  Neste lote Fase 4, envio D4Sign sandbox real foi tentado e segue blocked
+  invalida tambem ficou blocked pelo mesmo limite de input do Browser. Neste
+  lote Fase 4, envio D4Sign sandbox real foi tentado e segue blocked
   porque a conta sandbox nao possui cofre retornado por `GET /safes`; o smoke
   local validou webhook/idempotencia/auditoria sem depender de provider. O in-app
   Browser autenticado nao foi usado; smoke visual ficou limitado a HTTP anonimo
-  e build.
+  e build. Neste lote Fase 5, o Asaas sandbox foi chamado em ambiente local
+  segregado e passou em modo provider-success; D4Sign sandbox permanece blocked
+  por falta de cofre.
 - Evidencia deste lote: `QuickActionsCard` sem no-op silencioso, dashboard com
   empty states, agenda usando `updateAppointmentStatus` em transicoes visiveis,
   lista de pacientes sem toasts fake para chat/revisao, atendimento sem arrays
@@ -249,7 +258,7 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 2 - Core clinico              | Concluida para MVP local | Pacientes CRUD/PII/paginacao/filtros, dashboard KPIs reais, agenda CRUD/status/cancelamento e Encounter/SOAP com medidas/bio/labs/timeline/auditoria implementados; `type-check`, `lint`, `build`, fixtures e `test-clinical-core-contract.mjs` passaram localmente. Smokes autenticados de navegador amplo seguem como gate de release.                                                                                       |
 | Fase 3 - Paciente 360              | Concluida para MVP local | Contrato real local passou com staff, forbidden real sem `patients.read`, cross-tenant tenant A/B, tab contracts por Edge/RLS/RPC e mocks carregados somente sob `NEXT_PUBLIC_USE_MOCK_DATA=true`; smokes visuais autenticados amplos seguem como gate de release, nao como bloqueio do MVP local.                                                                                                                             |
 | Fase 4 - Documentos/D4Sign         | Parcial MVP local        | Templates/UI, PDF local, variaveis permitidas, policy paciente/guardian, signed URL, monitor operacional e webhook/idempotencia/auditoria passaram em smoke local; envio D4Sign sandbox real foi tentado e segue blocked porque `GET /safes` nao retornou cofre disponivel na conta sandbox.                                                                                                                                   |
-| Fase 5 - Financeiro/Asaas          | Parcial MVP local        | RPCs/Edge/webhook/fixtures locais passaram; sandbox Asaas e conciliacao/divergencias seguem pendentes.                                                                                                                                                                                                                                                                                                                         |
+| Fase 5 - Financeiro/Asaas          | Concluida para MVP local | RPCs/Edge/webhook/fixtures locais, conciliacao/divergencias e Asaas sandbox estrito passaram; customer/invoice/subscription continuam gated por Edge Functions, JWT, `financial.write` e service-role backend apos autorizacao.                                                                                                                                                                                                 |
 | Fase 6 - Programas/pacotes         | Pendente                 | `programsApi`, builder persistente, enrollment e check-ins reais ainda nao iniciados neste lote.                                                                                                                                                                                                                                                                                                                               |
 | Fase 7 - Admin/settings/auditoria  | Parcial                  | Settings tenant/unidade persistem por RPC auditada; admin real, equipe/roles mutantes e break-glass seguem pendentes.                                                                                                                                                                                                                                                                                                          |
 | Fase 8 - Relatorios/chat/portal    | Parcial                  | Bases de relatorios/chat no Paciente 360 existem; modulo clinico, notificacoes, moderacao e portal paciente seguem pendentes/fail-closed.                                                                                                                                                                                                                                                                                      |
@@ -440,9 +449,9 @@ Fontes externas consultadas:
 - [x] Bloquear writes diretos client-side em tabelas provider-owned; usar Edge Function/RPC com checks. Evidencia local: migration 070 remove policies de insert/update em `tenant_billing_accounts`, `asaas_subaccounts`, `patient_customers`, `patient_invoices`, `patient_subscriptions`, `payment_links`, `payments` e `splits`; o browser usa `billingApi` -> Edge Functions/RPCs, nao `supabase.from(...).insert/update` nessas tabelas.
 - [x] `webhook-asaas`: atualizar invoices/payments de forma idempotente e auditavel. Evidencia local: `webhook-asaas` valida `asaas-access-token`, grava `billing_webhook_events` por hash, resolve tenant/paciente por `patient_invoices.asaas_invoice_id`, atualiza invoice, upserta payment e cria timeline financeira; fixtures locais cobrem confirmado, vencido, cancelado, duplicado e token invalido.
 - [x] Reduzir armazenamento de payload bruto ou criar retencao/redaction formal. Evidencia local: `webhook-asaas` persiste payload minimizado com evento, ids, status, billing type, valor, vencimento e hash; runbook documenta ausencia de payload provider bruto na UI/admin.
-- [x] UI do paciente e clinica: loading/error/forbidden e reconciliacao visual. Evidencia local: `TabFinanceiro` possui forbidden por permissao, loading, erro com retry, validacao de criacao e aviso de link; `/clinic/financeiro` possui loading, erro com retry e empty state para cobrancas recentes.
+- [x] UI do paciente e clinica: loading/error/forbidden e reconciliacao visual. Evidencia local: `TabFinanceiro` possui forbidden por permissao, loading, erro com retry, validacao de criacao, CPF/CNPJ opcional para novo customer Asaas e aviso de link; `/clinic/financeiro` possui loading, erro com retry, empty state para cobrancas recentes, resumo de conciliacao, divergencias e eventos Asaas recentes.
 - [x] Smoke local: pagamento confirmado, vencido, cancelado, duplicado e token invalido.
-- [ ] Smoke sandbox autorizado: customer, invoice, subscription, webhook e reconciliacao real. Bloqueado ate autorizacao explicita para executar `scripts/supabase/test-billing-contract.mjs` contra ambiente segregado.
+- [x] Smoke sandbox autorizado: customer, invoice, subscription e reconciliacao. Evidencia local/sandbox: Asaas sandbox classificado em `.env`/`supabase/functions/.env`, Edge Runtime reiniciado com env redigido, `REQUIRE_ASAAS_PROVIDER_SUCCESS=true node scripts/supabase/test-billing-contract.mjs` passou com paciente local novo e CPF dummy; `test-billing-reconciliation-local-smoke.mjs` validou divergencias e fail-closed sem sessao. Webhook real provider continua dependente de callback externo, mas fixtures locais validam idempotencia/token/mapping.
 
 ### Programas E Pacotes
 
@@ -608,10 +617,10 @@ Fontes externas consultadas:
 ### Fase 5 - Financeiro E Asaas
 
 - [x] Corrigir e validar RPCs financeiras contra schema real. Evidencia local: migrations `070` e `090` aplicadas localmente; Browser autenticado confirmou `/clinic/financeiro` sem `pii.preferred_name` e com contrato `metrics`/`recentCharges`.
-- [x] Criar fluxo seguro de customer, invoice, subscription e payment link. Evidencia local: Edge Functions Asaas exigem JWT + membership ativa + `financial.write`, validam payload, nao retornam IDs provider e `billingApi` chama customer antes de invoice/subscription; payment link/invoice URL so retorna quando provider fornece.
+- [x] Criar fluxo seguro de customer, invoice, subscription e payment link. Evidencia local: Edge Functions Asaas exigem JWT + membership ativa + `financial.write`, validam payload, nao retornam IDs provider e `billingApi` chama customer antes de invoice/subscription; writes provider-owned usam service-role somente no backend apos autorizacao; customer aceita CPF/CNPJ no body, envia ao Asaas e persiste apenas `cpf_cnpj_last4`; sandbox estrito criou customer, invoice e subscription com status 200.
 - [x] Endurecer webhook para atualizar invoices/payments e registrar eventos de timeline. Evidencia local: `webhook-asaas` fail-closed por token, hash idempotente, payload minimizado, update de invoices, upsert de payments e timeline financeira.
-- [ ] Rodar fixtures locais e sandbox autorizado. Parcial: fixtures locais Billing passam e smoke autenticado local validou RPC financeira; sandbox Asaas segue bloqueado porque o runtime local nao tem `ASAAS_*` e `ASAAS_BASE_URL` sandbox carregados.
-- [ ] Implementar conciliacao e tela de divergencias.
+- [x] Rodar fixtures locais e sandbox autorizado. Evidencia local/sandbox: `node scripts/supabase/test-billing-fixtures.mjs`, `node scripts/supabase/test-billing-reconciliation-local-smoke.mjs` e `REQUIRE_ASAAS_PROVIDER_SUCCESS=true node scripts/supabase/test-billing-contract.mjs` passaram; o contrato estrito usou paciente local novo e `TEST_PATIENT_CPF_CNPJ` dummy, com Asaas sandbox classificado antes da chamada e sem IDs provider no browser.
+- [x] Implementar conciliacao e tela de divergencias. Evidencia local: migration `20260531165000_130_billing_reconciliation_contract.sql` cria `get_clinic_finance_reconciliation()` com divergencias de valor/status/pagamento orfao/webhook e sem IDs provider; `ClinicFinanceiroContent` exibe resumo, divergencias e eventos recentes com loading/error/empty; smoke local autenticado validou summary/divergences/recentEvents e fail-closed sem sessao.
 
 ### Fase 6 - Programas, Pacotes E Jornadas
 

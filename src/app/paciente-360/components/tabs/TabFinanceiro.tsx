@@ -210,6 +210,12 @@ function isValidDateInput(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+function normalizeBillingDocument(value: string) {
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return null;
+  return digits.length === 11 || digits.length === 14 ? digits : false;
+}
+
 function DisabledActionButton({
   icon,
   label,
@@ -254,6 +260,7 @@ export default function TabFinanceiro({
   const [amount, setAmount] = useState('400');
   const [description, setDescription] = useState('Cobrança avulsa');
   const [dueDate, setDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [billingDocument, setBillingDocument] = useState('');
   const canWriteFinancial = permissions.includes('financial.write');
   const creatingCharge = creatingInvoice || creatingSubscription;
 
@@ -270,6 +277,15 @@ export default function TabFinanceiro({
       return null;
     }
     return parsedAmount;
+  };
+
+  const getBillingIdentity = () => {
+    const normalized = normalizeBillingDocument(billingDocument);
+    if (normalized === false) {
+      setCreationError('Informe CPF com 11 digitos ou CNPJ com 14 digitos.');
+      return false;
+    }
+    return normalized ? { cpfCnpj: normalized } : undefined;
   };
 
   const handleOpenInvoiceModal = () => {
@@ -301,6 +317,8 @@ export default function TabFinanceiro({
       setCreationError('Informe uma data de vencimento valida.');
       return;
     }
+    const billingIdentity = getBillingIdentity();
+    if (billingIdentity === false) return;
 
     setCreatingInvoice(true);
     try {
@@ -308,7 +326,8 @@ export default function TabFinanceiro({
         patientId,
         parsedAmount,
         trimmedDescription,
-        dueDate
+        dueDate,
+        billingIdentity
       );
       if (result.error) {
         setCreationError(`Falha na Edge Function: ${result.error.message}`);
@@ -342,6 +361,8 @@ export default function TabFinanceiro({
     }
     const parsedAmount = getValidatedAmount();
     if (parsedAmount === null) return;
+    const billingIdentity = getBillingIdentity();
+    if (billingIdentity === false) return;
 
     setCreatingSubscription(true);
     try {
@@ -349,7 +370,8 @@ export default function TabFinanceiro({
         patientId,
         'default-package',
         parsedAmount,
-        'monthly'
+        'monthly',
+        billingIdentity
       );
       if (result.error) {
         setCreationError(`Falha na Edge Function: ${result.error.message}`);
@@ -606,6 +628,19 @@ export default function TabFinanceiro({
               onChange={(e) => setDueDate(e.target.value)}
             />
           </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              CPF/CNPJ para novo customer Asaas
+            </span>
+            <input
+              className="border rounded px-2 py-1 w-full"
+              inputMode="numeric"
+              value={billingDocument}
+              disabled={creatingInvoice}
+              onChange={(e) => setBillingDocument(e.target.value)}
+              placeholder="Somente numeros"
+            />
+          </label>
           <button
             type="button"
             className="btn-primary text-xs"
@@ -645,6 +680,19 @@ export default function TabFinanceiro({
             Contrato local seguro: pacote padrao e ciclo mensal; provider Asaas permanece atras da
             Edge Function.
           </p>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              CPF/CNPJ para novo customer Asaas
+            </span>
+            <input
+              className="border rounded px-2 py-1 w-full"
+              inputMode="numeric"
+              value={billingDocument}
+              disabled={creatingSubscription}
+              onChange={(e) => setBillingDocument(e.target.value)}
+              placeholder="Somente numeros"
+            />
+          </label>
           <button
             type="button"
             className="btn-primary text-xs"
