@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Search,
@@ -19,7 +19,6 @@ import {
   ChevronRight,
   Users,
   Phone,
-  Filter,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
@@ -128,9 +127,12 @@ const PAGE_SIZES = [10, 20, 50];
 
 export default function PatientListContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get('search') ?? '';
   const [patients, setPatients] = useState<PatientListRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState(initialSearch);
   const [filterProgram, setFilterProgram] = useState<ProgramType | ''>('');
   const [filterFinancial, setFilterFinancial] = useState<FinancialStatus | ''>('');
   const [filterAdherence, setFilterAdherence] = useState<AdherenceLevel | ''>('');
@@ -141,13 +143,31 @@ export default function PatientListContent() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => {
-    // Backend integration point: replace with getPatientList() Supabase call
-    getPatientList()
-      .then(setPatients)
-      .catch(() => toast.error('Falha ao carregar lista de pacientes.'))
-      .finally(() => setLoading(false));
+  const loadPatients = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const rows = await getPatientList();
+      setPatients(rows);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Falha ao carregar lista de pacientes.';
+      setPatients([]);
+      setLoadError(message);
+      toast.error('Falha ao carregar lista de pacientes.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadPatients();
+  }, [loadPatients]);
+
+  useEffect(() => {
+    setSearch(initialSearch);
+    setPage(1);
+  }, [initialSearch]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -224,6 +244,17 @@ export default function PatientListContent() {
           </button>
         }
       />
+
+      {loadError ? (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>{loadError}</span>
+            <button type="button" onClick={loadPatients} className="btn-secondary text-xs">
+              Tentar novamente
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Search + Filter bar */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
@@ -513,7 +544,13 @@ export default function PatientListContent() {
                           <div
                             className="bg-primary rounded-full h-1.5"
                             style={{
-                              width: `${(patient.currentWeek / patient.totalWeeks) * 100}%`,
+                              width: `${Math.min(
+                                100,
+                                Math.max(
+                                  0,
+                                  (patient.currentWeek / Math.max(patient.totalWeeks, 1)) * 100
+                                )
+                              )}%`,
                             }}
                           />
                         </div>

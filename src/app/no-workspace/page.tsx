@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import NoWorkspaceActions from './NoWorkspaceActions';
 
 export default function NoWorkspacePage() {
   return (
@@ -9,9 +9,7 @@ export default function NoWorkspacePage() {
           Sua conta esta autenticada, mas ainda nao possui um workspace clinico ativo ou vinculo de
           portal do paciente.
         </p>
-        <Link href="/auth/login" className="btn-secondary">
-          Voltar ao login
-        </Link>
+        <NoWorkspaceActions />
       </section>
     </main>
   );

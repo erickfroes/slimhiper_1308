@@ -17,6 +17,23 @@ comparativo competitivo e ordem de finalizacao.
   documentos, webhooks e multi-tenant.
 - Definir quando cada modulo sai de "parcial" para "pronto para producao".
 
+## Execucao Atual
+
+- Data: 2026-05-31 07:34 -03:00.
+- Branch: `test/asaas-billing-contract-hardening`.
+- Commit base: `34cfd43`.
+- Alvo aprovado: MVP clinico.
+- Ambiente aprovado: local seguro.
+- Lote em andamento: Fase 1 parcial + pacientes UI safety.
+- Checks ja executados neste lote: `npm run type-check`, `npm run lint`,
+  `npm run build`, fixtures locais Patient360/D4Sign/Billing e smoke HTTP local
+  sem sessao.
+- Skips deliberados: `.env` real nao foi lido, Supabase local/remoto nao foi
+  mutado, `supabase db push` nao foi executado, bootstraps nao foram rodados e
+  D4Sign/Asaas nao foram chamados.
+- Proximos bloqueios: smoke autenticado, Supabase local green, RLS cross-tenant
+  real e contratos sandbox dependem de ambiente/credenciais autorizados.
+
 ## Fontes Internas
 
 | Area | Fonte primaria | Como usar |
@@ -132,13 +149,13 @@ Fontes externas consultadas:
 
 ### Shell, Login E Navegacao
 
-- [ ] `src/app/layout.tsx`: remover dependencia de overlay global para logout quando `DashboardShell`/admin shell assumirem sessao.
-- [ ] `src/components/auth/AuthStateButton.tsx`: mover logout para menu de usuario e evitar botao fixo competindo com topbars.
-- [ ] `src/components/DashboardShell.tsx`: trocar badges hardcoded por contadores reais ou ocultar quando indisponiveis.
-- [ ] `src/components/DashboardShell.tsx`: implementar busca global ou transformar input em busca escopada documentada.
-- [ ] `src/app/auth/login/page.tsx` e `src/components/auth/AuthForm.tsx`: loading de submit, erro amigavel, foco/acessibilidade e redirecionamento por role validado.
-- [ ] `src/app/no-workspace/page.tsx`: estado acionavel para usuario sem tenant, com logout e suporte.
-- [ ] `src/app/patient/page.tsx`: manter fail-closed ate `patient_accounts`/`guardian_links` estarem prontos.
+- [x] `src/app/layout.tsx`: remover dependencia de overlay global para logout quando `DashboardShell`/admin shell assumirem sessao.
+- [x] `src/components/auth/AuthStateButton.tsx`: mover logout para menu de usuario e evitar botao fixo competindo com topbars.
+- [x] `src/components/DashboardShell.tsx`: trocar badges hardcoded por contadores reais ou ocultar quando indisponiveis.
+- [x] `src/components/DashboardShell.tsx`: implementar busca global ou transformar input em busca escopada documentada.
+- [x] `src/app/auth/login/page.tsx` e `src/components/auth/AuthForm.tsx`: loading de submit, erro amigavel, foco/acessibilidade e redirecionamento por role validado.
+- [x] `src/app/no-workspace/page.tsx`: estado acionavel para usuario sem tenant, com logout e suporte.
+- [x] `src/app/patient/page.tsx`: manter fail-closed ate `patient_accounts`/`guardian_links` estarem prontos.
 
 ### Dashboard Clinico
 
@@ -150,9 +167,9 @@ Fontes externas consultadas:
 
 ### Pacientes
 
-- [ ] `src/app/patient-list/components/PatientListContent.tsx`: adicionar erro persistente e retry quando `patientsApi` falhar.
+- [x] `src/app/patient-list/components/PatientListContent.tsx`: adicionar erro persistente e retry quando `patientsApi` falhar.
 - [ ] `src/app/patient-list/components/PatientListContent.tsx`: implementar "Novo paciente" com service real e validacao de PII.
-- [ ] `src/app/patient-list/components/PatientListContent.tsx`: evitar divisao por zero em progresso/semanas.
+- [x] `src/app/patient-list/components/PatientListContent.tsx`: evitar divisao por zero em progresso/semanas.
 - [ ] `src/services/patientsApi.ts`: adicionar criar/editar paciente, paginacao server-side e filtros por tenant/unidade/status.
 - [ ] Garantir que PII so aparece para roles com permissao adequada.
 
@@ -231,8 +248,8 @@ Fontes externas consultadas:
 
 ### CRM, Estoque, Relatorios, Chat E Portal Paciente
 
-- [ ] CRM: criar rota, service, funil, origem, eventos e conversao lead -> paciente.
-- [ ] Estoque: criar rota, service, itens, lotes, validade, unidade, entrada/saida/ajuste e auditoria.
+- [ ] CRM: criar rota, service, funil, origem, eventos e conversao lead -> paciente. Pos-MVP por decisao do lote MVP clinico.
+- [ ] Estoque: criar rota, service, itens, lotes, validade, unidade, entrada/saida/ajuste e auditoria. Pos-MVP por decisao do lote MVP clinico.
 - [ ] Relatorios: criar `/clinic/reports`, filtros salvos, permissao `reports.read` e export seguro.
 - [ ] Chat/notificacoes: criar envio real, unread count, retencao, moderacao e permissao por paciente/tenant.
 - [ ] App paciente: liberar somente apos linkage, RLS propria, documentos/financeiro/chat limitados ao proprio paciente.
@@ -274,7 +291,7 @@ Fontes externas consultadas:
 - [ ] Criar guard clinico server-side com estados `forbidden`, `no_workspace`, `session_error`.
 - [ ] Fechar patient/guardian linkage antes do portal.
 - [ ] Criar smoke RLS cross-tenant para paciente, documentos, financeiro, chat e relatorios.
-- [ ] Remover fallback permissivo de mock/session.
+- [x] Remover fallback permissivo de mock/session para o portal paciente.
 
 ### Fase 2 - Core Clinico Com Dados Reais
 
@@ -402,12 +419,12 @@ Fontes externas consultadas:
 
 ## Decisoes Humanas Pendentes
 
-- [ ] Confirmar se o portal paciente entra no MVP ou fica explicitamente bloqueado ate depois do core clinico.
-- [ ] Confirmar se D4Sign e Asaas devem ser requisitos do MVP ou entram como fase sandbox antes da producao.
+- [x] Confirmar se o portal paciente entra no MVP ou fica explicitamente bloqueado ate depois do core clinico. Decisao: bloqueado/fail-closed no MVP clinico.
+- [x] Confirmar se D4Sign e Asaas devem ser requisitos do MVP ou entram como fase sandbox antes da producao. Decisao: fixtures locais e fluxo gated, sem provider real neste lote.
 - [ ] Definir politica de retencao para raw payloads de Asaas e logs de webhooks.
 - [ ] Definir se teleconsulta/prescricao digital/TISS entram no roadmap curto ou ficam fora do escopo inicial.
 - [ ] Definir o nivel de certificacao/compliance desejado para prontuario, assinatura digital e guarda documental.
-- [ ] Definir escopo inicial de CRM e estoque: minimo operacional ou paridade com concorrentes.
+- [x] Definir escopo inicial de CRM e estoque: minimo operacional ou paridade com concorrentes. Decisao: CRM e estoque ficam pos-MVP.
 - [ ] Definir proprietario de dados/controlador-operador e textos juridicos de privacidade/termos.
 
 ## Checklist De Pronto Para Producao

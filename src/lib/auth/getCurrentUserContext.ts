@@ -37,7 +37,7 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
     memberships,
     canAccessPlatformAdmin: canAccessPlatformAdmin(),
     canAccessClinicWorkspace: canAccessClinicWorkspace(),
-    canAccessPatientPortal: session.isPatient(),
+    canAccessPatientPortal: false,
     canViewFinancial: canViewFinancial(),
     canViewMedicalPrescriptions: canViewMedicalPrescriptions(),
   };

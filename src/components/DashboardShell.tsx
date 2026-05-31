@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
+import { createClient } from '@/lib/supabase/client';
 import {
   LayoutDashboard,
   Users,
@@ -20,34 +21,30 @@ import {
   User,
   MessageSquare,
 } from 'lucide-react';
-import Icon from '@/components/ui/AppIcon';
 
 interface NavItem {
   key: string;
   label: string;
   href: string;
   icon: React.ElementType;
-  badge?: number;
 }
 
 const clinicNavItems: NavItem[] = [
   { key: 'nav-dashboard', label: 'Dashboard', href: '/clinic/dashboard', icon: LayoutDashboard },
-  { key: 'nav-pacientes', label: 'Pacientes', href: '/clinic/patients', icon: Users, badge: 8 },
-  { key: 'nav-agenda', label: 'Agenda', href: '/clinic/agenda', icon: CalendarDays, badge: 3 },
+  { key: 'nav-pacientes', label: 'Pacientes', href: '/clinic/patients', icon: Users },
+  { key: 'nav-agenda', label: 'Agenda', href: '/clinic/agenda', icon: CalendarDays },
   { key: 'nav-programas', label: 'Programas', href: '/clinic/programs', icon: BookOpen },
   {
     key: 'nav-documentos',
     label: 'Documentos',
     href: '/clinic/documents',
     icon: FileText,
-    badge: 6,
   },
   {
     key: 'nav-financeiro',
     label: 'Financeiro',
     href: '/clinic/financeiro',
     icon: CreditCard,
-    badge: 4,
   },
   { key: 'nav-configuracoes', label: 'Configurações', href: '/clinic/settings', icon: Settings },
 ];
@@ -59,12 +56,30 @@ interface DashboardShellProps {
 export default function DashboardShell({ children }: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [patientSearch, setPatientSearch] = useState('');
   const pathname = usePathname();
+  const router = useRouter();
 
   const isActive = (href: string) => {
     if (href === '/clinic/dashboard') return pathname === '/clinic/dashboard' || pathname === '/';
     return pathname.startsWith(href);
   };
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase?.auth?.signOut();
+
+    router.push('/auth/login');
+    router.refresh();
+  }
+
+  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = patientSearch.trim();
+    router.push(
+      query ? `/clinic/patients?search=${encodeURIComponent(query)}` : '/clinic/patients'
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -127,19 +142,10 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                     {item.label}
                   </span>
                 )}
-                {!collapsed && item.badge && item.badge > 0 && (
-                  <span className="ml-auto text-xs font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[20px] text-center leading-none">
-                    {item.badge}
-                  </span>
-                )}
-                {collapsed && item.badge && item.badge > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
-                )}
                 {/* Tooltip for collapsed */}
                 {collapsed && (
                   <span className="absolute left-full ml-2 px-2 py-1 bg-foreground text-background text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50">
                     {item.label}
-                    {item.badge ? ` (${item.badge})` : ''}
                   </span>
                 )}
               </Link>
@@ -150,7 +156,12 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         {/* Bottom: user + collapse toggle */}
         <div className="border-t border-border p-2 flex-shrink-0">
           {!collapsed && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-muted transition-colors cursor-pointer mb-1">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex w-full items-center gap-2 px-3 py-2 rounded-xl hover:bg-muted transition-colors cursor-pointer mb-1 text-left"
+              title="Sair"
+            >
               <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                 <User size={14} className="text-primary" />
               </div>
@@ -161,7 +172,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 <span className="text-xs text-muted-foreground">Coordenadora</span>
               </div>
               <LogOut size={14} className="ml-auto text-muted-foreground flex-shrink-0" />
-            </div>
+            </button>
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
@@ -189,17 +200,20 @@ export default function DashboardShell({ children }: DashboardShellProps) {
           </button>
 
           {/* Search */}
-          <div className="relative flex-1 max-w-sm">
+          <form onSubmit={handleSearch} className="relative flex-1 max-w-sm">
             <Search
               size={15}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
             />
             <input
               type="text"
-              placeholder="Buscar paciente, consulta..."
+              value={patientSearch}
+              onChange={(event) => setPatientSearch(event.target.value)}
+              placeholder="Buscar pacientes..."
+              aria-label="Buscar pacientes"
               className="input-base pl-9 py-1.5 text-sm"
             />
-          </div>
+          </form>
 
           <div className="ml-auto flex items-center gap-2">
             <button className="relative btn-ghost p-2">
@@ -210,9 +224,14 @@ export default function DashboardShell({ children }: DashboardShellProps) {
               <Bell size={18} />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-negative rounded-full" />
             </button>
-            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center cursor-pointer">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center cursor-pointer"
+              title="Sair"
+            >
               <User size={14} className="text-primary" />
-            </div>
+            </button>
           </div>
         </header>
 
