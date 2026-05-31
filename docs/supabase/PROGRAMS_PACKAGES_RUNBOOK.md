@@ -6,7 +6,8 @@ Operational notes for the MVP local programs/packages contract.
 
 Phase 6 covers clinic-side program templates, builder persistence, publish,
 archive, clone, patient enrollment, and generated journey check-ins visible in
-Patient 360.
+Patient 360. Enrollment also creates local operational reflections for agenda,
+billing, and required-document follow-up without calling external providers.
 
 The patient portal remains fail-closed. CRM and inventory package automations
 remain post-MVP.
@@ -17,6 +18,7 @@ Migration:
 
 - `supabase/migrations/20260531180000_140_programs_builder_contract.sql`
 - `supabase/migrations/20260531181000_141_program_checkin_template_fk_fix.sql`
+- `supabase/migrations/20260531182000_142_program_enrollment_operational_reflections.sql`
 
 Tables added or extended:
 
@@ -39,8 +41,11 @@ RPCs:
 - `clone_program(p_program_id)`: clone to draft with child rows. Requires
   `packages.write`.
 - `enroll_patient_in_program(p_patient_id, p_program_id, p_start_date)`: create
-  enrollment, derive service totals, generate check-ins and write timeline.
-  Requires `packages.write`.
+  enrollment, derive service totals, create an initial appointment, create a
+  local pending invoice when the program has price, create required-document
+  tasks, generate check-ins and write timeline. Requires `packages.write`,
+  `agenda.write`, `financial.write` when there is a charge, and
+  `patients.write` when required-document tasks are needed.
 
 ## Frontend Contracts
 
@@ -87,6 +92,6 @@ git diff --check
   implemented.
 - Enrollment currently generates local scheduled check-ins; patient submission
   UX and portal-scoped RLS are post-MVP.
-- Linking enrollment to billing documents is represented by persisted program
-  financial config and required documents; automated invoice/document creation
-  on enrollment remains a later workflow.
+- Enrollment creates local invoice and required-document task rows only. Asaas
+  provider calls remain gated by billing Edge Functions, and D4Sign/document PDF
+  generation remains gated by the documents module.

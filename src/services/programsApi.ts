@@ -40,6 +40,9 @@ export interface ProgramMutationResult {
   status?: ProgramStatus | 'ativo';
   published?: boolean;
   checkinsCreated?: number;
+  appointmentId?: string;
+  invoiceId?: string;
+  documentTasksCreated?: number;
 }
 
 export const BUILDER_STEPS: BuilderStep[] = [
@@ -504,6 +507,9 @@ export async function enrollPatientInProgram(
         id: asString(result.id),
         status: 'ativo',
         checkinsCreated: asNumber(result.checkinsCreated),
+        appointmentId: asString(result.appointmentId),
+        invoiceId: asString(result.invoiceId),
+        documentTasksCreated: asNumber(result.documentTasksCreated),
       },
       error: null,
     };

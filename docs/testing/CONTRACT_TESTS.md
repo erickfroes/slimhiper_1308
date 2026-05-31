@@ -270,9 +270,12 @@ Validated behavior:
 4. `upsert_program_from_builder()` saves a draft and publishes it.
 5. `clone_program()` creates a draft clone.
 6. `update_program_status()` archives the clone.
-7. `enroll_patient_in_program()` creates a real enrollment and generated
+7. `enroll_patient_in_program()` creates a real enrollment, initial agenda
+   appointment, local pending invoice, required-document task, and generated
    `patient_program_checkins`.
-8. `patient-360-summary` exposes package check-ins in the Paciente 360 pacotes
+8. The local invoice/task rows reference the enrollment, while external Asaas
+   and D4Sign provider calls remain outside the enrollment RPC.
+9. `patient-360-summary` exposes package check-ins in the Paciente 360 pacotes
    tab contract.
 
 The script refuses non-local targets unless
