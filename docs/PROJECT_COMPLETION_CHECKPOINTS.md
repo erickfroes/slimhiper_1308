@@ -19,16 +19,17 @@ comparativo competitivo e ordem de finalizacao.
 
 ## Execucao Atual
 
-- Data: 2026-05-31 08:30 -03:00.
+- Data: 2026-05-31 09:04 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
 - Commit base: `bb190f1`.
 - Alvo aprovado: MVP clinico.
 - Ambiente aprovado: local seguro.
-- Lote em andamento: Fase 3 parcial - Paciente 360 deep-link,
-  relatoriosApi local e smoke fail-closed; Fase 2 segue parcialmente concluida.
+- Lote em andamento: Fase 0 Docker/Supabase local green resolvido e Fase 3
+  parcial - Paciente 360 deep-link, relatoriosApi local, TabFinanceiro seguro e
+  smoke fail-closed; Fase 2 segue parcialmente concluida.
 - Checks ja executados neste lote: `npm run type-check`, `npm run lint`,
   `npm run build`, `git diff --check`, fixtures locais Patient360/D4Sign/Billing
-  e smoke HTTP local sem sessao, com smoke visual Browser da tela de login.
+  e smoke HTTP local sem sessao.
 - Skips deliberados: `.env` real nao foi lido, Supabase local/remoto nao foi
   mutado, `supabase db push` nao foi executado, bootstraps nao foram rodados e
   D4Sign/Asaas nao foram chamados.
@@ -37,17 +38,24 @@ comparativo competitivo e ordem de finalizacao.
   lista de pacientes sem toasts fake para chat/revisao, atendimento sem arrays
   `mock*` laterais, TabDocumentos com envio D4Sign desabilitado ate signatario
   real validado, Patient 360 com deep-link `?tab=...`, badge de chat vindo do
-  payload, TabRelatorios sem import direto de mock em producao, build verde e
-  smoke HTTP/Browser local fail-closed.
-- Proximos bloqueios: smoke autenticado, criacao/edicao/cancelamento real de
-  consulta, CRUD real de pacientes, contrato real de relatorios e
-  sintomas/pendencias, forbidden por aba, Supabase local green, RLS
+  payload, TabRelatorios sem import direto de mock em producao, TabFinanceiro
+  com validacao de valor/data/descricao, loading de criacao, erro visivel de
+  Edge Function e acoes pos-MVP desabilitadas, build verde e smoke HTTP local
+  fail-closed.
+- Proximos bloqueios: smoke autenticado do TabFinanceiro,
+  criacao/edicao/cancelamento real de consulta, CRUD real de pacientes,
+  contrato real de relatorios e sintomas/pendencias, forbidden por aba, RLS
   cross-tenant real e contratos sandbox dependem de ambiente/credenciais
   autorizados.
-- Docker local: Docker Engine respondeu (`29.2.1`), Postgres local respondeu a
-  `pg_isready`, Kong/Studio/Inbucket responderam em suas portas, mas
-  `supabase_vector_slimhiper_1308` estava reiniciando; Supabase local green
-  segue nao marcado.
+- Docker local: Docker Engine respondeu (`29.2.1`); Docker Desktop foi ajustado
+  via API local para expor `tcp://localhost:2375` (`ExposeDockerAPIOnTCP2375`
+  em `settings-store.json`), com backup local do arquivo de configuracao;
+  `supabase_vector_slimhiper_1308` estabilizou como `healthy`, Postgres local
+  respondeu a `pg_isready` e Kong/Studio/Inbucket/Analytics responderam em suas
+  portas sem imprimir secrets. Apos o restart do Docker Desktop, o container
+  `supabase_edge_runtime_slimhiper_1308` precisou de `docker start` manual
+  porque usa `restartPolicy=no`; depois disso ficou `Up` e rota de Edge Function
+  sem sessao retornou `401`.
 - Smoke local sem sessao incluiu `/clinic/patients/test-patient/encounter` e
   `/clinic/patients/test-patient?tab=relatorios` com redirect fail-closed para
   `/auth/login`; Browser confirmou login renderizado, sem overlay e sem erros
@@ -197,7 +205,7 @@ Fontes externas consultadas:
 - [ ] `src/services/patient360Api.ts`: manter contrato real e remover fallback silencioso em producao.
 - [ ] `src/app/paciente-360/components`: deep-link de abas, loading/error por aba e forbidden por permissao. Parcial: deep-link `?tab=...` implementado, badge de chat vem do payload e TabRelatorios possui loading/error/empty; forbidden por aba segue pendente.
 - [ ] `TabDocumentos`: remover email hardcoded `paciente@example.com` e resolver signatario real. Parcial: hardcode nao existe mais e envio D4Sign fica desabilitado ate signatario real validado.
-- [ ] `TabFinanceiro`: validar valores, loading de criacao e tratamento claro de falha Edge Function.
+- [x] `TabFinanceiro`: validar valores, loading de criacao e tratamento claro de falha Edge Function. Evidencia local: `src/app/paciente-360/components/tabs/TabFinanceiro.tsx` valida valor/data/descricao antes da chamada, mantem modal aberto em erro, exibe `role="alert"` para falha da Edge Function, mostra loading em cobranca/assinatura e deixa acoes sem contrato local desabilitadas.
 - [x] `TabRelatorios`: substituir `mockReportDefinitions` por `reportsApi`.
 - [ ] Tab chat: criar service real de threads/mensagens/unread.
 - [ ] Tabs consultas/nutricao/pacotes/prescricoes: substituir derivacoes mock por tabelas ou Edge Functions.
@@ -301,7 +309,7 @@ Fontes externas consultadas:
 - [x] Atualizar `docs/testing/BASELINE_CHECKS.md` com commit/branch atual.
 - [x] Garantir `git diff --check`, `npm run type-check`, `npm run lint` e `npm run build` verdes.
 - [x] Rodar fixtures locais em CI de PR: Patient360, D4Sign e Billing.
-- [ ] Registrar ambiente Supabase local green sem secrets.
+- [x] Registrar ambiente Supabase local green sem secrets.
 - [x] Adicionar checklist de browser smoke para rotas criticas.
 
 ### Fase 1 - Auth, RBAC, Guards E RLS
@@ -325,7 +333,7 @@ Fontes externas consultadas:
 - [ ] Rodar contrato real autorizado com token de staff.
 - [ ] Rodar forbidden real com usuario sem `patients.read`.
 - [ ] Rodar cross-tenant real tenant A/B.
-- [ ] Completar tabs: resumo, timeline, consultas, documentos, financeiro, nutricao, pacotes, prescricoes, relatorios e chat. Parcial: navegacao por aba e relatorios locais foram estabilizados.
+- [ ] Completar tabs: resumo, timeline, consultas, documentos, financeiro, nutricao, pacotes, prescricoes, relatorios e chat. Parcial: navegacao por aba, relatorios locais e fluxo seguro de criacao financeira foram estabilizados; financeiro ainda precisa smoke autenticado real.
 - [ ] Remover mocks diretos apos fallback controlado. Parcial: TabRelatorios deixou de importar `mockReportDefinitions` diretamente e usa `reportsApi` com mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`.
 
 ### Fase 4 - Documentos E Assinatura
