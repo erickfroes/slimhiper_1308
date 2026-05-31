@@ -130,6 +130,8 @@ Edge Function environments:
 - `D4SIGN_BASE_URL`
 - `D4SIGN_SAFE_UUID`
 - `D4SIGN_FOLDER_UUID` when documents should land in a specific D4Sign folder
+- `D4SIGN_AUTO_DISCOVER_SAFE=true` only for approved sandbox smoke runs when the
+  account has exactly the safe you expect to use
 - D4Sign webhook token or HMAC secret used by `webhook-d4sign`
 - `SUPABASE_SERVICE_ROLE_KEY` where required by trusted Edge Functions
 
@@ -174,6 +176,11 @@ Use placeholders in docs and examples. Never commit real values.
   uploads it to the configured D4Sign safe/cofre, creates the signer list, and
   sends to signer. Tokens, raw provider responses, and storage paths are never
   returned to browser code.
+- By default the provider send requires `D4SIGN_SAFE_UUID`. In an approved
+  sandbox smoke only, `D4SIGN_AUTO_DISCOVER_SAFE=true` lets the Edge Function
+  call `GET /safes` and use the first returned safe. If no safe is returned, the
+  function fails closed with `provider_safe_not_found` and does not proceed to
+  upload.
 - `supabase/functions/patient-documents` exposes only safe UI hints:
   `canRequestSignature` and `signatureDisabledReason`. It must not expose
   storage paths, signed URLs, raw provider payloads, or signer PII.
