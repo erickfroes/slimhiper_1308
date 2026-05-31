@@ -3,11 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import type { PatientDocument360Item, PatientDocumentCategory } from '@/domain/types';
 import EmptyState from '@/components/EmptyState';
-import {
-  getDocumentSignedUrl,
-  getPatientDocuments,
-  sendDocumentForSignature,
-} from '@/services/documentsApi';
+import { getDocumentSignedUrl, getPatientDocuments } from '@/services/documentsApi';
 import {
   FileText,
   Download,
@@ -138,13 +134,9 @@ function RowActions({ doc, patientId }: RowActionsProps) {
       return;
     }
     if (label === 'Enviar para assinatura') {
-      setLoadingAction(label);
-      const { error } = await sendDocumentForSignature(doc.id, patientId, [
-        { name: 'Paciente', email: 'paciente@example.com' },
-      ]);
-      setLoadingAction(null);
-      if (error) return toast.error(error.message);
-      toast.success('Documento enviado para assinatura.');
+      toast.error(
+        'Cadastre um email ou telefone validado do paciente antes de enviar para assinatura.'
+      );
       setOpen(false);
       return;
     }

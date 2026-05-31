@@ -45,7 +45,7 @@ interface ReviewSectionProps {
 
 function ReviewSection({ icon: Icon, title, isComplete, children }: ReviewSectionProps) {
   return (
-    <div className="card p-5 space-y-3">
+    <div className="card-base p-5 space-y-3">
       <div className="flex items-center gap-3">
         <div
           className={[
@@ -88,7 +88,7 @@ export default function StepRevisao({ draft }: Props) {
       {/* Overall status */}
       <div
         className={[
-          'card p-5 flex items-center gap-4',
+          'card-base p-5 flex items-center gap-4',
           allComplete ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200',
         ].join(' ')}
       >

@@ -35,7 +35,6 @@ import type {
   PatientReviewItem,
 } from '@/domain/types';
 import dynamic from 'next/dynamic';
-import Icon from '@/components/ui/AppIcon';
 
 const OccupancyChart = dynamic(() => import('@/components/charts/OccupancyChart'), { ssr: false });
 
@@ -132,10 +131,12 @@ export default function DashboardContent() {
   const [reviewPatients, setReviewPatients] = useState<PatientReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadData = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
+    setLoadError(null);
     try {
       const [s, q, a, alerts, review] = await Promise.all([
         getDashboardStats(),
@@ -151,9 +152,17 @@ export default function DashboardContent() {
       setReviewPatients(review);
       if (isRefresh) toast.success('Dados atualizados');
     } catch (dashboardError) {
-      if (dashboardError instanceof Error) {
-        console.error('[DashboardContent] load error:', dashboardError.message);
-      }
+      const message =
+        dashboardError instanceof Error
+          ? dashboardError.message
+          : 'Falha ao carregar dados do dashboard.';
+      console.error('[DashboardContent] load error:', message);
+      setStats(null);
+      setQueue([]);
+      setAppointments([]);
+      setClinicAlerts([]);
+      setReviewPatients([]);
+      setLoadError(message);
       toast.error('Falha ao carregar dados do dashboard. Tente novamente.');
     } finally {
       setLoading(false);
@@ -185,7 +194,27 @@ export default function DashboardContent() {
     );
   }
 
-  if (!stats) return null;
+  if (!stats) {
+    return (
+      <div className="p-6 xl:p-8">
+        <div className="card-base p-8 text-center max-w-xl mx-auto">
+          <AlertTriangle size={28} className="mx-auto text-red-600" />
+          <h1 className="mt-3 text-lg font-bold text-foreground">Dashboard indisponivel</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {loadError ?? 'Nao foi possivel carregar os indicadores da clinica.'}
+          </p>
+          <button
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            className="btn-primary mt-5 inline-flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-60"
+          >
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const completedToday = appointments.filter((a) => a.status === 'concluido').length;
   const remainingToday = appointments.filter((a) =>

@@ -22,10 +22,6 @@ function isMockExplicitlyEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 }
 
-function canUseDevelopmentMockFallback(): boolean {
-  return process.env.NODE_ENV === 'development';
-}
-
 export function canUseMockDashboardProvider(): boolean {
   return isMockExplicitlyEnabled();
 }
@@ -354,16 +350,7 @@ async function runDashboardOperation<T>(
   operation: (provider: DashboardProvider) => Promise<T>
 ): Promise<T> {
   const provider = await getDashboardProvider();
-
-  try {
-    return await operation(provider);
-  } catch (error) {
-    if (canUseDevelopmentMockFallback() && !canUseMockDashboardProvider()) {
-      return operation(await getMockDashboardProvider());
-    }
-
-    throw error;
-  }
+  return operation(provider);
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

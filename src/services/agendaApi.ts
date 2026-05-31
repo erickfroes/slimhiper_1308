@@ -73,10 +73,6 @@ function isMockExplicitlyEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 }
 
-function canUseDevelopmentMockFallback(): boolean {
-  return process.env.NODE_ENV === 'development';
-}
-
 function canUseMockAgendaProvider(): boolean {
   return isMockExplicitlyEnabled();
 }
@@ -381,16 +377,7 @@ async function getAgendaProvider(): Promise<AgendaProvider> {
 
 async function runAgendaOperation<T>(operation: (provider: AgendaProvider) => Promise<T>) {
   const provider = await getAgendaProvider();
-
-  try {
-    return await operation(provider);
-  } catch (error) {
-    if (canUseDevelopmentMockFallback() && !canUseMockAgendaProvider()) {
-      return operation(await getMockAgendaProvider());
-    }
-
-    throw error;
-  }
+  return operation(provider);
 }
 
 export async function getAgendaDay(date: string): Promise<AgendaDayData> {

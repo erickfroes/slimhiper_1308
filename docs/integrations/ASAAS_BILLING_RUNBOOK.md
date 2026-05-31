@@ -16,6 +16,9 @@ Relevant files include:
 - `src/app/clinic/financeiro`
 - `src/app/admin/billing`
 - `src/app/admin/webhooks`
+- `supabase/migrations/20260530125000_050_billing_asaas.sql`
+- `supabase/migrations/20260530126000_060_contract_views_rpcs.sql`
+- `supabase/migrations/20260531090000_070_billing_webhook_security_hardening.sql`
 - `scripts/supabase/bootstrap-billing-demo.mjs`
 - `scripts/supabase/test-billing-contract.mjs`
 - `scripts/supabase/test-billing-fixtures.mjs`
@@ -116,8 +119,10 @@ Expected webhook header:
 
 - `asaas-access-token`
 
-Confirm whether webhook deployment needs JWT verification disabled for the
-target environment before deploying.
+`supabase/config.toml` versions `[functions.webhook-asaas] verify_jwt = false`
+because Asaas cannot send a Supabase JWT. Keep this setting limited to webhook
+handlers that validate `asaas-access-token` or an equivalent provider secret
+before tenant resolution, idempotency, or data writes.
 
 ## Idempotency
 
@@ -138,12 +143,12 @@ Local fixtures assert this minimum provider-to-internal mapping:
 | `PAYMENT_CREATED` | `pendente` | `pending` | `cobranca_pendente` | `pagamento` |
 | `PAYMENT_DELETED` / `PAYMENT_CANCELLED` | `cancelado` | `canceled` | `cobranca_pendente` | none |
 
-Implementation note: `webhook-asaas` records an append-only webhook audit row,
-deduplicates by SHA-256 event hash, resolves tenant/patient from
-`patient_invoices.asaas_invoice_id`, updates `patient_invoices`, upserts
-`payments`, and emits timeline rows for created/received/confirmed/overdue
-events. Cancelled/deleted payments update financial rows but intentionally do
-not emit a new timeline event.
+Implementation note: `webhook-asaas` records an append-only webhook audit row
+with a minimized operational payload, deduplicates by SHA-256 event hash,
+resolves tenant/patient from `patient_invoices.asaas_invoice_id`, updates
+`patient_invoices`, upserts `payments`, and emits timeline rows for
+created/received/confirmed/overdue events. Cancelled/deleted payments update
+financial rows but intentionally do not emit a new timeline event.
 
 The database stores provider-normalized statuses such as `pending`, `paid`,
 `overdue`, and `cancelled`. The frontend contract maps these to Portuguese
@@ -180,9 +185,14 @@ node scripts/supabase/test-billing-fixtures.mjs
   existing invoice/customer records, not trust `externalReference` alone.
 - `financial.write` is required for customer, invoice, and subscription
   creation.
+- Direct authenticated writes to provider-owned billing tables are revoked by
+  `20260531090000_070_billing_webhook_security_hardening.sql`; provider
+  mutations should go through Edge Functions or reviewed RPCs.
 - No Asaas API key is persisted in tables or returned by functions.
 - Invalid webhook tokens must fail closed before idempotency, tenant resolution,
   or provider payload processing.
-- Store only the minimum webhook payload needed for operational support.
+- Store only the minimum webhook payload needed for operational support; the
+  current webhook audit row keeps event identifiers, payment status/type,
+  amount cents, due date, and event hash instead of raw provider bodies.
 - Prefer redacted views or summaries for UI/admin access to webhook events.
 - Local fixture scripts must not print raw provider payloads or real identifiers.

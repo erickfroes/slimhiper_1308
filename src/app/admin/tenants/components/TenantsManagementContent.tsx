@@ -506,7 +506,7 @@ function ActionMenu({ tenant, onClose }: { tenant: TenantRow; onClose: () => voi
 
 export default function TenantsManagementContent() {
   const [search, setSearch] = useState('');
-  const [tenantRows, setTenantRows] = useState<TenantRow[]>(mockTenantRows);
+  const [tenantRows, setTenantRows] = useState<TenantRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -514,7 +514,7 @@ export default function TenantsManagementContent() {
     let mounted = true;
     listTenants(mockTenantRows).then(({ data, error }) => {
       if (!mounted) return;
-      setTenantRows((data ?? mockTenantRows) as TenantRow[]);
+      setTenantRows((data ?? []) as TenantRow[]);
       setLoadError(error?.message ?? null);
       setIsLoading(false);
     });
@@ -657,6 +657,18 @@ export default function TenantsManagementContent() {
               Gerencie todas as clínicas cadastradas na plataforma
             </p>
           </div>
+
+          {isLoading && (
+            <div className="card-base p-4 mb-4 text-sm text-muted-foreground">
+              Carregando tenants...
+            </div>
+          )}
+
+          {loadError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 mb-4 text-sm text-red-700">
+              Nao foi possivel carregar tenants. {loadError}
+            </div>
+          )}
 
           {/* KPI Row */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">

@@ -1,0 +1,10 @@
+# Project-scoped Codex configuration. Codex loads this only after the project is
+# trusted, and user/global config still has lower precedence than CLI overrides.
+project_doc_max_bytes = 65536
+
+[agents]
+max_threads = 6
+max_depth = 1
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"

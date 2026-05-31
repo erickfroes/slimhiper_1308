@@ -45,10 +45,6 @@ function isMockExplicitlyEnabled() {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 }
 
-function canUseDevelopmentMockFallback() {
-  return process.env.NODE_ENV === 'development';
-}
-
 function asServiceError(error: unknown, fallback: string): SafeServiceError {
   if (error instanceof Error) return { message: error.message || fallback };
   if (error && typeof error === 'object' && 'message' in error) {
@@ -211,7 +207,6 @@ export async function getPatientList(): Promise<PatientListRow[]> {
   try {
     return await getPatientListFromSupabase();
   } catch (error) {
-    if (canUseDevelopmentMockFallback()) return getMockPatientList();
     throw asServiceError(error, 'Falha ao carregar lista de pacientes.');
   }
 }

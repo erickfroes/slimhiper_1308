@@ -41,7 +41,7 @@ export default function StepServicos({ draft, onChange }: Props) {
   return (
     <div className="space-y-5">
       {/* Presets */}
-      <div className="card p-4 space-y-3">
+      <div className="card-base p-4 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Adicionar serviço rápido</h3>
         <div className="flex flex-wrap gap-2">
           {servicePresets.map((p) => {
@@ -69,7 +69,7 @@ export default function StepServicos({ draft, onChange }: Props) {
       {/* Service list */}
       <div className="space-y-3">
         {services.map((svc, idx) => (
-          <div key={idx} className="card p-4">
+          <div key={idx} className="card-base p-4">
             <div className="grid grid-cols-12 gap-3 items-end">
               <div className="col-span-6 space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Serviço</label>

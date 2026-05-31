@@ -27,5 +27,5 @@ try{
  const {data:canRead}=await supabase.rpc('has_clinical_permission',{p_tenant_id:doc.tenant_id,p_permission:'documents.read'}); if(canRead!==true) return jsonResponse(403,{ok:false,error:{code:'forbidden'},meta:{timestamp}});
  const expiresInSeconds=300; const {data,error}=await admin.storage.from(String(doc.storage_bucket)).createSignedUrl(String(doc.storage_path),expiresInSeconds); if(error) throw error;
  return jsonResponse(200,{ok:true,data:{url:data.signedUrl,expiresInSeconds},meta:{timestamp,tenant_id:doc.tenant_id,patient_id:doc.patient_id,generated_document_id:doc.id}});
-}catch(error){return jsonResponse(500,{ok:false,error:{code:'internal_error',message:error instanceof Error?error.message:'Unexpected error'},meta:{timestamp}})}
+}catch(error){console.error('[document-signed-url] unexpected_error',{message:error instanceof Error?error.message:String(error)});return jsonResponse(500,{ok:false,error:{code:'internal_error',message:'Unexpected server error.'},meta:{timestamp}})}
 });

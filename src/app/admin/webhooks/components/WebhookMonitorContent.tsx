@@ -7,7 +7,6 @@ import {
   Filter,
   RefreshCw,
   Eye,
-  EyeOff,
   ChevronRight,
   LogOut,
   User,
@@ -20,7 +19,6 @@ import {
   RotateCcw,
   ChevronDown,
   ChevronUp,
-  Copy,
   X,
   Activity,
   Building2,
@@ -33,7 +31,6 @@ import {
   LayoutDashboard,
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
-import Icon from '@/components/ui/AppIcon';
 import { listWebhookSummaries } from '@/services/adminApi';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -417,16 +414,6 @@ function MaskedText({ value }: { value: string }) {
 // ─── PAYLOAD DRAWER ───────────────────────────────────────────────────────────
 
 function PayloadDrawer({ event, onClose }: { event: WebhookEvent; onClose: () => void }) {
-  const [showSensitive, setShowSensitive] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy(text: string) {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
@@ -502,58 +489,15 @@ function PayloadDrawer({ event, onClose }: { event: WebhookEvent; onClose: () =>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Payload Sensível
               </p>
-              <button
-                onClick={() => setShowSensitive(!showSensitive)}
-                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-              >
-                {showSensitive ? <EyeOff size={13} /> : <Eye size={13} />}
-                {showSensitive ? 'Ocultar' : 'Revelar'}
-              </button>
             </div>
 
-            {showSensitive ? (
-              <div className="space-y-3">
-                <div className="bg-slate-900 rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs text-slate-400 font-medium">Raw Body</p>
-                    <button
-                      onClick={() => handleCopy(event.sensitivePayload.rawBody)}
-                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
-                    >
-                      <Copy size={11} />
-                      {copied ? 'Copiado!' : 'Copiar'}
-                    </button>
-                  </div>
-                  <pre className="text-xs text-emerald-400 font-mono whitespace-pre-wrap break-all leading-relaxed">
-                    {JSON.stringify(JSON.parse(event.sensitivePayload.rawBody), null, 2)}
-                  </pre>
-                </div>
-                <div className="bg-slate-900 rounded-xl p-3">
-                  <p className="text-xs text-slate-400 font-medium mb-2">Headers</p>
-                  {Object.entries(event.sensitivePayload.headers).map(([k, v]) => (
-                    <div key={k} className="flex gap-2 text-xs font-mono">
-                      <span className="text-blue-400">{k}:</span>
-                      <span className="text-amber-300">{v}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="bg-slate-900 rounded-xl p-3">
-                  <p className="text-xs text-slate-400 font-medium mb-1">Assinatura</p>
-                  <p className="text-xs font-mono text-purple-400 break-all">
-                    {event.sensitivePayload.signature}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-muted/50 border border-border rounded-xl p-4 flex flex-col items-center gap-2">
-                <EyeOff size={20} className="text-muted-foreground" />
-                <p className="text-xs text-muted-foreground text-center">
-                  Payload oculto por padrão para proteger dados sensíveis.
-                  <br />
-                  Clique em <strong>Revelar</strong> para visualizar.
-                </p>
-              </div>
-            )}
+            <div className="bg-muted/50 border border-border rounded-xl p-4 flex flex-col items-center gap-2">
+              <Shield size={20} className="text-muted-foreground" />
+              <p className="text-xs text-muted-foreground text-center">
+                Payload bruto, headers e assinaturas nao sao exibidos no painel admin. Consulte logs
+                backend auditados quando houver autorizacao operacional.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -586,7 +530,7 @@ export default function WebhookMonitorContent() {
   const [selectedEvent, setSelectedEvent] = useState<WebhookEvent | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const [events, setEvents] = useState<WebhookEvent[]>(mockWebhookEvents);
+  const [events, setEvents] = useState<WebhookEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -594,7 +538,7 @@ export default function WebhookMonitorContent() {
     let mounted = true;
     listWebhookSummaries(mockWebhookEvents as any).then(({ data, error }) => {
       if (!mounted) return;
-      setEvents((data ?? mockWebhookEvents) as WebhookEvent[]);
+      setEvents((data ?? []) as WebhookEvent[]);
       setLoadError(error?.message ?? null);
       setIsLoading(false);
     });
@@ -735,6 +679,18 @@ export default function WebhookMonitorContent() {
             </p>
           </div>
 
+          {isLoading && (
+            <div className="card-base p-4 text-sm text-muted-foreground">
+              Carregando eventos de webhook...
+            </div>
+          )}
+
+          {loadError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              Nao foi possivel carregar webhooks. {loadError}
+            </div>
+          )}
+
           {/* KPI Row */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <KpiCard icon={Webhook} label="Total de Eventos" value={total} color="teal" />
@@ -790,7 +746,7 @@ export default function WebhookMonitorContent() {
           </div>
 
           {/* Table */}
-          <div className="card overflow-hidden p-0">
+          <div className="card-base overflow-hidden p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -968,16 +924,10 @@ export default function WebhookMonitorContent() {
                                       Payload Sensível
                                     </p>
                                     <div className="flex items-center gap-2">
-                                      <EyeOff size={12} className="text-muted-foreground" />
+                                      <Shield size={12} className="text-muted-foreground" />
                                       <span className="text-xs text-muted-foreground">
-                                        Oculto por padrão
+                                        Redigido no painel
                                       </span>
-                                      <button
-                                        onClick={() => setSelectedEvent(event)}
-                                        className="text-xs font-medium text-primary hover:underline"
-                                      >
-                                        Revelar no painel →
-                                      </button>
                                     </div>
                                   </div>
                                 </div>

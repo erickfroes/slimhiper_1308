@@ -31,7 +31,7 @@ export default function StepFinanceiro({ draft, onChange }: Props) {
   return (
     <div className="space-y-5">
       {/* Payment model selector */}
-      <div className="card p-5 space-y-3">
+      <div className="card-base p-5 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Modelo de pagamento</h3>
         <div className="grid grid-cols-2 gap-3">
           {paymentModels.map((m) => (
@@ -60,7 +60,7 @@ export default function StepFinanceiro({ draft, onChange }: Props) {
       </div>
 
       {/* Pricing */}
-      <div className="card p-5 space-y-4">
+      <div className="card-base p-5 space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Precificação</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
@@ -144,7 +144,7 @@ export default function StepFinanceiro({ draft, onChange }: Props) {
       </div>
 
       {/* Description */}
-      <div className="card p-5 space-y-2">
+      <div className="card-base p-5 space-y-2">
         <h3 className="text-sm font-semibold text-foreground">Descrição do modelo financeiro</h3>
         <textarea
           value={financial.description}

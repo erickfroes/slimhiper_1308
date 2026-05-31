@@ -21,9 +21,8 @@ Covered application files:
 
 Supabase schema sources:
 
-- `supabase/migrations/20260508110000_core_multitenant_foundation.sql`
-- `supabase/migrations/20260508123000_core_role_model_upgrade.sql`
-- `supabase/migrations/20260508133000_core_multitenant_rls_alignment.sql`
+- `supabase/migrations/20260530120000_000_extensions_security.sql`
+- `supabase/migrations/20260530121000_010_core_auth_rbac.sql`
 - `scripts/supabase/bootstrap-core-auth.mjs`
 - `supabase/tests/core_rbac_smoke_tests.sql`
 
@@ -331,8 +330,8 @@ components.
 6. `profiles.is_active` is not enforced in app session assembly. RLS helpers use
    `is_active` for platform admin checks, so the app and database can disagree
    for disabled users.
-7. `NEXT_PUBLIC_USE_MOCK_DATA=true` and service fallbacks can mask RLS/backend
-   errors in admin UI. RBAC smoke checks must run with real backend paths and
+7. `NEXT_PUBLIC_USE_MOCK_DATA=true` can still force mock providers in selected
+   screens. RBAC smoke checks must run with real backend paths and
    visible error/forbidden states.
 8. Build/type-check do not exercise live Supabase RLS or schema contracts. Use
    the diagnostic script and SQL smoke tests in authorized environments.

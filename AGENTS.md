@@ -193,8 +193,16 @@ explicit authorization.
 
 ## 9. Subagent Rules
 
-Use subagents for parallel audit, exploration, or independent implementation
-work when explicitly requested or when the task calls for separate reviewers.
+Use subagents only when the user explicitly asks for subagents, delegation, or
+parallel agent work. Do not spawn subagents automatically just because a task is
+large, complex, or review-oriented.
+
+Project-scoped custom agents live in `.codex/agents/*.toml`. Each file defines
+one standalone custom agent with `name`, `description`, and
+`developer_instructions`, following the OpenAI Codex subagents documentation.
+
+The project `.codex/config.toml` sets conservative subagent defaults and enables
+the OpenAI developer documentation MCP server for trusted project sessions.
 
 Subagent defaults:
 
@@ -218,6 +226,14 @@ Recommended audit roles:
 
 When multiple subagents run, the parent agent must consolidate and prioritize
 findings rather than pasting raw reports only.
+
+Example explicit subagent prompt:
+
+```text
+Review this branch with subagents. Use repo_explorer, security_reviewer, and
+frontend_reviewer, wait for all of them, then summarize findings by severity
+with file references.
+```
 
 ## 10. Mandatory Checks
 
@@ -263,3 +279,18 @@ A task is done when:
 - Any skipped checks are named with the reason.
 - Risks, follow-up work, and known limitations are called out.
 - File paths for important changes are included in the final response.
+
+## 12. OpenAI Documentation Alignment
+
+Always use the OpenAI developer documentation MCP server if you need to work
+with the OpenAI API, ChatGPT Apps SDK, Codex, MCP, subagents, or other OpenAI
+product documentation without the user having to explicitly ask.
+
+If the Docs MCP server is unavailable, use only official OpenAI documentation
+domains as a fallback and cite the source in the final response.
+
+Reference pages used to maintain this setup:
+
+- https://developers.openai.com/codex/guides/agents-md
+- https://developers.openai.com/codex/subagents
+- https://developers.openai.com/learn/docs-mcp

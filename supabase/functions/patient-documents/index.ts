@@ -30,5 +30,5 @@ Deno.serve(async (req)=>{
   if(error) throw error;
   const documents=(rows??[]).map((row:any)=>{const sr=Array.isArray(row.signature_requests)?row.signature_requests[0]:null;const status=mapStatus(String(sr?.status??row.status??''));return {id:row.id,patientId:row.patient_id,name:row.name,category:row.category,tipo:String(row.category??''),status,assinatura:status==='assinado'?'assinado':sr?'pendente':'nao_requerido',emitidoEm:new Date(row.generated_at??row.created_at).toLocaleDateString('pt-BR'),emitidoPor:'Equipe clínica',hasEvidencePackage:false};});
   return jsonResponse(200,{ok:true,data:{documents},meta:{timestamp,tenant_id:tenantId,patient_id:patientId,count:documents.length}});
- }catch(error){return jsonResponse(500,{ok:false,error:{code:'internal_error',message:error instanceof Error?error.message:'Unexpected error'},meta:{timestamp}})}
+ }catch(error){console.error('[patient-documents] unexpected_error',{message:error instanceof Error?error.message:String(error)});return jsonResponse(500,{ok:false,error:{code:'internal_error',message:'Unexpected server error.'},meta:{timestamp}})}
 });

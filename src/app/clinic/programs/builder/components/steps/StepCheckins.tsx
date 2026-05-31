@@ -42,7 +42,7 @@ export default function StepCheckins({ draft, onChange }: Props) {
   return (
     <div className="space-y-5">
       {/* Config */}
-      <div className="card p-5 space-y-4">
+      <div className="card-base p-5 space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Configuração geral</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
@@ -88,7 +88,7 @@ export default function StepCheckins({ draft, onChange }: Props) {
               key={template.id}
               onClick={() => toggleTemplate(template.id)}
               className={[
-                'card p-4 cursor-pointer transition-all',
+                'card-base p-4 cursor-pointer transition-all',
                 selected ? 'border-primary/40 bg-primary/5' : 'hover:border-border/80',
               ].join(' ')}
             >

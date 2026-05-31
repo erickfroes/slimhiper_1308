@@ -258,8 +258,9 @@ Deno.serve(async (req) => {
     const timelinePayload = {
       template_id: template.id,
       generated_document_id: generatedDocument.id,
-      rendered_content: renderedContent,
-      variables: mergedVariables,
+      document_name: generatedDocument.name,
+      document_category: generatedDocument.category,
+      document_status: generatedDocument.status,
     };
 
     const { error: timelineError } = await supabase.from('patient_timeline_events').insert({
@@ -298,11 +299,15 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
+    console.error('[generate-document] unexpected_error', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+
     return jsonResponse(500, {
       ok: false,
       error: {
         code: 'internal_error',
-        message: error instanceof Error ? error.message : 'Unexpected error.',
+        message: 'Unexpected server error.',
       },
       meta: { timestamp },
     });

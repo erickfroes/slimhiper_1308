@@ -306,11 +306,15 @@ Deno.serve(async (req) => {
       meta: { timestamp, tenant_id: tenantId, patient_id: patientId },
     });
   } catch (error) {
+    console.error('[d4sign-send-document] unexpected_error', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+
     return jsonResponse(500, {
       ok: false,
       error: {
         code: 'internal_error',
-        message: error instanceof Error ? error.message : 'Unexpected error.',
+        message: 'Unexpected server error.',
       },
       meta: { timestamp },
     });

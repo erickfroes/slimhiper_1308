@@ -679,7 +679,7 @@ export default function AgendaContent() {
       />
 
       {loadError && (
-        <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           Nao foi possivel carregar a agenda. {loadError}
         </div>
       )}

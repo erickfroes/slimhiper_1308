@@ -24,6 +24,7 @@ live under `docs/`.
 ```bash
 npm install
 npm run dev
+git diff --check
 npm run type-check
 npm run lint
 npm run build
@@ -32,6 +33,7 @@ npm run build
 Notes:
 
 - `npm run dev` starts the app on port `4028`.
+- `git diff --check` is the whitespace/syntax guard for staged or unstaged diffs.
 - `npm run lint` runs ESLint CLI over `src/**/*.{ts,tsx}`.
 - `npm run start` currently starts the development server.
 - Do not change `package.json` or `rocketCritical` dependencies without a
@@ -48,6 +50,7 @@ Notes:
 - Asaas billing runbook: [docs/integrations/ASAAS_BILLING_RUNBOOK.md](docs/integrations/ASAAS_BILLING_RUNBOOK.md)
 - Environment hygiene: [docs/security/ENV_HYGIENE.md](docs/security/ENV_HYGIENE.md)
 - Contract and smoke checks: [docs/testing/CONTRACT_TESTS.md](docs/testing/CONTRACT_TESTS.md)
+- Project completion checkpoints: [docs/PROJECT_COMPLETION_CHECKPOINTS.md](docs/PROJECT_COMPLETION_CHECKPOINTS.md)
 - Codex agent operating rules: [AGENTS.md](AGENTS.md)
 
 ## Secrets And Safety
