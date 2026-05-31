@@ -112,6 +112,38 @@ async function cleanupSmokeProgram(tenantId) {
   const ids = (programs ?? []).map((program) => program.id);
   if (ids.length === 0) return;
 
+  const { error: taskCleanupError } = await admin
+    .from('patient_tasks')
+    .delete()
+    .eq('tenant_id', tenantId)
+    .eq('patient_id', PATIENT_ID)
+    .ilike('details', `%${SMOKE_PROGRAM_NAME}%`);
+  if (taskCleanupError) throw taskCleanupError;
+
+  const { error: appointmentCleanupError } = await admin
+    .from('appointments')
+    .delete()
+    .eq('tenant_id', tenantId)
+    .eq('patient_id', PATIENT_ID)
+    .ilike('notes', `%${SMOKE_PROGRAM_NAME}%`);
+  if (appointmentCleanupError) throw appointmentCleanupError;
+
+  const { error: invoiceCleanupError } = await admin
+    .from('patient_invoices')
+    .delete()
+    .eq('tenant_id', tenantId)
+    .eq('patient_id', PATIENT_ID)
+    .contains('metadata', { program_name: SMOKE_PROGRAM_NAME });
+  if (invoiceCleanupError) throw invoiceCleanupError;
+
+  const { error: timelineCleanupError } = await admin
+    .from('patient_timeline_events')
+    .delete()
+    .eq('tenant_id', tenantId)
+    .eq('patient_id', PATIENT_ID)
+    .ilike('description', `%${SMOKE_PROGRAM_NAME}%`);
+  if (timelineCleanupError) throw timelineCleanupError;
+
   const { error: enrollmentError } = await admin
     .from('patient_program_enrollments')
     .delete()
@@ -235,11 +267,64 @@ async function run() {
   });
   ok(enrollment?.id, 'enroll_patient_in_program: expected enrollment id.');
   ok(enrollment?.checkinsCreated === 4, 'enroll_patient_in_program: expected 4 check-ins.');
+  ok(enrollment?.appointmentId, 'enroll_patient_in_program: expected agenda appointment id.');
+  ok(enrollment?.invoiceId, 'enroll_patient_in_program: expected local invoice id.');
+  ok(
+    enrollment?.documentTasksCreated === 1,
+    'enroll_patient_in_program: expected one required-document task.'
+  );
 
   const generatedCheckins = await countRows('patient_program_checkins', {
     enrollment_id: enrollment.id,
   });
   ok(generatedCheckins >= 4, `Expected generated check-ins, got ${generatedCheckins}.`);
+
+  currentStep = 'checking agenda, finance and required-document reflections';
+  const { data: appointment, error: appointmentError } = await admin
+    .from('appointments')
+    .select('id,type,status,notes')
+    .eq('tenant_id', tenant.id)
+    .eq('patient_id', PATIENT_ID)
+    .eq('id', enrollment.appointmentId)
+    .single();
+  if (appointmentError) throw appointmentError;
+  ok(appointment.status === 'agendado', 'Expected enrollment appointment to be agendado.');
+  ok(
+    appointment.type === 'avaliacao_inicial',
+    'Expected enrollment appointment to be avaliacao_inicial.'
+  );
+
+  const { data: invoice, error: invoiceError } = await admin
+    .from('patient_invoices')
+    .select('id,status,amount_cents,metadata')
+    .eq('tenant_id', tenant.id)
+    .eq('patient_id', PATIENT_ID)
+    .eq('id', enrollment.invoiceId)
+    .single();
+  if (invoiceError) throw invoiceError;
+  ok(invoice.status === 'pending', 'Expected local program invoice to be pending.');
+  ok(invoice.amount_cents === 80000, 'Expected local program invoice amount to be 80000.');
+  ok(
+    invoice.metadata?.source === 'program_enrollment' &&
+      invoice.metadata?.enrollment_id === enrollment.id,
+    'Expected invoice metadata to reference program enrollment.'
+  );
+
+  const { data: documentTasks, error: documentTaskError } = await admin
+    .from('patient_tasks')
+    .select('id,title,status,details')
+    .eq('tenant_id', tenant.id)
+    .eq('patient_id', PATIENT_ID)
+    .ilike('details', `%${enrollment.id}%`);
+  if (documentTaskError) throw documentTaskError;
+  ok(
+    Array.isArray(documentTasks) &&
+      documentTasks.some(
+        (task) =>
+          task.status === 'open' && task.title.startsWith('Documento obrigatorio:')
+      ),
+    'Expected open required-document task linked to enrollment.'
+  );
 
   currentStep = 'checking Patient 360 package visibility';
   const { data: summaryEnvelope, error: summaryError } = await client.functions.invoke(
