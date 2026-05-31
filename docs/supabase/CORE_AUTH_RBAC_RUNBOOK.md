@@ -1,8 +1,9 @@
 # Supabase Core Auth And RBAC Runbook
 
-This project includes a development bootstrap script for core auth and
-multi-tenant role testing only. It does not create UI changes and does not
-create new clinical tables.
+This project uses a clean canonical migration set for an empty Supabase
+project. The core auth bootstrap is for development/staging tenant and RBAC
+testing only. It does not create UI changes and should run only after the clean
+schema has been applied.
 
 For the app-facing session shape, route guards, expected tables/columns, and
 known contract gaps, see `docs/auth/AUTH_RBAC_SESSION_CONTRACT.md`.
@@ -35,6 +36,21 @@ Use service-role credentials only in trusted server-side scripts such as
 `scripts/supabase/bootstrap-core-auth.mjs`. Never expose service-role keys in
 browser code or any `NEXT_PUBLIC_*` variable.
 
+For local Supabase CLI, use `SERVICE_ROLE_KEY`, not `SECRET_KEY`. The
+`SECRET_KEY` value starts with `sb_secret_...` and is not accepted by these
+bootstrap scripts as `SUPABASE_SERVICE_ROLE_KEY`.
+
+PowerShell helper for local development:
+
+```powershell
+$status = npx supabase status --output env
+$env:SUPABASE_URL = ($status | Select-String '^API_URL=').Line -replace '^API_URL="(.+)"$','$1'
+$env:SUPABASE_SERVICE_ROLE_KEY = ($status | Select-String '^SERVICE_ROLE_KEY=').Line -replace '^SERVICE_ROLE_KEY="(.+)"$','$1'
+```
+
+This captures values into environment variables without printing them again in
+the terminal.
+
 ## Run Migrations First
 
 ```bash
@@ -43,6 +59,16 @@ supabase db push
 
 Do not run this command unless the task explicitly authorizes database changes
 against the selected Supabase project.
+
+Expected clean migration order:
+
+1. `20260530120000_000_extensions_security.sql`
+2. `20260530121000_010_core_auth_rbac.sql`
+3. `20260530122000_020_clinical_patient360.sql`
+4. `20260530123000_030_programs_reports_chat_crm_inventory.sql`
+5. `20260530124000_040_documents_storage_d4sign.sql`
+6. `20260530125000_050_billing_asaas.sql`
+7. `20260530126000_060_contract_views_rpcs.sql`
 
 ## Run The Bootstrap Script
 
@@ -77,11 +103,12 @@ Using placeholder emails:
 2. Links `auth.users` to `public.profiles` by upserting profile rows with
    matching `id`. Clinic users receive `profiles.active_tenant_id` for the demo
    tenant.
-3. Creates `tenant_memberships` only for clinic roles supported by the current
-   migration: `clinic_admin`, `physician`, `nutritionist`, `financial_user`.
+3. Creates `tenant_memberships` for the seeded clinic roles:
+   `clinic_admin`, `physician`, `nutritionist`, `financial_user`.
    `tenant_memberships.role` mirrors `role_code`.
-4. Skips patient tenant membership for now, seeding only auth plus profile for a
-   future patient-profile linking flow.
+4. Skips patient tenant membership for now, even though the schema contains
+   `patient_accounts` and `guardian_links`; the patient portal remains
+   fail-closed until UI guards and account-linking flows are implemented.
 5. Assigns roles and permissions by upserting tenant-scoped `roles`,
    `permissions`, and `role_permissions` for the clinic roles above.
 
@@ -97,8 +124,8 @@ If you prefer manual setup in Supabase Dashboard:
 4. Set `profiles.active_tenant_id` for clinic users to the demo tenant ID.
 5. Insert rows in `public.tenant_memberships` for clinic users only, using valid
    constrained role values.
-6. Seed patient as auth user plus `public.profiles` row only until a valid
-   patient membership schema exists.
+6. Seed patient as auth user plus `public.profiles` row only until the
+   patient-account linking flow is explicitly implemented.
 7. Insert role and permission rows in `public.roles`, `public.permissions`, then
    relation rows in `public.role_permissions` for clinic roles.
 
@@ -117,6 +144,8 @@ How to run:
 1. Run migrations and bootstrap first:
    - `supabase db push`
    - `node scripts/supabase/bootstrap-core-auth.mjs`
+   - Optional cross-tenant smoke seed:
+     `node scripts/supabase/bootstrap-cross-tenant-demo.mjs`
 2. Open Supabase Dashboard -> SQL Editor.
 3. Open or copy `supabase/tests/core_rbac_smoke_tests.sql`.
 4. Replace all placeholder IDs (`USER_*_UUID`, `TENANT_*_UUID`) with values

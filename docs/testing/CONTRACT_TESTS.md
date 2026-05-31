@@ -7,6 +7,28 @@ Do not run scripts that require tokens, provider credentials, service-role
 credentials, or Supabase mutations unless the task explicitly authorizes that
 operation.
 
+## Clean Schema Setup Order
+
+For a new empty Supabase project, apply and seed in this order only after
+explicit authorization:
+
+```bash
+supabase db push
+node scripts/supabase/bootstrap-core-auth.mjs
+node scripts/supabase/bootstrap-patient360-demo.mjs
+node scripts/supabase/bootstrap-document-templates-demo.mjs
+node scripts/supabase/bootstrap-billing-demo.mjs
+```
+
+Optional cross-tenant negative smoke seed:
+
+```bash
+node scripts/supabase/bootstrap-cross-tenant-demo.mjs
+```
+
+Run provider sandbox/real scripts only after the fixture contracts pass and the
+target environment is explicitly approved.
+
 ## Local App Checks
 
 For ordinary code changes:
@@ -108,6 +130,9 @@ supabase db push
 node scripts/supabase/bootstrap-core-auth.mjs
 node scripts/supabase/bootstrap-patient360-demo.mjs
 node scripts/supabase/bootstrap-document-templates-demo.mjs
+node scripts/supabase/bootstrap-billing-demo.mjs
+# Optional negative cross-tenant smoke data:
+node scripts/supabase/bootstrap-cross-tenant-demo.mjs
 ```
 
 Obtain a test access token (`TOKEN_WITH_PATIENTS_READ`) for a seeded user.

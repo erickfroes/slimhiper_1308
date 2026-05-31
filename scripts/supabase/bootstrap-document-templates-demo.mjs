@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js';
+import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
 
 const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
-const missing = requiredEnv.filter((key) => !process.env[key]);
 
-if (missing.length) {
-  console.error(`Missing required env vars: ${missing.join(', ')}`);
+let supabase;
+try {
+  requireEnv(requiredEnv);
+  supabase = createClient(process.env.SUPABASE_URL, getRequiredServiceRoleKey(), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
 
 const TEMPLATE_VARIABLES = {
   patient_name: '{{patient_name}}',
@@ -110,7 +112,7 @@ Este material apresenta orientações gerais em formato de template para uso em 
 ];
 
 async function run() {
-  const tenantSlug = 'demo-clinic';
+  const tenantSlug = process.env.SUPABASE_BOOTSTRAP_TENANT_SLUG ?? 'demo-clinic';
 
   const { data: tenant, error: tenantError } = await supabase
     .from('tenants')
@@ -151,6 +153,9 @@ async function run() {
 }
 
 run().catch((error) => {
-  console.error('Failed to seed document templates demo data.', error);
+  console.error(
+    'Failed to seed document templates demo data.',
+    error instanceof Error ? error.message : String(error)
+  );
   process.exit(1);
 });

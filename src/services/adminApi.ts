@@ -170,56 +170,33 @@ export async function listWebhookSummaries(mockData: AdminWebhookEventSummary[])
   if (isMockEnabled()) return { data: mockData, error: null as SafeServiceError | null };
   try {
     const supabase = createBrowserSupabaseClient();
-    const webhookResults = await Promise.all([
-      supabase
-        .from('asaas_events')
-        .select(
-          'id,tenant_id,event_type,asaas_event_id,idempotency_key,status,retry_count,error_message,created_at,processed_at'
-        )
-        .order('created_at', { ascending: false })
-        .limit(100),
-      supabase
-        .from('d4sign_events')
-        .select(
-          'id,tenant_id,event_type,provider_event_id,idempotency_key,status,retry_count,error_message,created_at,processed_at'
-        )
-        .order('created_at', { ascending: false })
-        .limit(100),
-    ]);
-    const asaas = webhookResults[0].data;
-    const d4 = webhookResults[1].data;
-    const tenants = await supabase.from('tenants').select('id,name');
-    const byId = new Map((tenants.data ?? []).map((t: any) => [t.id, t.name]));
-    const mapped: AdminWebhookEventSummary[] = [
-      ...(asaas ?? []).map((e: any) => ({
+    const { data, error } = await supabase
+      .from('admin_webhook_events')
+      .select(
+        'id,provider,tenant_id,tenant_name,event_type,external_id,idempotency_key,status,retry_count,error_message,created_at,processed_at'
+      )
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) return { data: mockData, error: fallbackError(error.message) };
+
+    const mapped: AdminWebhookEventSummary[] = (data ?? [])
+      .map((e: any) => ({
         id: e.id,
-        provider: 'Asaas' as const,
+        provider: e.provider === 'D4Sign' ? ('D4Sign' as const) : ('Asaas' as const),
         eventType: e.event_type ?? 'unknown',
-        tenant: byId.get(e.tenant_id) ?? 'N/A',
+        tenant: e.tenant_name ?? 'N/A',
         tenantId: e.tenant_id ?? 'N/A',
-        externalId: e.asaas_event_id ?? e.id,
+        externalId: e.external_id ?? e.id,
         idempotencyKey: e.idempotency_key ?? e.id,
         receivedAt: e.created_at,
         processedAt: e.processed_at,
         status: e.status ?? 'processed',
         retryCount: e.retry_count ?? 0,
         errorSummary: e.error_message ?? null,
-      })),
-      ...(d4 ?? []).map((e: any) => ({
-        id: e.id,
-        provider: 'D4Sign' as const,
-        eventType: e.event_type ?? 'unknown',
-        tenant: byId.get(e.tenant_id) ?? 'N/A',
-        tenantId: e.tenant_id ?? 'N/A',
-        externalId: e.provider_event_id ?? e.id,
-        idempotencyKey: e.idempotency_key ?? e.id,
-        receivedAt: e.created_at,
-        processedAt: e.processed_at,
-        status: e.status ?? 'processed',
-        retryCount: e.retry_count ?? 0,
-        errorSummary: e.error_message ?? null,
-      })),
-    ].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+      }))
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+
     return { data: mapped.length ? mapped : mockData, error: null as SafeServiceError | null };
   } catch {
     return {

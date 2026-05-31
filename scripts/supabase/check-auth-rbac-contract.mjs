@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js';
+import { requireServiceRoleKey } from './_shared/env.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -68,6 +69,13 @@ function logSkip() {
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   logSkip();
   process.exit(0);
+}
+
+try {
+  requireServiceRoleKey();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
 }
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {

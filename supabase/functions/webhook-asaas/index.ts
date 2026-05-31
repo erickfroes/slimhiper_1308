@@ -1,21 +1,293 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void;
   env: { get: (key: string) => string | undefined };
 };
-const h={'Content-Type':'application/json'}; const j=(s:number,p:Record<string,unknown>)=>new Response(JSON.stringify(p),{status:s,headers:h});
-async function sha256(v:string){const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,'0')).join('');}
-Deno.serve(async(req)=>{ if(req.method!=='POST') return j(405,{ok:false}); const token=req.headers.get('asaas-access-token'); if(!token||token!==Deno.env.get('ASAAS_WEBHOOK_TOKEN')) return j(401,{ok:false,error:'invalid_webhook_token'});
-const body=await req.json(); const hash=await sha256(JSON.stringify(body));
-const sb=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-const exists=await sb.from('billing_webhook_events').select('id').eq('event_hash',hash).maybeSingle(); if(exists.data?.id) return j(200,{ok:true,idempotent:true});
-await sb.from('billing_webhook_events').insert({provider:'asaas',event_hash:hash,event_type:body.event||'unknown',payload:body,processed_at:new Date().toISOString()});
-const payment=body.payment||{}; const extRef=payment.externalReference; let tenantId:string|undefined; let patientId:string|undefined;
-if(extRef){ const inv=await sb.from('patient_invoices').select('tenant_id,patient_id,id').eq('asaas_invoice_id',payment.id).maybeSingle(); tenantId=inv.data?.tenant_id; patientId=inv.data?.patient_id; }
-await sb.from('asaas_events').insert({tenant_id:tenantId??null,event_type:body.event||'unknown',asaas_event_id:body.id??null,external_reference:extRef??null,payload:body,processed_at:new Date().toISOString()});
-if(tenantId&&patientId){
-  if(['PAYMENT_RECEIVED','PAYMENT_CONFIRMED'].includes(body.event)) await sb.from('patient_timeline_events').insert({tenant_id:tenantId,patient_id:patientId,event_type:'pagamento_recebido',category:'financial',title:'Pagamento recebido',description:'Pagamento confirmado via Asaas',occurred_at:new Date().toISOString(),payload:{asaas_event:body.event}});
-  if(['PAYMENT_OVERDUE'].includes(body.event)) await sb.from('patient_timeline_events').insert({tenant_id:tenantId,patient_id:patientId,event_type:'pagamento_atrasado',category:'financial',title:'Pagamento atrasado',description:'Pagamento marcado como atrasado no Asaas',occurred_at:new Date().toISOString(),payload:{asaas_event:body.event}});
-  if(['PAYMENT_CREATED'].includes(body.event)) await sb.from('patient_timeline_events').insert({tenant_id:tenantId,patient_id:patientId,event_type:'pagamento',category:'financial',title:'Pagamento criado',description:'Cobrança criada no Asaas',occurred_at:new Date().toISOString(),payload:{asaas_event:body.event}});
+
+type Json = Record<string, unknown>;
+
+const headers = { 'Content-Type': 'application/json' };
+const json = (status: number, payload: Json) =>
+  new Response(JSON.stringify(payload), { status, headers });
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
-return j(200,{ok:true}); });
+
+function toObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function getString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return '';
+}
+
+function toAmountCents(value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.round(value * 100);
+}
+
+function normalizeEvent(event: string) {
+  if (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') {
+    return {
+      invoiceStatus: 'paid',
+      paymentStatus: 'paid',
+      timelineEventType: 'pagamento_recebido',
+      timelineTitle: 'Pagamento recebido',
+      timelineDescription: 'Pagamento confirmado via Asaas.',
+    };
+  }
+
+  if (event === 'PAYMENT_OVERDUE') {
+    return {
+      invoiceStatus: 'overdue',
+      paymentStatus: 'overdue',
+      timelineEventType: 'pagamento_atrasado',
+      timelineTitle: 'Pagamento atrasado',
+      timelineDescription: 'Pagamento marcado como atrasado no Asaas.',
+    };
+  }
+
+  if (event === 'PAYMENT_DELETED' || event === 'PAYMENT_CANCELLED') {
+    return {
+      invoiceStatus: 'cancelled',
+      paymentStatus: 'canceled',
+      timelineEventType: null,
+      timelineTitle: null,
+      timelineDescription: null,
+    };
+  }
+
+  return {
+    invoiceStatus: 'pending',
+    paymentStatus: 'pending',
+    timelineEventType: 'pagamento',
+    timelineTitle: 'Pagamento criado',
+    timelineDescription: 'Cobranca criada no Asaas.',
+  };
+}
+
+Deno.serve(async (req) => {
+  const timestamp = new Date().toISOString();
+
+  if (req.method !== 'POST') {
+    return json(405, { ok: false, error: 'method_not_allowed' });
+  }
+
+  const expectedToken = Deno.env.get('ASAAS_WEBHOOK_TOKEN');
+  const receivedToken = req.headers.get('asaas-access-token');
+  if (!expectedToken || !receivedToken || receivedToken !== expectedToken) {
+    return json(401, { ok: false, error: 'invalid_webhook_token' });
+  }
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return json(400, { ok: false, error: 'invalid_payload' });
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceRoleKey) {
+    return json(500, { ok: false, error: 'server_misconfigured' });
+  }
+
+  const bodyRecord = toObject(body);
+  const payment = toObject(bodyRecord.payment);
+  const eventType = getString(bodyRecord.event) || 'unknown';
+  const providerEventId = getString(bodyRecord.id);
+  const paymentId = getString(payment.id);
+  const eventHash = await sha256(JSON.stringify(bodyRecord));
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const existing = await supabase
+    .from('billing_webhook_events')
+    .select('id')
+    .eq('event_hash', eventHash)
+    .maybeSingle();
+
+  if (existing.error) {
+    return json(500, { ok: false, error: 'idempotency_lookup_failed' });
+  }
+
+  if (existing.data?.id) {
+    return json(200, { ok: true, idempotent: true });
+  }
+
+  const { error: webhookInsertError } = await supabase.from('billing_webhook_events').insert({
+    provider: 'asaas',
+    event_hash: eventHash,
+    event_type: eventType,
+    payload: bodyRecord,
+    status: 'received',
+  });
+
+  if (webhookInsertError) {
+    return json(500, { ok: false, error: 'webhook_event_insert_failed' });
+  }
+
+  let tenantId: string | null = null;
+  let patientId: string | null = null;
+  let invoiceId: string | null = null;
+
+  if (paymentId) {
+    const invoice = await supabase
+      .from('patient_invoices')
+      .select('id, tenant_id, patient_id')
+      .eq('asaas_invoice_id', paymentId)
+      .maybeSingle();
+
+    if (invoice.error) {
+      await supabase
+        .from('billing_webhook_events')
+        .update({ status: 'failed', error_message: 'invoice_lookup_failed' })
+        .eq('event_hash', eventHash);
+      return json(500, { ok: false, error: 'invoice_lookup_failed' });
+    }
+
+    tenantId = invoice.data?.tenant_id ?? null;
+    patientId = invoice.data?.patient_id ?? null;
+    invoiceId = invoice.data?.id ?? null;
+  }
+
+  const mapping = normalizeEvent(eventType);
+  const payloadSummary = {
+    event: eventType,
+    provider_event_id: providerEventId || null,
+    payment_id: paymentId || null,
+    external_reference: getString(payment.externalReference) || null,
+    status: getString(payment.status) || null,
+  };
+
+  const { error: asaasEventError } = await supabase.from('asaas_events').insert({
+    tenant_id: tenantId,
+    event_type: eventType,
+    asaas_event_id: providerEventId || null,
+    external_reference: getString(payment.externalReference) || null,
+    idempotency_key: eventHash,
+    status: tenantId ? 'processed' : 'ignored',
+    processed_at: timestamp,
+    payload_summary: payloadSummary,
+    error_message: tenantId ? null : 'tenant_not_resolved',
+  });
+
+  if (asaasEventError) {
+    await supabase
+      .from('billing_webhook_events')
+      .update({ status: 'failed', error_message: 'asaas_event_insert_failed' })
+      .eq('event_hash', eventHash);
+    return json(500, { ok: false, error: 'asaas_event_insert_failed' });
+  }
+
+  if (tenantId && patientId && invoiceId) {
+    const { error: invoiceUpdateError } = await supabase
+      .from('patient_invoices')
+      .update({
+        status: mapping.invoiceStatus,
+        paid_at: mapping.invoiceStatus === 'paid' ? timestamp : null,
+        invoice_url: getString(payment.invoiceUrl, payment.invoice_url) || null,
+        payment_link: getString(payment.bankSlipUrl, payment.invoiceUrl, payment.invoice_url) || null,
+        metadata: {
+          provider_status: getString(payment.status) || null,
+          provider_event: eventType,
+          billing_type: getString(payment.billingType) || null,
+        },
+      })
+      .eq('id', invoiceId)
+      .eq('tenant_id', tenantId);
+
+    if (invoiceUpdateError) {
+      await supabase
+        .from('billing_webhook_events')
+        .update({ status: 'failed', error_message: 'invoice_update_failed' })
+        .eq('event_hash', eventHash);
+      return json(500, { ok: false, error: 'invoice_update_failed' });
+    }
+
+    const amountCents = toAmountCents(payment.value);
+    if (amountCents > 0) {
+      const { error: paymentUpsertError } = await supabase.from('payments').upsert(
+        {
+          tenant_id: tenantId,
+          patient_id: patientId,
+          patient_invoice_id: invoiceId,
+          asaas_payment_id: paymentId || providerEventId || eventHash,
+          status: mapping.paymentStatus,
+          amount_cents: amountCents,
+          paid_at: mapping.paymentStatus === 'paid' ? timestamp : null,
+          due_date: getString(payment.dueDate) || null,
+          method: getString(payment.billingType).toLowerCase() || null,
+          metadata: {
+            provider_event: eventType,
+            provider_status: getString(payment.status) || null,
+          },
+        },
+        { onConflict: 'asaas_payment_id' }
+      );
+
+      if (paymentUpsertError) {
+        await supabase
+          .from('billing_webhook_events')
+          .update({ status: 'failed', error_message: 'payment_upsert_failed' })
+          .eq('event_hash', eventHash);
+        return json(500, { ok: false, error: 'payment_upsert_failed' });
+      }
+    }
+
+    if (mapping.timelineEventType) {
+      const { error: timelineError } = await supabase.from('patient_timeline_events').insert({
+        tenant_id: tenantId,
+        patient_id: patientId,
+        event_type: mapping.timelineEventType,
+        category: 'financial',
+        title: mapping.timelineTitle,
+        description: mapping.timelineDescription,
+        status: 'recorded',
+        status_label: mapping.invoiceStatus,
+        event_at: timestamp,
+        payload: {
+          provider: 'asaas',
+          event_type: eventType,
+          event_hash: eventHash,
+          invoice_id: invoiceId,
+        },
+      });
+
+      if (timelineError) {
+        await supabase
+          .from('billing_webhook_events')
+          .update({ status: 'failed', error_message: 'timeline_insert_failed' })
+          .eq('event_hash', eventHash);
+        return json(500, { ok: false, error: 'timeline_insert_failed' });
+      }
+    }
+  }
+
+  const { error: processedUpdateError } = await supabase
+    .from('billing_webhook_events')
+    .update({
+      status: 'processed',
+      processed_at: timestamp,
+      error_message: tenantId ? null : 'tenant_not_resolved',
+    })
+    .eq('event_hash', eventHash);
+
+  if (processedUpdateError) {
+    return json(500, { ok: false, error: 'webhook_event_update_failed' });
+  }
+
+  return json(200, {
+    ok: true,
+    processed: true,
+    resolved: Boolean(tenantId && patientId && invoiceId),
+  });
+});
