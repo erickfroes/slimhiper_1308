@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { Patient360Summary } from '@/domain/types';
 import TabResumo from './tabs/TabResumo';
 import TabTimeline from './tabs/TabTimeline';
@@ -23,9 +24,17 @@ const TABS = [
   { key: 'tab-documentos', label: 'Documentos', id: 'documentos' },
   { key: 'tab-financeiro', label: 'Financeiro', id: 'financeiro' },
   { key: 'tab-pacotes', label: 'Pacotes', id: 'pacotes' },
-  { key: 'tab-chat', label: 'Chat', id: 'chat', badge: 2 },
+  { key: 'tab-chat', label: 'Chat', id: 'chat' },
   { key: 'tab-relatorios', label: 'Relatórios', id: 'relatorios' },
-];
+] as const;
+
+type Patient360TabId = (typeof TABS)[number]['id'];
+
+const TAB_IDS = new Set<string>(TABS.map((tab) => tab.id));
+
+function isPatient360TabId(value: string | null): value is Patient360TabId {
+  return Boolean(value && TAB_IDS.has(value));
+}
 
 interface Patient360TabsProps {
   data: Patient360Summary;
@@ -34,16 +43,49 @@ interface Patient360TabsProps {
 }
 
 export default function Patient360Tabs({ data, patientId, userContext }: Patient360TabsProps) {
-  const [activeTab, setActiveTab] = useState('resumo');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<Patient360TabId>(
+    isPatient360TabId(requestedTab) ? requestedTab : 'resumo'
+  );
+  const unreadCount = data.chat?.unreadCount ?? 0;
+
+  useEffect(() => {
+    if (isPatient360TabId(requestedTab) && requestedTab !== activeTab) {
+      setActiveTab(requestedTab);
+    }
+    if (!requestedTab && activeTab !== 'resumo') {
+      setActiveTab('resumo');
+    }
+  }, [activeTab, requestedTab]);
+
+  const handleTabChange = useCallback(
+    (tabId: Patient360TabId) => {
+      setActiveTab(tabId);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', tabId);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
 
   return (
     <div>
       {/* Tab nav */}
-      <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin pb-1 mb-5 border-b border-border">
+      <div
+        role="tablist"
+        aria-label="Abas do Paciente 360"
+        className="flex items-center gap-1 overflow-x-auto scrollbar-thin pb-1 mb-5 border-b border-border"
+      >
         {TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.id)}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            onClick={() => handleTabChange(tab.id)}
             className={[
               'flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-all duration-150 border-b-2 -mb-px',
               activeTab === tab.id
@@ -52,9 +94,9 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
             ].join(' ')}
           >
             {tab.label}
-            {tab.badge && tab.badge > 0 && (
+            {tab.id === 'chat' && unreadCount > 0 && (
               <span className="bg-primary text-primary-foreground text-xs rounded-full px-1.5 py-0.5 leading-none font-semibold">
-                {tab.badge}
+                {unreadCount}
               </span>
             )}
           </button>
@@ -93,7 +135,9 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
             patientName={data.profile.name?.trim() || 'Paciente sem nome'}
           />
         )}
-        {activeTab === 'relatorios' && <TabRelatorios patientName={data.profile.name} />}
+        {activeTab === 'relatorios' && (
+          <TabRelatorios patientId={patientId} patientName={data.profile.name} />
+        )}
       </div>
     </div>
   );

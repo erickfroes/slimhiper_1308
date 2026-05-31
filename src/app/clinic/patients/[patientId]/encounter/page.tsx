@@ -16,7 +16,6 @@ import {
   UserPlus,
   RefreshCw,
   AlertTriangle,
-  Activity,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -25,41 +24,6 @@ import {
   FileText,
   Zap,
 } from 'lucide-react';
-
-// ─── Mock encounter-specific data ────────────────────────────────────────────
-
-const mockSintomasRecentes = [
-  { sintoma: 'Fadiga leve ao final do dia', relatadoEm: '2026-05-04' },
-  { sintoma: 'Dificuldade para dormir (2–3x/semana)', relatadoEm: '2026-04-28' },
-  { sintoma: 'Ansiedade relacionada à dieta', relatadoEm: '2026-04-20' },
-];
-
-const mockPendencias = [
-  { titulo: 'Enviar resultado do hemograma', prazo: '2026-05-10', prioridade: 'alta' },
-  { titulo: 'Assinar Termo de Consentimento Revisado', prazo: '2026-05-12', prioridade: 'alta' },
-  { titulo: 'Registrar medidas semanais', prazo: '2026-05-09', prioridade: 'media' },
-];
-
-const mockUltimosAtendimentos = [
-  {
-    data: '2026-04-24',
-    tipo: 'Retorno Médico',
-    profissional: 'Dra. Fernanda Lima',
-    resumo: 'Evolução positiva. Perdeu 1,8 kg. Ajuste no plano alimentar.',
-  },
-  {
-    data: '2026-04-10',
-    tipo: 'Avaliação Inicial',
-    profissional: 'Dra. Fernanda Lima',
-    resumo: 'Avaliação inicial completa. Iniciou programa Emagrecimento 12 Semanas.',
-  },
-  {
-    data: '2026-03-15',
-    tipo: 'Nutrição',
-    profissional: 'Nutr. Carlos Mendes',
-    resumo: 'Paciente não compareceu e não avisou.',
-  },
-];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -335,6 +299,28 @@ export default function EncounterPage() {
   const currentWeightKg = latestMeasurement?.weightKg ?? clinicalStatus.currentWeightKg;
   const currentBmi = latestMeasurement?.bmi ?? clinicalStatus.currentBmi;
   const lastMeasuredAt = latestMeasurement?.measuredAt ?? clinicalStatus.lastMeasuredAt;
+  const activePackageProgress = Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round((activePackage.currentWeek / Math.max(activePackage.totalWeeks, 1)) * 100)
+    )
+  );
+  const recentClinicalEvents = (data.recentTimeline ?? [])
+    .filter(
+      (event) =>
+        event.category === 'clinical' ||
+        [
+          'consulta',
+          'nutricao',
+          'atendimento_iniciado',
+          'atendimento_concluido',
+          'soap_atualizado',
+          'medida_registrada',
+          'prescricao_emitida',
+        ].includes(event.type)
+    )
+    .slice(0, 3);
 
   return (
     <DashboardShell>
@@ -473,13 +459,12 @@ export default function EncounterPage() {
                 <div
                   className="bg-primary h-1.5 rounded-full"
                   style={{
-                    width: `${Math.round((activePackage.currentWeek / activePackage.totalWeeks) * 100)}%`,
+                    width: `${activePackageProgress}%`,
                   }}
                 />
               </div>
               <p className="text-xs text-muted-foreground text-right">
-                {Math.round((activePackage.currentWeek / activePackage.totalWeeks) * 100)}%
-                concluído
+                {activePackageProgress}% concluído
               </p>
               <div className="mt-3 space-y-0">
                 <MetricPill
@@ -785,65 +770,66 @@ export default function EncounterPage() {
 
             {/* Sintomas recentes */}
             <SectionCard title="Sintomas Recentes" defaultOpen={false}>
-              <div className="space-y-2">
-                {mockSintomasRecentes.map((s, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <Activity size={11} className="text-muted-foreground mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-foreground">{s.sintoma}</p>
-                      <p className="text-xs text-muted-foreground">{s.relatadoEm}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs text-muted-foreground italic">
+                Nenhum sintoma recente registrado no contrato local disponível.
+              </p>
             </SectionCard>
 
             {/* Pendências */}
             <SectionCard title="Pendências" defaultOpen={false}>
               <div className="space-y-2">
-                {openTasks.length > 0
-                  ? openTasks.map((t) => (
-                      <div key={t.id} className="flex items-start gap-2">
-                        <ClipboardList
-                          size={11}
-                          className="text-muted-foreground mt-0.5 flex-shrink-0"
-                        />
-                        <div>
-                          <p className="text-xs font-medium text-foreground">{t.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Prazo: {t.dueDate} · {t.assignedTo}
-                          </p>
-                        </div>
+                {openTasks.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">Nenhuma pendência aberta.</p>
+                ) : (
+                  openTasks.map((t) => (
+                    <div key={t.id} className="flex items-start gap-2">
+                      <ClipboardList
+                        size={11}
+                        className="text-muted-foreground mt-0.5 flex-shrink-0"
+                      />
+                      <div>
+                        <p className="text-xs font-medium text-foreground">{t.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Prazo: {t.dueDate}
+                          {t.assignedTo ? ` · ${t.assignedTo}` : ''}
+                        </p>
                       </div>
-                    ))
-                  : mockPendencias.map((p, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <ClipboardList
-                          size={11}
-                          className="text-muted-foreground mt-0.5 flex-shrink-0"
-                        />
-                        <div>
-                          <p className="text-xs font-medium text-foreground">{p.titulo}</p>
-                          <p className="text-xs text-muted-foreground">Prazo: {p.prazo}</p>
-                        </div>
-                      </div>
-                    ))}
+                    </div>
+                  ))
+                )}
               </div>
             </SectionCard>
 
             {/* Últimos atendimentos */}
             <SectionCard title="Últimos Atendimentos" defaultOpen={false}>
               <div className="space-y-3">
-                {mockUltimosAtendimentos.map((a, i) => (
-                  <div key={i} className="border-b border-border pb-2 last:border-0 last:pb-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-xs font-semibold text-foreground">{a.tipo}</span>
-                      <span className="text-xs text-muted-foreground">{a.data}</span>
+                {recentClinicalEvents.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    Nenhum atendimento recente registrado.
+                  </p>
+                ) : (
+                  recentClinicalEvents.map((event) => (
+                    <div
+                      key={event.id}
+                      className="border-b border-border pb-2 last:border-0 last:pb-0"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <span className="text-xs font-semibold text-foreground">{event.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(event.date)}
+                        </span>
+                      </div>
+                      {(event.professional ?? event.actorName) ? (
+                        <p className="text-xs text-muted-foreground">
+                          {event.professional ?? event.actorName}
+                        </p>
+                      ) : null}
+                      <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">
+                        {event.description}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">{a.profissional}</p>
-                    <p className="text-xs text-foreground/80 mt-0.5 leading-relaxed">{a.resumo}</p>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </SectionCard>
           </div>

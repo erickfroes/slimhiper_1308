@@ -320,35 +320,45 @@ export default function DashboardContent() {
             </span>
           </div>
           <div className="space-y-2">
-            {queue.map((entry) => (
-              <Link
-                key={entry.id}
-                href={`/clinic/patients/${entry.patientId}/encounter`}
-                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted transition-colors cursor-pointer group"
-              >
-                <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
-                  {entry.patientName
-                    .split(' ')
-                    .map((n) => n[0])
-                    .slice(0, 2)
-                    .join('')}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground truncate">
-                    {entry.patientName}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">{entry.professionalName}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <StatusBadge status={entry.status} size="xs" />
-                  {entry.waitingMinutes > 0 && (
-                    <span className="text-xs text-amber-600 font-medium">
-                      {entry.waitingMinutes}min
-                    </span>
-                  )}
-                </div>
-              </Link>
-            ))}
+            {queue.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-muted/30 px-3 py-6 text-center">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Nenhum paciente aguardando.
+                </p>
+              </div>
+            ) : (
+              queue.map((entry) => (
+                <Link
+                  key={entry.id}
+                  href={`/clinic/patients/${entry.patientId}/encounter`}
+                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted transition-colors cursor-pointer group"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
+                    {entry.patientName
+                      .split(' ')
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join('')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground truncate">
+                      {entry.patientName}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {entry.professionalName}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <StatusBadge status={entry.status} size="xs" />
+                    {entry.waitingMinutes > 0 && (
+                      <span className="text-xs text-amber-600 font-medium">
+                        {entry.waitingMinutes}min
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              ))
+            )}
           </div>
         </div>
 
@@ -369,29 +379,37 @@ export default function DashboardContent() {
             </Link>
           </div>
           <div className="space-y-1.5 max-h-72 overflow-y-auto scrollbar-thin pr-1">
-            {appointments.map((appt) => (
-              <Link
-                key={appt.id}
-                href={`/clinic/patients/${appt.patientId}`}
-                className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-muted transition-colors group"
-              >
-                <span className="text-xs font-mono font-semibold text-muted-foreground w-10 flex-shrink-0">
-                  {new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground truncate">
-                    {appt.patientName}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {apptTypeLabel[appt.type]}
-                  </p>
-                </div>
-                <StatusBadge status={appt.status} size="xs" />
-              </Link>
-            ))}
+            {appointments.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-muted/30 px-3 py-6 text-center">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Nenhuma consulta para hoje.
+                </p>
+              </div>
+            ) : (
+              appointments.map((appt) => (
+                <Link
+                  key={appt.id}
+                  href={`/clinic/patients/${appt.patientId}`}
+                  className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-muted transition-colors group"
+                >
+                  <span className="text-xs font-mono font-semibold text-muted-foreground w-10 flex-shrink-0">
+                    {new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground truncate">
+                      {appt.patientName}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {apptTypeLabel[appt.type]}
+                    </p>
+                  </div>
+                  <StatusBadge status={appt.status} size="xs" />
+                </Link>
+              ))
+            )}
           </div>
         </div>
 
@@ -479,29 +497,37 @@ export default function DashboardContent() {
             </Link>
           </div>
           <div className="space-y-2">
-            {reviewPatients.map((p) => (
-              <Link
-                key={p.id}
-                href={`/clinic/patients/${p.id}`}
-                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
-                  {p.name
-                    .split(' ')
-                    .map((n) => n[0])
-                    .slice(0, 2)
-                    .join('')}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{p.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{p.issue}</p>
-                </div>
-                <ChevronRight
-                  size={13}
-                  className="text-muted-foreground group-hover:text-primary transition-colors"
-                />
-              </Link>
-            ))}
+            {reviewPatients.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-muted/30 px-3 py-6 text-center">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Nenhum paciente em revisao.
+                </p>
+              </div>
+            ) : (
+              reviewPatients.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/clinic/patients/${p.id}`}
+                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
+                    {p.name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join('')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground">{p.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{p.issue}</p>
+                  </div>
+                  <ChevronRight
+                    size={13}
+                    className="text-muted-foreground group-hover:text-primary transition-colors"
+                  />
+                </Link>
+              ))
+            )}
           </div>
         </div>
       </div>

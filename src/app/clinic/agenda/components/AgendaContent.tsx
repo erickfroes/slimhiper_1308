@@ -21,7 +21,11 @@ import type {
   AppointmentType,
   WaitingQueueEntry,
 } from '@/domain/types';
-import { getAgendaDay } from '@/services/agendaApi';
+import {
+  getAgendaDay,
+  getNextAppointmentStatus,
+  updateAppointmentStatus,
+} from '@/services/agendaApi';
 
 // ─── WORKFLOW STAGES ──────────────────────────────────────────────────────────
 
@@ -42,6 +46,14 @@ const workflowStages: WorkflowStage[] = [
     bgColor: 'bg-blue-50',
     borderColor: 'border-blue-200',
     dotColor: 'bg-blue-500',
+  },
+  {
+    key: 'chegou',
+    label: 'Chegou',
+    color: 'text-sky-700',
+    bgColor: 'bg-sky-50',
+    borderColor: 'border-sky-200',
+    dotColor: 'bg-sky-500',
   },
   {
     key: 'triagem',
@@ -66,6 +78,14 @@ const workflowStages: WorkflowStage[] = [
     bgColor: 'bg-cyan-50',
     borderColor: 'border-cyan-200',
     dotColor: 'bg-cyan-500',
+  },
+  {
+    key: 'aguardando_medico',
+    label: 'Aguardando médico',
+    color: 'text-purple-700',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-200',
+    dotColor: 'bg-purple-500',
   },
   {
     key: 'em_consulta',
@@ -105,6 +125,20 @@ const appointmentTypeLabel: Record<AppointmentType, string> = {
 };
 
 // ─── CALENDAR HELPERS ─────────────────────────────────────────────────────────
+
+const appointmentStatusLabel: Record<AppointmentStatus, string> = {
+  agendado: 'Agendado',
+  chegou: 'Chegou',
+  triagem: 'Triagem',
+  medidas: 'Medidas',
+  bioimpedancia: 'Bioimpedância',
+  aguardando_medico: 'Aguardando médico',
+  em_consulta: 'Consulta',
+  checkout: 'Checkout',
+  concluido: 'Concluído',
+  falta: 'Falta',
+  cancelado: 'Cancelado',
+};
 
 const MONTHS_PT = [
   'Janeiro',
@@ -263,9 +297,16 @@ function MiniCalendar({ selectedDate, calendarEvents, onSelectDate }: MiniCalend
 interface KanbanColumnProps {
   stage: WorkflowStage;
   appointments: AppointmentSummary[];
+  transitioningId: string | null;
+  onAdvanceStatus: (appointment: AppointmentSummary) => void;
 }
 
-function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
+function KanbanColumn({
+  stage,
+  appointments,
+  transitioningId,
+  onAdvanceStatus,
+}: KanbanColumnProps) {
   const items = appointments.filter((a) => a.status === stage.key);
 
   return (
@@ -294,48 +335,78 @@ function KanbanColumn({ stage, appointments }: KanbanColumnProps) {
             <span className="text-xs text-muted-foreground">Nenhum paciente</span>
           </div>
         ) : (
-          items.map((appt) => (
-            <Link
-              key={appt.id}
-              href={`/clinic/patients/${appt.patientId}/encounter`}
-              className="bg-card rounded-xl border border-border p-3 shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-150 cursor-pointer group"
-            >
-              {/* Patient name */}
-              <div className="flex items-start justify-between gap-1 mb-1.5">
-                <span className="text-xs font-semibold text-foreground leading-tight line-clamp-2 group-hover:text-primary transition-colors">
-                  {appt.patientName}
-                </span>
-                <ArrowRight
-                  size={12}
-                  className="text-muted-foreground flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                />
+          items.map((appt) => {
+            const nextStatus = getNextAppointmentStatus(appt.status);
+            const isTransitioning = transitioningId === appt.id;
+
+            return (
+              <div
+                key={appt.id}
+                className="bg-card rounded-xl border border-border p-3 shadow-sm transition-all duration-150 group"
+              >
+                <Link
+                  href={`/clinic/patients/${appt.patientId}/encounter`}
+                  className="block hover:text-primary"
+                >
+                  {/* Patient name */}
+                  <div className="flex items-start justify-between gap-1 mb-1.5">
+                    <span className="text-xs font-semibold text-foreground leading-tight line-clamp-2 group-hover:text-primary transition-colors">
+                      {appt.patientName}
+                    </span>
+                    <ArrowRight
+                      size={12}
+                      className="text-muted-foreground flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    />
+                  </div>
+
+                  {/* Type */}
+                  <p className="text-xs text-muted-foreground mb-2 leading-tight">
+                    {appointmentTypeLabel[appt.type]}
+                  </p>
+
+                  {/* Time + professional */}
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                    <Clock size={10} className="flex-shrink-0" />
+                    <span>
+                      {new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {appt.professionalName}
+                  </div>
+
+                  {/* Room */}
+                  {appt.roomName && (
+                    <div className="mt-1.5 text-xs text-muted-foreground/70 truncate">
+                      {appt.roomName}
+                    </div>
+                  )}
+                </Link>
+
+                {nextStatus ? (
+                  <button
+                    type="button"
+                    onClick={() => onAdvanceStatus(appt)}
+                    disabled={isTransitioning}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    title={`Avançar para ${appointmentStatusLabel[nextStatus]}`}
+                  >
+                    <ArrowRight size={12} />
+                    {isTransitioning
+                      ? 'Atualizando...'
+                      : `Avançar para ${appointmentStatusLabel[nextStatus]}`}
+                  </button>
+                ) : (
+                  <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/30 px-2 py-1.5 text-center text-xs font-medium text-muted-foreground">
+                    Sem próxima etapa
+                  </div>
+                )}
               </div>
-
-              {/* Type */}
-              <p className="text-xs text-muted-foreground mb-2 leading-tight">
-                {appointmentTypeLabel[appt.type]}
-              </p>
-
-              {/* Time + professional */}
-              <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                <Clock size={10} className="flex-shrink-0" />
-                <span>
-                  {new Date(appt.scheduledAt).toLocaleTimeString('pt-BR', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground truncate">{appt.professionalName}</div>
-
-              {/* Room */}
-              {appt.roomName && (
-                <div className="mt-1.5 text-xs text-muted-foreground/70 truncate">
-                  {appt.roomName}
-                </div>
-              )}
-            </Link>
-          ))
+            );
+          })
         )}
       </div>
     </div>
@@ -543,6 +614,7 @@ function WorkflowProgressBar({ appointments }: { appointments: AppointmentSummar
   const concluded = appointments.filter((a) => a.status === 'concluido').length;
   const inProgress = appointments.filter((a) =>
     [
+      'chegou',
       'triagem',
       'medidas',
       'bioimpedancia',
@@ -553,6 +625,7 @@ function WorkflowProgressBar({ appointments }: { appointments: AppointmentSummar
   ).length;
   const scheduled = appointments.filter((a) => a.status === 'agendado').length;
   const absent = appointments.filter((a) => ['falta', 'cancelado'].includes(a.status)).length;
+  const percent = (value: number) => (total > 0 ? `${(value / total) * 100}%` : '0%');
 
   return (
     <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
@@ -565,28 +638,29 @@ function WorkflowProgressBar({ appointments }: { appointments: AppointmentSummar
 
       {/* Progress bar */}
       <div className="flex h-2.5 rounded-full overflow-hidden bg-muted gap-0.5 mb-3">
+        {total === 0 ? <div className="w-full bg-muted" /> : null}
         {concluded > 0 && (
           <div
             className="bg-emerald-500 rounded-full transition-all"
-            style={{ width: `${(concluded / total) * 100}%` }}
+            style={{ width: percent(concluded) }}
           />
         )}
         {inProgress > 0 && (
           <div
             className="bg-teal-400 rounded-full transition-all"
-            style={{ width: `${(inProgress / total) * 100}%` }}
+            style={{ width: percent(inProgress) }}
           />
         )}
         {scheduled > 0 && (
           <div
             className="bg-blue-300 rounded-full transition-all"
-            style={{ width: `${(scheduled / total) * 100}%` }}
+            style={{ width: percent(scheduled) }}
           />
         )}
         {absent > 0 && (
           <div
             className="bg-red-400 rounded-full transition-all"
-            style={{ width: `${(absent / total) * 100}%` }}
+            style={{ width: percent(absent) }}
           />
         )}
       </div>
@@ -619,6 +693,7 @@ export default function AgendaContent() {
   const [calendarEvents, setCalendarEvents] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [transitioningId, setTransitioningId] = useState<string | null>(null);
 
   const loadAgenda = useCallback(async () => {
     setIsLoading(true);
@@ -643,6 +718,30 @@ export default function AgendaContent() {
     void loadAgenda();
   }, [loadAgenda]);
 
+  const handleAdvanceStatus = useCallback(
+    async (appointment: AppointmentSummary) => {
+      const nextStatus = getNextAppointmentStatus(appointment.status);
+      if (!nextStatus) return;
+
+      setTransitioningId(appointment.id);
+      setLoadError(null);
+
+      try {
+        await updateAppointmentStatus(appointment.id, nextStatus);
+        await loadAgenda();
+      } catch (error) {
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível atualizar o status da consulta.'
+        );
+      } finally {
+        setTransitioningId(null);
+      }
+    },
+    [loadAgenda]
+  );
+
   const formattedDate = (() => {
     const [y, m, d] = selectedDate.split('-').map(Number);
     const date = new Date(y, m - 1, d);
@@ -666,11 +765,21 @@ export default function AgendaContent() {
         }
         actions={
           <div className="flex items-center gap-2">
-            <button className="btn-ghost flex items-center gap-1.5 text-sm px-3 py-1.5">
+            <button
+              type="button"
+              disabled
+              title="Filtros avançados entram junto do contrato real de agenda."
+              className="btn-ghost flex items-center gap-1.5 text-sm px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               <Filter size={14} />
               Filtrar
             </button>
-            <button className="btn-primary flex items-center gap-1.5 text-sm px-3 py-1.5">
+            <button
+              type="button"
+              disabled
+              title="Criação de consulta depende do service real de CRUD."
+              className="btn-primary flex items-center gap-1.5 text-sm px-3 py-1.5"
+            >
               <Plus size={14} />
               Nova Consulta
             </button>
@@ -680,7 +789,18 @@ export default function AgendaContent() {
 
       {loadError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Nao foi possivel carregar a agenda. {loadError}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>Não foi possível concluir a operação da agenda. {loadError}</span>
+            <button
+              type="button"
+              onClick={loadAgenda}
+              disabled={isLoading}
+              className="btn-secondary text-xs disabled:opacity-60"
+            >
+              <RefreshCw size={13} className={isLoading ? 'animate-spin' : undefined} />
+              Tentar novamente
+            </button>
+          </div>
         </div>
       )}
 
@@ -756,7 +876,13 @@ export default function AgendaContent() {
             <div className="overflow-x-auto pb-2">
               <div className="flex gap-3 min-w-max">
                 {workflowStages.map((stage) => (
-                  <KanbanColumn key={stage.key} stage={stage} appointments={appointments} />
+                  <KanbanColumn
+                    key={stage.key}
+                    stage={stage}
+                    appointments={appointments}
+                    transitioningId={transitioningId}
+                    onAdvanceStatus={handleAdvanceStatus}
+                  />
                 ))}
               </div>
             </div>

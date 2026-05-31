@@ -5,24 +5,33 @@ results, pending items, and environment details for the current repository state
 
 ## Latest Implementation Validation
 
-- Date: 2026-05-31 07:34 -03:00.
+- Date: 2026-05-31 08:30 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
-- Commit base: `34cfd43`.
-- Touched paths: auth/session route handling, root layout, clinic shell,
-  no-workspace actions, patient portal fail-closed page, patient list safety,
+- Commit base: `bb190f1`.
+- Touched paths: dashboard empty states and quick actions, agenda/fila visible
+  status transitions, patient list fake-action hardening, encounter/SOAP
+  mock-side-panel removal, Patient 360 document signature gating, Patient 360
+  tab deep-links, Patient 360 reports service facade,
   `docs/PROJECT_COMPLETION_CHECKPOINTS.md`, and this baseline.
 - `npm run type-check`: passed.
-- `npm run lint`: passed with 29 warnings.
+- `npm run lint`: passed with 27 warnings.
 - `npm run build`: passed; Next generated 26 app routes.
 - Local fixture contracts passed:
   `node scripts/supabase/test-patient360-contract.mjs --mode=fixture`,
   `node scripts/supabase/test-d4sign-fixtures.mjs`, and
   `node scripts/supabase/test-billing-fixtures.mjs`.
 - Local HTTP smoke with `npm run dev` on port `4028`: `/auth/login` and
-  `/no-workspace` returned 200; `/patient`, `/clinic/patients?search=ana`, and
-  `/admin` returned 307 to `/auth/login` without an authenticated session.
-- Browser plugin smoke was not available in this session, so the local smoke was
-  HTTP-level only and did not exercise visual interactions.
+  `/no-workspace` returned 200; `/clinic/dashboard`, `/clinic/agenda`,
+  `/clinic/patients?search=ana`, `/clinic/patients/test-patient?tab=relatorios`,
+  `/clinic/patients/test-patient/encounter`, `/patient`, and `/admin` returned
+  307 to `/auth/login` without an authenticated session.
+- Browser smoke: authenticated Patient 360 deep-link was redirected to
+  `/auth/login`; login screen rendered with no framework overlay, no console
+  errors/warnings, and the e-mail field accepted focus.
+- Docker local check: Docker Engine responded (`29.2.1`), the local Supabase DB
+  answered `pg_isready`, Kong/Studio/Inbucket answered on their local ports, but
+  `supabase_vector_slimhiper_1308` was restarting; Supabase local green remains
+  blocked and no secret-printing status command was run.
 - Skipped: `.env` real inspection, Supabase `db push`, migrations, bootstraps,
   real/sandbox contract scripts, D4Sign sandbox, and Asaas sandbox/provider
   checks. Reason: local-safe execution only and no authorized mutable/provider
@@ -34,10 +43,10 @@ results, pending items, and environment details for the current repository state
 
 ## Environment Used
 
-- Date: 2026-05-31 07:34 -03:00.
+- Date: 2026-05-31 08:30 -03:00.
 - Repo path: local `slimhiper_1308` workspace.
 - Branch: `test/asaas-billing-contract-hardening`.
-- Commit base: `34cfd43`.
+- Commit base: `bb190f1`.
 - Shell: PowerShell.
 - Node: `v24.15.0`.
 - npm: `11.12.1`.
@@ -71,17 +80,18 @@ now uses ESLint CLI over `src/**/*.{ts,tsx}` instead of `next lint`.
 
 ## Results From This Run
 
-| Command              | Result               | Notes                                                                                               |
-| -------------------- | -------------------- | --------------------------------------------------------------------------------------------------- |
-| `npm install`        | Passed               | Dependencies were already up to date; npm audited 534 packages and produced no package diff.        |
-| `npm run type-check` | Passed               | `tsc --noEmit` exited successfully.                                                                 |
-| `npm run build`      | Passed               | `next build` compiled successfully and generated 26 app routes.                                      |
-| `npm run lint`       | Passed with warnings | ESLint CLI exited with code 0; existing 29 warnings remain.                                         |
-| `git diff --check`   | Passed               | No whitespace errors reported.                                                                      |
-| Patient 360 fixture  | Passed               | Summary, timeline, category filter, forbidden, and cross-tenant fixtures passed.                    |
-| D4Sign fixture       | Passed               | Valid webhook, invalid fail-closed behavior, document summary, and HMAC strategy passed.            |
-| Billing fixture      | Passed               | Confirmed, overdue, cancelled, duplicated, tenant resolution, and invalid-token fixtures passed.    |
-| Local HTTP smoke     | Passed limited       | Unauthenticated routes behaved fail-closed; visual/authenticated interactions remain blocked.       |
+| Command              | Result               | Notes                                                                                            |
+| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
+| `npm install`        | Passed               | Dependencies were already up to date; npm audited 534 packages and produced no package diff.     |
+| `npm run type-check` | Passed               | `tsc --noEmit` exited successfully.                                                              |
+| `npm run build`      | Passed               | `next build` compiled successfully and generated 26 app routes.                                  |
+| `npm run lint`       | Passed with warnings | ESLint CLI exited with code 0; existing 27 warnings remain.                                      |
+| `git diff --check`   | Passed               | No whitespace errors reported.                                                                   |
+| Patient 360 fixture  | Passed               | Summary, timeline, category filter, forbidden, and cross-tenant fixtures passed.                 |
+| D4Sign fixture       | Passed               | Valid webhook, invalid fail-closed behavior, document summary, and HMAC strategy passed.         |
+| Billing fixture      | Passed               | Confirmed, overdue, cancelled, duplicated, tenant resolution, and invalid-token fixtures passed. |
+| Local HTTP smoke     | Passed limited       | `/auth/login` and `/no-workspace` returned 200; touched authenticated routes redirected.         |
+| Browser smoke        | Passed limited       | Login rendered without overlay/console errors; e-mail field focus interaction passed.            |
 
 ## Lint Warning Categories
 
@@ -91,7 +101,6 @@ codebase:
 - Unused variables or arguments in admin, clinic, Patient 360, shared
   components, and Supabase middleware files.
 - `no-explicit-any` warnings in admin services and shared UI image/icon helpers.
-- Missing React hook dependency in `Patient360Content`.
 - `next/no-img-element` warning in `PatientHeaderCard`.
 - Missing `alt` warnings in `AppImage`.
 

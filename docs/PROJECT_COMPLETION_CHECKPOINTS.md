@@ -19,38 +19,57 @@ comparativo competitivo e ordem de finalizacao.
 
 ## Execucao Atual
 
-- Data: 2026-05-31 07:34 -03:00.
+- Data: 2026-05-31 08:30 -03:00.
 - Branch: `test/asaas-billing-contract-hardening`.
-- Commit base: `34cfd43`.
+- Commit base: `bb190f1`.
 - Alvo aprovado: MVP clinico.
 - Ambiente aprovado: local seguro.
-- Lote em andamento: Fase 1 parcial + pacientes UI safety.
+- Lote em andamento: Fase 3 parcial - Paciente 360 deep-link,
+  relatoriosApi local e smoke fail-closed; Fase 2 segue parcialmente concluida.
 - Checks ja executados neste lote: `npm run type-check`, `npm run lint`,
-  `npm run build`, fixtures locais Patient360/D4Sign/Billing e smoke HTTP local
-  sem sessao.
+  `npm run build`, `git diff --check`, fixtures locais Patient360/D4Sign/Billing
+  e smoke HTTP local sem sessao, com smoke visual Browser da tela de login.
 - Skips deliberados: `.env` real nao foi lido, Supabase local/remoto nao foi
   mutado, `supabase db push` nao foi executado, bootstraps nao foram rodados e
   D4Sign/Asaas nao foram chamados.
-- Proximos bloqueios: smoke autenticado, Supabase local green, RLS cross-tenant
-  real e contratos sandbox dependem de ambiente/credenciais autorizados.
+- Evidencia deste lote: `QuickActionsCard` sem no-op silencioso, dashboard com
+  empty states, agenda usando `updateAppointmentStatus` em transicoes visiveis,
+  lista de pacientes sem toasts fake para chat/revisao, atendimento sem arrays
+  `mock*` laterais, TabDocumentos com envio D4Sign desabilitado ate signatario
+  real validado, Patient 360 com deep-link `?tab=...`, badge de chat vindo do
+  payload, TabRelatorios sem import direto de mock em producao, build verde e
+  smoke HTTP/Browser local fail-closed.
+- Proximos bloqueios: smoke autenticado, criacao/edicao/cancelamento real de
+  consulta, CRUD real de pacientes, contrato real de relatorios e
+  sintomas/pendencias, forbidden por aba, Supabase local green, RLS
+  cross-tenant real e contratos sandbox dependem de ambiente/credenciais
+  autorizados.
+- Docker local: Docker Engine respondeu (`29.2.1`), Postgres local respondeu a
+  `pg_isready`, Kong/Studio/Inbucket responderam em suas portas, mas
+  `supabase_vector_slimhiper_1308` estava reiniciando; Supabase local green
+  segue nao marcado.
+- Smoke local sem sessao incluiu `/clinic/patients/test-patient/encounter` e
+  `/clinic/patients/test-patient?tab=relatorios` com redirect fail-closed para
+  `/auth/login`; Browser confirmou login renderizado, sem overlay e sem erros
+  de console.
 
 ## Fontes Internas
 
-| Area | Fonte primaria | Como usar |
-| --- | --- | --- |
-| Regras operacionais | `AGENTS.md` | Fonte de seguranca, Supabase, UI, migrations e checks obrigatorios. |
-| Inventario de modulos | `docs/PROJECT_MODULE_CHECKLIST.md` | Status por modulo, arquivos existentes, riscos e proximos passos. |
-| Sequencia de PRs | `docs/NEXT_IMPLEMENTATION_SEQUENCE.md` | Ordem preferencial de implementacao em PRs pequenos. |
-| Auth/RBAC | `docs/auth/AUTH_RBAC_SESSION_CONTRACT.md` | Contrato de sessao, tabelas esperadas, roles e permissoes. |
-| Supabase Auth/RBAC | `docs/supabase/CORE_AUTH_RBAC_RUNBOOK.md` | Bootstrap, validacao e operacao do core multi-tenant. |
-| Paciente 360 | `docs/supabase/PATIENT360_RUNBOOK.md` | Payloads, Edge Functions, fixture e contrato real. |
-| Document templates | `docs/supabase/DOCUMENT_TEMPLATES_RUNBOOK.md` | Templates, variaveis, storage e bootstrap. |
-| D4Sign | `docs/integrations/D4SIGN_RUNBOOK.md` | Webhook, signed URLs, fixtures e sandbox. |
-| Asaas | `docs/integrations/ASAAS_BILLING_RUNBOOK.md` | Billing, fixtures, sandbox e reconciliacao. |
-| Env hygiene | `docs/security/ENV_HYGIENE.md` | Variaveis publicas, server-only e placeholders seguros. |
-| Testes | `docs/testing/CONTRACT_TESTS.md` | Matriz de testes locais, Supabase autorizado e providers. |
-| Browser smoke | `docs/testing/BROWSER_SMOKE_CHECKLIST.md` | Roteiro operacional para validar rotas criticas no navegador. |
-| Baseline | `docs/testing/BASELINE_CHECKS.md` | Snapshot de checks, pendencias e ambiente usado. |
+| Area                  | Fonte primaria                                | Como usar                                                           |
+| --------------------- | --------------------------------------------- | ------------------------------------------------------------------- |
+| Regras operacionais   | `AGENTS.md`                                   | Fonte de seguranca, Supabase, UI, migrations e checks obrigatorios. |
+| Inventario de modulos | `docs/PROJECT_MODULE_CHECKLIST.md`            | Status por modulo, arquivos existentes, riscos e proximos passos.   |
+| Sequencia de PRs      | `docs/NEXT_IMPLEMENTATION_SEQUENCE.md`        | Ordem preferencial de implementacao em PRs pequenos.                |
+| Auth/RBAC             | `docs/auth/AUTH_RBAC_SESSION_CONTRACT.md`     | Contrato de sessao, tabelas esperadas, roles e permissoes.          |
+| Supabase Auth/RBAC    | `docs/supabase/CORE_AUTH_RBAC_RUNBOOK.md`     | Bootstrap, validacao e operacao do core multi-tenant.               |
+| Paciente 360          | `docs/supabase/PATIENT360_RUNBOOK.md`         | Payloads, Edge Functions, fixture e contrato real.                  |
+| Document templates    | `docs/supabase/DOCUMENT_TEMPLATES_RUNBOOK.md` | Templates, variaveis, storage e bootstrap.                          |
+| D4Sign                | `docs/integrations/D4SIGN_RUNBOOK.md`         | Webhook, signed URLs, fixtures e sandbox.                           |
+| Asaas                 | `docs/integrations/ASAAS_BILLING_RUNBOOK.md`  | Billing, fixtures, sandbox e reconciliacao.                         |
+| Env hygiene           | `docs/security/ENV_HYGIENE.md`                | Variaveis publicas, server-only e placeholders seguros.             |
+| Testes                | `docs/testing/CONTRACT_TESTS.md`              | Matriz de testes locais, Supabase autorizado e providers.           |
+| Browser smoke         | `docs/testing/BROWSER_SMOKE_CHECKLIST.md`     | Roteiro operacional para validar rotas criticas no navegador.       |
+| Baseline              | `docs/testing/BASELINE_CHECKS.md`             | Snapshot de checks, pendencias e ambiente usado.                    |
 
 ## Benchmark De Mercado
 
@@ -58,12 +77,12 @@ Comparacao feita por leitura de paginas oficiais de concorrentes e guias de
 seguranca. O objetivo nao e copiar features, mas entender o minimo competitivo
 para uma plataforma clinica SaaS no Brasil.
 
-| Referencia | Capacidades divulgadas | Implicacao para SlimHiper |
-| --- | --- | --- |
-| iClinic | Agenda, prontuario, teleconsulta, financeiro, TISS, repasse medico e lancamento financeiro a partir da agenda/prontuario. | O MVP precisa integrar agenda, atendimento e financeiro em fluxo unico, nao como telas isoladas. |
-| Feegow | Agenda, prontuario, aplicativo, relatorios, API, LGPD, financeiro e gestao de convenios/TISS. | SlimHiper precisa de relatorios operacionais, permissao clara e API/contratos estaveis antes de escalar. |
-| Ninsaude | Agenda multiunidade, confirmacao de consulta, check-in, sessoes/pacotes, prontuario, telemedicina, assinatura digital, arquivos, estoque e insights. | Pacotes, fila, atendimento, documentos e estoque devem compartilhar contexto de paciente/unidade/profissional. |
-| Clinicorp | Agenda, financeiro, relatorios, dashboard analitico, CRM/relacionamento, estoque, metas e faturamento. | O roadmap deve fechar dashboard, financeiro, CRM e estoque como operacao conectada, com indicadores confiaveis. |
+| Referencia | Capacidades divulgadas                                                                                                                               | Implicacao para SlimHiper                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| iClinic    | Agenda, prontuario, teleconsulta, financeiro, TISS, repasse medico e lancamento financeiro a partir da agenda/prontuario.                            | O MVP precisa integrar agenda, atendimento e financeiro em fluxo unico, nao como telas isoladas.                |
+| Feegow     | Agenda, prontuario, aplicativo, relatorios, API, LGPD, financeiro e gestao de convenios/TISS.                                                        | SlimHiper precisa de relatorios operacionais, permissao clara e API/contratos estaveis antes de escalar.        |
+| Ninsaude   | Agenda multiunidade, confirmacao de consulta, check-in, sessoes/pacotes, prontuario, telemedicina, assinatura digital, arquivos, estoque e insights. | Pacotes, fila, atendimento, documentos e estoque devem compartilhar contexto de paciente/unidade/profissional.  |
+| Clinicorp  | Agenda, financeiro, relatorios, dashboard analitico, CRM/relacionamento, estoque, metas e faturamento.                                               | O roadmap deve fechar dashboard, financeiro, CRM e estoque como operacao conectada, com indicadores confiaveis. |
 
 Fontes externas consultadas:
 
@@ -123,27 +142,27 @@ Fontes externas consultadas:
 
 ## Estado Atual Resumido
 
-| Modulo | Nivel atual | Foco de conclusao |
-| --- | --- | --- |
-| Auth/RBAC/multi-tenant | N3 | Fechar guards, roles, RLS e portal fail-closed. |
-| Dashboard | N2/N3 | Remover fallback silencioso, badges reais, quick actions e estados inline. |
-| Pacientes | N2/N3 | CRUD real, PII protegida, filtros/paginacao e criar paciente. |
-| Paciente 360 | N3 | Completar tabs com dados reais, permissoes por tab e smoke real. |
-| Agenda/fila | N2 | Usar `updateAppointmentStatus`, criar/editar consulta e timezone. |
-| Encounter/SOAP | N2/N3 | Ligar acoes auxiliares, validacao, exames, prescricoes e tarefas. |
-| Medidas/labs | N2 | Conectar `clinicalRecordsApi` a formularios reais e timeline. |
-| Document templates | N3 | Variaveis permitidas, geracao pela UI e policy paciente. |
-| Documentos/D4Sign | N2/N3 | Sandbox autorizado, signer real, reconciliacao e monitor. |
-| Financeiro/Asaas | N2/N3 | Corrigir RPCs, reconciliar webhooks e impedir writes provider-owned no client. |
-| Programas/pacotes | N1/N2 | Criar `programsApi`, persistir builder e enrollment. |
-| CRM/leads | N0/N1 | Criar rota/service e funil lead -> paciente. |
-| Estoque | N0/N1 | Criar rota/service e fluxos lote/movimentacao. |
-| Relatorios | N1/N2 | Rota clinica, filtros, export seguro e `reports.read`. |
-| Chat/notificacoes | N1/N2 | Modelo real de conversa, unread count, envio e retencao. |
-| App paciente | N1 | Linkage seguro, RLS propria e UX minima. |
-| Settings/admin | N1/N2 | Persistencia real, admin shell, erros, break-glass e support. |
-| Seguranca/auditoria | N2/N3 | Eventos auditaveis, retencao, monitoramento e incident response. |
-| Testes/CI | N2/N3 | CI completo, fixtures em PR e contracts reais gated. |
+| Modulo                 | Nivel atual | Foco de conclusao                                                              |
+| ---------------------- | ----------- | ------------------------------------------------------------------------------ |
+| Auth/RBAC/multi-tenant | N3          | Fechar guards, roles, RLS e portal fail-closed.                                |
+| Dashboard              | N2/N3       | Remover fallback silencioso, badges reais, quick actions e estados inline.     |
+| Pacientes              | N2/N3       | CRUD real, PII protegida, filtros/paginacao e criar paciente.                  |
+| Paciente 360           | N3          | Completar tabs com dados reais, permissoes por tab e smoke real.               |
+| Agenda/fila            | N2          | Usar `updateAppointmentStatus`, criar/editar consulta e timezone.              |
+| Encounter/SOAP         | N2/N3       | Ligar acoes auxiliares, validacao, exames, prescricoes e tarefas.              |
+| Medidas/labs           | N2          | Conectar `clinicalRecordsApi` a formularios reais e timeline.                  |
+| Document templates     | N3          | Variaveis permitidas, geracao pela UI e policy paciente.                       |
+| Documentos/D4Sign      | N2/N3       | Sandbox autorizado, signer real, reconciliacao e monitor.                      |
+| Financeiro/Asaas       | N2/N3       | Corrigir RPCs, reconciliar webhooks e impedir writes provider-owned no client. |
+| Programas/pacotes      | N1/N2       | Criar `programsApi`, persistir builder e enrollment.                           |
+| CRM/leads              | N0/N1       | Criar rota/service e funil lead -> paciente.                                   |
+| Estoque                | N0/N1       | Criar rota/service e fluxos lote/movimentacao.                                 |
+| Relatorios             | N1/N2       | Rota clinica, filtros, export seguro e `reports.read`.                         |
+| Chat/notificacoes      | N1/N2       | Modelo real de conversa, unread count, envio e retencao.                       |
+| App paciente           | N1          | Linkage seguro, RLS propria e UX minima.                                       |
+| Settings/admin         | N1/N2       | Persistencia real, admin shell, erros, break-glass e support.                  |
+| Seguranca/auditoria    | N2/N3       | Eventos auditaveis, retencao, monitoramento e incident response.               |
+| Testes/CI              | N2/N3       | CI completo, fixtures em PR e contracts reais gated.                           |
 
 ## Checkpoints Por UI Existente
 
@@ -159,9 +178,9 @@ Fontes externas consultadas:
 
 ### Dashboard Clinico
 
-- [ ] `src/app/components/DashboardContent.tsx`: exibir erro inline quando stats falham, nao retornar `null`.
-- [ ] `src/app/components/DashboardContent.tsx`: tratar empty state para agenda/fila/alertas/pacientes em revisao.
-- [ ] `src/app/components/DashboardContent.tsx`: ligar quick actions a rotas/modais reais ou desabilitar com motivo.
+- [x] `src/app/components/DashboardContent.tsx`: exibir erro inline quando stats falham, nao retornar `null`.
+- [x] `src/app/components/DashboardContent.tsx`: tratar empty state para agenda/fila/alertas/pacientes em revisao.
+- [x] `src/app/components/DashboardContent.tsx`: ligar quick actions a rotas/modais reais ou desabilitar com motivo.
 - [ ] `src/services/dashboardApi.ts`: producao deve falhar visivelmente sem mock; mock somente com `NEXT_PUBLIC_USE_MOCK_DATA=true`.
 - [ ] Validar KPIs com dados reais de `appointments`, `patient_alerts`, `patient_invoices` e documentos pendentes.
 
@@ -176,16 +195,16 @@ Fontes externas consultadas:
 ### Paciente 360
 
 - [ ] `src/services/patient360Api.ts`: manter contrato real e remover fallback silencioso em producao.
-- [ ] `src/app/paciente-360/components`: deep-link de abas, loading/error por aba e forbidden por permissao.
-- [ ] `TabDocumentos`: remover email hardcoded `paciente@example.com` e resolver signatario real.
+- [ ] `src/app/paciente-360/components`: deep-link de abas, loading/error por aba e forbidden por permissao. Parcial: deep-link `?tab=...` implementado, badge de chat vem do payload e TabRelatorios possui loading/error/empty; forbidden por aba segue pendente.
+- [ ] `TabDocumentos`: remover email hardcoded `paciente@example.com` e resolver signatario real. Parcial: hardcode nao existe mais e envio D4Sign fica desabilitado ate signatario real validado.
 - [ ] `TabFinanceiro`: validar valores, loading de criacao e tratamento claro de falha Edge Function.
-- [ ] `TabRelatorios`: substituir `mockReportDefinitions` por `reportsApi`.
+- [x] `TabRelatorios`: substituir `mockReportDefinitions` por `reportsApi`.
 - [ ] Tab chat: criar service real de threads/mensagens/unread.
 - [ ] Tabs consultas/nutricao/pacotes/prescricoes: substituir derivacoes mock por tabelas ou Edge Functions.
 
 ### Agenda E Fila
 
-- [ ] `src/app/clinic/agenda/components/AgendaContent.tsx`: usar `updateAppointmentStatus` nas transicoes visiveis.
+- [x] `src/app/clinic/agenda/components/AgendaContent.tsx`: usar `updateAppointmentStatus` nas transicoes visiveis.
 - [ ] Implementar criar/editar/cancelar consulta com permissao e validacao.
 - [ ] Definir timezone por tenant/unidade/profissional.
 - [ ] Trocar tokens Tailwind indefinidos como `destructive` por classes existentes ou criar token global justificado.
@@ -194,7 +213,7 @@ Fontes externas consultadas:
 
 ### Atendimento, SOAP, Medidas E Labs
 
-- [ ] `src/app/clinic/patients/[patientId]/encounter/page.tsx`: remover `onClick={() => {}}` das acoes auxiliares.
+- [x] `src/app/clinic/patients/[patientId]/encounter/page.tsx`: remover `onClick={() => {}}` das acoes auxiliares.
 - [ ] Usar `encounterApi` para rascunho, finalizacao, timeline e audit log.
 - [ ] Conectar `clinicalRecordsApi` para bioimpedancia, medidas, exames, sintomas e pendencias.
 - [ ] Validar finalizacao de SOAP por role e por tenant.
@@ -204,11 +223,11 @@ Fontes externas consultadas:
 ### Documentos E D4Sign
 
 - [ ] `src/app/clinic/documents/page.tsx`: substituir painel hardcoded por service real de templates/documentos/eventos.
-- [ ] `src/services/documentsApi.ts`: manter D4Sign apenas via Edge Function, sem segredo no browser.
+- [x] `src/services/documentsApi.ts`: manter D4Sign apenas via Edge Function, sem segredo no browser.
 - [ ] `document-signed-url`: validar tenant, paciente, documento e permissao antes de signed URL.
 - [ ] Aplicar policy paciente/guardian antes de liberar portal para documentos.
 - [ ] Confirmar assinatura com signatario real e resumo de payload seguro.
-- [ ] Smoke local: fixtures D4Sign valid/invalid e idempotencia.
+- [x] Smoke local: fixtures D4Sign valid/invalid e idempotencia.
 - [ ] Smoke sandbox autorizado: envio, webhook, reconciliacao e auditoria.
 
 ### Financeiro E Asaas
@@ -219,7 +238,7 @@ Fontes externas consultadas:
 - [ ] `webhook-asaas`: atualizar invoices/payments de forma idempotente e auditavel.
 - [ ] Reduzir armazenamento de payload bruto ou criar retencao/redaction formal.
 - [ ] UI do paciente e clinica: loading/error/forbidden e reconciliacao visual.
-- [ ] Smoke: pagamento confirmado, vencido, cancelado, duplicado e token invalido.
+- [x] Smoke local: pagamento confirmado, vencido, cancelado, duplicado e token invalido.
 
 ### Programas E Pacotes
 
@@ -272,8 +291,8 @@ Fontes externas consultadas:
 - [ ] `src/app/clinic/settings/components/ClinicSettingsContent.tsx`: remover settings locais/mock.
 - [ ] `src/app/clinic/programs/components/ProgramsContent.tsx`: remover `mockClinicPrograms`.
 - [ ] `src/app/clinic/programs/builder`: remover `mockBuilderData`.
-- [ ] `src/app/paciente-360/components/tabs/TabRelatorios.tsx`: remover `mockReportDefinitions`.
-- [ ] `src/app/clinic/patients/[patientId]/encounter/page.tsx`: substituir mocks laterais por dados reais.
+- [x] `src/app/paciente-360/components/tabs/TabRelatorios.tsx`: remover `mockReportDefinitions`.
+- [ ] `src/app/clinic/patients/[patientId]/encounter/page.tsx`: substituir mocks laterais por dados reais. Parcial: arrays `mock*` removidos da UI; sintomas ainda ficam como empty state ate existir contrato real.
 
 ## Ordem Recomendada De Finalizacao
 
@@ -306,8 +325,8 @@ Fontes externas consultadas:
 - [ ] Rodar contrato real autorizado com token de staff.
 - [ ] Rodar forbidden real com usuario sem `patients.read`.
 - [ ] Rodar cross-tenant real tenant A/B.
-- [ ] Completar tabs: resumo, timeline, consultas, documentos, financeiro, nutricao, pacotes, prescricoes, relatorios e chat.
-- [ ] Remover mocks diretos apos fallback controlado.
+- [ ] Completar tabs: resumo, timeline, consultas, documentos, financeiro, nutricao, pacotes, prescricoes, relatorios e chat. Parcial: navegacao por aba e relatorios locais foram estabilizados.
+- [ ] Remover mocks diretos apos fallback controlado. Parcial: TabRelatorios deixou de importar `mockReportDefinitions` diretamente e usa `reportsApi` com mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`.
 
 ### Fase 4 - Documentos E Assinatura
 

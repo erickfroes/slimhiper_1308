@@ -238,7 +238,12 @@ export default function PatientListContent() {
         title="Pacientes"
         subtitle={`${patients.length} pacientes cadastrados · ${patients.filter((p) => p.status === 'ativo').length} ativos`}
         actions={
-          <button className="btn-primary text-sm">
+          <button
+            type="button"
+            disabled
+            title="Criação de paciente depende do service real com validação de PII."
+            className="btn-primary text-sm"
+          >
             <Users size={15} />
             Novo Paciente
           </button>
@@ -369,11 +374,21 @@ export default function PatientListContent() {
             {selectedIds.size} selecionado(s)
           </span>
           <div className="flex items-center gap-2 ml-auto">
-            <button className="btn-secondary text-xs gap-1.5">
+            <button
+              type="button"
+              disabled
+              title="Envio real de mensagens entra no módulo de chat/notificações."
+              className="btn-secondary text-xs gap-1.5"
+            >
               <MessageSquare size={13} />
               Enviar mensagem
             </button>
-            <button className="btn-secondary text-xs gap-1.5">
+            <button
+              type="button"
+              disabled
+              title="Marcação real de revisão depende de escrita segura em patientsApi."
+              className="btn-secondary text-xs gap-1.5"
+            >
               <Flag size={13} />
               Marcar para revisão
             </button>
@@ -607,22 +622,18 @@ export default function PatientListContent() {
                           <Eye size={14} />
                         </Link>
                         <button
-                          className="p-1.5 rounded-lg hover:bg-sky-50 text-muted-foreground hover:text-sky-600 transition-colors"
-                          title="Enviar mensagem"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toast.success(`Abrindo chat com ${patient.name}`);
-                          }}
+                          type="button"
+                          disabled
+                          className="p-1.5 rounded-lg text-muted-foreground opacity-50 cursor-not-allowed transition-colors"
+                          title="Chat real ainda não está liberado no MVP clínico."
                         >
                           <MessageSquare size={14} />
                         </button>
                         <button
-                          className="p-1.5 rounded-lg hover:bg-amber-50 text-muted-foreground hover:text-amber-600 transition-colors"
-                          title="Marcar para revisão"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toast.info(`${patient.name} marcado para revisão`);
-                          }}
+                          type="button"
+                          disabled
+                          className="p-1.5 rounded-lg text-muted-foreground opacity-50 cursor-not-allowed transition-colors"
+                          title="Revisão real depende de escrita segura em patientsApi."
                         >
                           <Flag size={14} />
                         </button>
