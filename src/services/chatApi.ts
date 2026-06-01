@@ -392,11 +392,7 @@ export async function markPatientChatAsAnswered(
     }
 
     const supabase = getSupabaseClient();
-    const { error } = await supabase
-      .from('patient_chat_threads')
-      .update({ unread_count: 0 })
-      .eq('id', threadId)
-      .eq('patient_id', patientId);
+    const { error } = await supabase.rpc('mark_thread_read', { p_thread_id: threadId });
 
     if (error) return { data: null, error: { message: error.message, code: error.code } };
 
