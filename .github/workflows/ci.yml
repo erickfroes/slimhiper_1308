@@ -1,4 +1,4 @@
-name: CI
+name: CI Release Gates
 
 on:
   pull_request:
@@ -6,15 +6,32 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      run_local_supabase_smokes:
+        description: Run Docker-backed local Supabase smoke tests after baseline gates
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-release-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+  NEXT_PUBLIC_USE_MOCK_DATA: 'true'
+  CI: 'true'
 
 jobs:
-  baseline:
-    name: Baseline Checks
+  quality-gates:
+    name: Required quality gates
     runs-on: ubuntu-latest
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
-      NEXT_PUBLIC_USE_MOCK_DATA: 'true'
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -28,11 +45,13 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
+      - name: Install dependencies with lockfile
         run: npm ci
 
       - name: Whitespace check
+        shell: bash
         run: |
+          set -euo pipefail
           BEFORE="${{ github.event.before }}"
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -60,3 +79,74 @@ jobs:
 
       - name: Billing fixture contract
         run: node scripts/supabase/test-billing-fixtures.mjs
+
+  local-supabase-smokes-skip:
+    name: Local Supabase smokes skipped
+    runs-on: ubuntu-latest
+    needs: quality-gates
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_local_supabase_smokes != true }}
+    steps:
+      - name: Explain explicit skip
+        run: |
+          echo "Docker-backed Supabase smokes are optional for CI and are skipped unless workflow_dispatch input run_local_supabase_smokes=true."
+          echo "Run them only in an authorized runner with local Docker/Supabase capacity and dummy data."
+
+  local-supabase-smokes:
+    name: Optional Docker-backed local Supabase smokes
+    runs-on: ubuntu-latest
+    needs: quality-gates
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_local_supabase_smokes == true }}
+    timeout-minutes: 60
+    env:
+      RUN_PHASE10_LOCAL_SMOKES: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies with lockfile
+        run: npm ci
+
+      - name: Verify authorized local smoke environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Apply all local migrations
+        run: supabase migration up --local --include-all
+
+      - name: Clinical core local smoke
+        run: node scripts/supabase/test-clinical-core-contract.mjs
+
+      - name: Patient 360 local real smoke
+        run: node scripts/supabase/test-patient360-local-real-smoke.mjs
+
+      - name: Documents phase 4 local smoke
+        run: node scripts/supabase/test-documents-phase4-local-smoke.mjs
+
+      - name: Programs phase 6 local smoke
+        run: node scripts/supabase/test-programs-phase6-local-smoke.mjs
+
+      - name: Platform admin phase 7 local smoke
+        run: node scripts/supabase/test-platform-admin-phase7-local-smoke.mjs
+
+      - name: Reports phase 8 local smoke
+        run: node scripts/supabase/test-reports-phase8-local-smoke.mjs
+
+      - name: CRM inventory phase 9 local smoke
+        run: node scripts/supabase/test-crm-inventory-phase9-local-smoke.mjs

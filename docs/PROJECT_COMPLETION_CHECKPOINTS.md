@@ -304,7 +304,7 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 7 - Admin/settings/auditoria  | Implementada aguardando validacao local | Settings tenant/unidade persistem por RPC auditada; migration `150` adiciona RPCs sanitizados para admin tenants/detalhe/webhooks e mutators auditados de support/break-glass; migration `170` adiciona mutator auditado de role/status/unidade; convite Auth Admin agora passa por rota server-side com service role backend, valida tenant/role/unidade, cria/atualiza perfil, membership `invited` e audit log; telas admin usam `adminApi` real e `AdminShell`. Pendentes por ambiente: aplicar/validar migrations e smoke Fase 7 quando Docker/Postgres e env Supabase estiverem disponiveis. |
 | Fase 8 - Relatorios/chat/portal    | Parcial                                 | Bases de relatorios/chat no Paciente 360 existem; modulo clinico, notificacoes, moderacao e portal paciente seguem pendentes/fail-closed.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Fase 9 - CRM/estoque               | PR 9.5 implementada                    | Pre-requisitos revisados e mantidos: Fase 8 possui migrations 180-183 para relatorios/chat/portal/comunicacoes; PRs 9.1-9.4 entregaram fundacao RBAC/RLS/RPCs, CRM operacional com conversao idempotente, estoque ledger por lote/local e insights agregados em dashboard/relatorios. PR 9.5 adiciona `20260601233000_195_crm_inventory_governance_hardening.sql` com snapshot agregado de governanca e helper service-role de retencao dry-run/execucao explicita, `test-crm-inventory-phase9-local-smoke.mjs` com tenants A/B, permissoes negativas, deduplicacao, conversao, ledger, saldo negativo, auditoria, notificacoes e reports, e runbook `CRM_INVENTORY_GOVERNANCE_RUNBOOK.md` para LGPD/operacao. Nao houve `supabase db push`, provider API ou chamada externa; Supabase local/migration up e smoke mutante seguem pendentes quando Docker/Postgres/env Supabase estiverem disponiveis. |
-| Fase 10 - Producao/observabilidade | Pendente                                | CI/CD, monitoramento, backup/restore e revisao LGPD final ainda pendentes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Fase 10 - Producao/observabilidade | PR 10.1 implementada                    | Pre-requisitos revisados: Fases 1-9 seguem com evidencias locais registradas e os smokes Supabase/browser pendentes permanecem gates de release, nao autorizacao de producao. PR 10.1 endurece `.github/workflows/ci.yml` com `npm ci`, `git diff --check`, `type-check`, `lint`, `build` e contratos fixture bloqueantes; adiciona smokes Supabase/Docker opcionais por `workflow_dispatch` com skip explicito; documenta matriz local/preview/staging/producao, templates de variaveis sem valores reais, isolamento de previews e processo de release/rollback. Monitoramento, backup/restore, incidentes e revisao LGPD final seguem nas PRs 10.2-10.5.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ## Fontes Internas
 
@@ -1064,6 +1064,21 @@ read-only, depois validacao em staging, depois corte controlado para producao.
   smoke pos-deploy, rollback, congelamento de provider webhooks quando aplicavel
   e criterios de abortar a promocao.
 
+_Status PR 10.1: implementado nesta branch. Pre-requisitos da Fase 10 foram
+revisados no controle por fase: as evidencias locais das Fases 1-9 permanecem
+registradas, e pendencias Supabase/browser que dependem de ambiente autorizado
+seguem explicitamente como gates antes de release. O workflow
+`.github/workflows/ci.yml` agora executa gates bloqueantes de lockfile,
+whitespace, type-check, lint, build e contratos fixture; os smokes locais
+Docker/Supabase ficaram condicionados a `workflow_dispatch` com skip explicito
+quando o runner nao estiver autorizado. `docs/operations/ENVIRONMENT_MATRIX.md`,
+`docs/operations/env-templates/`, `docs/operations/PREVIEW_ISOLATION.md` e
+`docs/operations/RELEASE_PROCESS.md` documentam segregacao local/preview/staging/
+production, variaveis sem valores reais, previews isolados, tag/changelog,
+checklist de migracoes, smoke pos-deploy, rollback e criterios de abortar
+promocao. Esta PR nao promove producao, nao roda provider API, nao executa
+`supabase db push` e nao altera secrets reais._
+
 **PR 10.2 - Observabilidade de app, Edge Functions, webhooks e jobs (`hardening/observability-alerting`):**
 
 - Instrumentar monitoramento de disponibilidade e erro para frontend Next.js,
@@ -1198,7 +1213,7 @@ read-only, depois validacao em staging, depois corte controlado para producao.
 - [x] `feat/inventory-operations`
 - [x] `feat/crm-inventory-insights`
 - [x] `test/crm-inventory-hardening`
-- [ ] `hardening/ci-cd-release-gates`
+- [x] `hardening/ci-cd-release-gates`
 - [ ] `hardening/observability-alerting`
 - [ ] `hardening/backup-restore-dr`
 - [ ] `hardening/incident-runbooks`
