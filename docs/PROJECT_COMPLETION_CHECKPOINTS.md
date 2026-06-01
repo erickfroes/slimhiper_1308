@@ -684,6 +684,151 @@ Fontes externas consultadas:
 - [ ] Liberar app paciente minimo depois de RLS/linkage.
 - [ ] Criar retencao e moderacao para comunicacoes.
 
+#### Plano De Implementacao Completo Da Fase 8
+
+**Objetivo de produto:** entregar relatorios operacionais/clinicos exportaveis com
+controle de permissao, inbox clinico de chat/notificacoes com contadores reais e
+portal minimo do paciente/responsavel, mantendo escopo patient/guardian fechado
+por linkage, RLS e smokes cross-patient/cross-tenant antes de abrir `/patient`.
+
+**Inventario ja existente relacionado a Fase 8:**
+
+- UI de header/topbar: `src/components/DashboardShell.tsx` ja possui busca de
+  pacientes e botoes `MessageSquare`/`Bell`, mas hoje os indicadores sao dots
+  estaticos sem leitura de `patient_chat_threads.unread_count` nem
+  `notifications.status`. O plano deve transformar esses botoes em links/menus
+  acessiveis, com loading, empty, error, badge numerico, mark-as-read e fallback
+  sem mock silencioso.
+- Dashboard clinico: `src/app/components/DashboardContent.tsx` ja exibe
+  `mensagensNaoLidas` no card/resumo a partir do `dashboardApi`; deve ser
+  alinhado ao mesmo contrato agregado usado pelo header.
+- Paciente 360: `TabChat` ja le/escreve `patient_chat_threads` e
+  `patient_chat_messages`; `TabRelatorios` lista definicoes via
+  `patient-reports`, mas export/impressao seguem bloqueados. A Fase 8 deve
+  promover esses contratos para uso clinico amplo e portal-scoped.
+- Services existentes: `src/services/chatApi.ts`, `src/services/reportsApi.ts`
+  e `src/services/dashboardApi.ts` ja cobrem parte do read/write/unread; falta
+  `notificationsApi`, `clinicReportsApi` e `patientPortalApi` com envelopes
+  `{ data, error }`, permissao explicita e sem fallback permissivo.
+- Schema/RLS base: `report_definitions`, `report_runs`,
+  `patient_chat_threads`, `patient_chat_messages` e `notifications` ja existem
+  em migrations com RLS inicial; a fase deve acrescentar contratos RPC/Edge,
+  auditoria, retencao e policies patient/guardian especificas quando necessario,
+  sem editar migrations antigas.
+- Portal paciente: `src/app/patient/page.tsx` permanece fail-closed; linkage
+  paciente/responsavel ja foi validado, mas ainda falta UI propria, contracts
+  scoped e smoke navegavel antes de remover o bloqueio.
+- Configuracoes/programas: settings de notificacoes em
+  `clinicSettingsApi` e entitlements `chat`/`notificacoes` no builder de
+  programas devem alimentar preferencia, horarios de atendimento, canal
+  habilitado e expectativas de SLA sem acionar push externo antes de opt-in
+  formal.
+
+**PR 8.1 - Relatorios clinicos e export seguro (`feat/reports-clinic-module`):**
+
+- Criar rota `/clinic/reports` sob `DashboardShell`, adicionar item de menu se
+  aprovado para MVP, e montar UI densa com filtros por periodo, unidade,
+  profissional, programa/pacote, status financeiro/documental e paciente.
+- Criar `clinicReportsApi` para listar definicoes, criar `report_runs`,
+  consultar status/resultados e baixar exportacao por URL curta server-side ou
+  Edge Function. Export deve exigir `reports.read` e, quando incluir financeiro
+  ou dados sensiveis, permissao adicional (`financial.read`,
+  `timeline.sensitive.read` ou equivalente).
+- Implementar executor seguro de relatorios com allowlist de definicoes; nunca
+  aceitar SQL livre vindo do browser. Resultado deve ser agregado/sanitizado por
+  padrao e detalhado somente quando permissao permitir.
+- Implementar export CSV/PDF com minimizacao, registro em `report_runs`,
+  `audit_logs`, filtros usados, usuario solicitante, expiracao curta e sem URL
+  publica direta.
+- Atualizar `TabRelatorios` do Paciente 360 para acionar o mesmo contrato de
+  run/export patient-scoped quando `export_enabled=true`; manter botoes
+  desabilitados com motivo claro quando a definicao nao permitir export.
+- Criar empty/error/loading/forbidden states e smoke de permissao cobrindo
+  `clinic_admin`, `physician`, `financial_user`, usuario sem `reports.read`,
+  cross-tenant e tentativa de export sensivel sem permissao adicional.
+
+**PR 8.2 - Inbox de chat e notificacoes no header (`feat/chat-notifications-foundation`):**
+
+- Criar `notificationsApi` e endpoint/RPC agregado para o header retornar, em
+  uma unica chamada, total de mensagens nao lidas, total de notificacoes
+  unread, ultimos itens, severidade, paciente relacionado e href seguro.
+- Evoluir `DashboardShell` para consumir esse contrato: badges numericos em
+  `MessageSquare` e `Bell`, menus/popovers responsivos, estados skeleton/empty,
+  erro nao sensivel, atalhos para `/clinic/inbox` ou Paciente 360 e
+  `aria-label`/teclado. Remover dots estaticos quando o contrato real existir.
+- Criar rota `/clinic/inbox` com abas `Conversas`, `Notificacoes` e
+  `Atribuidas a mim`; permitir filtro por unread, paciente, responsavel, SLA e
+  categoria. O header deve linkar para essa rota e deep-linkar para
+  conversas/notificacoes especificas.
+- Padronizar `patient_chat_threads.unread_count`: mensagem de paciente aumenta
+  unread da equipe; resposta de staff ou acao `mark read` zera/ajusta somente
+  dentro do tenant/paciente autorizado. Cobrir concorrencia para nao ficar
+  negativo.
+- Criar mutators auditados para `mark_notification_read`,
+  `archive_notification`, `mark_thread_read`, atribuir responsavel e fechar/
+  reabrir thread. Browser nao deve fazer update amplo em tabelas provider-owned
+  ou communication-owned quando a regra exigir RPC.
+- Gerar notificacoes in-app para eventos ja existentes do MVP: documentos
+  pendentes/falha D4Sign, pagamento vencido/confirmado, agendamento alterado,
+  check-in atrasado, mensagem nova, report export concluido/falhou e alerta
+  clinico. Push/email/WhatsApp ficam explicitamente fora da fase ate opt-in,
+  provider e consentimento documentados.
+
+**PR 8.3 - Portal minimo paciente/responsavel (`feat/patient-portal-minimum`):**
+
+- Substituir o fail-closed de `/patient` por guard server-side apenas depois de
+  contrato local verde: usuario precisa de `patient_portal.access`, linkage ativo
+  em `patient_accounts` ou `guardian_links`, e escopo resolvido para exatamente
+  um paciente selecionado ou lista de pacientes do responsavel.
+- Criar shell do portal com identidade visual simples, navegacao por cards/tabs
+  e estados loading/empty/error/forbidden. Superficies minimas: resumo do
+  paciente, documentos liberados com signed URL curta, financeiro proprio
+  permitido, chat proprio, notificacoes proprias e check-ins do programa.
+- Criar `patientPortalApi` com contratos patient-scoped/guardian-scoped; nunca
+  reutilizar services staff que consultam tenant-wide sem filtro de linkage.
+- Garantir que RLS permita somente leitura/escrita propria necessaria:
+  documentos liberados para portal, invoices/payment links proprios, chat do
+  proprio paciente, notificacoes do proprio usuario e check-ins atribuiveis.
+- Implementar troca segura de paciente para guardian com dois ou mais vinculos,
+  sem expor nomes/dados fora do vinculo ativo.
+- Criar smoke browser anonimo/auth paciente/auth guardian/staff: anonimo ->
+  login, paciente A nao acessa paciente B, guardian A ve apenas vinculos ativos,
+  staff sem portal nao entra em `/patient`, e rotas clinicas continuam separadas.
+
+**PR 8.4 - Retencao, moderacao e governanca de comunicacoes (`feat/communications-governance`):**
+
+- Adicionar migration nova para campos/ tabelas de governanca se necessario:
+  `retention_until`, `archived_at`, `moderation_status`, `moderation_reason`,
+  `moderated_by`, `moderated_at`, `read_receipts` ou tabela de eventos de
+  comunicacao. Incluir grants/RLS e analise LGPD.
+- Definir politica por categoria: mensagens clinicas, notificacoes operacionais,
+  eventos financeiros, exports de relatorio e payloads provider. Registrar no
+  runbook prazo de retencao, base legal/finalidade, redaction e processo de
+  atendimento a solicitacao do titular.
+- Implementar moderacao fail-closed para ocultar mensagem/notificacao sinalizada
+  sem apagar trilha auditavel; UI deve indicar conteudo removido/sob revisao sem
+  revelar dado sensivel.
+- Evitar logs com corpo de mensagem, tokens, IDs provider sensiveis ou payloads
+  brutos. Erros de Edge/RPC devem retornar codigos seguros.
+- Criar job/script read-only ou Edge scheduled para arquivar/expirar itens
+  conforme retencao; execucao mutante deve ficar documentada e autorizada por
+  ambiente.
+
+**Checks obrigatorios da Fase 8:**
+
+- `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check`.
+- Smokes locais Supabase: reports run/export, chat unread, notifications header,
+  portal patient/guardian e cross-tenant/cross-patient. Nao rodar `supabase db
+  push`, provider APIs, push/email/WhatsApp ou scripts mutantes sem autorizacao
+  explicita.
+- Browser quando pratico: `/clinic/reports`, `/clinic/inbox`, header
+  `MessageSquare`/`Bell`, Paciente 360 abas `Chat`/`Relatorios` e `/patient`
+  com usuario paciente/guardian. Verificar blank screen, overlay, console e uma
+  interacao relevante por superficie.
+- Evidencias a registrar neste checkpoint ao concluir: migrations novas, RPCs/
+  Edge Functions, services, rotas/UI, smokes com comandos, skips por ambiente,
+  riscos remanescentes e decisao explicita sobre push externo.
+
 ### Fase 9 - CRM E Estoque
 
 - [ ] Criar CRM/leads com funil e conversao lead -> paciente.
