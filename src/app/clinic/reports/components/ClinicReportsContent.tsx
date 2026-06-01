@@ -4,15 +4,23 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Bell,
+  Briefcase,
+  CalendarClock,
   Clock,
   DollarSign,
   Download,
+  GitBranch,
   FileCheck,
   FileText,
   RefreshCcw,
+  RotateCcw,
   ShieldCheck,
   ShoppingBag,
   Target,
+  Timer,
+  Users,
+  PackageSearch,
+  Coins,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
 import PageHeader from '@/components/PageHeader';
@@ -33,6 +41,15 @@ const iconMap: Record<string, React.ElementType> = {
   Target,
   Clock,
   Bell,
+  Users,
+  GitBranch,
+  Timer,
+  Briefcase,
+  PackageSearch,
+  RotateCcw,
+  CalendarClock,
+  AlertTriangle,
+  Coins,
 };
 
 function isoDate(daysAgo: number): string {

@@ -577,6 +577,22 @@ export interface Patient360Summary {
 }
 
 // Dashboard types
+export interface DashboardOperationalInsights {
+  crm: {
+    canRead: boolean;
+    openLeads: number;
+    overdueTasks: number;
+    href: string;
+  };
+  inventory: {
+    canRead: boolean;
+    criticalStockItems: number;
+    expiringLots: number;
+    daysToExpiry: number;
+    href: string;
+  };
+}
+
 export interface DashboardStats {
   consultasHoje: number;
   consultasConcluidas: number;
@@ -587,6 +603,7 @@ export interface DashboardStats {
   documentosPendentes: number;
   inadimplentes: number;
   taxaOcupacao: number;
+  operationalInsights?: DashboardOperationalInsights;
 }
 
 export interface WaitingQueueEntry {

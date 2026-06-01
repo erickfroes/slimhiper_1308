@@ -1740,6 +1740,16 @@ export const mockDashboardStats: DashboardStats = {
   documentosPendentes: 6,
   inadimplentes: 4,
   taxaOcupacao: 82,
+  operationalInsights: {
+    crm: { canRead: true, openLeads: 9, overdueTasks: 2, href: '/clinic/crm' },
+    inventory: {
+      canRead: true,
+      criticalStockItems: 3,
+      expiringLots: 2,
+      daysToExpiry: 30,
+      href: '/clinic/inventory',
+    },
+  },
 };
 
 export const mockWaitingQueue: WaitingQueueEntry[] = [

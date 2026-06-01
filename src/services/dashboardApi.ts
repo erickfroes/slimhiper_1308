@@ -70,6 +70,22 @@ type ChatThreadUnreadRow = {
   unread_count: number | null;
 };
 
+type DashboardInsightsRpc = {
+  crm?: {
+    canRead?: boolean;
+    openLeads?: number;
+    overdueTasks?: number;
+    href?: string;
+  };
+  inventory?: {
+    canRead?: boolean;
+    criticalStockItems?: number;
+    expiringLots?: number;
+    daysToExpiry?: number;
+    href?: string;
+  };
+};
+
 function todayRange() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -109,6 +125,38 @@ function waitingMinutesFromScheduledAt(scheduledAt: string) {
   const scheduled = new Date(scheduledAt).getTime();
   if (Number.isNaN(scheduled)) return 0;
   return Math.max(0, Math.floor((Date.now() - scheduled) / 60000));
+}
+
+function normalizeDashboardInsights(payload: unknown): DashboardStats['operationalInsights'] {
+  const record = payload && typeof payload === 'object' ? (payload as DashboardInsightsRpc) : {};
+  const crm = record.crm ?? {};
+  const inventory = record.inventory ?? {};
+
+  return {
+    crm: {
+      canRead: crm.canRead === true,
+      openLeads: Number(crm.openLeads ?? 0),
+      overdueTasks: Number(crm.overdueTasks ?? 0),
+      href: typeof crm.href === 'string' ? crm.href : '/clinic/crm',
+    },
+    inventory: {
+      canRead: inventory.canRead === true,
+      criticalStockItems: Number(inventory.criticalStockItems ?? 0),
+      expiringLots: Number(inventory.expiringLots ?? 0),
+      daysToExpiry: Number(inventory.daysToExpiry ?? 30),
+      href: typeof inventory.href === 'string' ? inventory.href : '/clinic/inventory',
+    },
+  };
+}
+
+async function getOperationalInsights() {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc('get_crm_inventory_dashboard_insights', {
+    p_days_to_expiry: 30,
+  });
+
+  if (error) throw error;
+  return normalizeDashboardInsights(data);
 }
 
 async function resolveActiveTenantId() {
@@ -214,6 +262,7 @@ const supabaseDashboardProvider: DashboardProvider = {
       pendingDocumentsResult,
       overdueInvoicesResult,
       unreadThreadsResult,
+      operationalInsights,
     ] = await Promise.all([
       supabase
         .from('patient_program_enrollments')
@@ -240,6 +289,7 @@ const supabaseDashboardProvider: DashboardProvider = {
         .select('unread_count')
         .eq('tenant_id', tenantId)
         .gt('unread_count', 0),
+      getOperationalInsights(),
     ]);
 
     for (const result of [
@@ -271,6 +321,7 @@ const supabaseDashboardProvider: DashboardProvider = {
       taxaOcupacao: todayAppointments.length
         ? Math.round((completedToday / todayAppointments.length) * 100)
         : 0,
+      operationalInsights,
     };
   },
 
