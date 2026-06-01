@@ -18,6 +18,8 @@ foundation through Asaas, and development bootstraps for Supabase data.
 - Document templates and D4Sign integration runbooks.
 - Billing and Asaas integration runbooks.
 - Environment hygiene guidance in `docs/security/ENV_HYGIENE.md`.
+- Fase 10 release gates, environment matrix, preview isolation and release
+  process in `docs/operations/`.
 
 ## Installation
 
@@ -63,6 +65,7 @@ slimhiper_1308/
 │   ├── lib/                        # Auth/Supabase helpers
 │   ├── services/                   # Frontend service facades
 │   └── styles/                     # Global styles and Tailwind utilities
+├── docs/operations/                # CI/CD, environment and release runbooks
 ├── scripts/supabase/               # Bootstrap and contract-check scripts
 ├── supabase/
 │   ├── functions/                  # Edge Functions
@@ -116,6 +119,11 @@ Use `docs/security/ENV_HYGIENE.md` as the source of truth for `.env.local`,
 
 Use `docs/auth/AUTH_RBAC_SESSION_CONTRACT.md` as the source of truth for app
 session shape, Auth/RBAC tables, guards, and known contract gaps.
+
+Use `docs/operations/ENVIRONMENT_MATRIX.md`,
+`docs/operations/PREVIEW_ISOLATION.md`, and
+`docs/operations/RELEASE_PROCESS.md` before promoting preview, staging, or
+production environments.
 
 ## Deployment
 
