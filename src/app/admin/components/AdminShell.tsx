@@ -10,6 +10,7 @@ import {
   HardDrive,
   Headphones,
   Link2,
+  LineChart,
   LogOut,
   RefreshCw,
   Shield,
@@ -27,6 +28,7 @@ export type AdminShellSection =
   | 'storage'
   | 'integrations'
   | 'webhooks'
+  | 'observability'
   | 'security'
   | 'support'
   | 'audit';
@@ -44,6 +46,7 @@ const navItems: Array<{
   { key: 'storage', label: 'Armazenamento', href: '/admin', icon: HardDrive },
   { key: 'integrations', label: 'Integracoes', href: '/admin/integrations', icon: Link2 },
   { key: 'webhooks', label: 'Webhooks', href: '/admin/webhooks', icon: Webhook },
+  { key: 'observability', label: 'Observabilidade', href: '/admin/observability', icon: LineChart },
   { key: 'security', label: 'Seguranca', href: '/admin/security', icon: Shield },
   { key: 'support', label: 'Suporte', href: '/admin/support', icon: Headphones },
   { key: 'audit', label: 'Auditoria', href: '/admin/audit', icon: ClipboardList },
