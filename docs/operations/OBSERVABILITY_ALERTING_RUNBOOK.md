@@ -1,0 +1,123 @@
+# Observabilidade, alertas e smoke pos-deploy
+
+Escopo da PR 10.2: app Next.js, rotas server-side, Edge Functions, webhooks,
+RPCs criticos, storage assinado, jobs operacionais, banco, releases e smokes
+read-only. Este runbook nao autoriza provider APIs, retries de webhook,
+`supabase db push`, migrations, restores ou rotacao de chaves em ambientes
+compartilhados.
+
+## Pre-requisitos validados
+
+- PR 10.1 precisa estar aplicada: CI bloqueante, matriz de ambientes, templates
+  de variaveis, isolamento de previews e processo de release/rollback.
+- Fases 1-9 continuam como gates antes de release: `type-check`, `lint`,
+  `build`, `git diff --check`, smokes Supabase locais e browser smoke
+  obrigatorio em ambiente autorizado.
+- `NEXT_PUBLIC_USE_MOCK_DATA=true` e permitido apenas em preview descartavel sem
+  dados reais; staging/producao devem falhar o health check se mocks estiverem
+  habilitados.
+
+## Esquema de log estruturado
+
+Todos os logs novos devem usar JSON em linha unica e estes campos minimos:
+
+| Campo             | Obrigatorio | Observacao                                                        |
+| ----------------- | ----------- | ----------------------------------------------------------------- |
+| `timestamp`       | Sim         | ISO-8601 UTC.                                                     |
+| `severity`        | Sim         | `debug`, `info`, `warn` ou `error`.                               |
+| `event`           | Sim         | Nome estavel para metrica/alerta.                                 |
+| `module`          | Sim         | Ex.: `api.health`, `api.auth.app-session`, `edge.webhook-d4sign`. |
+| `request_id`      | Sim         | Recebido por header ou gerado no runtime.                         |
+| `correlation_id`  | Sim         | Propagado entre app, Edge Functions e jobs.                       |
+| `outcome`         | Sim         | `success`, `failure`, `denied` ou `skipped`.                      |
+| `latency_ms`      | Sim         | Tempo do handler/operacao observada.                              |
+| `tenant_id`       | Condicional | Deve ser pseudonimizado/redigido em sinks externos.               |
+| `reason`/`status` | Condicional | Use codigos estaveis, sem payload bruto.                          |
+
+Proibido em logs e alertas: secrets, tokens, cookies, e-mails, telefones,
+CPF/CNPJ, nomes de pacientes/responsaveis, payload bruto de provider, storage
+paths sensiveis, signed URLs, documentos e amostras clinicas/financeiras.
+
+## Sinais por superficie
+
+| Superficie            | Sinais minimos                                                                | Fonte inicial nesta PR                                          |
+| --------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Frontend/Next.js      | 5xx, latencia, falha de deploy, health degraded/fail                          | `/api/health`, CI/deploy logs, smoke pos-deploy.                |
+| Auth/session SSR      | `auth_session_resolved` com `denied`, session failures, redirects fail-closed | `/api/auth/app-session`.                                        |
+| Edge Functions        | 5xx, envelope invalido, latencia, erro por modulo                             | Logs JSON padronizados e correlation headers.                   |
+| Webhooks D4Sign/Asaas | signature failures, idempotencia, ignored, processed, internal errors         | `webhook-d4sign`, `webhook-asaas`.                              |
+| RPCs criticos         | erro, denied spikes, latencia p95, contrato invalido                          | Logs da camada de servico e monitores do banco.                 |
+| Storage assinado      | 403/404 esperado, erro de bucket, signed URL curta                            | `document-signed-url` e smoke autorizado.                       |
+| Jobs operacionais     | atraso, falha, dry-run/execucao, divergencia                                  | Jobs devem emitir `job_started`, `job_completed`, `job_failed`. |
+| Banco                 | conexoes, slow queries, RLS deny spikes, deadlocks                            | Supabase/Postgres metrics e logs redigidos.                     |
+| Releases              | build/deploy failure, rollback, versao atual                                  | CI, plataforma de deploy e metadados de release.                |
+
+## Alertas acionaveis
+
+| Alerta                                                    | Severidade | Condicao inicial                        | Owner                | Ack maximo   | Escalonamento                                  |
+| --------------------------------------------------------- | ---------- | --------------------------------------- | -------------------- | ------------ | ---------------------------------------------- |
+| Indisponibilidade geral ou health `fail` em producao      | S1         | 2 checks consecutivos ou erro 5xx amplo | Platform on-call     | 15 min       | Incident commander + rollback owner.           |
+| Suspeita de vazamento, log sensivel ou credencial exposta | S1         | Qualquer evidencia confirmada           | Security on-call     | 15 min       | Rotacao de chaves e LGPD owner.                |
+| Webhook financeiro/documental falhando                    | S2         | >5 falhas/15 min ou dead-letter novo    | Integrations on-call | 30 min       | Backend on-call + owner financeiro/documental. |
+| Signature failures anormais                               | S2         | >10 denied/15 min por provider          | Security on-call     | 30 min       | Integrations on-call.                          |
+| Jobs atrasados ou divergencia de conciliacao              | S2         | atraso >2x SLA ou divergencia nova      | Operations on-call   | 30 min       | Data on-call.                                  |
+| Latencia p95 elevada em RPC/Edge                          | S3         | p95 >2s por 15 min                      | Backend on-call      | 4 h uteis    | Data on-call se envolver banco.                |
+| Denied spikes auth/RLS                                    | S3         | aumento >3x baseline                    | Security on-call     | 4 h uteis    | Platform owner.                                |
+| Falha de build/deploy em branch protegida                 | S3         | CI/deploy failed                        | Release owner        | 4 h uteis    | Platform on-call.                              |
+| Ajuste cosmetico de dashboard/runbook                     | S4         | Sem impacto operacional                 | Area owner           | 2 dias uteis | Backlog da squad.                              |
+
+Canais: S1/S2 em pager/telefone + canal `#ops-incidents`; S3 em
+`#ops-alerts`; S4 em issue/backlog. Fora do horario comercial, apenas S1/S2
+acionam on-call. Todo S1/S2 requer registro de timeline e decisao de
+postmortem; S1 sempre requer postmortem.
+
+## Dashboard operacional
+
+A rota `/admin/observability` apresenta o painel operacional por ambiente com:
+
+- estado do health endpoint e smoke pos-deploy;
+- frontend, auth/session, Edge Functions, webhooks, banco/RPCs e storage;
+- owners operacionais e sinais monitorados;
+- tabela S1-S4 com criterio e tempo maximo de acknowledgement.
+
+O painel e intencionalmente seguro: nao consulta providers, nao mostra payloads
+brutos, nao mostra PII/PHI e nao imprime secrets. Para producao, conecte as
+fontes reais do provedor de logs/APM mantendo este mesmo contrato visual.
+
+## Smoke read-only pos-deploy
+
+Com o app publicado, execute:
+
+```bash
+node scripts/observability/post-deploy-smoke.mjs --base-url https://app.example.com
+```
+
+Sem `SLIMHIPER_SMOKE_COOKIE`, o smoke valida:
+
+- `/api/health` com `x-request-id`;
+- `/auth/login` retornando 200;
+- `/clinic/dashboard`, `/admin` e `/patient` redirecionando anonimos para
+  `/auth/login`.
+
+Com `SLIMHIPER_SMOKE_COOKIE` de uma sessao dummy autorizada em staging, o smoke
+continua read-only e aceita 200/redirect/403 esperados sem imprimir o cookie.
+Nao use cookie real de paciente, provider ou producao fora de janela aprovada.
+
+## Teste de alerta controlado
+
+1. Em staging, gere um `x-request-id` dummy e chame `/api/health`.
+2. Confirme que o evento `health_check` chegou ao sink configurado com
+   severidade, modulo, request id, correlation id e latencia.
+3. Use uma regra temporaria ou ambiente de teste para disparar alerta S4/S3 sem
+   payload sensivel.
+4. Registre owner, horario de disparo, ack, resolucao e link do evento redigido.
+5. Remova a regra temporaria ou volte o threshold ao valor operacional.
+
+## Criterios de aceite da PR 10.2
+
+- Health endpoint seguro e smoke read-only disponiveis.
+- Logs estruturados com correlation/request id no app e nos webhooks D4Sign/Asaas.
+- Dashboard operacional admin documentado e acessivel sem consultar providers.
+- Matriz de alertas S1-S4 com canais, owners, ack e escalonamento definida.
+- Evidencias nao contem secrets, tokens, cookies, PII/PHI, payloads brutos,
+  storage paths sensiveis ou signed URLs.

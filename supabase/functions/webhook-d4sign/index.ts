@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createEdgeContext, logEdgeEvent, observedEdgeHeaders } from '../_shared/observability.ts';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -15,12 +16,20 @@ declare const Deno: {
 const corsHeaders = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-d4sign-signature, x-d4sign-token, idempotency-key',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-d4sign-signature, x-d4sign-token, idempotency-key',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-function jsonResponse(status: number, payload: JsonRecord) {
-  return new Response(JSON.stringify(payload), { status, headers: corsHeaders });
+function jsonResponse(
+  status: number,
+  payload: JsonRecord,
+  extraHeaders: Record<string, string> = {}
+) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, ...extraHeaders },
+  });
 }
 
 function toObject(value: unknown): JsonRecord {
@@ -38,13 +47,23 @@ function getString(...values: unknown[]) {
 
 function normalizeStatus(rawStatus: string): SignatureStatus {
   const status = rawStatus.toLowerCase();
-  if (status.includes('sign') || status.includes('assinad') || status === 'done' || status === 'completed') return 'signed';
-  if (status.includes('view') || status.includes('opened') || status.includes('visualiz')) return 'viewed';
-  if (status.includes('reject') || status.includes('refus') || status.includes('declin')) return 'rejected';
+  if (
+    status.includes('sign') ||
+    status.includes('assinad') ||
+    status === 'done' ||
+    status === 'completed'
+  )
+    return 'signed';
+  if (status.includes('view') || status.includes('opened') || status.includes('visualiz'))
+    return 'viewed';
+  if (status.includes('reject') || status.includes('refus') || status.includes('declin'))
+    return 'rejected';
   if (status.includes('expir')) return 'expired';
   if (status.includes('cancel')) return 'canceled';
-  if (status.includes('error') || status.includes('fail') || status.includes('invalid')) return 'error';
-  if (status.includes('sent') || status.includes('created') || status.includes('enviado')) return 'sent';
+  if (status.includes('error') || status.includes('fail') || status.includes('invalid'))
+    return 'error';
+  if (status.includes('sent') || status.includes('created') || status.includes('enviado'))
+    return 'sent';
   return 'sent';
 }
 
@@ -59,9 +78,17 @@ function signatureToSignerStatus(status: SignatureStatus): SignerStatus {
 }
 
 async function hmacSha256Hex(secret: string, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
   const digest = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 async function isWebhookAuthentic(req: Request, rawBody: string) {
@@ -72,49 +99,124 @@ async function isWebhookAuthentic(req: Request, rawBody: string) {
   const providedToken = getString(
     req.headers.get('x-d4sign-token'),
     req.headers.get('x-webhook-token'),
-    req.headers.get('authorization')?.replace(/^Bearer\s+/i, ''),
+    req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
   );
-  const providedSignature = getString(req.headers.get('x-d4sign-signature'), req.headers.get('x-signature')).toLowerCase();
+  const providedSignature = getString(
+    req.headers.get('x-d4sign-signature'),
+    req.headers.get('x-signature')
+  ).toLowerCase();
 
   if (sharedToken && providedToken !== sharedToken) return { ok: false, reason: 'token_mismatch' };
 
   if (hmacSecret) {
     if (!providedSignature) return { ok: false, reason: 'missing_signature' };
     const expected = (await hmacSha256Hex(hmacSecret, rawBody)).toLowerCase();
-    if (providedSignature.replace(/^sha256=/, '') !== expected) return { ok: false, reason: 'signature_mismatch' };
+    if (providedSignature.replace(/^sha256=/, '') !== expected)
+      return { ok: false, reason: 'signature_mismatch' };
   }
 
   return { ok: true, reason: 'verified' };
 }
 
 Deno.serve(async (req) => {
+  const context = createEdgeContext('edge.webhook-d4sign', req);
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  if (req.method !== 'POST') return jsonResponse(405, { ok: false, error: { code: 'method_not_allowed', message: 'Only POST is allowed.' }, meta: { timestamp } });
+  if (req.method !== 'POST') {
+    await logEdgeEvent(context, 'webhook_rejected', 'warn', 'denied', {
+      reason: 'method_not_allowed',
+    });
+    return jsonResponse(
+      405,
+      {
+        ok: false,
+        error: { code: 'method_not_allowed', message: 'Only POST is allowed.' },
+        meta: { timestamp },
+      },
+      observedEdgeHeaders(context)
+    );
+  }
 
   const rawBody = await req.text();
   let body: JsonRecord = {};
   try {
     body = toObject(JSON.parse(rawBody || '{}'));
   } catch {
-    return jsonResponse(400, { ok: false, error: { code: 'invalid_json', message: 'Invalid JSON payload.' }, meta: { timestamp } });
+    await logEdgeEvent(context, 'webhook_rejected', 'warn', 'failure', { reason: 'invalid_json' });
+    return jsonResponse(
+      400,
+      {
+        ok: false,
+        error: { code: 'invalid_json', message: 'Invalid JSON payload.' },
+        meta: { timestamp },
+      },
+      observedEdgeHeaders(context)
+    );
   }
 
   try {
     const authCheck = await isWebhookAuthentic(req, rawBody);
-    if (!authCheck.ok) return jsonResponse(401, { ok: false, error: { code: 'unauthorized_webhook', message: authCheck.reason }, meta: { timestamp } });
+    if (!authCheck.ok) {
+      await logEdgeEvent(context, 'webhook_signature_failed', 'warn', 'denied', {
+        reason: authCheck.reason,
+      });
+      return jsonResponse(
+        401,
+        {
+          ok: false,
+          error: { code: 'unauthorized_webhook', message: authCheck.reason },
+          meta: { timestamp },
+        },
+        observedEdgeHeaders(context)
+      );
+    }
 
-    const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    const eventType = getString(body.event, body.event_type, body.type, body.action, body.status) || 'unknown';
+    const eventType =
+      getString(body.event, body.event_type, body.type, body.action, body.status) || 'unknown';
     const providerEventId = getString(body.event_id, body.id, body.uuid);
-    const providerDocumentId = getString(body.provider_document_id, body.document_id, body.document_uuid, toObject(body.document).id, toObject(body.document).uuid);
-    const idempotencyKey = getString(body.idempotency_key, req.headers.get('idempotency-key'), providerEventId && `${providerEventId}:${eventType}`, providerDocumentId && `${providerDocumentId}:${eventType}`, crypto.randomUUID());
+    const providerDocumentId = getString(
+      body.provider_document_id,
+      body.document_id,
+      body.document_uuid,
+      toObject(body.document).id,
+      toObject(body.document).uuid
+    );
+    const idempotencyKey = getString(
+      body.idempotency_key,
+      req.headers.get('idempotency-key'),
+      providerEventId && `${providerEventId}:${eventType}`,
+      providerDocumentId && `${providerDocumentId}:${eventType}`,
+      crypto.randomUUID()
+    );
 
-    const { data: existingEvent, error: existingEventError } = await supabase.from('d4sign_events').select('id').eq('idempotency_key', idempotencyKey).maybeSingle();
+    const { data: existingEvent, error: existingEventError } = await supabase
+      .from('d4sign_events')
+      .select('id')
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle();
     if (existingEventError) throw existingEventError;
-    if (existingEvent) return jsonResponse(200, { ok: true, duplicate: true, data: { idempotency_key: idempotencyKey, event_id: existingEvent.id }, meta: { timestamp } });
+    if (existingEvent) {
+      await logEdgeEvent(context, 'webhook_duplicate', 'info', 'success', {
+        provider: 'd4sign',
+        event_type: eventType,
+      });
+      return jsonResponse(
+        200,
+        {
+          ok: true,
+          duplicate: true,
+          data: { idempotency_key: idempotencyKey, event_id: existingEvent.id },
+          meta: { timestamp },
+        },
+        observedEdgeHeaders(context)
+      );
+    }
 
     const { data: signatureRequest, error: signatureRequestError } = await supabase
       .from('signature_requests')
@@ -125,10 +227,27 @@ Deno.serve(async (req) => {
 
     if (signatureRequestError) throw signatureRequestError;
     if (!signatureRequest) {
-      return jsonResponse(202, { ok: true, ignored: true, reason: 'signature_request_not_found', data: { provider_document_id: providerDocumentId, idempotency_key: idempotencyKey }, meta: { timestamp } });
+      await logEdgeEvent(context, 'webhook_ignored', 'warn', 'skipped', {
+        provider: 'd4sign',
+        reason: 'signature_request_not_found',
+        provider_document_id: providerDocumentId,
+      });
+      return jsonResponse(
+        202,
+        {
+          ok: true,
+          ignored: true,
+          reason: 'signature_request_not_found',
+          data: { provider_document_id: providerDocumentId, idempotency_key: idempotencyKey },
+          meta: { timestamp },
+        },
+        observedEdgeHeaders(context)
+      );
     }
 
-    const normalizedStatus = normalizeStatus(getString(body.status, body.event, body.event_type, body.type));
+    const normalizedStatus = normalizeStatus(
+      getString(body.status, body.event, body.event_type, body.type)
+    );
 
     const { data: insertedEvent, error: insertEventError } = await supabase
       .from('d4sign_events')
@@ -161,7 +280,11 @@ Deno.serve(async (req) => {
     if (normalizedStatus === 'canceled') signaturePatch.canceled_at = timestamp;
     if (normalizedStatus === 'expired') signaturePatch.expires_at = timestamp;
 
-    const { error: updateRequestError } = await supabase.from('signature_requests').update(signaturePatch).eq('id', signatureRequest.id).eq('tenant_id', signatureRequest.tenant_id);
+    const { error: updateRequestError } = await supabase
+      .from('signature_requests')
+      .update(signaturePatch)
+      .eq('id', signatureRequest.id)
+      .eq('tenant_id', signatureRequest.tenant_id);
     if (updateRequestError) throw updateRequestError;
 
     const signers = Array.isArray(body.signers) ? body.signers : [];
@@ -173,7 +296,11 @@ Deno.serve(async (req) => {
 
       let query = supabase
         .from('signature_signers')
-        .update({ status: signatureToSignerStatus(specificStatus), signed_at: specificStatus === 'signed' ? timestamp : null, updated_at: timestamp })
+        .update({
+          status: signatureToSignerStatus(specificStatus),
+          signed_at: specificStatus === 'signed' ? timestamp : null,
+          updated_at: timestamp,
+        })
         .eq('signature_request_id', signatureRequest.id)
         .eq('tenant_id', signatureRequest.tenant_id);
 
@@ -186,7 +313,11 @@ Deno.serve(async (req) => {
     }
 
     if (normalizedStatus === 'signed') {
-      const { error: generatedDocumentError } = await supabase.from('generated_documents').update({ status: 'signed', updated_at: timestamp }).eq('id', signatureRequest.generated_document_id).eq('tenant_id', signatureRequest.tenant_id);
+      const { error: generatedDocumentError } = await supabase
+        .from('generated_documents')
+        .update({ status: 'signed', updated_at: timestamp })
+        .eq('id', signatureRequest.generated_document_id)
+        .eq('tenant_id', signatureRequest.tenant_id);
       if (generatedDocumentError) throw generatedDocumentError;
 
       const { error: timelineError } = await supabase.from('patient_timeline_events').insert({
@@ -210,12 +341,39 @@ Deno.serve(async (req) => {
       if (timelineError) throw timelineError;
     }
 
-    return jsonResponse(200, { ok: true, processed: true, data: { idempotency_key: idempotencyKey, signature_request_id: signatureRequest.id, status: normalizedStatus }, meta: { timestamp } });
+    await logEdgeEvent(context, 'webhook_processed', 'info', 'success', {
+      provider: 'd4sign',
+      event_type: eventType,
+      status: normalizedStatus,
+      tenant_id: signatureRequest.tenant_id,
+    });
+    return jsonResponse(
+      200,
+      {
+        ok: true,
+        processed: true,
+        data: {
+          idempotency_key: idempotencyKey,
+          signature_request_id: signatureRequest.id,
+          status: normalizedStatus,
+        },
+        meta: { timestamp },
+      },
+      observedEdgeHeaders(context)
+    );
   } catch (error) {
-    console.error('[webhook-d4sign] unexpected_error', {
-      message: error instanceof Error ? error.message : String(error),
+    await logEdgeEvent(context, 'webhook_unexpected_error', 'error', 'failure', {
+      error_message: error instanceof Error ? error.message : String(error),
     });
 
-    return jsonResponse(500, { ok: false, error: { code: 'internal_error', message: 'Unexpected server error.' }, meta: { timestamp } });
+    return jsonResponse(
+      500,
+      {
+        ok: false,
+        error: { code: 'internal_error', message: 'Unexpected server error.' },
+        meta: { timestamp },
+      },
+      observedEdgeHeaders(context)
+    );
   }
 });
