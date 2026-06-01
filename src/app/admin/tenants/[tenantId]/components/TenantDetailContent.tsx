@@ -10,25 +10,22 @@ import {
   ArrowLeft,
   Ban,
   Building2,
-  ChevronRight,
   ClipboardList,
   Clock,
   CreditCard,
   Headphones,
   Key,
   Link2,
-  LogOut,
   Mail,
   MapPin,
   Phone,
-  RefreshCw,
   Shield,
   Unlock,
   User,
   Users,
   Webhook,
 } from 'lucide-react';
-import AppLogo from '@/components/ui/AppLogo';
+import AdminShell from '@/app/admin/components/AdminShell';
 import {
   decidePlatformBreakGlass,
   getTenantDetail,
@@ -145,80 +142,6 @@ function SectionCard({
       </div>
       {children}
     </div>
-  );
-}
-
-function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const navItems = [
-    { key: 'overview', label: 'Visao Geral', href: '/admin', icon: Activity },
-    { key: 'tenants', label: 'Gestao de Tenants', href: '/admin/tenants', icon: Building2 },
-    { key: 'webhooks', label: 'Webhooks', href: '/admin/webhooks', icon: Webhook },
-  ];
-
-  return (
-    <aside
-      className={`flex flex-shrink-0 flex-col border-r border-border bg-card sidebar-transition ${collapsed ? 'w-16' : 'w-56'}`}
-    >
-      <div
-        className={`flex items-center border-b border-border py-4 ${collapsed ? 'justify-center px-2' : 'gap-2 px-4'}`}
-      >
-        <AppLogo size={28} />
-        {!collapsed ? (
-          <div className="flex flex-col leading-none">
-            <span className="text-xs font-bold tracking-tight text-foreground">SlimHiper</span>
-            <span className="text-xs font-semibold text-primary">Admin</span>
-          </div>
-        ) : null}
-      </div>
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3 scrollbar-thin">
-        {navItems.map((item) => {
-          const ItemIcon = item.icon;
-          const active = item.key === 'tenants';
-          return (
-            <Link
-              key={item.key}
-              href={item.href}
-              className={`flex items-center rounded-xl transition-all ${
-                collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
-              } ${
-                active
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
-              }`}
-            >
-              <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
-              {!collapsed ? (
-                <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>
-                  {item.label}
-                </span>
-              ) : null}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="border-t border-border p-2">
-        {!collapsed ? (
-          <div className="mb-1 flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 hover:bg-muted">
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
-              <User size={12} className="text-primary" />
-            </div>
-            <div className="flex min-w-0 flex-col leading-none">
-              <span className="truncate text-xs font-semibold text-foreground">Platform Admin</span>
-              <span className="text-xs text-muted-foreground">Operacoes</span>
-            </div>
-            <LogOut size={12} className="ml-auto text-muted-foreground" />
-          </div>
-        ) : null}
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex w-full items-center justify-center gap-1 rounded-xl py-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
-        >
-          <ChevronRight size={14} className={collapsed ? '' : 'rotate-180'} />
-          {!collapsed ? 'Recolher' : null}
-        </button>
-      </div>
-    </aside>
   );
 }
 
@@ -780,7 +703,6 @@ function TabContent({
 export default function TenantDetailContent() {
   const params = useParams();
   const tenantId = params?.tenantId as string;
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<TenantTab>('overview');
   const [detail, setDetail] = useState<AdminTenantDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -867,111 +789,98 @@ export default function TenantDetailContent() {
   const tenant = detail.tenant;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed((value) => !value)}
-      />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex flex-shrink-0 items-center gap-3 border-b border-border bg-card px-6 py-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Link href="/admin" className="hover:text-primary">
-              Admin
+    <AdminShell
+      activeSection="tenants"
+      onRefresh={loadDetail}
+      mainClassName="flex-1 overflow-y-auto scrollbar-thin"
+      breadcrumbs={
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Link href="/admin" className="hover:text-primary">
+            Admin
+          </Link>
+          <span>/</span>
+          <Link href="/admin/tenants" className="hover:text-primary">
+            Gestao de Tenants
+          </Link>
+          <span>/</span>
+          <span className="font-medium text-foreground">{tenant.clinicName}</span>
+        </div>
+      }
+    >
+      <div className="border-b border-border bg-card px-6 pb-4 pt-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <Link
+              href="/admin/tenants"
+              className="mt-1 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ArrowLeft size={16} />
             </Link>
-            <ChevronRight size={12} />
-            <Link href="/admin/tenants" className="hover:text-primary">
-              Gestao de Tenants
-            </Link>
-            <ChevronRight size={12} />
-            <span className="font-medium text-foreground">{tenant.clinicName}</span>
-          </div>
-          <button
-            type="button"
-            onClick={loadDetail}
-            className="ml-auto flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-          >
-            <RefreshCw size={12} />
-            Atualizar
-          </button>
-        </header>
-
-        <main className="flex-1 overflow-y-auto scrollbar-thin">
-          <div className="border-b border-border bg-card px-6 pb-4 pt-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <Link
-                  href="/admin/tenants"
-                  className="mt-1 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  <ArrowLeft size={16} />
-                </Link>
+            <div>
+              <div className="mb-1.5 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <Building2 size={20} className="text-primary" />
+                </div>
                 <div>
-                  <div className="mb-1.5 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                      <Building2 size={20} className="text-primary" />
-                    </div>
-                    <div>
-                      <h1 className="text-xl font-bold text-foreground">{tenant.clinicName}</h1>
-                      <div className="mt-0.5 flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{tenant.id}</span>
-                        <TenantStatusBadge status={tenant.status} />
-                        <StateBadge tone="blue">{tenant.plan}</StateBadge>
-                      </div>
-                    </div>
+                  <h1 className="text-xl font-bold text-foreground">{tenant.clinicName}</h1>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <span className="font-mono text-xs text-muted-foreground">{tenant.id}</span>
+                    <TenantStatusBadge status={tenant.status} />
+                    <StateBadge tone="blue">{tenant.plan}</StateBadge>
                   </div>
-                  <p className="ml-14 text-sm text-muted-foreground">
-                    {tenant.owner} - {tenant.email} - Criado em {formatDate(tenant.createdAt)}
-                  </p>
                 </div>
               </div>
-              <div className="flex flex-shrink-0 items-center gap-2">
-                <StateBadge tone={tenant.openSupportSessions > 0 ? 'amber' : 'slate'}>
-                  {tenant.openSupportSessions} suporte
-                </StateBadge>
-                <StateBadge tone={tenant.pendingBreakGlass > 0 ? 'red' : 'slate'}>
-                  {tenant.pendingBreakGlass} break-glass
-                </StateBadge>
-              </div>
+              <p className="ml-14 text-sm text-muted-foreground">
+                {tenant.owner} - {tenant.email} - Criado em {formatDate(tenant.createdAt)}
+              </p>
             </div>
+          </div>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <StateBadge tone={tenant.openSupportSessions > 0 ? 'amber' : 'slate'}>
+              {tenant.openSupportSessions} suporte
+            </StateBadge>
+            <StateBadge tone={tenant.pendingBreakGlass > 0 ? 'red' : 'slate'}>
+              {tenant.pendingBreakGlass} break-glass
+            </StateBadge>
+          </div>
+        </div>
 
-            <div className="mt-5 flex items-center gap-1 overflow-x-auto scrollbar-thin">
-              {tabs.map((tab) => {
-                const TabIcon = tab.icon;
-                const isActive = activeTab === tab.key;
-                const count = 'count' in tab ? (tab.count ?? 0) : 0;
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setActiveTab(tab.key as TenantTab)}
-                    className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-all ${
-                      isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        <div className="mt-5 flex items-center gap-1 overflow-x-auto scrollbar-thin">
+          {tabs.map((tab) => {
+            const TabIcon = tab.icon;
+            const isActive = activeTab === tab.key;
+            const count = 'count' in tab ? (tab.count ?? 0) : 0;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key as TenantTab)}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium transition-all ${
+                  isActive
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                <TabIcon size={13} />
+                {tab.label}
+                {count > 0 ? (
+                  <span
+                    className={`min-w-[18px] rounded-full px-1.5 py-0.5 text-center text-xs font-bold ${
+                      isActive ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'
                     }`}
                   >
-                    <TabIcon size={13} />
-                    {tab.label}
-                    {count > 0 ? (
-                      <span
-                        className={`min-w-[18px] rounded-full px-1.5 py-0.5 text-center text-xs font-bold ${
-                          isActive ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {count}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-5 p-6">
-            <TabContent activeTab={activeTab} detail={detail} onReload={loadDetail} />
-          </div>
-        </main>
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </div>
+
+      <div className="space-y-5 p-6">
+        <TabContent activeTab={activeTab} detail={detail} onReload={loadDetail} />
+      </div>
+    </AdminShell>
   );
 }
