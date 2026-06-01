@@ -13,6 +13,7 @@ import {
   FileText,
   CreditCard,
   Settings,
+  BarChart3,
   ChevronLeft,
   ChevronRight,
   Bell,
@@ -45,6 +46,12 @@ const clinicNavItems: NavItem[] = [
     label: 'Financeiro',
     href: '/clinic/financeiro',
     icon: CreditCard,
+  },
+  {
+    key: 'nav-relatorios',
+    label: 'Relatórios',
+    href: '/clinic/reports',
+    icon: BarChart3,
   },
   { key: 'nav-configuracoes', label: 'Configurações', href: '/clinic/settings', icon: Settings },
 ];

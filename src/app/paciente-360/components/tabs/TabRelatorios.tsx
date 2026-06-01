@@ -18,6 +18,7 @@ import {
 import type { PatientReportDefinition } from '@/domain/types';
 import EmptyState from '@/components/EmptyState';
 import { getPatientReportDefinitions } from '@/services/reportsApi';
+import { createClinicReportRun, downloadClinicReportExport } from '@/services/clinicReportsApi';
 
 // Map iconKey strings to Lucide components
 const iconMap: Record<string, React.ElementType> = {
@@ -50,6 +51,8 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
   const [reports, setReports] = useState<PatientReportDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [runningAction, setRunningAction] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const loadReports = useCallback(async () => {
     setIsLoading(true);
@@ -73,6 +76,51 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
     void loadReports();
   }, [loadReports]);
 
+  async function runPatientReport(reportKey: string, exportFormat: 'csv' | 'pdf') {
+    setRunningAction(`${reportKey}:${exportFormat}`);
+    setActionMessage(null);
+
+    const today = new Date();
+    const from = new Date();
+    from.setDate(today.getDate() - 90);
+
+    const runResult = await createClinicReportRun({
+      reportKey,
+      exportFormat,
+      patientId,
+      filters: {
+        from: from.toISOString().slice(0, 10),
+        to: today.toISOString().slice(0, 10),
+        patientId,
+      },
+    });
+
+    if (runResult.error || !runResult.data) {
+      setActionMessage(runResult.error?.message ?? 'Falha ao executar relatorio do paciente.');
+      setRunningAction(null);
+      return;
+    }
+
+    const downloadResult = await downloadClinicReportExport(runResult.data);
+    if (downloadResult.error || !downloadResult.data) {
+      setActionMessage(downloadResult.error?.message ?? 'Relatorio gerado, mas o download falhou.');
+      setRunningAction(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(downloadResult.data.blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = downloadResult.data.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+
+    setActionMessage('Exportacao segura gerada e auditada. O link expira em poucos minutos.');
+    setRunningAction(null);
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -87,6 +135,12 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
           {reports.length} relatórios disponíveis
         </span>
       </div>
+
+      {actionMessage && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
+          {actionMessage}
+        </div>
+      )}
 
       {/* Report Cards Grid */}
       {isLoading ? (
@@ -115,8 +169,10 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
               iconColor: 'text-gray-600',
             };
             const disabledReason = card.exportImplemented
-              ? 'Executor de relatorio ainda nao foi publicado neste lote.'
+              ? 'Exportacao segura disponivel para este relatorio.'
               : 'Relatorio cadastrado sem exportacao habilitada.';
+            const pdfRunning = runningAction === `${card.key}:pdf`;
+            const csvRunning = runningAction === `${card.key}:csv`;
             return (
               <div
                 key={card.key}
@@ -154,38 +210,42 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
                   {/* Primary action */}
                   <button
                     type="button"
-                    disabled
+                    disabled={!card.exportImplemented || runningAction !== null}
                     title={disabledReason}
-                    className="btn-primary text-xs w-full gap-1.5 justify-center cursor-not-allowed opacity-55"
+                    onClick={() => void runPatientReport(card.key, 'csv')}
+                    className="btn-primary text-xs w-full gap-1.5 justify-center disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     <Eye size={13} />
-                    Ver relatório completo
+                    {csvRunning ? 'Gerando relatório...' : 'Ver relatório completo'}
                   </button>
 
                   {/* Secondary actions */}
                   <div className="grid grid-cols-3 gap-1.5">
                     <button
                       type="button"
-                      disabled
-                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5 cursor-not-allowed opacity-55"
+                      disabled={!card.exportImplemented || runningAction !== null}
+                      onClick={() => void runPatientReport(card.key, 'pdf')}
+                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5 disabled:cursor-not-allowed disabled:opacity-55"
                       title={disabledReason}
                     >
                       <FileDown size={12} />
-                      PDF
+                      {pdfRunning ? '...' : 'PDF'}
                     </button>
                     <button
                       type="button"
-                      disabled
-                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5 cursor-not-allowed opacity-55"
+                      disabled={!card.exportImplemented || runningAction !== null}
+                      onClick={() => void runPatientReport(card.key, 'csv')}
+                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5 disabled:cursor-not-allowed disabled:opacity-55"
                       title={disabledReason}
                     >
                       <Table2 size={12} />
-                      Excel
+                      CSV
                     </button>
                     <button
                       type="button"
-                      disabled
-                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5 cursor-not-allowed opacity-55"
+                      disabled={!card.exportImplemented || runningAction !== null}
+                      onClick={() => void runPatientReport(card.key, 'pdf')}
+                      className="btn-secondary text-[11px] gap-1 justify-center px-2 py-1.5 disabled:cursor-not-allowed disabled:opacity-55"
                       title={disabledReason}
                     >
                       <Printer size={12} />

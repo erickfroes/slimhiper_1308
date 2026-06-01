@@ -523,7 +523,7 @@ Fontes externas consultadas:
 
 - [ ] CRM: criar rota, service, funil, origem, eventos e conversao lead -> paciente. Pos-MVP por decisao do lote MVP clinico.
 - [ ] Estoque: criar rota, service, itens, lotes, validade, unidade, entrada/saida/ajuste e auditoria. Pos-MVP por decisao do lote MVP clinico.
-- [ ] Relatorios: criar `/clinic/reports`, filtros salvos, permissao `reports.read` e export seguro. Parcial MVP 360: `patient-reports` lista `report_definitions` ativas com `reports.read`; execucao/export seguem bloqueados ate contrato de `report_runs`.
+- [x] Relatorios: criar `/clinic/reports`, filtros salvos, permissao `reports.read` e export seguro. Evidencia PR 8.1: `/clinic/reports` executa apenas definicoes allowlist por Edge/RPC, persiste filtros em `report_runs`, exige `financial.read` para relatorios financeiros e `timeline.sensitive.read` para detalhamento sensivel, retorna export CSV/PDF por token curto auditado e reaproveita o contrato no Paciente 360.
 - [ ] Chat/notificacoes: criar envio real, unread count, retencao, moderacao e permissao por paciente/tenant.
 - [ ] App paciente: liberar somente apos linkage, RLS propria, documentos/financeiro/chat limitados ao proprio paciente. Parcial: linkage/RLS propria do vinculo ativo esta pronto; UI e contratos de dados scoped seguem pendentes.
 
@@ -679,7 +679,7 @@ Fontes externas consultadas:
 
 ### Fase 8 - Relatorios, Chat, Notificacoes E Portal
 
-- [ ] Criar modulo de relatorios clinicos com export seguro.
+- [x] Criar modulo de relatorios clinicos com export seguro. Evidencia PR 8.1: migration `20260601120000_180_clinic_reports_secure_exports.sql` adiciona contrato de executor/export em `report_runs`, RPCs allowlist `list_clinic_report_definitions`, `create_clinic_report_run`, `get_clinic_report_run` e `get_clinic_report_export`, expira token em 15 minutos e audita criacao/download; Edge Functions `clinic-reports` e `clinic-report-export` encapsulam execucao e download sem SQL livre; `clinicReportsApi`, rota `/clinic/reports` e `TabRelatorios` do Paciente 360 usam o mesmo contrato patient-scoped/clinic-scoped com loading, empty, error e bloqueio por permissao.
 - [ ] Criar chat/notificacoes reais com unread count.
 - [ ] Liberar app paciente minimo depois de RLS/linkage.
 - [ ] Criar retencao e moderacao para comunicacoes.
@@ -860,7 +860,7 @@ por linkage, RLS e smokes cross-patient/cross-tenant antes de abrir `/patient`.
 - [x] `feat/programs-builder-persistence`
 - [ ] `feat/clinic-settings-persistence`
 - [ ] `feat/platform-admin-real-data`
-- [ ] `feat/reports-clinic-module`
+- [x] `feat/reports-clinic-module`
 - [ ] `feat/chat-notifications-foundation`
 - [ ] `feat/patient-portal-linkage-minimum`
 - [ ] `feat/crm-leads-foundation`
@@ -869,10 +869,10 @@ por linkage, RLS e smokes cross-patient/cross-tenant antes de abrir `/patient`.
 
 ## Evidencia De Aceite Por PR
 
-- [ ] `git diff --check`.
-- [ ] `npm run type-check`.
-- [ ] `npm run lint`.
-- [ ] `npm run build`.
+- [x] `git diff --check`.
+- [x] `npm run type-check`.
+- [x] `npm run lint`.
+- [x] `npm run build`.
 - [ ] Caminhos tocados listados no resumo do PR.
 - [ ] Checks pulados justificados com motivo concreto e proximo passo.
 - [ ] Teste de fixture aplicavel ao modulo.
@@ -894,6 +894,7 @@ por linkage, RLS e smokes cross-patient/cross-tenant antes de abrir `/patient`.
 - [ ] `/clinic/agenda`: criar, alterar status, cancelar, fila e timezone.
 - [ ] `/clinic/documents`: templates, gerar, assinar, signed URL e erro.
 - [ ] `/clinic/financeiro`: resumo, cobrancas, inadimplencia e conciliacao.
+- [ ] `/clinic/reports`: definicoes, filtros, run/export seguro, forbidden financeiro/sensivel e download curto auditado.
 - [ ] `/clinic/programs`: lista, builder, publicar e enrollment.
 - [ ] `/clinic/settings`: salvar unidade, equipe, roles e integracoes.
 - [ ] `/admin`: guard plataforma e dashboard real.
