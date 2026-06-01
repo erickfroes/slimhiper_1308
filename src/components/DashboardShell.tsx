@@ -15,6 +15,7 @@ import {
   Settings,
   BarChart3,
   Inbox,
+  TrendingUp,
   ChevronLeft,
   ChevronRight,
   Bell,
@@ -43,6 +44,7 @@ const clinicNavItems: NavItem[] = [
   { key: 'nav-dashboard', label: 'Dashboard', href: '/clinic/dashboard', icon: LayoutDashboard },
   { key: 'nav-pacientes', label: 'Pacientes', href: '/clinic/patients', icon: Users },
   { key: 'nav-agenda', label: 'Agenda', href: '/clinic/agenda', icon: CalendarDays },
+  { key: 'nav-crm', label: 'CRM', href: '/clinic/crm', icon: TrendingUp },
   { key: 'nav-programas', label: 'Programas', href: '/clinic/programs', icon: BookOpen },
   {
     key: 'nav-documentos',
