@@ -539,6 +539,20 @@ export async function requestPlatformSupportSession(input: {
   }
 }
 
+export async function endPlatformSupportSession(sessionId: string) {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('end_platform_support_session', {
+      p_session_id: sessionId,
+    });
+
+    if (error) return { error: asServiceError(error, 'Falha ao encerrar suporte.') };
+    return { error: null as SafeServiceError | null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Falha ao encerrar suporte.') };
+  }
+}
+
 export async function requestPlatformBreakGlass(input: {
   tenantId: string;
   reason: string;
@@ -576,5 +590,20 @@ export async function decidePlatformBreakGlass(input: {
     return { error: null as SafeServiceError | null };
   } catch (error) {
     return { error: asServiceError(error, 'Falha ao decidir break-glass.') };
+  }
+}
+
+export async function revokePlatformBreakGlass(input: { requestId: string; reason: string }) {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('revoke_platform_break_glass', {
+      p_request_id: input.requestId,
+      p_reason: input.reason,
+    });
+
+    if (error) return { error: asServiceError(error, 'Falha ao revogar break-glass.') };
+    return { error: null as SafeServiceError | null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Falha ao revogar break-glass.') };
   }
 }

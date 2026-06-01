@@ -28,9 +28,11 @@ import {
 import AdminShell from '@/app/admin/components/AdminShell';
 import {
   decidePlatformBreakGlass,
+  endPlatformSupportSession,
   getTenantDetail,
   requestPlatformBreakGlass,
   requestPlatformSupportSession,
+  revokePlatformBreakGlass,
   type AdminBreakGlassRequest,
   type AdminSupportSession,
   type AdminTenantDetail,
@@ -426,6 +428,7 @@ function SupportTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
   const [reason, setReason] = useState('');
   const [priority, setPriority] = useState<AdminSupportSession['priority']>('medio');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [endingId, setEndingId] = useState<string | null>(null);
 
   const submit = async () => {
     setIsSubmitting(true);
@@ -443,6 +446,18 @@ function SupportTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
     toast.success('Sessao de suporte registrada com auditoria.');
     setSubject('');
     setReason('');
+    onReload();
+  };
+
+  const endSession = async (session: AdminSupportSession) => {
+    setEndingId(session.id);
+    const { error } = await endPlatformSupportSession(session.id);
+    setEndingId(null);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Sessao de suporte encerrada com auditoria.');
     onReload();
   };
 
@@ -504,6 +519,18 @@ function SupportTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
                 {session.reason ? (
                   <p className="mt-2 text-xs text-foreground">{session.reason}</p>
                 ) : null}
+                {session.status !== 'resolved' ? (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <button
+                      type="button"
+                      onClick={() => endSession(session)}
+                      disabled={endingId === session.id}
+                      className="btn-ghost px-3 py-1.5 text-xs text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Encerrar suporte
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ))
           )}
@@ -519,6 +546,8 @@ function BreakGlassTab({ detail, onReload }: { detail: AdminTenantDetail; onRelo
   const [durationMinutes, setDurationMinutes] = useState(120);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revocationReasons, setRevocationReasons] = useState<Record<string, string>>({});
 
   const submit = async () => {
     setIsSubmitting(true);
@@ -547,6 +576,26 @@ function BreakGlassTab({ detail, onReload }: { detail: AdminTenantDetail; onRelo
       return;
     }
     toast.success(`Break-glass ${decision === 'approved' ? 'aprovado' : 'negado'}.`);
+    onReload();
+  };
+
+  const revoke = async (request: AdminBreakGlassRequest) => {
+    setRevokingId(request.id);
+    const { error } = await revokePlatformBreakGlass({
+      requestId: request.id,
+      reason: revocationReasons[request.id] ?? '',
+    });
+    setRevokingId(null);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Break-glass revogado com auditoria.');
+    setRevocationReasons((current) => {
+      const next = { ...current };
+      delete next[request.id];
+      return next;
+    });
     onReload();
   };
 
@@ -672,6 +721,31 @@ function BreakGlassTab({ detail, onReload }: { detail: AdminTenantDetail; onRelo
                       Negar
                     </button>
                   </div>
+                ) : request.status === 'approved' ? (
+                  <div className="mt-3 space-y-2 border-t border-border pt-3">
+                    <textarea
+                      value={revocationReasons[request.id] ?? ''}
+                      onChange={(event) =>
+                        setRevocationReasons((current) => ({
+                          ...current,
+                          [request.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="Motivo auditavel da revogacao. Minimo de 12 caracteres."
+                      className="input-base min-h-20 w-full text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => revoke(request)}
+                      disabled={
+                        revokingId === request.id ||
+                        (revocationReasons[request.id]?.trim().length ?? 0) < 12
+                      }
+                      className="btn-ghost px-3 py-1.5 text-xs text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Revogar acesso
+                    </button>
+                  </div>
                 ) : null}
               </div>
             ))
@@ -746,7 +820,7 @@ export default function TenantDetailContent() {
               key: 'support',
               label: 'Suporte',
               icon: Headphones,
-              count: detail.supportSessions.filter((item) => item.status === 'open').length,
+              count: detail.supportSessions.filter((item) => item.status !== 'resolved').length,
             },
             {
               key: 'breakglass',

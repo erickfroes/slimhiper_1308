@@ -204,13 +204,34 @@ async function run() {
     if (decisionError) throw decisionError;
     ok(decision.status === 'approved', 'Break-glass request should be approved.');
 
+    currentStep = 'ending support session';
+    const { data: endedSupport, error: endSupportError } = await platformAdmin.rpc(
+      'end_platform_support_session',
+      {
+        p_session_id: support.id,
+      }
+    );
+    if (endSupportError) throw endSupportError;
+    ok(endedSupport.status === 'ended', 'Support session should be ended.');
+
+    currentStep = 'revoking approved break-glass';
+    const { data: revokedBreakGlass, error: revokeError } = await approver.rpc(
+      'revoke_platform_break_glass',
+      {
+        p_request_id: breakGlass.id,
+        p_reason: 'Phase 7 local smoke revocation reason',
+      }
+    );
+    if (revokeError) throw revokeError;
+    ok(revokedBreakGlass.status === 'expired', 'Break-glass request should be revoked/expired.');
+
     currentStep = 'verifying audit rows';
     const { count: auditCount, error: auditError } = await admin
       .from('audit_logs')
       .select('id', { count: 'exact', head: true })
       .in('entity_id', [createdIds.supportSessionId, createdIds.breakGlassId]);
     if (auditError) throw auditError;
-    ok((auditCount ?? 0) >= 3, 'Expected audit rows for support and break-glass lifecycle.');
+    ok((auditCount ?? 0) >= 5, 'Expected audit rows for support and break-glass lifecycle.');
 
     console.log('Phase 7 platform admin local smoke passed.');
   } finally {
