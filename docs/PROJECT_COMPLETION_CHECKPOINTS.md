@@ -304,7 +304,7 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 7 - Admin/settings/auditoria  | Implementada aguardando validacao local | Settings tenant/unidade persistem por RPC auditada; migration `150` adiciona RPCs sanitizados para admin tenants/detalhe/webhooks e mutators auditados de support/break-glass; migration `170` adiciona mutator auditado de role/status/unidade; convite Auth Admin agora passa por rota server-side com service role backend, valida tenant/role/unidade, cria/atualiza perfil, membership `invited` e audit log; telas admin usam `adminApi` real e `AdminShell`. Pendentes por ambiente: aplicar/validar migrations e smoke Fase 7 quando Docker/Postgres e env Supabase estiverem disponiveis.                                                                                                                                                                                                                                                                                                    |
 | Fase 8 - Relatorios/chat/portal    | Parcial                                 | Bases de relatorios/chat no Paciente 360 existem; modulo clinico, notificacoes, moderacao e portal paciente seguem pendentes/fail-closed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Fase 9 - CRM/estoque               | PR 9.5 implementada                     | Pre-requisitos revisados e mantidos: Fase 8 possui migrations 180-183 para relatorios/chat/portal/comunicacoes; PRs 9.1-9.4 entregaram fundacao RBAC/RLS/RPCs, CRM operacional com conversao idempotente, estoque ledger por lote/local e insights agregados em dashboard/relatorios. PR 9.5 adiciona `20260601233000_195_crm_inventory_governance_hardening.sql` com snapshot agregado de governanca e helper service-role de retencao dry-run/execucao explicita, `test-crm-inventory-phase9-local-smoke.mjs` com tenants A/B, permissoes negativas, deduplicacao, conversao, ledger, saldo negativo, auditoria, notificacoes e reports, e runbook `CRM_INVENTORY_GOVERNANCE_RUNBOOK.md` para LGPD/operacao. Nao houve `supabase db push`, provider API ou chamada externa; Supabase local/migration up e smoke mutante seguem pendentes quando Docker/Postgres/env Supabase estiverem disponiveis. |
-| Fase 10 - Producao/observabilidade | PR 10.2 implementada                    | Pre-requisitos revisados: PR 10.1 segue aplicada com CI bloqueante, matriz de ambientes, templates de variaveis, isolamento de previews e release/rollback; Fases 1-9 continuam gates antes de release, sem autorizacao de producao. PR 10.2 adiciona endpoint seguro `/api/health`, logs estruturados com request/correlation id no app e nos webhooks D4Sign/Asaas, dashboard admin `/admin/observability`, smoke read-only `scripts/observability/post-deploy-smoke.mjs`, variaveis de observabilidade nos templates e runbook `OBSERVABILITY_ALERTING_RUNBOOK.md` com metricas, alertas S1-S4, canais, owners, ack e teste de alerta controlado. Nao houve provider API, `supabase db push`, migrations, retries de webhook, leitura de `.env` ou promocao de ambiente. Backup/restore, incidentes e revisao LGPD final seguem nas PRs 10.3-10.5.                                                 |
+| Fase 10 - Producao/observabilidade | PR 10.3 implementada                    | Pre-requisitos revisados: PRs 10.1 e 10.2 seguem aplicadas com CI/release gates, segregacao de ambientes, smoke pos-deploy read-only, health seguro, logs redigidos, dashboard e alertas; Fases 1-9 continuam gates antes de release, sem autorizacao de producao. PR 10.3 adiciona `docs/operations/BACKUP_RESTORE_DR_RUNBOOK.md` com estrategia de backup para banco/storage/Edge/config/audit/release, RPO/RTO por familia de dados, roteiro de restore isolado, checks de integridade, politica de retencao/descarte e DR/mode degradado para Supabase, storage, hosting, D4Sign, Asaas e jobs; `docs/operations/BACKUP_RESTORE_EVIDENCE_TEMPLATE.md` padroniza evidencias redigidas de teste de restore. Nao houve provider API, `supabase db push`, migrations, restore real, rotacao de chaves, leitura de `.env` ou promocao de ambiente. Incidentes, rotacao/operacao diaria e revisao LGPD final seguem nas PRs 10.4-10.5.                                                 |
 
 ## Fontes Internas
 
@@ -1133,6 +1133,20 @@ chaves, leitura de `.env` ou promocao de ambiente._
   Edge Functions, Vercel/hosting, D4Sign, Asaas e jobs, incluindo modo degradado
   seguro e comunicacao ao cliente.
 
+_Status PR 10.3: implementado nesta branch. Os pre-requisitos das PRs 10.1
+e 10.2 foram mantidos e os gates pendentes de Fases 1-9 continuam bloqueadores
+de release, sem autorizacao de producao. `docs/operations/BACKUP_RESTORE_DR_RUNBOOK.md`
+documenta escopo de backup para banco Supabase/Postgres, storage, Edge
+Functions/configuracao, audit logs e artefatos de release; define RPO/RTO por
+prontuario/PII, documentos, financeiro, webhooks, CRM, estoque, relatorios,
+logs e auditoria; estabelece roteiro de restore isolado, checks pos-restore,
+politica de retencao/descarte e plano DR com modo degradado seguro para banco,
+storage, Edge Functions, hosting, D4Sign, Asaas e jobs. `docs/operations/BACKUP_RESTORE_EVIDENCE_TEMPLATE.md`
+cria o modelo de evidencia redigida para teste periodico ou restore
+emergencial. Nao foram chamadas APIs de providers, nao houve `supabase db push`,
+migrations, restore real, rotacao de chaves, leitura de `.env` ou promocao de
+ambiente._
+
 **PR 10.4 - Incidentes, rotacao de chaves, rollback e operacao diaria (`hardening/incident-runbooks`):**
 
 - Criar runbooks de incidente para vazamento/risco de PII, falha de autenticacao,
@@ -1231,7 +1245,7 @@ chaves, leitura de `.env` ou promocao de ambiente._
 - [x] `test/crm-inventory-hardening`
 - [x] `hardening/ci-cd-release-gates`
 - [x] `hardening/observability-alerting`
-- [ ] `hardening/backup-restore-dr`
+- [x] `hardening/backup-restore-dr`
 - [ ] `hardening/incident-runbooks`
 - [ ] `hardening/lgpd-security-readiness`
 
@@ -1274,7 +1288,7 @@ chaves, leitura de `.env` ou promocao de ambiente._
 
 - [x] Confirmar se o portal paciente entra no MVP ou fica explicitamente bloqueado ate depois do core clinico. Decisao: bloqueado/fail-closed no MVP clinico.
 - [x] Confirmar se D4Sign e Asaas devem ser requisitos do MVP ou entram como fase sandbox antes da producao. Decisao: fixtures locais e fluxo gated, sem provider real neste lote.
-- [ ] Definir politica de retencao para raw payloads de Asaas e logs de webhooks.
+- [x] Definir politica de retencao para raw payloads de Asaas e logs de webhooks. Decisao PR 10.3: evitar payload bruto; manter resumo operacional/hash/idempotency enquanto necessario para auditoria e redigir/descartar payload bruto conforme runbook de backup/retencao.
 - [ ] Definir se teleconsulta/prescricao digital/TISS entram no roadmap curto ou ficam fora do escopo inicial.
 - [ ] Definir o nivel de certificacao/compliance desejado para prontuario, assinatura digital e guarda documental.
 - [x] Definir escopo inicial de CRM e estoque: minimo operacional ou paridade com concorrentes. Decisao: CRM e estoque ficam pos-MVP.
