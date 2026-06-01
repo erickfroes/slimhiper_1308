@@ -303,7 +303,7 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 6 - Programas/pacotes         | Concluida para MVP local                | `programsApi`, builder persistente, publish/archive/clone, enrollment, agenda inicial, invoice local, tarefas de documentos obrigatorios e `patient_program_checkins` reais passaram em smoke local; Patient 360 pacotes exibe check-ins gerados. Submissao portal de check-ins e chamadas provider derivadas da invoice/tarefas ficam pos-MVP.                                                                                                                                                                                                                                                    |
 | Fase 7 - Admin/settings/auditoria  | Implementada aguardando validacao local | Settings tenant/unidade persistem por RPC auditada; migration `150` adiciona RPCs sanitizados para admin tenants/detalhe/webhooks e mutators auditados de support/break-glass; migration `170` adiciona mutator auditado de role/status/unidade; convite Auth Admin agora passa por rota server-side com service role backend, valida tenant/role/unidade, cria/atualiza perfil, membership `invited` e audit log; telas admin usam `adminApi` real e `AdminShell`. Pendentes por ambiente: aplicar/validar migrations e smoke Fase 7 quando Docker/Postgres e env Supabase estiverem disponiveis. |
 | Fase 8 - Relatorios/chat/portal    | Parcial                                 | Bases de relatorios/chat no Paciente 360 existem; modulo clinico, notificacoes, moderacao e portal paciente seguem pendentes/fail-closed.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Fase 9 - CRM/estoque               | Pos-MVP                                 | Mantido fora do MVP inicial por decisao registrada.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Fase 9 - CRM/estoque               | Planejada pos-MVP                      | Plano completo documentado para CRM, conversao lead -> paciente, estoque ledger-based por lote/validade/unidade, integracoes, governanca, smokes e gates de conclusao; implementacao permanece pos-MVP ate autorizacao explicita.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Fase 10 - Producao/observabilidade | Pendente                                | CI/CD, monitoramento, backup/restore e revisao LGPD final ainda pendentes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ## Fontes Internas
@@ -839,6 +839,186 @@ _Status PR 8.4: implementado nesta branch. A governanca adiciona campos/tabela d
 - [ ] Criar estoque com itens, lotes, validade, unidades e movimentacoes.
 - [ ] Integrar CRM e estoque a relatorios e auditoria.
 
+#### Plano De Implementacao Completo Da Fase 9
+
+**Objetivo da fase:**
+
+Levar CRM e estoque de pos-MVP para um modulo operacional seguro, multi-tenant e
+auditavel, sem reabrir riscos do MVP clinico. A fase deve entregar captacao e
+conversao de leads, pipeline comercial, controle de inventario por lote/validade,
+movimentacoes auditadas e reflexos em relatorios, agenda, financeiro e Paciente
+360 somente quando houver autorizacao clinica/tenant correta.
+
+**Escopo funcional obrigatorio:**
+
+- CRM: leads, origem/campanha, responsavel, consentimento de contato, funil,
+  tarefas comerciais, atividades, anexos seguros, deduplicacao por telefone/e-mail
+  normalizados e conversao controlada para paciente.
+- Estoque: catalogo de itens, categorias, unidades de medida, locais de estoque,
+  lotes, validade, custo, saldo atual, minimo, reserva, perdas, ajustes e
+  transferencia entre unidades quando habilitado.
+- Integracoes: relatorios clinico-operacionais, dashboard, auditoria, timeline
+  quando lead vira paciente, financeiro apenas apos conversao, agenda para
+  consulta inicial opcional e alertas/notificacoes in-app.
+- Fora do escopo da fase, salvo tarefa explicita posterior: marketing outbound
+  por WhatsApp/e-mail/SMS, compra automatica com fornecedores, emissao fiscal,
+  integracoes externas de CRM/ERP e chamadas provider reais.
+
+**Pre-condicoes e decisoes de seguranca:**
+
+- Fase 8 precisa estar aplicada ou explicitamente compatibilizada para usar
+  notificacoes, relatorios e portal sem duplicar contratos.
+- Nao criar writes diretos amplos no browser para tabelas de CRM/estoque que
+  exigem validacao de tenant, unidade, permissao, LGPD ou consistencia de saldo;
+  preferir RPCs auditadas.
+- Separar permissoes RBAC novas: `crm.read`, `crm.write`, `crm.convert`,
+  `inventory.read`, `inventory.write`, `inventory.adjust`, `inventory.transfer`
+  e `inventory.cost.read` quando custo/margem nao deve ser visivel para toda a
+  equipe.
+- Dados de lead sao dados pessoais: armazenar consentimento, origem, finalidade,
+  opt-out, data de expiracao/retencao e evitar expor PII em logs, erros,
+  notificacoes e relatorios agregados.
+- Conversao lead -> paciente deve ser idempotente, auditada e protegida contra
+  duplicidade/cross-tenant; nao deve sobrescrever PII clinica existente sem
+  confirmacao explicita.
+- Estoque deve ser ledger-based: saldo calculado/atualizado por movimentacoes
+  transacionais, nunca por update manual do saldo no cliente.
+
+**Inventario tecnico inicial a fazer antes do PR 9.1:**
+
+- Mapear rotas, componentes e placeholders existentes para CRM/estoque em
+  `src/app`, `src/components`, `src/services`, `src/data` e `src/domain/types.ts`.
+- Confirmar se ja existem mocks ou links de navegacao para CRM/estoque e marcar
+  cada um como manter, substituir por contrato real ou remover.
+- Revisar migrations/RPCs existentes para `patients`, `appointments`,
+  `audit_logs`, `report_definitions`, `notifications`, `tenant_units` e RBAC
+  antes de criar novos contratos.
+- Definir se a primeira entrega usa unidades clinicas existentes como locais de
+  estoque ou cria `inventory_locations` independentes vinculados a
+  `tenant_units`.
+
+**PR 9.1 - Fundacao de dados, RBAC e auditoria (`feat/crm-inventory-contracts`):**
+
+- Criar migrations novas, sem editar migrations antigas, para tabelas de CRM:
+  `crm_leads`, `crm_pipeline_stages`, `crm_lead_activities`,
+  `crm_lead_tasks`, `crm_lead_consents`, `crm_lead_attachments` se necessario e
+  indices por tenant, status, responsavel, origem e datas.
+- Criar migrations novas para estoque: `inventory_items`,
+  `inventory_categories`, `inventory_locations`, `inventory_lots`,
+  `inventory_movements`, `inventory_stock_snapshots` opcional,
+  `inventory_reservations` opcional e tabelas auxiliares de unidade/custo quando
+  necessario.
+- Implementar RLS/grants por tenant e unidade, com leitura/escrita condicionada
+  a membership ativa e permissoes RBAC. Custo e ajustes devem ter politica mais
+  restritiva que consulta operacional.
+- Adicionar RPCs de contrato minimo: listar/criar/atualizar lead, mover etapa,
+  registrar atividade, listar itens/lotes/saldos, criar movimentacao, ajustar
+  estoque e consultar alertas de validade/minimo.
+- Criar seeds/bootstrap somente para permissoes e definicoes seguras; nao semear
+  leads reais, fornecedores reais ou dados pessoais.
+- Registrar audit log para criacao/alteracao de lead, mudanca de etapa,
+  consentimento/opt-out, conversao, criacao/alteracao de item/lote e todas as
+  movimentacoes de estoque.
+
+**PR 9.2 - CRM operacional e conversao lead -> paciente (`feat/crm-leads-pipeline`):**
+
+- Criar `crmApi` em `src/services` com envelopes `{ data, error }`, suporte a
+  mock somente sob `NEXT_PUBLIC_USE_MOCK_DATA=true` e contratos reais por RPC.
+- Implementar rota `/clinic/crm` com `DashboardShell`, funil kanban/lista,
+  filtros, busca, responsavel, origem/campanha, SLA, tarefas vencidas e estados
+  loading/empty/error/forbidden.
+- Implementar detalhe do lead com timeline comercial, consentimentos, tarefas,
+  atividades, notas redigidas sem dados sensiveis em logs e anexos apenas se
+  houver contrato de storage seguro.
+- Implementar conversao idempotente por RPC/Edge server-side: validar
+  `crm.convert`, tenant/unidade, consentimento/base legal, deduplicacao contra
+  paciente existente, criacao/associacao de `patients`/`patient_pii`, timeline e
+  audit log.
+- Permitir acao opcional de criar consulta inicial apos conversao usando os
+  contratos de agenda existentes, sem chamar financeiro/provider automaticamente.
+- Adicionar notificacoes in-app para lead atribuido, tarefa vencida, lead parado
+  no funil e conversao concluida/falha, respeitando preferencias da Fase 8.
+
+**PR 9.3 - Estoque operacional por lote, validade e unidade (`feat/inventory-operations`):**
+
+- Criar `inventoryApi` com leitura de catalogo, saldos, lotes, movimentacoes,
+  alertas, ajustes e transferencias por RPC; evitar updates diretos no cliente.
+- Implementar rota `/clinic/inventory` com visao de saldos, alertas de estoque
+  minimo, validade proxima/vencida, filtros por unidade/local/categoria e estados
+  loading/empty/error/forbidden.
+- Implementar cadastro/edicao de item com unidade de medida, categoria, ativo/
+  inativo, estoque minimo e visibilidade de custo condicionada a
+  `inventory.cost.read`.
+- Implementar recebimento, consumo, perda, ajuste e transferencia como
+  movimentacoes imutaveis no ledger, com motivo obrigatorio, responsavel, unidade
+  de origem/destino, lote e validade quando aplicavel.
+- Bloquear saldo negativo por padrao; qualquer excecao deve exigir permissao
+  explicita, motivo e auditoria.
+- Adicionar notificacoes in-app para estoque abaixo do minimo, lote vencido/
+  proximo do vencimento, ajuste manual e transferencia pendente/recebida.
+
+**PR 9.4 - Integracoes operacionais, relatorios e dashboards (`feat/crm-inventory-insights`):**
+
+- Integrar CRM aos relatorios seguros da Fase 8 com definicoes allowlist: leads
+  por origem, conversao por etapa, SLA de tarefas, responsavel, campanhas e
+  taxa de conversao para paciente, com agregacoes que evitem vazamento de PII.
+- Integrar estoque aos relatorios allowlist: saldo por unidade, giro, consumo,
+  perdas, lotes a vencer, ajustes por motivo e custo apenas para permissoes
+  autorizadas.
+- Atualizar dashboard clinico/operacional com cards discretos para leads
+  pendentes, tarefas comerciais vencidas, estoque critico e validade, sem
+  transformar workflows clinicos em tela de marketing.
+- Refletir conversao lead -> paciente na timeline do paciente e no audit log;
+  nao mostrar historico comercial sensivel no Paciente 360 sem finalidade
+  definida.
+- Adicionar links seguros em notificacoes e relatorios para `/clinic/crm`,
+  detalhe do lead convertido, `/clinic/inventory` e itens/lotes, sempre com
+  checagem server/RPC.
+
+**PR 9.5 - Governanca, retencao, smokes e hardening (`test/crm-inventory-hardening`):**
+
+- Criar scripts de smoke locais para CRM e estoque cobrindo tenant A/B,
+  permissoes positivas/negativas, deduplicacao, conversao idempotente, ledger de
+  estoque, bloqueio de saldo negativo e auditoria.
+- Criar fixtures deterministicas com dados dummy; nao usar dados reais de leads,
+  fornecedores, telefones, e-mails ou pacientes.
+- Documentar runbook LGPD/operacional: retencao de leads nao convertidos, opt-out,
+  exportacao/anonimizacao, descarte de anexos, inventario fisico, ajuste, perda,
+  recall por lote e trilha de auditoria.
+- Adicionar checks de regressao para relatorios e notificacoes criados na Fase 8,
+  garantindo que novos eventos de CRM/estoque nao quebrem inbox/header/export.
+- Preparar dados para browser smoke autenticado: usuario clinic admin, usuario
+  sem `crm.write`, usuario sem `inventory.adjust`, tenant B e rotas anonimas.
+
+**Checks obrigatorios da Fase 9:**
+
+- `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check`.
+- Smokes locais Supabase autorizados: contratos CRM, conversao lead -> paciente,
+  RLS cross-tenant/cross-unit, contratos estoque, ledger de movimentacoes,
+  auditoria, notificacoes e relatorios allowlist. Nao rodar `supabase db push`,
+  scripts mutantes em ambientes compartilhados ou provider APIs sem autorizacao
+  explicita.
+- Browser quando pratico: `/clinic/crm`, detalhe/conversao de lead,
+  `/clinic/inventory`, cadastro/recebimento/ajuste de item, alertas, dashboards
+  e relatorios relacionados. Verificar blank screen, overlay, console e pelo
+  menos uma interacao relevante por superficie.
+- Evidencias a registrar neste checkpoint ao concluir: migrations novas, RBAC,
+  RPCs, services, rotas/UI, smokes com comandos, skips por ambiente, riscos
+  remanescentes, decisao explicita sobre providers externos e impactos LGPD.
+
+**Gates de conclusao da Fase 9:**
+
+- CRM opera sem mocks por padrao, com pipeline real, tarefas, atividades,
+  consentimento e conversao lead -> paciente auditada e idempotente.
+- Estoque opera sem mocks por padrao, com catalogo, lotes, validade, saldo por
+  unidade/local e movimentacoes imutaveis auditadas.
+- RLS/RBAC bloqueia cross-tenant, cross-unit indevido e permissoes sensiveis de
+  conversao, ajuste, transferencia e custo.
+- Relatorios, dashboard, notificacoes e audit log mostram dados agregados/seguros
+  sem vazar PII, custo restrito ou historico comercial indevido.
+- Runbook LGPD/operacional e smokes locais ficam atualizados antes de considerar
+  a fase pronta para producao.
+
 ### Fase 10 - Producao, Observabilidade E Operacao
 
 - [ ] Configurar CI/CD, preview environments e variaveis por ambiente.
@@ -867,8 +1047,11 @@ _Status PR 8.4: implementado nesta branch. A governanca adiciona campos/tabela d
 - [x] `feat/reports-clinic-module`
 - [x] `feat/chat-notifications-foundation`
 - [ ] `feat/patient-portal-linkage-minimum`
-- [ ] `feat/crm-leads-foundation`
-- [ ] `feat/inventory-foundation`
+- [ ] `feat/crm-inventory-contracts`
+- [ ] `feat/crm-leads-pipeline`
+- [ ] `feat/inventory-operations`
+- [ ] `feat/crm-inventory-insights`
+- [ ] `test/crm-inventory-hardening`
 - [ ] `hardening/production-observability-security`
 
 ## Evidencia De Aceite Por PR
