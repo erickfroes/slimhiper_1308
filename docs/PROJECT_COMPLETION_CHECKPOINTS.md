@@ -680,7 +680,7 @@ Fontes externas consultadas:
 ### Fase 8 - Relatorios, Chat, Notificacoes E Portal
 
 - [x] Criar modulo de relatorios clinicos com export seguro. Evidencia PR 8.1: migration `20260601120000_180_clinic_reports_secure_exports.sql` adiciona contrato de executor/export em `report_runs`, RPCs allowlist `list_clinic_report_definitions`, `create_clinic_report_run`, `get_clinic_report_run` e `get_clinic_report_export`, expira token em 15 minutos e audita criacao/download; Edge Functions `clinic-reports` e `clinic-report-export` encapsulam execucao e download sem SQL livre; `clinicReportsApi`, rota `/clinic/reports` e `TabRelatorios` do Paciente 360 usam o mesmo contrato patient-scoped/clinic-scoped com loading, empty, error e bloqueio por permissao.
-- [ ] Criar chat/notificacoes reais com unread count.
+- [x] Criar chat/notificacoes reais com unread count. Evidencia PR 8.2: migration `20260601133000_181_chat_notifications_inbox_foundation.sql` adiciona RPC agregado `get_clinic_communications_summary`, inbox `list_clinic_inbox`, mutators auditados de notificacao/thread e triggers de notificacao in-app para chat, relatorios, documentos, financeiro e agenda; `notificationsApi`, `DashboardShell` e `/clinic/inbox` consomem contadores reais com badges, popovers, filtros e estados loading/empty/error; push/email/WhatsApp permanecem fora do escopo ate opt-in/provider/consentimento.
 - [ ] Liberar app paciente minimo depois de RLS/linkage.
 - [ ] Criar retencao e moderacao para comunicacoes.
 
@@ -861,7 +861,7 @@ por linkage, RLS e smokes cross-patient/cross-tenant antes de abrir `/patient`.
 - [ ] `feat/clinic-settings-persistence`
 - [ ] `feat/platform-admin-real-data`
 - [x] `feat/reports-clinic-module`
-- [ ] `feat/chat-notifications-foundation`
+- [x] `feat/chat-notifications-foundation`
 - [ ] `feat/patient-portal-linkage-minimum`
 - [ ] `feat/crm-leads-foundation`
 - [ ] `feat/inventory-foundation`

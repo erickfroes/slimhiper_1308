@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
@@ -14,14 +14,23 @@ import {
   CreditCard,
   Settings,
   BarChart3,
+  Inbox,
   ChevronLeft,
   ChevronRight,
   Bell,
+  AlertTriangle,
+  Check,
   Search,
   LogOut,
   User,
   MessageSquare,
 } from 'lucide-react';
+import {
+  getCommunicationsSummary,
+  markNotificationRead,
+  markThreadRead,
+  type CommunicationsSummary,
+} from '@/services/notificationsApi';
 
 interface NavItem {
   key: string;
@@ -53,6 +62,12 @@ const clinicNavItems: NavItem[] = [
     href: '/clinic/reports',
     icon: BarChart3,
   },
+  {
+    key: 'nav-inbox',
+    label: 'Inbox',
+    href: '/clinic/inbox',
+    icon: Inbox,
+  },
   { key: 'nav-configuracoes', label: 'Configurações', href: '/clinic/settings', icon: Settings },
 ];
 
@@ -60,12 +75,80 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
+function formatBadgeCount(count: number) {
+  if (count <= 0) return '';
+  return count > 99 ? '99+' : String(count);
+}
+
+function formatRelativeTimestamp(value: string) {
+  if (!value) return 'Sem data';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sem data';
+
+  const diffMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+  if (diffMinutes < 1) return 'Agora';
+  if (diffMinutes < 60) return `${diffMinutes} min`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} h`;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
 export default function DashboardShell({ children }: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
+  const [summary, setSummary] = useState<CommunicationsSummary | null>(null);
+  const [communicationsLoading, setCommunicationsLoading] = useState(true);
+  const [communicationsError, setCommunicationsError] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<'messages' | 'notifications' | null>(null);
+  const topbarMenuRef = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
   const router = useRouter();
+
+  const totalUnreadMessages = summary?.unreadMessages ?? 0;
+  const totalUnreadNotifications = summary?.unreadNotifications ?? 0;
+  const formattedUnreadMessages = formatBadgeCount(totalUnreadMessages);
+  const formattedUnreadNotifications = formatBadgeCount(totalUnreadNotifications);
+  const topMessages = useMemo(() => summary?.messages ?? [], [summary]);
+  const topNotifications = useMemo(() => summary?.notifications ?? [], [summary]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadSummary() {
+      setCommunicationsLoading(true);
+      const result = await getCommunicationsSummary();
+      if (!mounted) return;
+
+      if (result.error) {
+        setCommunicationsError('Nao foi possivel carregar inbox e notificacoes.');
+        setSummary(null);
+      } else {
+        setCommunicationsError(null);
+        setSummary(result.data);
+      }
+      setCommunicationsLoading(false);
+    }
+
+    void loadSummary();
+    const interval = window.setInterval(() => void loadSummary(), 60000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!topbarMenuRef.current?.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const isActive = (href: string) => {
     if (href === '/clinic/dashboard') return pathname === '/clinic/dashboard' || pathname === '/';
@@ -222,15 +305,195 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             />
           </form>
 
-          <div className="ml-auto flex items-center gap-2">
-            <button className="relative btn-ghost p-2">
-              <MessageSquare size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
-            </button>
-            <button className="relative btn-ghost p-2">
-              <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-negative rounded-full" />
-            </button>
+          <div className="ml-auto flex items-center gap-2" ref={topbarMenuRef}>
+            <div className="relative">
+              <button
+                type="button"
+                className="relative btn-ghost p-2"
+                aria-label={`Abrir inbox de conversas${totalUnreadMessages ? `, ${totalUnreadMessages} nao lidas` : ''}`}
+                aria-expanded={openMenu === 'messages'}
+                onClick={() =>
+                  setOpenMenu((current) => (current === 'messages' ? null : 'messages'))
+                }
+              >
+                <MessageSquare size={18} />
+                {communicationsLoading ? (
+                  <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-muted-foreground/50" />
+                ) : formattedUnreadMessages ? (
+                  <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-primary px-1 text-center text-[10px] font-bold leading-[18px] text-primary-foreground">
+                    {formattedUnreadMessages}
+                  </span>
+                ) : null}
+              </button>
+              {openMenu === 'messages' && (
+                <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Conversas</p>
+                      <p className="text-xs text-muted-foreground">Unread count real por tenant.</p>
+                    </div>
+                    <Link
+                      href="/clinic/inbox?tab=conversas"
+                      className="text-xs font-semibold text-primary"
+                      onClick={() => setOpenMenu(null)}
+                    >
+                      Ver inbox
+                    </Link>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto p-2">
+                    {communicationsError ? (
+                      <div
+                        role="alert"
+                        className="flex gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"
+                      >
+                        <AlertTriangle size={14} className="shrink-0" /> {communicationsError}
+                      </div>
+                    ) : communicationsLoading ? (
+                      <div className="space-y-2 p-2" aria-label="Carregando conversas">
+                        {[0, 1, 2].map((item) => (
+                          <div key={item} className="h-14 animate-pulse rounded-xl bg-muted" />
+                        ))}
+                      </div>
+                    ) : topMessages.length === 0 ? (
+                      <div className="rounded-xl p-4 text-center text-xs text-muted-foreground">
+                        Nenhuma conversa recente.
+                      </div>
+                    ) : (
+                      topMessages.map((message) => (
+                        <div key={message.id} className="rounded-xl p-2 hover:bg-muted/60">
+                          <div className="flex items-start gap-2">
+                            <Link
+                              href={message.href}
+                              className="min-w-0 flex-1"
+                              onClick={() => setOpenMenu(null)}
+                            >
+                              <span className="block truncate text-sm font-semibold text-foreground">
+                                {message.patientName}
+                              </span>
+                              <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                {message.body}
+                              </span>
+                              <span className="mt-1 block text-[11px] text-muted-foreground">
+                                {formatRelativeTimestamp(message.createdAt)} · {message.unreadCount}{' '}
+                                nao lidas
+                              </span>
+                            </Link>
+                            {message.unreadCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const result = await markThreadRead(message.threadId);
+                                  if (result.data) setSummary(result.data);
+                                }}
+                                className="btn-ghost p-1.5"
+                                aria-label={`Marcar conversa de ${message.patientName} como lida`}
+                              >
+                                <Check size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="relative">
+              <button
+                type="button"
+                className="relative btn-ghost p-2"
+                aria-label={`Abrir notificacoes${totalUnreadNotifications ? `, ${totalUnreadNotifications} nao lidas` : ''}`}
+                aria-expanded={openMenu === 'notifications'}
+                onClick={() =>
+                  setOpenMenu((current) => (current === 'notifications' ? null : 'notifications'))
+                }
+              >
+                <Bell size={18} />
+                {communicationsLoading ? (
+                  <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-muted-foreground/50" />
+                ) : formattedUnreadNotifications ? (
+                  <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-negative px-1 text-center text-[10px] font-bold leading-[18px] text-white">
+                    {formattedUnreadNotifications}
+                  </span>
+                ) : null}
+              </button>
+              {openMenu === 'notifications' && (
+                <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Notificacoes</p>
+                      <p className="text-xs text-muted-foreground">Somente itens autorizados.</p>
+                    </div>
+                    <Link
+                      href="/clinic/inbox?tab=notificacoes"
+                      className="text-xs font-semibold text-primary"
+                      onClick={() => setOpenMenu(null)}
+                    >
+                      Ver todas
+                    </Link>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto p-2">
+                    {communicationsError ? (
+                      <div
+                        role="alert"
+                        className="flex gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"
+                      >
+                        <AlertTriangle size={14} className="shrink-0" /> {communicationsError}
+                      </div>
+                    ) : communicationsLoading ? (
+                      <div className="space-y-2 p-2" aria-label="Carregando notificacoes">
+                        {[0, 1, 2].map((item) => (
+                          <div key={item} className="h-14 animate-pulse rounded-xl bg-muted" />
+                        ))}
+                      </div>
+                    ) : topNotifications.length === 0 ? (
+                      <div className="rounded-xl p-4 text-center text-xs text-muted-foreground">
+                        Nenhuma notificacao pendente.
+                      </div>
+                    ) : (
+                      topNotifications.map((notification) => (
+                        <div key={notification.id} className="rounded-xl p-2 hover:bg-muted/60">
+                          <div className="flex items-start gap-2">
+                            <Link
+                              href={notification.href}
+                              className="min-w-0 flex-1"
+                              onClick={() => setOpenMenu(null)}
+                            >
+                              <span className="block truncate text-sm font-semibold text-foreground">
+                                {notification.title}
+                              </span>
+                              <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                {notification.body || notification.category}
+                              </span>
+                              <span className="mt-1 block text-[11px] text-muted-foreground">
+                                {formatRelativeTimestamp(notification.createdAt)} ·{' '}
+                                {notification.category}
+                              </span>
+                            </Link>
+                            {notification.status === 'unread' && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const result = await markNotificationRead(
+                                    notification.notificationId
+                                  );
+                                  if (result.data) setSummary(result.data);
+                                }}
+                                className="btn-ghost p-1.5"
+                                aria-label={`Marcar notificacao ${notification.title} como lida`}
+                              >
+                                <Check size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={handleLogout}
