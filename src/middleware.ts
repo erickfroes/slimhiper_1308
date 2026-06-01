@@ -14,6 +14,7 @@ function getTargetRoute(context: MiddlewareUserContext) {
   if (context.canAccessPlatformAdmin) return '/admin';
   if (context.canAccessClinicWorkspace && context.hasActiveTenantMembership)
     return '/clinic/dashboard';
+  if (context.canAccessPatientPortal) return '/patient';
   return '/no-workspace';
 }
 
@@ -58,7 +59,7 @@ export async function middleware(request: NextRequest) {
       canAccessPlatformAdmin: appSession?.canAccessPlatformAdmin() ?? false,
       canAccessClinicWorkspace: appSession?.canAccessClinicWorkspace() ?? false,
       hasActiveTenantMembership,
-      canAccessPatientPortal: false,
+      canAccessPatientPortal: appSession?.canAccessPatientPortal() ?? false,
       sessionError: false,
     };
   } catch {

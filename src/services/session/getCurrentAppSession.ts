@@ -40,6 +40,7 @@ export interface AppSession {
   canViewFinancial: () => boolean;
   canViewMedicalPrescriptions: () => boolean;
   canManageTenantUsers: () => boolean;
+  canAccessPatientPortal: () => boolean;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -216,6 +217,10 @@ export async function getCurrentAppSession(
       hasAnyPermission(permissionSet, ['prescriptions.read', 'prescriptions.write']),
     canManageTenantUsers: () =>
       canManageByRole || hasAnyPermission(permissionSet, ['tenant.users.manage', 'settings.write']),
+    canAccessPatientPortal: () =>
+      activeMembership?.status === 'active' &&
+      ['patient', 'guardian'].includes(normalizedActiveRole) &&
+      hasAnyPermission(permissionSet, PERMISSIONS.PATIENT_PORTAL_ACCESS),
   };
 
   return session;

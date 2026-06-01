@@ -8,6 +8,7 @@ type AppSessionWithoutComputedBooleans = Omit<
   | 'isPatient'
   | 'canAccessPlatformAdmin'
   | 'canAccessClinicWorkspace'
+  | 'canAccessPatientPortal'
   | 'canViewFinancial'
   | 'canViewMedicalPrescriptions'
   | 'canManageTenantUsers'
@@ -35,6 +36,7 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
     isPatient: _isPatient,
     canAccessPlatformAdmin,
     canAccessClinicWorkspace,
+    canAccessPatientPortal,
     canViewFinancial,
     canViewMedicalPrescriptions,
     canManageTenantUsers: _canManageTenantUsers,
@@ -47,7 +49,7 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
     memberships,
     canAccessPlatformAdmin: canAccessPlatformAdmin(),
     canAccessClinicWorkspace: canAccessClinicWorkspace(),
-    canAccessPatientPortal: false,
+    canAccessPatientPortal: canAccessPatientPortal(),
     canViewFinancial: canViewFinancial(),
     canViewMedicalPrescriptions: canViewMedicalPrescriptions(),
   };
