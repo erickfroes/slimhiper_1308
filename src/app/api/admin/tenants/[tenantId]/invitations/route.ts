@@ -1,0 +1,249 @@
+import { NextResponse } from 'next/server';
+import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
+import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
+
+const INVITABLE_ROLES = new Set([
+  'tenant_owner',
+  'clinic_admin',
+  'receptionist',
+  'physician',
+  'nutritionist',
+  'fitness_professional',
+  'financial_user',
+  'external_professional',
+]);
+
+function jsonError(message: string, status: number) {
+  return NextResponse.json({ data: null, error: { message } }, { status });
+}
+
+function normalizeString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeEmail(value: unknown) {
+  return normalizeString(value).toLowerCase();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+async function findAuthUserByEmail(
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  email: string
+) {
+  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error) throw error;
+  return data.users.find((user) => user.email?.toLowerCase() === email) ?? null;
+}
+
+export async function POST(request: Request, context: { params: Promise<{ tenantId: string }> }) {
+  const session = await getCurrentAppSession();
+
+  if (!session) {
+    return jsonError('Sessao obrigatoria para convidar usuario.', 401);
+  }
+
+  const canInviteTenantUsers =
+    isPlatformOwnerRole(session.platformRole) || isPlatformAdminRole(session.platformRole);
+
+  if (!canAccessPlatformAdminFromSession(session) || !canInviteTenantUsers) {
+    return jsonError('Apenas administradores da plataforma podem convidar usuarios.', 403);
+  }
+
+  const { tenantId } = await context.params;
+  if (!isUuid(tenantId)) {
+    return jsonError('Tenant invalido.', 400);
+  }
+
+  const admin = createSupabaseAdminClient();
+  if (!admin) {
+    return jsonError('Supabase admin client nao configurado no servidor.', 503);
+  }
+
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) {
+    return jsonError('Payload JSON invalido.', 400);
+  }
+
+  const email = normalizeEmail(body.email);
+  const fullName = normalizeString(body.fullName);
+  const roleCode = normalizeString(body.roleCode);
+  const unitId = normalizeString(body.unitId) || null;
+  const reason = normalizeString(body.reason);
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return jsonError('E-mail invalido.', 400);
+  }
+
+  if (!INVITABLE_ROLES.has(roleCode)) {
+    return jsonError('Papel nao permitido para convite.', 400);
+  }
+
+  if (unitId && !isUuid(unitId)) {
+    return jsonError('Unidade invalida.', 400);
+  }
+
+  if (reason.length < 16) {
+    return jsonError('Informe um motivo auditavel com pelo menos 16 caracteres.', 400);
+  }
+
+  const { data: tenant, error: tenantError } = await admin
+    .from('tenants')
+    .select('id')
+    .eq('id', tenantId)
+    .maybeSingle();
+
+  if (tenantError) {
+    return jsonError('Falha ao validar tenant.', 500);
+  }
+
+  if (!tenant) {
+    return jsonError('Tenant nao encontrado.', 404);
+  }
+
+  const { data: role, error: roleError } = await admin
+    .from('roles')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('name', roleCode)
+    .maybeSingle();
+
+  if (roleError) {
+    return jsonError('Falha ao validar papel do tenant.', 500);
+  }
+
+  if (!role) {
+    return jsonError('Papel nao configurado para este tenant.', 400);
+  }
+
+  if (unitId) {
+    const { data: unit, error: unitError } = await admin
+      .from('tenant_units')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('id', unitId)
+      .maybeSingle();
+
+    if (unitError) {
+      return jsonError('Falha ao validar unidade.', 500);
+    }
+
+    if (!unit) {
+      return jsonError('Unidade nao encontrada para este tenant.', 404);
+    }
+  }
+
+  try {
+    let authUser = await findAuthUserByEmail(admin, email);
+    let inviteDelivery: 'existing_auth_user' | 'supabase_invite_sent' = 'existing_auth_user';
+
+    if (!authUser) {
+      const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
+        email,
+        {
+          data: {
+            full_name: fullName || undefined,
+            tenant_id: tenantId,
+            role_code: roleCode,
+          },
+        }
+      );
+
+      if (inviteError) throw inviteError;
+      if (!invited.user) throw new Error('Supabase Auth nao retornou usuario convidado.');
+      authUser = invited.user;
+      inviteDelivery = 'supabase_invite_sent';
+    }
+
+    const { error: profileError } = await admin.from('profiles').upsert(
+      {
+        id: authUser.id,
+        email,
+        full_name: fullName || authUser.user_metadata?.full_name || email,
+        platform_role: 'user',
+        active_tenant_id: tenantId,
+        is_active: true,
+      },
+      { onConflict: 'id' }
+    );
+
+    if (profileError) throw profileError;
+
+    const { data: existingMembership, error: existingMembershipError } = await admin
+      .from('tenant_memberships')
+      .select('id,status')
+      .eq('tenant_id', tenantId)
+      .eq('user_id', authUser.id)
+      .maybeSingle();
+
+    if (existingMembershipError) throw existingMembershipError;
+
+    if (existingMembership && !['invited', 'revoked'].includes(existingMembership.status)) {
+      return jsonError('Usuario ja possui vinculo ativo/suspenso. Use a edicao auditada.', 409);
+    }
+
+    const membershipPayload = {
+      tenant_id: tenantId,
+      user_id: authUser.id,
+      unit_id: unitId,
+      role_code: roleCode,
+      role: roleCode,
+      status: 'invited',
+      invited_by: session.userId,
+      accepted_at: null,
+    };
+
+    const membershipResult = existingMembership
+      ? await admin
+          .from('tenant_memberships')
+          .update(membershipPayload)
+          .eq('id', existingMembership.id)
+          .select('id,status,role_code,unit_id')
+          .single()
+      : await admin
+          .from('tenant_memberships')
+          .insert(membershipPayload)
+          .select('id,status,role_code,unit_id')
+          .single();
+
+    if (membershipResult.error) throw membershipResult.error;
+
+    const { error: auditError } = await admin.from('audit_logs').insert({
+      tenant_id: tenantId,
+      user_id: session.userId,
+      action: 'platform_tenant_membership.invited',
+      entity_type: 'tenant_membership',
+      entity_id: membershipResult.data.id,
+      metadata: {
+        reason,
+        targetUserId: authUser.id,
+        email,
+        roleCode,
+        unitId,
+        inviteDelivery,
+      },
+    });
+
+    if (auditError) throw auditError;
+
+    return NextResponse.json({
+      data: {
+        id: membershipResult.data.id,
+        tenantId,
+        userId: authUser.id,
+        email,
+        role: membershipResult.data.role_code,
+        status: membershipResult.data.status,
+        unitId: membershipResult.data.unit_id,
+        inviteDelivery,
+      },
+      error: null,
+    });
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : 'Falha ao convidar usuario.', 500);
+  }
+}

@@ -517,6 +517,45 @@ export async function getPlatformAdminSnapshot(): Promise<{
   };
 }
 
+export async function invitePlatformTenantUser(input: {
+  tenantId: string;
+  email: string;
+  fullName?: string;
+  roleCode: string;
+  unitId?: string | null;
+  reason: string;
+}) {
+  try {
+    const response = await fetch(`/api/admin/tenants/${input.tenantId}/invitations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: input.email,
+        fullName: input.fullName ?? '',
+        roleCode: input.roleCode,
+        unitId: input.unitId ?? null,
+        reason: input.reason,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as {
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        error: {
+          message: payload?.error?.message ?? 'Falha ao convidar usuario do tenant.',
+        } satisfies SafeServiceError,
+      };
+    }
+
+    return { error: null as SafeServiceError | null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Falha ao convidar usuario do tenant.') };
+  }
+}
+
 export async function updatePlatformTenantMembership(input: {
   tenantId: string;
   membershipId: string;
