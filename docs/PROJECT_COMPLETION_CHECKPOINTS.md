@@ -304,7 +304,7 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 7 - Admin/settings/auditoria  | Implementada aguardando validacao local | Settings tenant/unidade persistem por RPC auditada; migration `150` adiciona RPCs sanitizados para admin tenants/detalhe/webhooks e mutators auditados de support/break-glass; migration `170` adiciona mutator auditado de role/status/unidade; convite Auth Admin agora passa por rota server-side com service role backend, valida tenant/role/unidade, cria/atualiza perfil, membership `invited` e audit log; telas admin usam `adminApi` real e `AdminShell`. Pendentes por ambiente: aplicar/validar migrations e smoke Fase 7 quando Docker/Postgres e env Supabase estiverem disponiveis.                                                                                                                                                                                                                                                                                                    |
 | Fase 8 - Relatorios/chat/portal    | Parcial                                 | Bases de relatorios/chat no Paciente 360 existem; modulo clinico, notificacoes, moderacao e portal paciente seguem pendentes/fail-closed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Fase 9 - CRM/estoque               | PR 9.5 implementada                     | Pre-requisitos revisados e mantidos: Fase 8 possui migrations 180-183 para relatorios/chat/portal/comunicacoes; PRs 9.1-9.4 entregaram fundacao RBAC/RLS/RPCs, CRM operacional com conversao idempotente, estoque ledger por lote/local e insights agregados em dashboard/relatorios. PR 9.5 adiciona `20260601233000_195_crm_inventory_governance_hardening.sql` com snapshot agregado de governanca e helper service-role de retencao dry-run/execucao explicita, `test-crm-inventory-phase9-local-smoke.mjs` com tenants A/B, permissoes negativas, deduplicacao, conversao, ledger, saldo negativo, auditoria, notificacoes e reports, e runbook `CRM_INVENTORY_GOVERNANCE_RUNBOOK.md` para LGPD/operacao. Nao houve `supabase db push`, provider API ou chamada externa; Supabase local/migration up e smoke mutante seguem pendentes quando Docker/Postgres/env Supabase estiverem disponiveis. |
-| Fase 10 - Producao/observabilidade | PR 10.3 implementada                    | Pre-requisitos revisados: PRs 10.1 e 10.2 seguem aplicadas com CI/release gates, segregacao de ambientes, smoke pos-deploy read-only, health seguro, logs redigidos, dashboard e alertas; Fases 1-9 continuam gates antes de release, sem autorizacao de producao. PR 10.3 adiciona `docs/operations/BACKUP_RESTORE_DR_RUNBOOK.md` com estrategia de backup para banco/storage/Edge/config/audit/release, RPO/RTO por familia de dados, roteiro de restore isolado, checks de integridade, politica de retencao/descarte e DR/mode degradado para Supabase, storage, hosting, D4Sign, Asaas e jobs; `docs/operations/BACKUP_RESTORE_EVIDENCE_TEMPLATE.md` padroniza evidencias redigidas de teste de restore. Nao houve provider API, `supabase db push`, migrations, restore real, rotacao de chaves, leitura de `.env` ou promocao de ambiente. Incidentes, rotacao/operacao diaria e revisao LGPD final seguem nas PRs 10.4-10.5.                                                 |
+| Fase 10 - Producao/observabilidade | PR 10.4 implementada                    | Pre-requisitos revisados: PRs 10.1-10.3 seguem aplicadas com CI/release gates, segregacao de ambientes, smoke pos-deploy read-only, health seguro, logs redigidos, dashboard/alertas e backup/restore/DR; Fases 1-9 continuam gates antes de release, sem autorizacao de producao. PR 10.4 adiciona runbooks de incidente, rotacao de chaves/secrets, rollback tecnico, operacao diaria/semanal, break-glass auditado e template de exercicio/evidencia redigida em `docs/operations/INCIDENT_RESPONSE_RUNBOOK.md`, `docs/operations/SECRET_ROTATION_RUNBOOK.md`, `docs/operations/ROLLBACK_DAILY_OPERATIONS_RUNBOOK.md` e `docs/operations/INCIDENT_TABLETOP_EVIDENCE_TEMPLATE.md`. Nao houve provider API, `supabase db push`, migrations, restore real, rotacao real de chaves, leitura de `.env` ou promocao de ambiente. Revisao LGPD/security final segue na PR 10.5.                           |
 
 ## Fontes Internas
 
@@ -1167,6 +1167,26 @@ ambiente._
 - Garantir que suporte/break-glass tenha aprovacao, janela, auditoria, tempo de
   expiracao, justificativa obrigatoria e relatorio revisavel.
 
+_Status PR 10.4: implementado nesta branch. Os pre-requisitos das PRs 10.1-10.3
+foram mantidos e os gates pendentes de Fases 1-9 continuam bloqueadores de
+release, sem autorizacao de producao. `docs/operations/INCIDENT_RESPONSE_RUNBOOK.md`
+define principios, severidades S1-S4, playbook universal e runbooks especificos
+para PII/PHI, auth, RLS, agenda/prontuario, webhooks, divergencia financeira,
+assinatura documental, restore emergencial e suporte/break-glass auditado.
+`docs/operations/SECRET_ROTATION_RUNBOOK.md` documenta rotacao por ambiente para
+Supabase anon/service role, JWT/auth, storage, D4Sign, Asaas, webhooks, CI/CD,
+monitoring e credenciais de suporte, com ordem segura, validacao, rollback e
+evidencias redigidas. `docs/operations/ROLLBACK_DAILY_OPERATIONS_RUNBOOK.md`
+define rollback tecnico, roll-forward/rollback de migration, desativacao de Edge
+Function, feature flag segura, pausa de provider webhook, reprocessamento
+idempotente e checklists diario/semanal para filas, webhooks, financeiro, jobs,
+backups, alertas, admins, memberships, exports e break-glass.
+`docs/operations/INCIDENT_TABLETOP_EVIDENCE_TEMPLATE.md` padroniza evidencias de
+exercicio/incidente sem secrets, PII/PHI, payload bruto, storage path ou signed
+URL. Nao foram chamadas APIs de providers, nao houve `supabase db push`,
+migrations, restore real, rotacao real de chaves, leitura de `.env` ou promocao
+de ambiente._
+
 **PR 10.5 - Revisao LGPD/security final e readiness de producao (`hardening/lgpd-security-readiness`):**
 
 - Executar revisao de superficie de dados: inventario de PII/PHI, finalidade,
@@ -1246,7 +1266,7 @@ ambiente._
 - [x] `hardening/ci-cd-release-gates`
 - [x] `hardening/observability-alerting`
 - [x] `hardening/backup-restore-dr`
-- [ ] `hardening/incident-runbooks`
+- [x] `hardening/incident-runbooks`
 - [ ] `hardening/lgpd-security-readiness`
 
 ## Evidencia De Aceite Por PR
