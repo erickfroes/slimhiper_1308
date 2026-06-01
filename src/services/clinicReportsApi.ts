@@ -17,6 +17,9 @@ export interface ClinicReportDefinition {
   exportEnabled: boolean;
   requiresFinancialRead: boolean;
   requiresSensitiveRead: boolean;
+  requiresCrmRead?: boolean;
+  requiresInventoryRead?: boolean;
+  requiresInventoryCostRead?: boolean;
   canRun: boolean;
   disabledReason?: string | null;
 }
@@ -114,6 +117,9 @@ function normalizeDefinition(item: unknown): ClinicReportDefinition | null {
     exportEnabled: asBoolean(record.exportEnabled, true),
     requiresFinancialRead: asBoolean(record.requiresFinancialRead),
     requiresSensitiveRead: asBoolean(record.requiresSensitiveRead),
+    requiresCrmRead: asBoolean(record.requiresCrmRead),
+    requiresInventoryRead: asBoolean(record.requiresInventoryRead),
+    requiresInventoryCostRead: asBoolean(record.requiresInventoryCostRead),
     canRun: asBoolean(record.canRun, true),
     disabledReason: asString(record.disabledReason) || null,
   };

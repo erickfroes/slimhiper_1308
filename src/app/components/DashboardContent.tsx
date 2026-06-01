@@ -13,6 +13,8 @@ import {
   ChevronRight,
   Activity,
   RefreshCw,
+  UserPlus,
+  PackageSearch,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -303,6 +305,67 @@ export default function DashboardContent() {
           accent={stats.inadimplentes > 0 ? 'danger' : 'success'}
         />
       </div>
+
+      {stats.operationalInsights &&
+        (stats.operationalInsights.crm.canRead || stats.operationalInsights.inventory.canRead) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {stats.operationalInsights.crm.canRead && (
+              <Link
+                href={stats.operationalInsights.crm.href}
+                className="card-base p-5 border-sky-100 bg-sky-50/40 transition-colors hover:bg-sky-50"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
+                      <UserPlus size={18} />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
+                        CRM operacional
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">
+                        {stats.operationalInsights.crm.openLeads} leads pendentes
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {stats.operationalInsights.crm.overdueTasks} tarefas comerciais vencidas
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="mt-1 text-sky-700" />
+                </div>
+              </Link>
+            )}
+
+            {stats.operationalInsights.inventory.canRead && (
+              <Link
+                href={stats.operationalInsights.inventory.href}
+                className="card-base p-5 border-orange-100 bg-orange-50/40 transition-colors hover:bg-orange-50"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-orange-700">
+                      <PackageSearch size={18} />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">
+                        Estoque critico
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">
+                        {stats.operationalInsights.inventory.criticalStockItems} itens abaixo do
+                        minimo
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {stats.operationalInsights.inventory.expiringLots} lotes vencidos ou a
+                        vencer em {stats.operationalInsights.inventory.daysToExpiry} dias
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="mt-1 text-orange-700" />
+                </div>
+              </Link>
+            )}
+          </div>
+        )}
 
       {/* Second row: Queue + Schedule + Occupancy */}
       <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-3 gap-4">
