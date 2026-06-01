@@ -238,13 +238,15 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
   Fase 7 parcial: migration `20260531203000_150_platform_admin_audit_contracts.sql`
   adiciona RPCs sanitizados de admin plataforma (`list_platform_tenants`,
   `get_platform_tenant_detail`, `list_platform_webhook_events`) e mutators
-  auditados de support/break-glass; `adminApi`, telas `/admin`, `/admin/tenants`,
-  `/admin/tenants/[tenantId]` e `/admin/webhooks` consomem os contratos reais sem
-  fixtures operacionais; e `test-platform-admin-phase7-local-smoke.mjs` cobre o
-  fluxo local autorizado. A migration/smoke ainda nao foram aplicados nesta
-  sessao.
+  auditados de support/break-glass; migration `20260601100000_170_platform_admin_membership_mutators.sql`
+  adiciona alteracao auditada de role/status/unidade de vinculo existente;
+  `adminApi`, telas `/admin`, `/admin/tenants`, `/admin/tenants/[tenantId]` e
+  `/admin/webhooks` consomem os contratos reais sem fixtures operacionais; e
+  `test-platform-admin-phase7-local-smoke.mjs` cobre o fluxo local autorizado.
+  As migrations/smoke Supabase ainda nao foram aplicados nesta sessao por falta
+  de Docker/Postgres local.
 - Proximos bloqueios: convites de equipe via Auth Admin auditado, alteracao real
-  de roles/permissoes por RPC, settings por usuario, aplicar/validar a migration
+  de permissoes por RPC, settings por usuario, aplicar/validar as migrations
   Fase 7 de admin plataforma, UI/contratos scoped do portal paciente antes de abrir `/patient`,
   executor/export real de relatorios, CRUD real de plano alimentar, smokes
   autenticados amplos de navegador para os novos modais da Fase 2, smoke sandbox
@@ -500,14 +502,14 @@ Fontes externas consultadas:
 - [ ] Separar settings de tenant, unidade e usuario. Parcial: tenant settings e unidade ja estao separados; settings por usuario ainda nao existem.
 - [x] Validar campos sensiveis e nunca exibir secrets de integracao. Evidencia local: `get_clinic_settings_snapshot` retorna integracoes sanitizadas apenas com `enabled/status`; `update_clinic_settings` aceita somente chaves permitidas e reduz integracoes a `enabled/status`; UI nao renderiza nem recebe tokens provider.
 - [ ] Implementar optimistic UI somente com rollback claro.
-- [ ] Smoke: editar unidade, convidar equipe, alterar role e revisar auditoria. Parcial: `upsert_clinic_unit` salvou unidade local e gravou `clinic_unit.upserted`; convite e roles seguem bloqueados; Browser autenticado ficou blocked por clipboard virtual, com smoke HTTP autenticado de `/clinic/settings` como substituto parcial.
+- [ ] Smoke: editar unidade, convidar equipe, alterar role e revisar auditoria. Parcial: `upsert_clinic_unit` salvou unidade local e gravou `clinic_unit.upserted`; `update_platform_tenant_membership` e UI admin de usuarios permitem alterar role/status/unidade de vinculo existente com auditoria; convites seguem bloqueados; Browser autenticado ficou blocked por clipboard virtual, com smoke HTTP autenticado de `/clinic/settings` como substituto parcial.
 
 ### Admin Plataforma
 
 - [ ] Usar `PlatformAdminGuard` de forma consistente ou remover duplicidade apenas em task dedicada.
 - [x] Criar shell admin compartilhado para evitar sidebars/topbars repetidas. Evidencia local: `AdminShell` centraliza sidebar/header/refresh e foi aplicado em `/admin`, `/admin/tenants`, `/admin/tenants/[tenantId]` e `/admin/webhooks`.
 - [ ] `src/app/admin/components/AdminContent.tsx`: substituir tenants mockados por dados reais.
-- [ ] `src/app/admin/tenants/[tenantId]`: substituir usuarios/unidades/audit/support/break-glass mockados.
+- [ ] `src/app/admin/tenants/[tenantId]`: substituir usuarios/unidades/audit/support/break-glass mockados. Parcial: detalhe ja consome RPC real e usuarios existentes podem ter role/status/unidade alterados por `update_platform_tenant_membership`; convite Auth Admin ainda pendente.
 - [ ] `src/app/admin/webhooks`: usar `admin_webhook_events.external_id` e permissao de plataforma apropriada.
 - [x] Break-glass precisa de justificativa, duracao, aprovacao/auditoria e revogacao. Evidencia local: `request_platform_break_glass`, `decide_platform_break_glass` e `revoke_platform_break_glass` exigem motivo/escopo, duracao limitada, aprovacao por outro admin, revogacao auditada e UI operacional no detalhe do tenant.
 
@@ -664,7 +666,7 @@ Fontes externas consultadas:
 
 ### Fase 7 - Admin, Settings E Auditoria
 
-- [ ] Persistir settings clinicas e admin tenants/users/units. Parcial: settings clinicas de tenant/unidade persistem localmente por RPC auditada; admin tenants/users/units agora leem contratos reais por `list_platform_tenants` e `get_platform_tenant_detail`; mutators de equipe/roles seguem pendentes.
+- [ ] Persistir settings clinicas e admin tenants/users/units. Parcial: settings clinicas de tenant/unidade persistem localmente por RPC auditada; admin tenants/users/units agora leem contratos reais por `list_platform_tenants` e `get_platform_tenant_detail`; `update_platform_tenant_membership` altera role/status/unidade de usuario existente via RPC auditada com motivo obrigatorio; convites Auth Admin seguem pendentes.
 - [ ] Fechar admin shell e guards de plataforma. Parcial: `AdminShell` compartilhado removeu sidebars/topbars duplicadas em admin overview, tenants, detalhe e webhooks; rotas seguem sob guard server-side de plataforma existente; falta validar em Browser depois de aplicar a migration Fase 7 no Supabase local.
 - [ ] Implementar support/break-glass com auditoria forte. Parcial: `request_platform_support_session`, `end_platform_support_session`, `request_platform_break_glass`, `decide_platform_break_glass` e `revoke_platform_break_glass` exigem platform admin/support, justificativa, duracao limitada, bloqueio de autoaprovacao, encerramento/revogacao operacional e audit log; falta aplicar migrations e validar smoke local.
 - [ ] Criar eventos auditaveis para fluxos sensiveis. Parcial: support/break-glass registram `audit_logs`; webhooks/admin exibem resumos sanitizados; falta ampliar cobertura para login sensivel, troca de tenant, exportacoes e revogacao/encerramento operacional.

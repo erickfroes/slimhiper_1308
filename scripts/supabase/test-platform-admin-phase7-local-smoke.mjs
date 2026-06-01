@@ -4,8 +4,9 @@
  * Local Phase 7 platform admin/support smoke.
  *
  * Signs in a platform admin, exercises sanitized admin RPCs, creates audited
- * support and break-glass requests, approves break-glass with a second admin,
- * and cleans up the mutable smoke rows. Refuses remote targets by default.
+ * updates an existing tenant membership through the audited platform mutator,
+ * creates audited support and break-glass requests, approves break-glass with a second admin,
+ * and cleans up/restores mutable smoke rows. Refuses remote targets by default.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -108,6 +109,23 @@ async function signIn(email) {
 }
 
 async function cleanup(ids) {
+  if (ids.membershipId && ids.originalMembership) {
+    await admin
+      .from('tenant_memberships')
+      .update({
+        role_code: ids.originalMembership.role,
+        status: ids.originalMembership.membershipStatus,
+        unit_id: ids.originalMembership.unitId,
+      })
+      .eq('id', ids.membershipId);
+
+    await admin
+      .from('audit_logs')
+      .delete()
+      .eq('action', 'platform_tenant_membership.updated')
+      .eq('entity_id', ids.membershipId);
+  }
+
   if (ids.supportSessionId) {
     await admin.from('support_sessions').delete().eq('id', ids.supportSessionId);
     await admin
@@ -154,7 +172,44 @@ async function run() {
     );
     if (detailError) throw detailError;
     ok(Array.isArray(detail.users), 'Tenant detail should include users array.');
+    ok(detail.users.length > 0, 'Tenant detail should include at least one user.');
     ok(Array.isArray(detail.auditLogs), 'Tenant detail should include audit logs array.');
+
+    currentStep = 'updating tenant membership role through audited RPC';
+    const mutableRoles = new Set([
+      'tenant_owner',
+      'clinic_admin',
+      'receptionist',
+      'physician',
+      'nutritionist',
+      'fitness_professional',
+      'financial_user',
+      'external_professional',
+    ]);
+    const membership =
+      detail.users.find((user) => user.role !== 'tenant_owner' && mutableRoles.has(user.role)) ??
+      detail.users.find((user) => mutableRoles.has(user.role));
+    ok(membership, 'Tenant detail should include at least one mutable staff membership.');
+    const nextRole = membership.role === 'receptionist' ? 'clinic_admin' : 'receptionist';
+    createdIds.membershipId = membership.id;
+    createdIds.originalMembership = {
+      role: membership.role,
+      membershipStatus: membership.membershipStatus,
+      unitId: membership.unitId,
+    };
+    const { data: membershipUpdate, error: membershipUpdateError } = await platformAdmin.rpc(
+      'update_platform_tenant_membership',
+      {
+        p_tenant_id: tenant.id,
+        p_membership_id: membership.id,
+        p_role_code: nextRole,
+        p_status: membership.membershipStatus,
+        p_unit_id: membership.unitId,
+        p_reason: `Phase 7 local smoke role update ${Date.now()}`,
+      }
+    );
+    if (membershipUpdateError) throw membershipUpdateError;
+    ok(membershipUpdate.role === nextRole, 'Membership role should be updated by RPC.');
 
     currentStep = 'creating support session';
     const supportReason = `Phase 7 local smoke support reason ${Date.now()}`;

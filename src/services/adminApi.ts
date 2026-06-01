@@ -517,6 +517,32 @@ export async function getPlatformAdminSnapshot(): Promise<{
   };
 }
 
+export async function updatePlatformTenantMembership(input: {
+  tenantId: string;
+  membershipId: string;
+  roleCode?: string;
+  status?: AdminTenantUser['membershipStatus'];
+  unitId?: string | null;
+  reason: string;
+}) {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('update_platform_tenant_membership', {
+      p_tenant_id: input.tenantId,
+      p_membership_id: input.membershipId,
+      p_role_code: input.roleCode ?? null,
+      p_status: input.status ?? null,
+      p_unit_id: input.unitId ?? null,
+      p_reason: input.reason,
+    });
+
+    if (error) return { error: asServiceError(error, 'Falha ao atualizar usuario do tenant.') };
+    return { error: null as SafeServiceError | null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Falha ao atualizar usuario do tenant.') };
+  }
+}
+
 export async function requestPlatformSupportSession(input: {
   tenantId: string;
   subject: string;

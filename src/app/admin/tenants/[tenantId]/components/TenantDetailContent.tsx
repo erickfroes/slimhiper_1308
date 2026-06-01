@@ -33,6 +33,7 @@ import {
   requestPlatformBreakGlass,
   requestPlatformSupportSession,
   revokePlatformBreakGlass,
+  updatePlatformTenantMembership,
   type AdminBreakGlassRequest,
   type AdminSupportSession,
   type AdminTenantDetail,
@@ -40,6 +41,19 @@ import {
 } from '@/services/adminApi';
 
 type TenantTab = 'overview' | 'users' | 'units' | 'audit' | 'webhooks' | 'support' | 'breakglass';
+
+const ADMIN_MUTABLE_ROLES = [
+  'tenant_owner',
+  'clinic_admin',
+  'receptionist',
+  'physician',
+  'nutritionist',
+  'fitness_professional',
+  'financial_user',
+  'external_professional',
+] as const;
+
+const ADMIN_MUTABLE_STATUSES = ['active', 'invited', 'suspended', 'revoked'] as const;
 
 function formatDate(value: string | null | undefined) {
   if (!value) return 'N/D';
@@ -247,43 +261,183 @@ function OverviewTab({ detail }: { detail: AdminTenantDetail }) {
   );
 }
 
-function UsersTab({ detail }: { detail: AdminTenantDetail }) {
+function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [roleCode, setRoleCode] = useState('');
+  const [status, setStatus] = useState('');
+  const [unitId, setUnitId] = useState('');
+  const [reason, setReason] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const startEdit = (user: AdminTenantDetail['users'][number]) => {
+    setEditingId(user.id);
+    setRoleCode(user.role);
+    setStatus(user.membershipStatus);
+    setUnitId(user.unitId ?? '');
+    setReason('');
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setRoleCode('');
+    setStatus('');
+    setUnitId('');
+    setReason('');
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setIsSaving(true);
+    const { error } = await updatePlatformTenantMembership({
+      tenantId: detail.tenant.id,
+      membershipId: editingId,
+      roleCode,
+      status,
+      unitId: unitId || null,
+      reason,
+    });
+    setIsSaving(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success('Usuario do tenant atualizado com auditoria.');
+    cancelEdit();
+    onReload();
+  };
+
   return (
     <SectionCard
       title="Usuarios"
       icon={Users}
       action={<span className="text-xs text-muted-foreground">{detail.users.length} usuarios</span>}
     >
+      <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+        Convites Auth Admin continuam bloqueados ate contrato server-side dedicado. Esta etapa
+        altera apenas usuarios ja vinculados ao tenant por RPC auditada, com motivo obrigatorio.
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border">
-              {['Nome', 'Email', 'Papel', 'Status', 'MFA', 'Criado em'].map((header) => (
-                <th key={header} className="px-3 py-2 text-left font-medium text-muted-foreground">
-                  {header}
-                </th>
-              ))}
+              {['Nome', 'Email', 'Papel', 'Status', 'Unidade', 'MFA', 'Criado em', 'Acoes'].map(
+                (header) => (
+                  <th
+                    key={header}
+                    className="px-3 py-2 text-left font-medium text-muted-foreground"
+                  >
+                    {header}
+                  </th>
+                )
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {detail.users.map((user) => (
-              <tr key={user.id} className="hover:bg-muted/40">
-                <td className="px-3 py-2.5 font-medium text-foreground">{user.name}</td>
-                <td className="px-3 py-2.5 text-muted-foreground">{user.email}</td>
-                <td className="px-3 py-2.5">
-                  <StateBadge tone="slate">{user.role}</StateBadge>
-                </td>
-                <td className="px-3 py-2.5">
-                  <StateBadge tone={user.status === 'active' ? 'emerald' : 'slate'}>
-                    {user.membershipStatus}
-                  </StateBadge>
-                </td>
-                <td className="px-3 py-2.5 text-muted-foreground">
-                  {user.mfaEnabled ? 'Ativo' : 'N/D'}
-                </td>
-                <td className="px-3 py-2.5 text-muted-foreground">{formatDate(user.createdAt)}</td>
-              </tr>
-            ))}
+            {detail.users.map((user) => {
+              const isEditing = editingId === user.id;
+              const unit = detail.units.find((item) => item.id === user.unitId);
+              return (
+                <React.Fragment key={user.id}>
+                  <tr className="hover:bg-muted/40">
+                    <td className="px-3 py-2.5 font-medium text-foreground">{user.name}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{user.email}</td>
+                    <td className="px-3 py-2.5">
+                      <StateBadge tone="slate">{user.role}</StateBadge>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <StateBadge tone={user.status === 'active' ? 'emerald' : 'slate'}>
+                        {user.membershipStatus}
+                      </StateBadge>
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {unit?.name ?? (user.unitId ? 'Unidade vinculada' : 'Todas')}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {user.mfaEnabled ? 'Ativo' : 'N/D'}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {formatDate(user.createdAt)}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(user)}
+                        className="btn-ghost px-3 py-1.5 text-xs"
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  </tr>
+                  {isEditing ? (
+                    <tr>
+                      <td colSpan={8} className="bg-muted/30 px-3 py-3">
+                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[180px_150px_180px_1fr_auto]">
+                          <select
+                            value={roleCode}
+                            onChange={(event) => setRoleCode(event.target.value)}
+                            className="input-base text-xs"
+                          >
+                            {ADMIN_MUTABLE_ROLES.map((role) => (
+                              <option key={role} value={role}>
+                                {role}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={status}
+                            onChange={(event) => setStatus(event.target.value)}
+                            className="input-base text-xs"
+                          >
+                            {ADMIN_MUTABLE_STATUSES.map((statusOption) => (
+                              <option key={statusOption} value={statusOption}>
+                                {statusOption}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={unitId}
+                            onChange={(event) => setUnitId(event.target.value)}
+                            className="input-base text-xs"
+                          >
+                            <option value="">Todas as unidades</option>
+                            {detail.units.map((unitOption) => (
+                              <option key={unitOption.id} value={unitOption.id}>
+                                {unitOption.name}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            value={reason}
+                            onChange={(event) => setReason(event.target.value)}
+                            placeholder="Motivo auditavel. Minimo de 16 caracteres."
+                            className="input-base text-xs"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={saveEdit}
+                              disabled={isSaving || reason.trim().length < 16}
+                              className="btn-primary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Salvar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEdit}
+                              className="btn-ghost px-3 py-1.5 text-xs"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -766,7 +920,7 @@ function TabContent({
   onReload: () => void;
 }) {
   if (activeTab === 'overview') return <OverviewTab detail={detail} />;
-  if (activeTab === 'users') return <UsersTab detail={detail} />;
+  if (activeTab === 'users') return <UsersTab detail={detail} onReload={onReload} />;
   if (activeTab === 'units') return <UnitsTab detail={detail} />;
   if (activeTab === 'audit') return <AuditTab detail={detail} />;
   if (activeTab === 'webhooks') return <WebhooksTab detail={detail} />;
