@@ -21,6 +21,7 @@ export interface HeaderMessageItem {
   unreadCount: number;
   assignedTo?: string | null;
   status: string;
+  moderationStatus?: 'approved' | 'pending_review' | 'removed';
   createdAt: string;
   href: string;
   patientHref: string;
@@ -36,6 +37,7 @@ export interface HeaderNotificationItem {
   category: string;
   severity: InboxSeverity;
   status: 'unread' | 'read' | 'archived';
+  moderationStatus?: 'approved' | 'pending_review' | 'removed';
   createdAt: string;
   href: string;
   patientHref?: string | null;
@@ -58,6 +60,7 @@ export interface InboxConversation {
   lastMessageAt: string;
   unreadCount: number;
   status: 'open' | 'closed' | 'archived';
+  moderationStatus?: 'approved' | 'pending_review' | 'removed';
   assignedTo?: string | null;
   assignedToName?: string | null;
   sla: string;
@@ -95,6 +98,15 @@ function asNumber(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function asModerationStatus(value: unknown): 'approved' | 'pending_review' | 'removed' {
+  const status = asString(value, 'approved');
+  return status === 'pending_review' || status === 'removed' ? status : 'approved';
+}
+
+function isModerated(value: { moderationStatus?: string }) {
+  return value.moderationStatus === 'pending_review' || value.moderationStatus === 'removed';
+}
+
 function asSeverity(value: unknown): InboxSeverity {
   const severity = asString(value, 'medium').toLowerCase();
   if (severity === 'critical' || severity === 'high' || severity === 'low') return severity;
@@ -125,18 +137,24 @@ function normalizeMessage(value: unknown): HeaderMessageItem | null {
   const patientId = asString(record.patientId);
   if (!id || !threadId || !patientId) return null;
 
+  const moderationStatus = asModerationStatus(record.moderationStatus);
+  const moderated = isModerated({ moderationStatus });
+
   return {
     id,
     threadId,
     patientId,
     patientName: asString(record.patientName, 'Paciente'),
     title: asString(record.title, 'Conversa'),
-    body: asString(record.body, 'Conversa sem mensagens recentes.'),
+    body: moderated
+      ? 'Conteúdo sob revisão de moderação.'
+      : asString(record.body, 'Conversa sem mensagens recentes.'),
     category: asString(record.category, 'chat'),
     severity: asSeverity(record.severity),
     unreadCount: Math.max(0, asNumber(record.unreadCount)),
     assignedTo: asString(record.assignedTo) || null,
     status: asString(record.status, 'open'),
+    moderationStatus,
     createdAt: asString(record.createdAt),
     href: asString(record.href, `/clinic/inbox?tab=conversas&thread=${threadId}`),
     patientHref: asString(record.patientHref, `/clinic/patients/${patientId}?tab=chat`),
@@ -151,16 +169,20 @@ function normalizeNotification(value: unknown): HeaderNotificationItem | null {
   if (!id || !notificationId || !title) return null;
 
   const status = asString(record.status, 'unread');
+  const moderationStatus = asModerationStatus(record.moderationStatus);
+  const moderated = isModerated({ moderationStatus });
+
   return {
     id,
     notificationId,
     patientId: asString(record.patientId) || null,
     patientName: asString(record.patientName) || null,
-    title,
-    body: asString(record.body),
+    title: moderated ? 'Notificação sob revisão' : title,
+    body: moderated ? 'Conteúdo removido ou sob revisão de moderação.' : asString(record.body),
     category: asString(record.category, 'operacional'),
     severity: asSeverity(record.severity),
     status: status === 'read' || status === 'archived' ? status : 'unread',
+    moderationStatus,
     createdAt: asString(record.createdAt),
     href: asString(record.href, `/clinic/inbox?tab=notificacoes&notification=${notificationId}`),
     patientHref: asString(record.patientHref) || null,
@@ -175,16 +197,21 @@ function normalizeConversation(value: unknown): InboxConversation | null {
   if (!id || !threadId || !patientId) return null;
 
   const status = asString(record.status, 'open');
+  const moderationStatus = asModerationStatus(record.moderationStatus);
+  const moderated = isModerated({ moderationStatus });
   return {
     id,
     threadId,
     patientId,
     patientName: asString(record.patientName, 'Paciente'),
-    lastMessagePreview: asString(record.lastMessagePreview, 'Conversa sem mensagens recentes.'),
-    lastMessageFrom: asString(record.lastMessageFrom, 'Equipe'),
+    lastMessagePreview: moderated
+      ? 'Conteúdo sob revisão de moderação.'
+      : asString(record.lastMessagePreview, 'Conversa sem mensagens recentes.'),
+    lastMessageFrom: moderated ? 'Moderação' : asString(record.lastMessageFrom, 'Equipe'),
     lastMessageAt: asString(record.lastMessageAt),
     unreadCount: Math.max(0, asNumber(record.unreadCount)),
     status: status === 'closed' || status === 'archived' ? status : 'open',
+    moderationStatus,
     assignedTo: asString(record.assignedTo) || null,
     assignedToName: asString(record.assignedToName) || null,
     sla: asString(record.sla, 'SLA padrao'),
@@ -247,6 +274,7 @@ function mockSummary(): CommunicationsSummary {
         unreadCount: 2,
         assignedTo: null,
         status: 'open',
+        moderationStatus: 'approved',
         createdAt: new Date().toISOString(),
         href: '/clinic/inbox?tab=conversas&thread=mock-thread-1',
         patientHref: '/clinic/patients/mock-patient-1?tab=chat',
@@ -263,6 +291,7 @@ function mockSummary(): CommunicationsSummary {
         category: 'documentos',
         severity: 'high',
         status: 'unread',
+        moderationStatus: 'approved',
         createdAt: new Date().toISOString(),
         href: '/clinic/documents',
         patientHref: '/clinic/patients/mock-patient-1',
@@ -309,6 +338,7 @@ export async function listClinicInbox(filters: ClinicInboxFilters = {}): Promise
             lastMessageAt: message.createdAt,
             unreadCount: message.unreadCount,
             status: 'open',
+            moderationStatus: 'approved',
             assignedTo: null,
             assignedToName: null,
             sla: 'Responder ate hoje',
