@@ -1023,11 +1023,155 @@ _Status PR 9.5: implementado nesta branch. A migration `20260601233000_195_crm_i
 
 ### Fase 10 - Producao, Observabilidade E Operacao
 
-- [ ] Configurar CI/CD, preview environments e variaveis por ambiente.
-- [ ] Monitorar Edge Functions, webhooks, erros de frontend e jobs.
-- [ ] Criar rotina de backup/restore testado.
-- [ ] Criar runbook de incidente, rotacao de chaves e rollback.
-- [ ] Realizar revisao final LGPD/security antes de producao.
+Objetivo: transformar o MVP validado localmente em uma operacao de producao
+segura, observavel, recuperavel e auditavel, sem chamar providers externos ou
+mutar ambientes compartilhados fora de janelas explicitamente autorizadas. A fase
+deve ser executada como hardening operacional: primeiro contratos e automacoes
+read-only, depois validacao em staging, depois corte controlado para producao.
+
+**Premissas e restricoes da Fase 10:**
+
+- Nao promover para producao enquanto Fases 1-9 nao tiverem evidencias de
+  `type-check`, `lint`, `build`, `git diff --check`, smokes Supabase locais e
+  browser smoke obrigatorio antes de release.
+- Nao usar `NEXT_PUBLIC_USE_MOCK_DATA=true` em staging/producao; preview pode
+  usar mocks apenas quando rotulado como ambiente descartavel e sem dados reais.
+- Nao rodar `supabase db push`, migrations, bootstraps, restores, provider APIs,
+  retries de webhook ou rotacao de chaves em ambiente compartilhado sem plano de
+  janela, rollback e autorizacao explicita.
+- Segregar chaves por ambiente: local, preview, staging e producao. Service role
+  deve existir apenas em scripts trusted, Edge Functions e jobs controlados.
+- Toda evidencia de producao deve redigir secrets, tokens, cookies, PII/PHI,
+  payloads brutos de provider, storage paths sensiveis e signed URLs.
+
+**PR 10.1 - CI/CD, qualidade e ambientes (`hardening/ci-cd-release-gates`):**
+
+- Criar/ajustar pipelines para `npm ci`, `npm run type-check`, `npm run lint`,
+  `npm run build` e `git diff --check`, bloqueando merge quando qualquer gate
+  obrigatorio falhar.
+- Adicionar jobs opcionais/condicionados para smokes locais que dependem de
+  Supabase/Docker, com skips explicitos quando o runner nao tiver ambiente
+  autorizado.
+- Definir matriz de ambientes (`local`, `preview`, `staging`, `production`) com
+  owners, URLs, politica de dados, branch/promocao, retencao de logs e quais
+  variaveis podem existir em cada um.
+- Publicar template de variaveis por ambiente sem valores reais, diferenciando
+  `NEXT_PUBLIC_*` seguro de secrets backend, Edge Functions, provider sandbox e
+  provider producao.
+- Garantir que previews sejam isolados, tenham dados dummy ou anonimizados, nao
+  usem service-role de producao e nao executem callbacks reais de D4Sign/Asaas.
+- Documentar processo de release: tag/versao, changelog, checklist de migracoes,
+  smoke pos-deploy, rollback, congelamento de provider webhooks quando aplicavel
+  e criterios de abortar a promocao.
+
+**PR 10.2 - Observabilidade de app, Edge Functions, webhooks e jobs (`hardening/observability-alerting`):**
+
+- Instrumentar monitoramento de disponibilidade e erro para frontend Next.js,
+  rotas server-side, Edge Functions Supabase, RPCs criticos, storage assinado,
+  jobs operacionais e webhooks D4Sign/Asaas.
+- Padronizar logs estruturados com correlation/request id, tenant id redigido ou
+  pseudonimizado quando adequado, modulo, severidade, resultado e latencia, sem
+  payload bruto nem PII/PHI.
+- Criar metricas e alertas para: erro 5xx, auth/session failures, denied spikes,
+  webhook signature failures, retries/idempotencia, filas de documentos,
+  conciliacao financeira divergente, jobs atrasados, build/deploy failure e
+  aumento de latencia em RPCs.
+- Implementar dashboard operacional por ambiente com status de webhooks, Edge
+  Functions, banco, storage, erros de frontend, tarefas agendadas e releases
+  recentes.
+- Definir severidades S1-S4, canais de alerta, horarios de cobertura,
+  responsaveis, tempo maximo de acknowledgement e criterios de escalonamento.
+- Criar smoke read-only pos-deploy para rotas anonimas/protegidas e endpoints de
+  saude, validando redirect/403/200 esperados sem imprimir dados sensiveis.
+
+**PR 10.3 - Backup, restore, DR e retencao (`hardening/backup-restore-dr`):**
+
+- Documentar estrategia de backup para banco Supabase, storage de documentos,
+  metadados de Edge Functions/configuracao, audit logs e artefatos de release.
+- Definir RPO/RTO por familia de dados: prontuario/PII, documentos assinados,
+  financeiro, webhooks, CRM, estoque, relatorios e logs operacionais.
+- Criar roteiro de restore em ambiente isolado: preparar projeto limpo, restaurar
+  schema/dados/storage, reaplicar secrets dummy, rodar checks de integridade e
+  validar RLS/RBAC sem expor dados reais.
+- Testar restore periodicamente com evidencia redigida: timestamp do backup,
+  duracao, checks executados, divergencias, owner e decisao go/no-go.
+- Definir retencao e descarte para backups, logs, payloads de webhook, leads nao
+  convertidos, anexos, documentos gerados, audit logs e exports, alinhando LGPD e
+  requisitos clinicos/contratuais.
+- Criar plano de disaster recovery para indisponibilidade de banco, storage,
+  Edge Functions, Vercel/hosting, D4Sign, Asaas e jobs, incluindo modo degradado
+  seguro e comunicacao ao cliente.
+
+**PR 10.4 - Incidentes, rotacao de chaves, rollback e operacao diaria (`hardening/incident-runbooks`):**
+
+- Criar runbooks de incidente para vazamento/risco de PII, falha de autenticacao,
+  quebra de RLS, indisponibilidade de agenda/prontuario, webhook replay/fraude,
+  divergencia financeira, falha de assinatura documental e restore emergencial.
+- Definir playbook de triagem: deteccao, classificacao S1-S4, isolamento,
+  preservacao de evidencias, comunicacao interna/externa, correcao, validacao,
+  postmortem e follow-up.
+- Documentar rotacao de chaves/secrets por ambiente: Supabase anon/service role,
+  JWT, storage, D4Sign, Asaas, webhooks, CI/CD, monitoring e credenciais de
+  suporte, com ordem segura e rollback.
+- Definir rollback tecnico: revert de deploy, rollback/roll-forward de migration,
+  desativacao temporaria de Edge Function, feature flag segura, pausa de provider
+  webhook e reprocessamento idempotente.
+- Criar checklist operacional diario/semanal: filas de documento, webhooks com
+  falha, divergencias financeiras, jobs atrasados, backups, alertas abertos,
+  usuarios admin, memberships, exports e logs de suporte/break-glass.
+- Garantir que suporte/break-glass tenha aprovacao, janela, auditoria, tempo de
+  expiracao, justificativa obrigatoria e relatorio revisavel.
+
+**PR 10.5 - Revisao LGPD/security final e readiness de producao (`hardening/lgpd-security-readiness`):**
+
+- Executar revisao de superficie de dados: inventario de PII/PHI, finalidade,
+  base legal, controlador/operador, suboperadores, transferencia internacional,
+  retencao, descarte, acesso e exportacao.
+- Revisar RBAC/RLS ponta a ponta para staff, admin plataforma, paciente,
+  responsavel, suporte, service role, Edge Functions e scripts trusted.
+- Revisar contratos de logs e erros para garantir redacao de secrets, tokens,
+  provider IDs sensiveis, storage paths, signed URLs, payloads brutos e dados de
+  saude.
+- Validar politicas de privacidade, termos, DPA/contrato de operador, canal de
+  direitos do titular, processo de exportacao/anonimizacao e respostas a
+  incidentes de seguranca.
+- Executar checklist de hardening: headers/CSP deliberados, cookies, SSR auth,
+  rate limits quando aplicavel, webhook HMAC, idempotencia, upload/storage,
+  tamanho de payload, autorizacao server-side e segregacao de secrets.
+- Produzir relatorio final de go/no-go com riscos residuais, excecoes aceitas,
+  owners, prazos, evidencias dos checks, plano de rollback e assinatura humana
+  de aprovacao para producao.
+
+**Checks obrigatorios da Fase 10:**
+
+- `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check` em
+  cada PR que toque codigo ou configuracao executavel. Para docs-only, pelo
+  menos `git diff --check`.
+- CI em branch/PR executando os mesmos gates locais; falhas devem bloquear merge
+  ou ficar justificadas como ambiente indisponivel, nunca ignoradas
+  silenciosamente.
+- Smoke pos-deploy em staging: `/auth/login`, rotas clinicas principais, admin,
+  paciente fail-closed/portal quando liberado, webhooks em modo sandbox/dummy,
+  Edge Functions criticas e relatorios/export com dados dummy.
+- Teste de restore em ambiente isolado antes do go-live e em cadencia definida
+  depois do go-live; evidencias redigidas devem ficar no runbook/checkpoint.
+- Teste de alerta: gerar evento controlado nao sensivel e confirmar recebimento,
+  severidade, owner, ack, resolucao e registro de postmortem quando aplicavel.
+- Revisao LGPD/security assinada por owner humano antes de habilitar dados reais
+  ou provider producao.
+
+**Gates de conclusao da Fase 10:**
+
+- Pipeline bloqueia qualidade, build e checks minimos; preview/staging/producao
+  tem variaveis segregadas e nenhuma dependencia de mock em producao.
+- Observabilidade cobre frontend, backend, Edge Functions, webhooks, jobs, banco,
+  storage e providers com logs redigidos e alertas acionaveis.
+- Backup/restore foi testado, RPO/RTO estao definidos, DR tem owner e modo
+  degradado documentado.
+- Runbooks de incidente, rotacao de chaves, rollback e operacao diaria foram
+  ensaiados ou tiveram exercicio de mesa registrado.
+- Revisao LGPD/security final foi concluida com go/no-go, riscos residuais
+  aceitos explicitamente e plano de acompanhamento pos-producao.
 
 ## Sequencia De PRs Recomendada
 
@@ -1054,7 +1198,11 @@ _Status PR 9.5: implementado nesta branch. A migration `20260601233000_195_crm_i
 - [x] `feat/inventory-operations`
 - [x] `feat/crm-inventory-insights`
 - [x] `test/crm-inventory-hardening`
-- [ ] `hardening/production-observability-security`
+- [ ] `hardening/ci-cd-release-gates`
+- [ ] `hardening/observability-alerting`
+- [ ] `hardening/backup-restore-dr`
+- [ ] `hardening/incident-runbooks`
+- [ ] `hardening/lgpd-security-readiness`
 
 ## Evidencia De Aceite Por PR
 
