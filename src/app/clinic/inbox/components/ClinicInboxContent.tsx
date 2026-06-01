@@ -52,6 +52,12 @@ function severityClass(severity: string) {
   return 'bg-amber-50 text-amber-700';
 }
 
+function moderationLabel(status?: 'approved' | 'pending_review' | 'removed') {
+  if (status === 'pending_review') return 'Sob revisão';
+  if (status === 'removed') return 'Conteúdo removido';
+  return null;
+}
+
 function statusLabel(status: InboxConversation['status']) {
   if (status === 'closed') return 'Fechada';
   if (status === 'archived') return 'Arquivada';
@@ -245,6 +251,11 @@ export default function ClinicInboxContent() {
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
                         {notification.status}
                       </span>
+                      {moderationLabel(notification.moderationStatus) && (
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                          {moderationLabel(notification.moderationStatus)}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {notification.body || 'Notificação operacional sem corpo sensível.'}
@@ -317,6 +328,11 @@ export default function ClinicInboxContent() {
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
                       {statusLabel(conversation.status)}
                     </span>
+                    {moderationLabel(conversation.moderationStatus) && (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        {moderationLabel(conversation.moderationStatus)}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">

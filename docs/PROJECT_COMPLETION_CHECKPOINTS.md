@@ -682,7 +682,7 @@ Fontes externas consultadas:
 - [x] Criar modulo de relatorios clinicos com export seguro. Evidencia PR 8.1: migration `20260601120000_180_clinic_reports_secure_exports.sql` adiciona contrato de executor/export em `report_runs`, RPCs allowlist `list_clinic_report_definitions`, `create_clinic_report_run`, `get_clinic_report_run` e `get_clinic_report_export`, expira token em 15 minutos e audita criacao/download; Edge Functions `clinic-reports` e `clinic-report-export` encapsulam execucao e download sem SQL livre; `clinicReportsApi`, rota `/clinic/reports` e `TabRelatorios` do Paciente 360 usam o mesmo contrato patient-scoped/clinic-scoped com loading, empty, error e bloqueio por permissao.
 - [x] Criar chat/notificacoes reais com unread count. Evidencia PR 8.2: migration `20260601133000_181_chat_notifications_inbox_foundation.sql` adiciona RPC agregado `get_clinic_communications_summary`, inbox `list_clinic_inbox`, mutators auditados de notificacao/thread e triggers de notificacao in-app para chat, relatorios, documentos, financeiro e agenda; `notificationsApi`, `DashboardShell` e `/clinic/inbox` consomem contadores reais com badges, popovers, filtros e estados loading/empty/error; push/email/WhatsApp permanecem fora do escopo ate opt-in/provider/consentimento.
 - [x] Liberar app paciente minimo depois de RLS/linkage. Evidencia PR 8.3: migration `20260601150000_182_patient_portal_minimum.sql` adiciona helper `can_access_patient_portal_patient`, snapshot `get_patient_portal_snapshot`, mutators patient-scoped de chat/check-in/notificacao e policies RLS proprias para PII minima, documentos liberados, financeiro proprio, chat, notificacoes e check-ins; `patientPortalApi`, `/patient` e middleware/login passam a abrir somente usuarios com `patient_portal.access` e vinculo ativo patient/guardian, mantendo staff clinico separado.
-- [ ] Criar retencao e moderacao para comunicacoes.
+- [x] Criar retencao e moderacao para comunicacoes. Evidencia PR 8.4: migration `20260601163000_183_communications_governance.sql` adiciona `retention_until`, `archived_at`, `moderation_status`, `moderation_reason`, `moderated_by`, `moderated_at`, `read_receipts`, tabela `communication_governance_events`, mutators auditados de moderacao e RPC service-role de expiracao; inbox/header/Paciente 360/portal ocultam conteudo moderado com placeholders fail-closed; runbook `COMMUNICATIONS_GOVERNANCE_RUNBOOK.md` define prazos LGPD e `check-communications-retention.mjs` faz dry-run agregado sem mutacao.
 
 #### Plano De Implementacao Completo Da Fase 8
 
@@ -798,6 +798,8 @@ _Status PR 8.3: implementado nesta branch. O portal minimo usa `/patient` com sh
   staff sem portal nao entra em `/patient`, e rotas clinicas continuam separadas.
 
 **PR 8.4 - Retencao, moderacao e governanca de comunicacoes (`feat/communications-governance`):**
+
+_Status PR 8.4: implementado nesta branch. A governanca adiciona campos/tabela de retencao e moderacao, placeholders fail-closed em surfaces clinicas/portal, runbook LGPD e script dry-run read-only. Smokes Supabase/browser dependem de ambiente local com Docker/Postgres e variaveis Supabase._
 
 - Adicionar migration nova para campos/ tabelas de governanca se necessario:
   `retention_until`, `archived_at`, `moderation_status`, `moderation_reason`,

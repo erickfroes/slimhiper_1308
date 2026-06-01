@@ -26,6 +26,8 @@ type ChatMessageRow = {
   sender_label: string | null;
   body: string;
   metadata: unknown;
+  moderation_status?: string | null;
+  archived_at?: string | null;
   created_at: string;
 };
 
@@ -95,6 +97,14 @@ function senderLabel(row: ChatMessageRow, from: PatientChatMessage['from']): str
   );
 }
 
+function isMessageModerated(row: ChatMessageRow) {
+  return row.moderation_status === 'pending_review' || row.moderation_status === 'removed';
+}
+
+function visibleMessageText(row: ChatMessageRow) {
+  return isMessageModerated(row) ? 'Conteúdo removido ou sob revisão de moderação.' : row.body;
+}
+
 function mapMessages(rows: ChatMessageRow[], unreadCount: number): PatientChatMessage[] {
   const unreadPatientIds = new Set(
     rows
@@ -111,7 +121,7 @@ function mapMessages(rows: ChatMessageRow[], unreadCount: number): PatientChatMe
     return {
       id: row.id,
       from,
-      text: row.body,
+      text: visibleMessageText(row),
       time: row.created_at,
       read: explicitRead ?? (from === 'patient' ? !unreadPatientIds.has(row.id) : true),
     };
@@ -126,7 +136,7 @@ function mapChat(thread: ChatThreadRow, messageRows: ChatMessageRow[]): PatientC
   const threadSummary: PatientChatThread = {
     id: thread.id,
     date: thread.created_at,
-    summary: latestMessage?.body ?? 'Conversa sem mensagens.',
+    summary: latestMessage ? visibleMessageText(latestMessage) : 'Conversa sem mensagens.',
     messageCount: messageRows.length,
   };
 
@@ -134,7 +144,9 @@ function mapChat(thread: ChatThreadRow, messageRows: ChatMessageRow[]): PatientC
     id: thread.id,
     patientId: thread.patient_id,
     lastMessageAt: latestMessage?.created_at ?? thread.last_message_at ?? thread.updated_at,
-    lastMessagePreview: latestMessage?.body ?? 'Sem mensagens recentes.',
+    lastMessagePreview: latestMessage
+      ? visibleMessageText(latestMessage)
+      : 'Sem mensagens recentes.',
     lastMessageFrom: latestMessage
       ? senderLabel(latestMessage, senderType(latestMessage))
       : 'Equipe',
@@ -176,10 +188,11 @@ async function fetchChatFromSupabase(
   const thread = threadData as ChatThreadRow;
   const { data: messageData, error: messageError } = await supabase
     .from('patient_chat_messages')
-    .select('id,sender_user_id,sender_label,body,metadata,created_at')
+    .select('id,sender_user_id,sender_label,body,metadata,moderation_status,archived_at,created_at')
     .eq('tenant_id', thread.tenant_id)
     .eq('thread_id', thread.id)
     .eq('patient_id', patientId)
+    .is('archived_at', null)
     .order('created_at', { ascending: false })
     .limit(50);
 
@@ -240,7 +253,7 @@ export async function openPatientChatThread(
     if (existingThread?.id) {
       const { error } = await supabase
         .from('patient_chat_threads')
-        .update({ status: 'open' })
+        .update({ status: 'open', archived_at: null })
         .eq('id', existingThread.id)
         .eq('patient_id', patientId);
       if (error) return { data: null, error: { message: error.message, code: error.code } };
@@ -267,6 +280,7 @@ export async function openPatientChatThread(
       patient_id: patientId,
       status: 'open',
       last_message_at: new Date().toISOString(),
+      retention_until: new Date(Date.now() + 6 * 365 * 24 * 60 * 60 * 1000).toISOString(),
     });
 
     if (insertError) {
@@ -351,6 +365,8 @@ export async function sendPatientChatMessage(
       sender_label: 'Equipe',
       body: message,
       metadata: { sender_type: 'staff' },
+      moderation_status: 'approved',
+      retention_until: new Date(Date.now() + 6 * 365 * 24 * 60 * 60 * 1000).toISOString(),
       created_at: now,
     });
 
@@ -360,7 +376,12 @@ export async function sendPatientChatMessage(
 
     const { error: updateError } = await supabase
       .from('patient_chat_threads')
-      .update({ status: 'open', last_message_at: now })
+      .update({
+        status: 'open',
+        archived_at: null,
+        last_message_at: now,
+        retention_until: new Date(Date.now() + 6 * 365 * 24 * 60 * 60 * 1000).toISOString(),
+      })
       .eq('id', thread.id)
       .eq('patient_id', patientId);
 
