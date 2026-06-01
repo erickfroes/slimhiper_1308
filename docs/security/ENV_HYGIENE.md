@@ -48,10 +48,13 @@ scripts, CI secrets, or Supabase Edge Function secrets:
 - `TEST_ACCESS_TOKEN`
 - `TEST_PATIENT_ID`
 - `TEST_TEMPLATE_ID`
+- `ENABLE_PRODUCTION_SOURCE_MAPS`
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `PERPLEXITY_API_KEY`
+
+`ENABLE_PRODUCTION_SOURCE_MAPS` must stay unset/false unless a release owner explicitly accepts the risk of publishing production source maps for a bounded diagnostic window.
 
 `SUPABASE_SERVICE_ROLE_KEY` must never be imported into client components,
 browser services, or any `NEXT_PUBLIC_*` variable. It bypasses RLS and belongs

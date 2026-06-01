@@ -114,3 +114,18 @@ Para cada release, anexar internamente:
 - smoke pos-deploy redigido;
 - decisao go/no-go;
 - riscos residuais aceitos e prazo de mitigacao.
+
+## Gate LGPD/Security Final
+
+A promocao para producao com dados reais exige a revisao final de
+`docs/operations/LGPD_SECURITY_READINESS_REVIEW.md` preenchida em sistema interno
+ou anexada como evidencia redigida. A decisao tecnica padrao e **NO-GO** ate que
+existam:
+
+- smokes de staging/pos-deploy com dados dummy ou anonimizados;
+- restore testado em ambiente isolado;
+- teste de alerta controlado recebido, acknowledged e resolvido;
+- conferencia de secrets por ambiente sem expor valores;
+- politica de privacidade, termos, DPA/contrato de operador e canal do titular
+  aprovados por owner humano;
+- riscos residuais aceitos explicitamente com owner e prazo.

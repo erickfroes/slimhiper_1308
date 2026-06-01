@@ -62,6 +62,7 @@ sao nomes e finalidade; mantenha vazios em templates versionados.
 | `TEST_ACCESS_TOKEN` | Local/staging smoke | Token curto, redigido em logs. |
 | `TEST_PATIENT_ID` | Local/staging smoke | ID dummy/anonimizado. |
 | `TEST_TEMPLATE_ID` | Local/staging smoke | Template dummy. |
+| `ENABLE_PRODUCTION_SOURCE_MAPS` | Preview/staging/production somente com excecao aprovada | `true` publica source maps de producao; manter vazio/`false` por padrao e registrar justificativa. |
 
 ### Providers e webhooks
 

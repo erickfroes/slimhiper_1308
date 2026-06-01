@@ -304,7 +304,7 @@ negado`, e perfil `is_active=false` -> `app-session` `authenticated=false`,
 | Fase 7 - Admin/settings/auditoria  | Implementada aguardando validacao local | Settings tenant/unidade persistem por RPC auditada; migration `150` adiciona RPCs sanitizados para admin tenants/detalhe/webhooks e mutators auditados de support/break-glass; migration `170` adiciona mutator auditado de role/status/unidade; convite Auth Admin agora passa por rota server-side com service role backend, valida tenant/role/unidade, cria/atualiza perfil, membership `invited` e audit log; telas admin usam `adminApi` real e `AdminShell`. Pendentes por ambiente: aplicar/validar migrations e smoke Fase 7 quando Docker/Postgres e env Supabase estiverem disponiveis.                                                                                                                                                                                                                                                                                                    |
 | Fase 8 - Relatorios/chat/portal    | Parcial                                 | Bases de relatorios/chat no Paciente 360 existem; modulo clinico, notificacoes, moderacao e portal paciente seguem pendentes/fail-closed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Fase 9 - CRM/estoque               | PR 9.5 implementada                     | Pre-requisitos revisados e mantidos: Fase 8 possui migrations 180-183 para relatorios/chat/portal/comunicacoes; PRs 9.1-9.4 entregaram fundacao RBAC/RLS/RPCs, CRM operacional com conversao idempotente, estoque ledger por lote/local e insights agregados em dashboard/relatorios. PR 9.5 adiciona `20260601233000_195_crm_inventory_governance_hardening.sql` com snapshot agregado de governanca e helper service-role de retencao dry-run/execucao explicita, `test-crm-inventory-phase9-local-smoke.mjs` com tenants A/B, permissoes negativas, deduplicacao, conversao, ledger, saldo negativo, auditoria, notificacoes e reports, e runbook `CRM_INVENTORY_GOVERNANCE_RUNBOOK.md` para LGPD/operacao. Nao houve `supabase db push`, provider API ou chamada externa; Supabase local/migration up e smoke mutante seguem pendentes quando Docker/Postgres/env Supabase estiverem disponiveis. |
-| Fase 10 - Producao/observabilidade | PR 10.4 implementada                    | Pre-requisitos revisados: PRs 10.1-10.3 seguem aplicadas com CI/release gates, segregacao de ambientes, smoke pos-deploy read-only, health seguro, logs redigidos, dashboard/alertas e backup/restore/DR; Fases 1-9 continuam gates antes de release, sem autorizacao de producao. PR 10.4 adiciona runbooks de incidente, rotacao de chaves/secrets, rollback tecnico, operacao diaria/semanal, break-glass auditado e template de exercicio/evidencia redigida em `docs/operations/INCIDENT_RESPONSE_RUNBOOK.md`, `docs/operations/SECRET_ROTATION_RUNBOOK.md`, `docs/operations/ROLLBACK_DAILY_OPERATIONS_RUNBOOK.md` e `docs/operations/INCIDENT_TABLETOP_EVIDENCE_TEMPLATE.md`. Nao houve provider API, `supabase db push`, migrations, restore real, rotacao real de chaves, leitura de `.env` ou promocao de ambiente. Revisao LGPD/security final segue na PR 10.5.                           |
+| Fase 10 - Producao/observabilidade | PR 10.5 implementada                    | Pre-requisitos revisados: PRs 10.1-10.4 seguem aplicadas com CI/release gates, segregacao de ambientes, smoke pos-deploy read-only, health seguro, logs redigidos, dashboard/alertas, backup/restore/DR, runbooks de incidente, rotacao, rollback e operacao diaria. PR 10.5 adiciona `docs/operations/LGPD_SECURITY_READINESS_REVIEW.md` com inventario LGPD/security, RBAC/RLS, logs/erros, contratos, go/no-go, riscos residuais e assinatura humana; `next.config.mjs` endurece headers/CSP, HSTS em producao, source maps opt-in e falha de build para erros TypeScript/ESLint. Nao houve provider API, `supabase db push`, migrations, restore real, rotacao real de chaves, leitura de `.env` ou promocao de ambiente. Go-live permanece NO-GO ate smokes/restore/alerta em staging e aprovacao humana LGPD/security.                           |
 
 ## Fontes Internas
 
@@ -1207,6 +1207,17 @@ de ambiente._
   owners, prazos, evidencias dos checks, plano de rollback e assinatura humana
   de aprovacao para producao.
 
+_Status PR 10.5: implementado nesta branch. `docs/operations/LGPD_SECURITY_READINESS_REVIEW.md`
+consolida inventario de PII/PHI/financeiro/logs/backups/exports, matriz de
+finalidade/base legal a confirmar, revisao RBAC/RLS por ator, padrao de redacao
+de logs/erros/evidencias, checklist de politicas/DPA/canal do titular e
+relatorio go/no-go. `next.config.mjs` adiciona headers/CSP deliberados mantendo
+Rocket e Supabase, HSTS em producao, source maps de producao opt-in e remove os
+ignores de TypeScript/ESLint no build. Nao houve provider API, `supabase db
+push`, migrations, restore real, rotacao real de chaves, leitura de `.env` ou
+promocao de ambiente. Readiness final permanece NO-GO ate smoke pos-deploy,
+restore/teste de alerta em staging e assinatura humana LGPD/security._
+
 **Checks obrigatorios da Fase 10:**
 
 - `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check` em
@@ -1267,7 +1278,7 @@ de ambiente._
 - [x] `hardening/observability-alerting`
 - [x] `hardening/backup-restore-dr`
 - [x] `hardening/incident-runbooks`
-- [ ] `hardening/lgpd-security-readiness`
+- [x] `hardening/lgpd-security-readiness`
 
 ## Evidencia De Aceite Por PR
 
