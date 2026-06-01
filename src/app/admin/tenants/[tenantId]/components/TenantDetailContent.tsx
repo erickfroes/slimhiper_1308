@@ -30,6 +30,7 @@ import {
   decidePlatformBreakGlass,
   endPlatformSupportSession,
   getTenantDetail,
+  invitePlatformTenantUser,
   requestPlatformBreakGlass,
   requestPlatformSupportSession,
   revokePlatformBreakGlass,
@@ -268,6 +269,13 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
   const [unitId, setUnitId] = useState('');
   const [reason, setReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRoleCode, setInviteRoleCode] =
+    useState<(typeof ADMIN_MUTABLE_ROLES)[number]>('receptionist');
+  const [inviteUnitId, setInviteUnitId] = useState('');
+  const [inviteReason, setInviteReason] = useState('');
+  const [isInviting, setIsInviting] = useState(false);
 
   const startEdit = (user: AdminTenantDetail['users'][number]) => {
     setEditingId(user.id);
@@ -308,15 +316,112 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
     onReload();
   };
 
+  const sendInvite = async () => {
+    setIsInviting(true);
+    const { error } = await invitePlatformTenantUser({
+      tenantId: detail.tenant.id,
+      email: inviteEmail,
+      fullName: inviteName,
+      roleCode: inviteRoleCode,
+      unitId: inviteUnitId || null,
+      reason: inviteReason,
+    });
+    setIsInviting(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success('Convite registrado com Auth Admin e auditoria.');
+    setInviteEmail('');
+    setInviteName('');
+    setInviteRoleCode('receptionist');
+    setInviteUnitId('');
+    setInviteReason('');
+    onReload();
+  };
+
   return (
     <SectionCard
       title="Usuarios"
       icon={Users}
       action={<span className="text-xs text-muted-foreground">{detail.users.length} usuarios</span>}
     >
+      <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Mail size={14} className="text-emerald-700" />
+          <div>
+            <p className="text-xs font-bold text-emerald-900">Convidar usuario via Auth Admin</p>
+            <p className="text-xs text-emerald-800">
+              O convite roda em rota server-side com service role, valida tenant/role/unidade e
+              grava audit log com motivo obrigatorio.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_180px_180px]">
+          <input
+            value={inviteEmail}
+            onChange={(event) => setInviteEmail(event.target.value)}
+            placeholder="email@clinica.com"
+            className="input-base text-xs"
+          />
+          <input
+            value={inviteName}
+            onChange={(event) => setInviteName(event.target.value)}
+            placeholder="Nome opcional"
+            className="input-base text-xs"
+          />
+          <select
+            value={inviteRoleCode}
+            onChange={(event) =>
+              setInviteRoleCode(event.target.value as (typeof ADMIN_MUTABLE_ROLES)[number])
+            }
+            className="input-base text-xs"
+          >
+            {ADMIN_MUTABLE_ROLES.map((role) => (
+              <option key={role} value={role}>
+                {role}
+              </option>
+            ))}
+          </select>
+          <select
+            value={inviteUnitId}
+            onChange={(event) => setInviteUnitId(event.target.value)}
+            className="input-base text-xs"
+          >
+            <option value="">Todas as unidades</option>
+            {detail.units.map((unitOption) => (
+              <option key={unitOption.id} value={unitOption.id}>
+                {unitOption.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+          <input
+            value={inviteReason}
+            onChange={(event) => setInviteReason(event.target.value)}
+            placeholder="Motivo auditavel do convite. Minimo de 16 caracteres."
+            className="input-base text-xs"
+          />
+          <button
+            type="button"
+            onClick={sendInvite}
+            disabled={
+              isInviting ||
+              inviteReason.trim().length < 16 ||
+              !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())
+            }
+            className="btn-primary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Enviar convite
+          </button>
+        </div>
+      </div>
       <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-        Convites Auth Admin continuam bloqueados ate contrato server-side dedicado. Esta etapa
-        altera apenas usuarios ja vinculados ao tenant por RPC auditada, com motivo obrigatorio.
+        Alteracoes em usuarios ja vinculados continuam por RPC auditada, com motivo obrigatorio e
+        sem writes diretos do browser em tabelas de RBAC.
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
