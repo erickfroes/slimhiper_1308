@@ -79,7 +79,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                            | Avanço de contrato real em 2026-06-02: leitura diária/mensal, criação, edição, status, cancelamento com motivo, eventos de fila e conflito de horário blindados por código   | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                     |
 | F09 | Programas                | `/clinic/programs`, builder, `programsApi`                               | Avanço de matrícula em 2026-06-02: UI de programas aciona `enroll_patient_in_program`, seleciona paciente ativo e mostra reflexos de check-ins/documentos/agenda/invoice     | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | Smoke autenticado, RLS multi-tenant e efeitos derivados |
 | F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                | Avanço de contrato real em 2026-06-02: UI e Edge Function bloqueiam envio D4Sign quando o template não está habilitado/ativo; status fica visível na lista                   | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign sandbox, storage, webhook e permissões reais     |
-| F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                       | Mock/real misto                                                                                                                                                              | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas, idempotência e webhooks                          |
+| F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                       | Avanço de idempotência em 2026-06-02: criação de cobrança/assinatura usa chave por tentativa e Edge Functions reutilizam registros locais antes de chamar Asaas              | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas sandbox, webhook real e RLS multi-tenant          |
 | F12 | Relatórios clínica       | `/clinic/reports`, `clinicReportsApi`                                    | Contrato dependente                                                                                                                                                          | Execução/exportação validada   | Executar relatório e baixar exportação                                                                                               | Edge Function `clinic-reports`                          |
 | F13 | Configurações            | `/clinic/settings`, `clinicSettingsApi`                                  | Integrado por leitura                                                                                                                                                        | Real validado                  | Ler, atualizar clínica e unidade                                                                                                     | RPCs de settings e permissões                           |
 | F14 | Inbox                    | `/clinic/inbox`, `notificationsApi`, `chatApi`                           | Mock/real misto                                                                                                                                                              | Real validado                  | Marcar lido, arquivar, atribuir e responder                                                                                          | RPCs de comunicações e RLS                              |
@@ -502,15 +502,15 @@ webhook -> reconciliação -> timeline/financeiro.
 **Checklist técnico:**
 
 - [ ] Subconta tenant criada somente uma vez.
-- [ ] Customer paciente idempotente.
-- [ ] Invoice idempotente.
-- [ ] Subscription idempotente.
-- [ ] Webhook valida autenticação.
-- [ ] Webhook valida tenant mapping.
-- [ ] Webhook trata reentrega.
-- [ ] Payload bruto não é armazenado sem necessidade explícita.
-- [ ] Status financeiro e reconciliação ficam coerentes.
-- [ ] Erros do provider são mostrados sem vazar detalhes sensíveis.
+- [x] Customer paciente idempotente por código: a Edge Function reutiliza `patient_customers` existente por tenant/paciente antes de chamar Asaas; sandbox real pendente.
+- [x] Invoice idempotente por código: UI envia chave por tentativa e a Edge Function reutiliza cobrança local com a mesma chave antes de chamar Asaas; sandbox real pendente.
+- [x] Subscription idempotente por código: UI envia chave por tentativa e a Edge Function reutiliza assinatura local com a mesma chave antes de chamar Asaas; sandbox real pendente.
+- [x] Webhook valida autenticação por código com `ASAAS_WEBHOOK_TOKEN`; reentrega real pendente.
+- [x] Webhook valida tenant mapping por código via `asaas_invoice_id`/invoice local e marca evento sem tenant como `ignored`; sandbox real pendente.
+- [x] Webhook trata reentrega por código via hash do evento antes de inserir/processar; reentrega real pendente.
+- [x] Payload bruto não é armazenado sem necessidade explícita; código persiste payload minimizado em `billing_webhook_events` e resumo em `asaas_events`.
+- [x] Status financeiro e reconciliação ficam coerentes por código via RPCs `get_clinic_finance_overview` e `get_clinic_finance_reconciliation`; prova com dados sintéticos pendente.
+- [x] Erros do provider são mostrados sem vazar detalhes sensíveis; Edge Functions retornam mensagens genéricas e UI sanitiza mensagens operacionais.
 
 ## 10. Fase 6 — Portal paciente completo
 
@@ -987,6 +987,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado com documento/template/paciente sintéticos.
 - Status: aprovado por código; validação real em homologação/sandbox pendente.
 - Pendências: validar geração, assinatura, webhook idempotente/autenticado, URL assinada curta, liberação/ocultação no portal e isolamento RLS multi-tenant com usuários sintéticos.
+
+### Evidência — F11 Financeiro clínica e Asaas idempotente
+
+- Data: 2026-06-02.
+- Ambiente: local, validação por código e checks obrigatórios; provedores externos não foram chamados.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; validação estática usou contratos RLS/RPC/Edge Functions já versionados.
+- Tenant sintético: pendente para criar customer/cobrança/assinatura em sandbox Asaas, processar webhook e provar reconciliação.
+- Mock habilitado? código preserva mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/clinic/financeiro`, aba Financeiro do Paciente 360, `billingApi`, RPCs `get_patient_financial_summary`, `get_clinic_finance_overview`, `get_clinic_finance_reconciliation`, Edge Functions `asaas-create-patient-customer`, `asaas-create-patient-invoice`, `asaas-create-patient-subscription` e `webhook-asaas`.
+- Passos executados:
+  1. Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente da ordem, F11.
+  2. O serviço frontend passou a aceitar uma chave de idempotência opcional para cobranças e assinaturas, enviada apenas para Edge Functions em fluxo real.
+  3. A aba financeira do Paciente 360 passou a gerar uma chave por tentativa de criação e manter a mesma chave durante retries da mesma tentativa.
+  4. As Edge Functions de invoice e subscription passaram a consultar registros locais do mesmo tenant/paciente com a chave recebida antes de chamar Asaas, retornando o registro existente quando encontrado.
+  5. A chave fica persistida somente em `metadata.idempotency_key` operacional; CPF/CNPJ continua normalizado no cliente/Edge Function e não é impresso em log.
+- Resultado esperado: avançar F11 na ordem do plano sem criar migração, sem chamar Asaas localmente e reduzindo risco de duplicidade em retry de cobrança/assinatura.
+- Resultado observado: checks obrigatórios executados após as mudanças; smoke Supabase/browser/Asaas sandbox continua pendente.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de provider ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado com paciente sintético e sandbox Asaas autorizado.
+- Status: aprovado por código; validação real em homologação/sandbox pendente.
+- Pendências: validar customer/cobrança/assinatura em sandbox, webhook idempotente/autenticado, reconciliação com divergências sintéticas, isolamento RLS multi-tenant e evidência visual.
 
 ## 18. Sequência recomendada de implementação
 

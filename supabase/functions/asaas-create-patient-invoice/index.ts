@@ -38,6 +38,12 @@ function bearerToken(req: Request) {
   return auth.startsWith('Bearer ') ? auth.slice(7) : '';
 }
 
+function safeIdempotencyKey(value: unknown) {
+  const key = asString(value);
+  if (!key) return '';
+  return key.length <= 120 ? key : '';
+}
+
 function safeErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (error && typeof error === 'object' && 'message' in error) {
@@ -184,6 +190,7 @@ Deno.serve(async (req) => {
     const amountCents = asPositiveInteger(body?.amount_cents);
     const dueDate = asString(body?.due_date);
     const description = asString(body?.description).slice(0, 240);
+    const idempotencyKey = safeIdempotencyKey(body?.idempotency_key ?? body?.idempotencyKey);
 
     if (!patientId || !amountCents || !dueDate || !isDateInput(dueDate) || !description) {
       return jsonResponse(400, {
@@ -199,6 +206,30 @@ Deno.serve(async (req) => {
     const tenantResolution = await resolvePatientTenant({ supabase, userId: user.id, patientId });
     if (tenantResolution.error) return tenantResolution.error;
     const tenantId = tenantResolution.tenantId as string;
+
+    if (idempotencyKey) {
+      const { data: existingInvoice, error: existingInvoiceError } = await admin
+        .from('patient_invoices')
+        .select('id, status, invoice_url, payment_link')
+        .eq('tenant_id', tenantId)
+        .eq('patient_id', patientId)
+        .eq('metadata->>idempotency_key', idempotencyKey)
+        .maybeSingle();
+
+      if (existingInvoiceError) throw existingInvoiceError;
+      if (existingInvoice?.id) {
+        return jsonResponse(200, {
+          ok: true,
+          data: {
+            id: existingInvoice.id,
+            status: existingInvoice.status,
+            invoice_url: existingInvoice.invoice_url ?? null,
+            payment_link: existingInvoice.payment_link ?? null,
+          },
+          meta: { tenantId, timestamp, reused: true },
+        });
+      }
+    }
 
     const { data: customer, error: customerError } = await admin
       .from('patient_customers')
@@ -271,7 +302,11 @@ Deno.serve(async (req) => {
         description,
         invoice_url: invoiceUrl,
         payment_link: paymentLink,
-        metadata: { provider: 'asaas', invoice_number: providerData.invoiceNumber ?? null },
+        metadata: {
+          provider: 'asaas',
+          invoice_number: providerData.invoiceNumber ?? null,
+          idempotency_key: idempotencyKey || null,
+        },
       })
       .select('id, status, invoice_url, payment_link')
       .single();
