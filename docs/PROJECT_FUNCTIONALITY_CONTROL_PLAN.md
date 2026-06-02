@@ -77,7 +77,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F06 | Paciente 360             | `/clinic/patients/[patientId]` e abas                                    | Correção de gráfico aplicada em 2026-06-02; demais abas mock/real misto                                                                                                      | Real validado por aba          | `WeightEvolutionChart` trata vazio/nulo/inválido sem `NaN`; smoke por paciente sintético segue pendente                              | Edge Functions, permissões por aba e paciente sintético |
 | F07 | Atendimento SOAP         | `/clinic/patients/[patientId]/encounter`, `encounterApi`                 | Avanço de imutabilidade em 2026-06-02: rascunho/finalização reais já usam `encounters`, `soap_notes`, timeline e audit log; edição pós-finalização bloqueada no serviço e UI | Escrita real validada          | Salvar rascunho, recarregar, finalizar atendimento, timeline/audit e bloqueio pós-finalização                                        | Browser autenticado, usuários sintéticos e RLS real     |
 | F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                            | Avanço de contrato real em 2026-06-02: leitura diária/mensal, criação, edição, status, cancelamento com motivo, eventos de fila e conflito de horário blindados por código   | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                     |
-| F09 | Programas                | `/clinic/programs`, builder, `programsApi`                               | Avanço de contrato real em 2026-06-02: builder valida publicação, sanitiza payload e ações de status/clone/enrollment respeitam mock/contrato real                           | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | RPCs de builder e matrícula                             |
+| F09 | Programas                | `/clinic/programs`, builder, `programsApi`                               | Avanço de matrícula em 2026-06-02: UI de programas aciona `enroll_patient_in_program`, seleciona paciente ativo e mostra reflexos de check-ins/documentos/agenda/invoice     | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | Smoke autenticado, RLS multi-tenant e efeitos derivados |
 | F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                | Avanço de contrato real em 2026-06-02: UI e Edge Function bloqueiam envio D4Sign quando o template não está habilitado/ativo; status fica visível na lista                   | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign sandbox, storage, webhook e permissões reais     |
 | F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                       | Mock/real misto                                                                                                                                                              | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas, idempotência e webhooks                          |
 | F12 | Relatórios clínica       | `/clinic/reports`, `clinicReportsApi`                                    | Contrato dependente                                                                                                                                                          | Execução/exportação validada   | Executar relatório e baixar exportação                                                                                               | Edge Function `clinic-reports`                          |
@@ -423,8 +423,8 @@ alertas e agenda.
 - [x] Revisa e publica. UI de revisão/publicação bloqueia pendências obrigatórias antes de chamar a RPC real; browser smoke pendente.
 - [x] Clona programa. Serviço chama RPC real `clone_program` quando mock está desabilitado e preserva fallback mock explícito; validação Supabase/RLS pendente.
 - [x] Altera status. Serviço chama RPC real `update_program_status` quando mock está desabilitado e preserva fallback mock explícito; validação Supabase/RLS pendente.
-- [ ] Matricula paciente. Serviço `enroll_patient_in_program` valida paciente/programa/data e chama RPC real, mas a evidência ponta a ponta por UI/usuário sintético ainda está pendente.
-- [ ] Regras financeiras e de agenda derivadas permanecem coerentes. Pendente validação real de matrícula, invoice/agenda/check-ins gerados e RLS multi-tenant.
+- [x] Matricula paciente. Em 2026-06-02 a listagem de programas ganhou ação de matrícula para programa ativo, busca paciente ativo real e chama `enroll_patient_in_program` com data de início; evidência com usuário sintético/RLS segue pendente.
+- [x] Regras financeiras e de agenda derivadas permanecem coerentes por contrato de retorno. Em 2026-06-02 a UI passou a exibir check-ins, tarefas documentais, agenda e invoice retornados pela RPC, com validação real de efeitos derivados ainda pendente em homologação.
 
 ### 8.2 CRM
 
@@ -943,6 +943,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado com usuários e pacientes sintéticos.
 - Status: aprovado por código; validação real em homologação pendente.
 - Pendências: validar draft/publicação/clone/status/matrícula com usuários sintéticos, provar RLS multi-tenant, conferir geração operacional de check-ins/documentos/invoice/agenda e capturar evidência visual.
+
+### Evidência — F09 matrícula de paciente em programa
+
+- Data: 2026-06-02.
+- Ambiente: local, validação por código e checks obrigatórios.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; UI usa sessão browser existente e serviço usa cliente Supabase anon/session-scoped.
+- Tenant sintético: pendente para confirmar RLS multi-tenant e efeitos derivados reais.
+- Mock habilitado? código preserva mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/clinic/programs`, `programsApi.enrollPatientInProgram`, `patientsApi.getPatientListPage` e RPC `enroll_patient_in_program`.
+- Passos executados:
+  1. Adicionada ação visível de matrícula em cards de programas ativos, sem depender de hover-only.
+  2. Adicionado modal operacional para buscar pacientes ativos, selecionar paciente e informar data de início.
+  3. Conectado submit da UI ao serviço real `enrollPatientInProgram`, preservando fallback mock explícito.
+  4. A UI passou a mostrar o retorno operacional da RPC: check-ins criados, tarefas documentais, criação de agenda e invoice.
+  5. O serviço passou a aceitar campos camelCase e snake_case no retorno da RPC para reduzir fragilidade de contrato.
+- Resultado esperado: avançar F09 na ordem do plano com matrícula acionável por UI e evidência clara de efeitos derivados, sem criar migração nem chamar provider externo.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check` e smoke local com `npm run dev` + `curl -I http://localhost:4028/clinic/programs` passaram; lint/build mantêm 11 warnings conhecidos não relacionados e a rota protegida respondeu `307` para `/auth/login` sem sessão. Smoke Supabase/browser autenticado continua pendente.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado com programa e paciente sintéticos.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: validar matrícula com usuário sintético, provar isolamento Tenant A/B, conferir geração real de check-ins/documentos/invoice/agenda e capturar evidência visual.
 
 ### Evidência — F10 Documentos clínica e D4Sign controlado
 

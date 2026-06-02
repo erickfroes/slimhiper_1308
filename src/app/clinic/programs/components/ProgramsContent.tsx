@@ -25,13 +25,15 @@ import {
   Wrench,
 } from 'lucide-react';
 
-import type { ClinicProgram, ProgramStatus } from '@/domain/types';
+import type { ClinicProgram, PatientListRow, ProgramStatus } from '@/domain/types';
 import {
   cloneProgram,
+  enrollPatientInProgram,
   getClinicPrograms,
   setProgramStatus,
   type ClinicProgramsSummary,
 } from '@/services/programsApi';
+import { getPatientListPage } from '@/services/patientsApi';
 
 const colorMap: Record<string, { accent: string; badge: string; dot: string; icon: string }> = {
   teal: {
@@ -87,15 +89,29 @@ const emptySummary: ClinicProgramsSummary = {
   activePatients: 0,
 };
 
+type EnrollmentResult = {
+  programName: string;
+  patientName: string;
+  checkinsCreated: number;
+  documentTasksCreated: number;
+  appointmentId?: string;
+  invoiceId?: string;
+};
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 interface ProgramCardProps {
   program: ClinicProgram;
   busy: boolean;
   onArchive: (program: ClinicProgram) => void;
   onPublish: (program: ClinicProgram) => void;
   onClone: (program: ClinicProgram) => void;
+  onEnroll: (program: ClinicProgram) => void;
 }
 
-function ProgramCard({ program, busy, onArchive, onPublish, onClone }: ProgramCardProps) {
+function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }: ProgramCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const colors = colorMap[program.color] ?? colorMap['teal'];
@@ -364,6 +380,19 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone }: ProgramCa
           >
             <Eye size={12} /> Pacientes
           </Link>
+          <button
+            type="button"
+            onClick={() => onEnroll(program)}
+            disabled={busy || program.status !== 'ativo'}
+            title={
+              program.status === 'ativo'
+                ? 'Matricular paciente'
+                : 'Publique o programa antes da matricula'
+            }
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <CheckSquare size={12} /> Matricular
+          </button>
           <Link
             href={`/clinic/programs/builder?programId=${program.id}`}
             className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
@@ -383,6 +412,15 @@ export default function ProgramsContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyProgramId, setBusyProgramId] = useState<string | null>(null);
+  const [enrollmentProgram, setEnrollmentProgram] = useState<ClinicProgram | null>(null);
+  const [enrollmentPatients, setEnrollmentPatients] = useState<PatientListRow[]>([]);
+  const [enrollmentPatientId, setEnrollmentPatientId] = useState('');
+  const [enrollmentSearch, setEnrollmentSearch] = useState('');
+  const [enrollmentStartDate, setEnrollmentStartDate] = useState(todayIsoDate);
+  const [enrollmentLoadingPatients, setEnrollmentLoadingPatients] = useState(false);
+  const [enrollmentSubmitting, setEnrollmentSubmitting] = useState(false);
+  const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
+  const [enrollmentResult, setEnrollmentResult] = useState<EnrollmentResult | null>(null);
 
   const loadPrograms = useCallback(async () => {
     setLoading(true);
@@ -424,6 +462,59 @@ export default function ProgramsContent() {
       await loadPrograms();
     }
     setBusyProgramId(null);
+  };
+
+  const loadEnrollmentPatients = useCallback(async (search: string) => {
+    setEnrollmentLoadingPatients(true);
+    setEnrollmentError(null);
+    const response = await getPatientListPage({ page: 1, pageSize: 25, search, status: 'ativo' });
+    if (response.error) {
+      setEnrollmentPatients([]);
+      setEnrollmentPatientId('');
+      setEnrollmentError(response.error.message);
+    } else {
+      const rows = response.data?.rows ?? [];
+      setEnrollmentPatients(rows);
+      setEnrollmentPatientId((current) => (rows.some((row) => row.id === current) ? current : ''));
+    }
+    setEnrollmentLoadingPatients(false);
+  }, []);
+
+  const openEnrollment = (program: ClinicProgram) => {
+    setEnrollmentProgram(program);
+    setEnrollmentSearch('');
+    setEnrollmentPatientId('');
+    setEnrollmentStartDate(todayIsoDate());
+    setEnrollmentResult(null);
+    setEnrollmentError(null);
+    void loadEnrollmentPatients('');
+  };
+
+  const submitEnrollment = async () => {
+    if (!enrollmentProgram || !enrollmentPatientId || enrollmentSubmitting) return;
+
+    const patient = enrollmentPatients.find((item) => item.id === enrollmentPatientId);
+    setEnrollmentSubmitting(true);
+    setEnrollmentError(null);
+    const response = await enrollPatientInProgram(
+      enrollmentPatientId,
+      enrollmentProgram.id,
+      enrollmentStartDate
+    );
+    if (response.error) {
+      setEnrollmentError(response.error.message);
+    } else {
+      setEnrollmentResult({
+        programName: enrollmentProgram.name,
+        patientName: patient?.name ?? 'Paciente selecionado',
+        checkinsCreated: response.data?.checkinsCreated ?? 0,
+        documentTasksCreated: response.data?.documentTasksCreated ?? 0,
+        appointmentId: response.data?.appointmentId,
+        invoiceId: response.data?.invoiceId,
+      });
+      await loadPrograms();
+    }
+    setEnrollmentSubmitting(false);
   };
 
   return (
@@ -539,8 +630,126 @@ export default function ProgramsContent() {
               onArchive={(item) => void runProgramAction(item, 'archive')}
               onPublish={(item) => void runProgramAction(item, 'publish')}
               onClone={(item) => void runProgramAction(item, 'clone')}
+              onEnroll={openEnrollment}
             />
           ))}
+        </div>
+      )}
+
+      {enrollmentProgram && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-border bg-card shadow-xl">
+            <div className="border-b border-border px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">Matricular paciente</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Enrollment real no programa {enrollmentProgram.name}, com reflexos operacionais
+                    gerados pela RPC do tenant ativo.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEnrollmentProgram(null)}
+                  className="rounded-lg px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-5 py-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Buscar paciente ativo
+                  </span>
+                  <input
+                    type="search"
+                    value={enrollmentSearch}
+                    onChange={(event) => setEnrollmentSearch(event.target.value)}
+                    placeholder="Nome, telefone ou documento mascarado"
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void loadEnrollmentPatients(enrollmentSearch)}
+                  disabled={enrollmentLoadingPatients}
+                  className="self-end rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {enrollmentLoadingPatients ? 'Buscando...' : 'Buscar'}
+                </button>
+              </div>
+
+              <label className="space-y-1 block">
+                <span className="text-xs font-medium text-muted-foreground">Paciente</span>
+                <select
+                  value={enrollmentPatientId}
+                  onChange={(event) => setEnrollmentPatientId(event.target.value)}
+                  disabled={enrollmentLoadingPatients || enrollmentPatients.length === 0}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="">Selecione um paciente ativo</option>
+                  {enrollmentPatients.map((patient) => (
+                    <option key={patient.id} value={patient.id}>
+                      {patient.name} - {patient.phone} - {patient.activePackage}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 block">
+                <span className="text-xs font-medium text-muted-foreground">Data de inicio</span>
+                <input
+                  type="date"
+                  value={enrollmentStartDate}
+                  onChange={(event) => setEnrollmentStartDate(event.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary sm:w-56"
+                />
+              </label>
+
+              {enrollmentError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {enrollmentError}
+                </div>
+              )}
+
+              {enrollmentResult && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-800">
+                  <p className="font-semibold">
+                    {enrollmentResult.patientName} matriculado em {enrollmentResult.programName}.
+                  </p>
+                  <ul className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                    <li>Check-ins criados: {enrollmentResult.checkinsCreated}</li>
+                    <li>Tarefas documentais: {enrollmentResult.documentTasksCreated}</li>
+                    <li>Agenda: {enrollmentResult.appointmentId ? 'criada' : 'nao gerada'}</li>
+                    <li>
+                      Financeiro: {enrollmentResult.invoiceId ? 'invoice criada' : 'sem invoice'}
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-border px-5 py-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setEnrollmentProgram(null)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitEnrollment()}
+                disabled={!enrollmentPatientId || enrollmentSubmitting}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {enrollmentSubmitting ? 'Matriculando...' : 'Confirmar matricula'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
