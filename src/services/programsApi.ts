@@ -181,6 +181,184 @@ function normalizeFinancialConfig(
   };
 }
 
+export interface ProgramDraftValidationIssue {
+  field: string;
+  message: string;
+  blockingForPublish: boolean;
+}
+
+function sanitizeText(value: string, maxLength = 240): string {
+  const withoutControlCharacters = Array.from(value, (char) => {
+    const code = char.charCodeAt(0);
+    return code <= 31 || code === 127 ? ' ' : char;
+  }).join('');
+
+  return withoutControlCharacters.replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function sanitizeOptionalText(value: string | undefined, maxLength = 500): string {
+  return sanitizeText(value ?? '', maxLength);
+}
+
+function sanitizeDraft(draft: ProgramBuilderDraft): ProgramBuilderDraft {
+  const phases = draft.phases
+    .map((phase) => ({
+      name: sanitizeText(phase.name, 120),
+      durationWeeks: Math.max(0, Math.trunc(asNumber(phase.durationWeeks))),
+      description: sanitizeOptionalText(phase.description, 500),
+    }))
+    .filter((phase) => phase.name !== '' || phase.durationWeeks > 0 || phase.description !== '');
+
+  const includedServices = draft.includedServices
+    .map((service) => ({
+      label: sanitizeText(service.label, 120),
+      quantity: Math.max(0, Math.trunc(asNumber(service.quantity))),
+      unit: sanitizeText(service.unit || 'unidade', 40),
+    }))
+    .filter((service) => service.label !== '');
+
+  const appEntitlements = draft.appEntitlements
+    .map((entitlement) => {
+      const label = sanitizeText(entitlement.label, 120);
+      return {
+        key: sanitizeText(entitlement.key || label, 80),
+        label,
+        enabled: entitlement.enabled,
+      };
+    })
+    .filter((entitlement) => entitlement.key !== '' && entitlement.label !== '');
+
+  const checkinTemplates = draft.checkinTemplates
+    .map((template) => ({
+      id: sanitizeText(template.id, 120),
+      label: sanitizeText(template.label, 120),
+      frequency: sanitizeOptionalText(template.frequency, 120),
+      channel: template.channel,
+      questions: template.questions
+        .map((question) => sanitizeOptionalText(question, 240))
+        .filter((question) => question !== ''),
+    }))
+    .filter((template) => template.label !== '');
+
+  const requiredDocuments = draft.requiredDocuments
+    .map((document) => ({
+      label: sanitizeText(document.label, 160),
+      required: document.required,
+    }))
+    .filter((document) => document.label !== '');
+
+  const team = draft.team
+    .map((member) => ({
+      id: sanitizeText(member.id, 80),
+      name: sanitizeText(member.name, 120),
+      role: sanitizeOptionalText(member.role, 120),
+      specialty: sanitizeOptionalText(member.specialty, 120),
+    }))
+    .filter((member) => member.id !== '' || member.name !== '');
+
+  return {
+    ...draft,
+    name: sanitizeText(draft.name, 160),
+    objective: sanitizeOptionalText(draft.objective, 1000),
+    durationWeeks: Math.max(0, Math.trunc(asNumber(draft.durationWeeks))),
+    phases,
+    includedServices,
+    appEntitlements,
+    checkInsTotal: Math.max(0, Math.trunc(asNumber(draft.checkInsTotal))),
+    checkInFrequency: sanitizeOptionalText(draft.checkInFrequency, 120),
+    checkinTemplates,
+    requiredDocuments,
+    financial: {
+      paymentModel: asPaymentModel(draft.financial.paymentModel),
+      basePrice: Math.max(0, asNumber(draft.financial.basePrice)),
+      installments:
+        draft.financial.installments === undefined
+          ? undefined
+          : Math.max(0, Math.trunc(asNumber(draft.financial.installments))),
+      discountPercent:
+        draft.financial.discountPercent === undefined
+          ? undefined
+          : Math.min(100, Math.max(0, asNumber(draft.financial.discountPercent))),
+      description: sanitizeOptionalText(draft.financial.description, 500),
+    },
+    team,
+  };
+}
+
+export function validateProgramDraft(draft: ProgramBuilderDraft): ProgramDraftValidationIssue[] {
+  const sanitized = sanitizeDraft(draft);
+  const issues: ProgramDraftValidationIssue[] = [];
+
+  if (!sanitized.name) {
+    issues.push({
+      field: 'name',
+      message: 'Informe o nome do programa.',
+      blockingForPublish: true,
+    });
+  }
+  if (!sanitized.programType) {
+    issues.push({
+      field: 'programType',
+      message: 'Selecione o tipo do programa.',
+      blockingForPublish: true,
+    });
+  }
+  if (sanitized.durationWeeks <= 0) {
+    issues.push({
+      field: 'durationWeeks',
+      message: 'Informe uma duracao maior que zero.',
+      blockingForPublish: true,
+    });
+  }
+  if (sanitized.phases.length === 0) {
+    issues.push({
+      field: 'phases',
+      message: 'Adicione ao menos uma fase antes de publicar.',
+      blockingForPublish: true,
+    });
+  }
+  if (sanitized.phases.some((phase) => !phase.name || phase.durationWeeks <= 0)) {
+    issues.push({
+      field: 'phases',
+      message: 'Cada fase precisa de nome e duracao maior que zero.',
+      blockingForPublish: true,
+    });
+  }
+  if (sanitized.includedServices.length === 0) {
+    issues.push({
+      field: 'includedServices',
+      message: 'Adicione ao menos um servico incluido.',
+      blockingForPublish: true,
+    });
+  }
+  if (sanitized.includedServices.some((service) => !service.label || service.quantity <= 0)) {
+    issues.push({
+      field: 'includedServices',
+      message: 'Cada servico precisa de nome e quantidade maior que zero.',
+      blockingForPublish: true,
+    });
+  }
+  if (sanitized.checkInsTotal > 0 && !sanitized.checkInFrequency) {
+    issues.push({
+      field: 'checkInFrequency',
+      message: 'Informe a frequencia dos check-ins configurados.',
+      blockingForPublish: true,
+    });
+  }
+  if (sanitized.financial.basePrice > 0 && sanitized.financial.paymentModel === 'parcelado') {
+    const installments = sanitized.financial.installments ?? 0;
+    if (installments <= 0) {
+      issues.push({
+        field: 'financial.installments',
+        message: 'Informe parcelas para modelo parcelado.',
+        blockingForPublish: true,
+      });
+    }
+  }
+
+  return issues;
+}
+
 function normalizeProgram(item: unknown): ClinicProgram {
   const raw = asRecord(item);
   const paymentModel = asPaymentModel(raw.paymentModel);
@@ -413,18 +591,21 @@ export async function saveProgramDraft(
   publish = false
 ): Promise<{ data: ProgramMutationResult | null; error: SafeServiceError | null }> {
   try {
-    if (!draft.name.trim()) {
-      return { data: null, error: { message: 'Nome do programa obrigatorio.' } };
-    }
-    if (!draft.programType) {
-      return { data: null, error: { message: 'Tipo de programa obrigatorio.' } };
+    const sanitizedDraft = sanitizeDraft(draft);
+    const validationIssues = validateProgramDraft(sanitizedDraft);
+    const blockingIssues = publish
+      ? validationIssues.filter((issue) => issue.blockingForPublish)
+      : validationIssues.filter((issue) => issue.field === 'name' || issue.field === 'programType');
+
+    if (blockingIssues.length > 0) {
+      return { data: null, error: { message: blockingIssues[0].message } };
     }
 
     if (isMockEnabled()) {
       return {
         data: {
-          id: draft.id ?? `mock-program-${Date.now()}`,
-          status: publish ? 'ativo' : draft.status,
+          id: sanitizedDraft.id ?? `mock-program-${Date.now()}`,
+          status: publish ? 'ativo' : sanitizedDraft.status,
           published: publish,
         },
         error: null,
@@ -433,7 +614,7 @@ export async function saveProgramDraft(
 
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('upsert_program_from_builder', {
-      p_draft: draft,
+      p_draft: sanitizedDraft,
       p_publish: publish,
     });
     if (error) return { data: null, error: serviceError(error, 'Falha ao salvar programa.') };
@@ -457,6 +638,13 @@ export async function setProgramStatus(
   status: ProgramStatus
 ): Promise<{ data: ProgramMutationResult | null; error: SafeServiceError | null }> {
   try {
+    if (!programId.trim()) {
+      return { data: null, error: { message: 'Programa obrigatorio.' } };
+    }
+    if (isMockEnabled()) {
+      return { data: { id: programId, status }, error: null };
+    }
+
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('update_program_status', {
       p_program_id: programId,
@@ -476,6 +664,13 @@ export async function cloneProgram(
   programId: string
 ): Promise<{ data: ProgramMutationResult | null; error: SafeServiceError | null }> {
   try {
+    if (!programId.trim()) {
+      return { data: null, error: { message: 'Programa obrigatorio.' } };
+    }
+    if (isMockEnabled()) {
+      return { data: { id: `mock-program-clone-${Date.now()}`, status: 'rascunho' }, error: null };
+    }
+
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('clone_program', { p_program_id: programId });
     if (error) return { data: null, error: serviceError(error, 'Falha ao clonar programa.') };
@@ -493,6 +688,24 @@ export async function enrollPatientInProgram(
   startDate?: string
 ): Promise<{ data: ProgramMutationResult | null; error: SafeServiceError | null }> {
   try {
+    if (!patientId.trim() || !programId.trim()) {
+      return { data: null, error: { message: 'Paciente e programa sao obrigatorios.' } };
+    }
+    if (startDate && Number.isNaN(Date.parse(startDate))) {
+      return { data: null, error: { message: 'Data de inicio invalida.' } };
+    }
+    if (isMockEnabled()) {
+      return {
+        data: {
+          id: `mock-enrollment-${Date.now()}`,
+          status: 'ativo',
+          checkinsCreated: 0,
+          documentTasksCreated: 0,
+        },
+        error: null,
+      };
+    }
+
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('enroll_patient_in_program', {
       p_patient_id: patientId,

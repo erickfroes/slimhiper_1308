@@ -77,7 +77,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F06 | Paciente 360             | `/clinic/patients/[patientId]` e abas                                    | Correção de gráfico aplicada em 2026-06-02; demais abas mock/real misto                                                                                                      | Real validado por aba          | `WeightEvolutionChart` trata vazio/nulo/inválido sem `NaN`; smoke por paciente sintético segue pendente                              | Edge Functions, permissões por aba e paciente sintético |
 | F07 | Atendimento SOAP         | `/clinic/patients/[patientId]/encounter`, `encounterApi`                 | Avanço de imutabilidade em 2026-06-02: rascunho/finalização reais já usam `encounters`, `soap_notes`, timeline e audit log; edição pós-finalização bloqueada no serviço e UI | Escrita real validada          | Salvar rascunho, recarregar, finalizar atendimento, timeline/audit e bloqueio pós-finalização                                        | Browser autenticado, usuários sintéticos e RLS real     |
 | F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                            | Avanço de contrato real em 2026-06-02: leitura diária/mensal, criação, edição, status, cancelamento com motivo, eventos de fila e conflito de horário blindados por código   | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                     |
-| F09 | Programas                | `/clinic/programs`, builder, `programsApi`                               | Mock/real misto                                                                                                                                                              | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | RPCs de builder e matrícula                             |
+| F09 | Programas                | `/clinic/programs`, builder, `programsApi`                               | Avanço de contrato real em 2026-06-02: builder valida publicação, sanitiza payload e ações de status/clone/enrollment respeitam mock/contrato real                           | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | RPCs de builder e matrícula                             |
 | F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                | Contrato dependente                                                                                                                                                          | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign, storage, webhook e permissões                   |
 | F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                       | Mock/real misto                                                                                                                                                              | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas, idempotência e webhooks                          |
 | F12 | Relatórios clínica       | `/clinic/reports`, `clinicReportsApi`                                    | Contrato dependente                                                                                                                                                          | Execução/exportação validada   | Executar relatório e baixar exportação                                                                                               | Edge Function `clinic-reports`                          |
@@ -400,21 +400,21 @@ alertas e agenda.
 
 **Checklist:**
 
-- [ ] Lista programas reais.
-- [ ] Cria draft no builder.
-- [ ] Valida etapas obrigatórias.
-- [ ] Salva fases.
-- [ ] Salva serviços.
-- [ ] Salva check-ins.
-- [ ] Salva documentos vinculados.
-- [ ] Salva entitlements.
-- [ ] Salva financeiro.
-- [ ] Salva equipe.
-- [ ] Revisa e publica.
-- [ ] Clona programa.
-- [ ] Altera status.
-- [ ] Matricula paciente.
-- [ ] Regras financeiras e de agenda derivadas permanecem coerentes.
+- [x] Lista programas reais. Código usa RPC `get_clinic_programs` quando `NEXT_PUBLIC_USE_MOCK_DATA` não é `true`; validação Supabase/browser segue pendente.
+- [x] Cria draft no builder. Código usa RPC `upsert_program_from_builder` e agora sanitiza texto/listas antes do envio real; validação de escrita em homologação segue pendente.
+- [x] Valida etapas obrigatórias. Em 2026-06-02 o builder passou a exibir pendências e bloquear publicação sem nome, tipo, duração, fases, serviços e regras financeiras mínimas.
+- [x] Salva fases. Contrato real persiste fases pelo payload do builder; validação Supabase/RLS pendente.
+- [x] Salva serviços. Contrato real persiste serviços pelo payload do builder; validação Supabase/RLS pendente.
+- [x] Salva check-ins. Contrato real persiste templates/frequência pelo payload do builder; validação Supabase/RLS pendente.
+- [x] Salva documentos vinculados. Contrato real persiste documentos obrigatórios pelo payload do builder; validação Supabase/RLS pendente.
+- [x] Salva entitlements. Contrato real persiste entitlements do app paciente pelo payload do builder; validação Supabase/RLS pendente.
+- [x] Salva financeiro. Contrato real persiste configuração financeira do builder e bloqueia parcelado com preço sem parcelas; validação de regras derivadas pendente.
+- [x] Salva equipe. Contrato real filtra membros por vínculo ativo no tenant; validação com usuários sintéticos pendente.
+- [x] Revisa e publica. UI de revisão/publicação bloqueia pendências obrigatórias antes de chamar a RPC real; browser smoke pendente.
+- [x] Clona programa. Serviço chama RPC real `clone_program` quando mock está desabilitado e preserva fallback mock explícito; validação Supabase/RLS pendente.
+- [x] Altera status. Serviço chama RPC real `update_program_status` quando mock está desabilitado e preserva fallback mock explícito; validação Supabase/RLS pendente.
+- [ ] Matricula paciente. Serviço `enroll_patient_in_program` valida paciente/programa/data e chama RPC real, mas a evidência ponta a ponta por UI/usuário sintético ainda está pendente.
+- [ ] Regras financeiras e de agenda derivadas permanecem coerentes. Pendente validação real de matrícula, invoice/agenda/check-ins gerados e RLS multi-tenant.
 
 ### 8.2 CRM
 
@@ -911,6 +911,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado com paciente sintético.
 - Status: aprovado por código; validação real em homologação pendente.
 - Pendências: validar criar/editar/cancelar/avançar status com usuários sintéticos, provar conflito real em Supabase, validar queue events sob RLS e capturar evidência visual.
+
+### Evidência — F09 Programas e builder com publicação controlada
+
+- Data: 2026-06-02.
+- Ambiente: local dev, validação por código e checks obrigatórios.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; validação estática usou RPCs protegidas por sessão/tenant resolvido no Supabase.
+- Tenant sintético: pendente para criar rascunho, publicar, clonar, arquivar e matricular paciente com isolamento Tenant A/B.
+- Mock habilitado? código preserva mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/clinic/programs`, `/clinic/programs/builder`, `programsApi`, RPCs `get_clinic_programs`, `get_program_builder_options`, `upsert_program_from_builder`, `update_program_status`, `clone_program` e `enroll_patient_in_program`.
+- Passos executados:
+  1. Revisado o contrato real de listagem, builder, publicação, alteração de status, clonagem e matrícula de programas.
+  2. Adicionada sanitização de textos/listas do payload do builder antes de salvar em RPC real, reduzindo risco de campos vazios, caracteres de controle e dados inconsistentes.
+  3. Adicionada validação compartilhada de publicação para bloquear programa sem nome, tipo, duração, fases, serviços ou parcelamento mínimo coerente.
+  4. Atualizada a UI do builder para exibir pendências de publicação e desabilitar publicação até resolver itens obrigatórios.
+  5. Preservado fallback mock explícito para status, clone e matrícula quando `NEXT_PUBLIC_USE_MOCK_DATA=true`, evitando chamadas Supabase inesperadas em modo mock.
+- Resultado esperado: avançar F09 na ordem do plano sem criar migração, sem chamar provedores externos e sem depender de mock para validações mínimas de programas.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check` passaram após as mudanças; lint/build mantêm 11 warnings conhecidos não relacionados quando aplicável. `npm run dev` subiu localmente e `curl -I` confirmou proteção por redirecionamento para `/auth/login` nas rotas de programas sem sessão. Smoke Supabase/browser autenticado continua pendente.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado com usuários e pacientes sintéticos.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: validar draft/publicação/clone/status/matrícula com usuários sintéticos, provar RLS multi-tenant, conferir geração operacional de check-ins/documentos/invoice/agenda e capturar evidência visual.
 
 ## 18. Sequência recomendada de implementação
 
