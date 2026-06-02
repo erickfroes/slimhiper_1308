@@ -119,12 +119,14 @@ function SOAPField({
   onChange,
   placeholder,
   rows = 5,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   rows?: number;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -136,7 +138,8 @@ function SOAPField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={rows}
-        className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+        disabled={disabled}
+        className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
       />
     </div>
   );
@@ -278,6 +281,11 @@ export default function EncounterPage() {
   }, [patientId]);
 
   const handleSaveDraft = async () => {
+    if (finalized) {
+      setActionError('Atendimento finalizado nao pode ser editado.');
+      return;
+    }
+
     setSaving(true);
     setActionError(null);
 
@@ -337,6 +345,10 @@ export default function EncounterPage() {
   };
 
   const ensureDraftEncounter = async () => {
+    if (finalized) {
+      throw new Error('Atendimento finalizado nao pode receber novos registros.');
+    }
+
     if (encounterId) return encounterId;
 
     const result = await saveSoapDraft({
@@ -780,6 +792,7 @@ export default function EncounterPage() {
               onChange={(v) => setSoap((p) => ({ ...p, S: v }))}
               placeholder="Queixa principal, história da doença atual, sintomas relatados pelo paciente, histórico relevante..."
               rows={6}
+              disabled={finalized}
             />
             <SOAPField
               label="O — Objetivo"
@@ -787,6 +800,7 @@ export default function EncounterPage() {
               onChange={(v) => setSoap((p) => ({ ...p, O: v }))}
               placeholder="Dados objetivos: peso, IMC, pressão arterial, exame físico, resultados de exames, bioimpedância..."
               rows={6}
+              disabled={finalized}
             />
             <SOAPField
               label="A — Avaliação"
@@ -794,6 +808,7 @@ export default function EncounterPage() {
               onChange={(v) => setSoap((p) => ({ ...p, A: v }))}
               placeholder="Diagnóstico, hipóteses diagnósticas, análise clínica, evolução do quadro, resposta ao tratamento..."
               rows={6}
+              disabled={finalized}
             />
             <SOAPField
               label="P — Plano"
@@ -801,6 +816,7 @@ export default function EncounterPage() {
               onChange={(v) => setSoap((p) => ({ ...p, P: v }))}
               placeholder="Conduta, prescrições, solicitação de exames, orientações, retorno, encaminhamentos, ajustes no programa..."
               rows={6}
+              disabled={finalized}
             />
 
             <div
@@ -813,7 +829,8 @@ export default function EncounterPage() {
                     Registros clinicos do atendimento
                   </h3>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Medidas, bioimpedancia e exames ficam vinculados ao atendimento em aberto.
+                    Medidas, bioimpedancia e exames ficam vinculados ao atendimento em aberto; apos
+                    finalizar, novos registros devem ser feitos em outro atendimento.
                   </p>
                 </div>
                 {clinicalActionSaving && (
@@ -862,7 +879,8 @@ export default function EncounterPage() {
                               [key]: event.target.value,
                             }))
                           }
-                          className="input-base text-xs"
+                          disabled={clinicalActionSaving || finalized}
+                          className="input-base text-xs disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
                           inputMode="decimal"
                         />
                       </label>
@@ -877,14 +895,15 @@ export default function EncounterPage() {
                             notes: event.target.value,
                           }))
                         }
-                        className="input-base text-xs"
+                        disabled={clinicalActionSaving || finalized}
+                        className="input-base text-xs disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
                       />
                     </label>
                   </div>
                   <button
                     type="submit"
-                    disabled={clinicalActionSaving}
-                    className="btn-secondary mt-3 w-full justify-center text-xs disabled:opacity-60"
+                    disabled={clinicalActionSaving || finalized}
+                    className="btn-secondary mt-3 w-full justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Registrar medidas
                   </button>
@@ -918,7 +937,8 @@ export default function EncounterPage() {
                               [key]: event.target.value,
                             }))
                           }
-                          className="input-base text-xs"
+                          disabled={clinicalActionSaving || finalized}
+                          className="input-base text-xs disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
                           inputMode="decimal"
                         />
                       </label>
@@ -926,8 +946,8 @@ export default function EncounterPage() {
                   </div>
                   <button
                     type="submit"
-                    disabled={clinicalActionSaving}
-                    className="btn-secondary mt-3 w-full justify-center text-xs disabled:opacity-60"
+                    disabled={clinicalActionSaving || finalized}
+                    className="btn-secondary mt-3 w-full justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Registrar bioimpedancia
                   </button>
@@ -955,7 +975,8 @@ export default function EncounterPage() {
                             panelName: event.target.value,
                           }))
                         }
-                        className="input-base text-xs"
+                        disabled={clinicalActionSaving || finalized}
+                        className="input-base text-xs disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
                         placeholder="Checkup metabolico"
                       />
                     </label>
@@ -969,7 +990,8 @@ export default function EncounterPage() {
                             tests: event.target.value,
                           }))
                         }
-                        className="input-base text-xs"
+                        disabled={clinicalActionSaving || finalized}
+                        className="input-base text-xs disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
                         placeholder="Hemograma, glicemia, lipidograma"
                       />
                     </label>
@@ -983,7 +1005,8 @@ export default function EncounterPage() {
                             urgency: event.target.value,
                           }))
                         }
-                        className="input-base text-xs"
+                        disabled={clinicalActionSaving || finalized}
+                        className="input-base text-xs disabled:cursor-not-allowed disabled:bg-muted/40 disabled:text-muted-foreground"
                       >
                         <option value="routine">Rotina</option>
                         <option value="priority">Prioritario</option>
@@ -992,8 +1015,8 @@ export default function EncounterPage() {
                   </div>
                   <button
                     type="submit"
-                    disabled={clinicalActionSaving}
-                    className="btn-secondary mt-3 w-full justify-center text-xs disabled:opacity-60"
+                    disabled={clinicalActionSaving || finalized}
+                    className="btn-secondary mt-3 w-full justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Solicitar exames
                   </button>

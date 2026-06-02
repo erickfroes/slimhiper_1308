@@ -212,7 +212,13 @@ async function ensureEncounter(input: {
       .single();
 
     if (error) throw error;
-    return { supabase, tenantId, userId, patientId, encounter: encounter as EncounterRow };
+
+    const existingEncounter = encounter as EncounterRow;
+    if (input.status === 'open' && existingEncounter.status === 'closed') {
+      throw new Error('encounter_already_finalized');
+    }
+
+    return { supabase, tenantId, userId, patientId, encounter: existingEncounter };
   }
 
   const { data: encounter, error } = await supabase
@@ -251,6 +257,27 @@ async function persistSoap(
     encounterId: input.encounterId,
     status: status === 'final' ? 'closed' : 'open',
   });
+  if (input.soapNoteId) {
+    const { data: existingSoap, error: existingSoapError } = await supabase
+      .from('soap_notes')
+      .select('id,encounter_id,status')
+      .eq('id', input.soapNoteId)
+      .eq('tenant_id', tenantId)
+      .eq('patient_id', patientId)
+      .single();
+
+    if (existingSoapError) throw existingSoapError;
+
+    const currentSoap = existingSoap as Pick<SoapRow, 'id' | 'encounter_id' | 'status'>;
+    if (currentSoap.status === 'final') {
+      throw new Error('soap_note_already_finalized');
+    }
+
+    if (currentSoap.encounter_id && currentSoap.encounter_id !== encounter.id) {
+      throw new Error('soap_note_encounter_mismatch');
+    }
+  }
+
   const now = new Date().toISOString();
   const soapPayload = {
     tenant_id: tenantId,
