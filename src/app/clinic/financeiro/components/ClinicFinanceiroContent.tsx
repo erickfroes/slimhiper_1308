@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleDollarSign,
+  LockKeyhole,
   ReceiptText,
   RefreshCcw,
   ShieldCheck,
@@ -30,8 +31,39 @@ function dateLabel(value: string | null | undefined) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Erro inesperado ao carregar financeiro.';
+  if (error instanceof Error && error.message.toLowerCase().includes('network')) {
+    return 'Nao foi possivel conectar ao financeiro. Tente novamente em instantes.';
+  }
+  return 'Erro inesperado ao carregar financeiro. Tente novamente sem recarregar a pagina.';
 }
+
+function safeServiceMessage(message: string | null | undefined) {
+  if (!message) return null;
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes('permission') ||
+    normalized.includes('rls') ||
+    normalized.includes('denied')
+  ) {
+    return 'Seu perfil nao possui permissao para consultar estes dados financeiros.';
+  }
+  if (normalized.includes('network') || normalized.includes('fetch')) {
+    return 'Nao foi possivel conectar ao financeiro. Tente novamente em instantes.';
+  }
+  return 'Contrato financeiro indisponivel no momento. Tente novamente ou acione suporte.';
+}
+
+function safeEventErrorMessage(message: string | null | undefined) {
+  if (!message) return null;
+  return 'Falha operacional registrada. Consulte auditoria autorizada para detalhes.';
+}
+
+const chargeStatusLabel = {
+  pendente: 'Pendentes',
+  pago: 'Pagas',
+  vencido: 'Vencidas',
+  cancelado: 'Canceladas',
+};
 
 const chargeStatusClass = {
   pendente: 'border-amber-200 bg-amber-50 text-amber-700',
@@ -95,8 +127,8 @@ export default function ClinicFinanceiroContent() {
       ]);
       setData(overviewResult.data);
       setReconciliation(reconciliationResult.data);
-      setError(overviewResult.error?.message ?? null);
-      setReconciliationError(reconciliationResult.error?.message ?? null);
+      setError(safeServiceMessage(overviewResult.error?.message) ?? null);
+      setReconciliationError(safeServiceMessage(reconciliationResult.error?.message) ?? null);
     } catch (requestError) {
       setData(null);
       setReconciliation(null);
@@ -187,6 +219,16 @@ export default function ClinicFinanceiroContent() {
       icon: CheckCircle2,
     },
   ];
+  const chargeStatusSummary = Object.keys(chargeStatusLabel).map((status) => {
+    const charges = data.recentCharges.filter((charge) => charge.status === status);
+    const total = charges.reduce((sum, charge) => sum + charge.amount, 0);
+    return {
+      status: status as keyof typeof chargeStatusLabel,
+      label: chargeStatusLabel[status as keyof typeof chargeStatusLabel],
+      count: charges.length,
+      total,
+    };
+  });
   const hasRecentCharges = data.recentCharges.length > 0;
   const reconciliationCards = reconciliation
     ? [
@@ -254,6 +296,30 @@ export default function ClinicFinanceiroContent() {
       </section>
 
       <section className="bg-card border rounded-2xl p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold">Cobrancas por status</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Visao operacional calculada sobre as cobrancas recentes retornadas pelo contrato real.
+            </p>
+          </div>
+          <ReceiptText size={18} className="text-muted-foreground" />
+        </div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          {chargeStatusSummary.map((item) => (
+            <article
+              key={item.status}
+              className={`rounded-lg border p-3 ${chargeStatusClass[item.status]}`}
+            >
+              <p className="text-xs font-medium">{item.label}</p>
+              <p className="mt-1 text-xl font-semibold">{item.count}</p>
+              <p className="mt-1 text-xs">{brl(item.total)}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-card border rounded-2xl p-5">
         <h2 className="text-base font-semibold">Cobrancas recentes</h2>
         {hasRecentCharges ? (
           <div className="mt-3 space-y-2">
@@ -283,6 +349,33 @@ export default function ClinicFinanceiroContent() {
             Nenhuma cobranca recente encontrada para o tenant ativo.
           </p>
         )}
+      </section>
+
+      <section className="bg-card border rounded-2xl p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-base font-semibold">Operacoes Asaas</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Criacao de customer, cobranca e assinatura permanece bloqueada neste painel. As acoes
+              mutaveis exigem paciente validado, ambiente sandbox explicitamente autorizado e Edge
+              Functions com idempotencia.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2" aria-label="Acoes Asaas bloqueadas">
+            {['Criar customer', 'Gerar cobranca', 'Criar assinatura'].map((label) => (
+              <button
+                key={label}
+                type="button"
+                disabled
+                className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500"
+                title="Acao bloqueada fora de fluxo autorizado com paciente validado."
+              >
+                <LockKeyhole size={14} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="bg-card border rounded-2xl p-5">
@@ -375,7 +468,10 @@ export default function ClinicFinanceiroContent() {
                       <span className="min-w-0">
                         <span className="font-medium">{event.eventType}</span>
                         {event.errorMessage ? (
-                          <span className="text-red-600"> - {event.errorMessage}</span>
+                          <span className="text-red-600">
+                            {' '}
+                            - {safeEventErrorMessage(event.errorMessage)}
+                          </span>
                         ) : null}
                       </span>
                       <span className="flex flex-wrap items-center gap-2">

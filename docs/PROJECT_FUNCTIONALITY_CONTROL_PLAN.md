@@ -365,13 +365,21 @@ alertas e agenda.
 
 **Checklist:**
 
-- [ ] Carrega overview real.
-- [ ] Carrega reconciliação real.
-- [ ] Mostra cobranças por status.
-- [ ] Ações Asaas ficam bloqueadas sem ambiente autorizado.
-- [ ] Em sandbox autorizado, cria customer/invoice/subscription.
+- [x] Carrega overview real. Código consome `get_clinic_finance_overview` via `billingApi` quando `NEXT_PUBLIC_USE_MOCK_DATA` não é `true`; validação browser autenticada segue pendente.
+- [x] Carrega reconciliação real. Código consome `get_clinic_finance_reconciliation` via `billingApi` e mantém erro de conciliação isolado do overview; validação Supabase/browser segue pendente.
+- [x] Mostra cobranças por status. Em 2026-06-02 a tela passou a exibir cards por status calculados sobre as cobranças recentes do contrato real.
+- [x] Ações Asaas ficam bloqueadas sem ambiente autorizado. Em 2026-06-02 o painel da clínica passou a exibir ações de customer/cobrança/assinatura explicitamente desabilitadas fora do fluxo autorizado por paciente.
+- [ ] Em sandbox autorizado, cria customer/invoice/subscription. Pendente execução controlada com usuário sintético e sandbox Asaas autorizado.
 - [ ] Webhook atualiza status financeiro.
 - [ ] Idempotência impede cobrança duplicada.
+
+**Progresso registrado em 2026-06-02:**
+
+- `/clinic/financeiro` foi mantido como consumidor real dos RPCs `get_clinic_finance_overview` e `get_clinic_finance_reconciliation`, com mensagens de erro sanitizadas para não expor detalhes internos de RLS, RPC ou provider.
+- A tela ganhou resumo de cobranças por status (`pendente`, `pago`, `vencido`, `cancelado`) derivado das cobranças recentes retornadas pelo contrato financeiro.
+- O painel de operações Asaas agora deixa explícito que criação de customer, cobrança e assinatura permanece bloqueada nesse contexto, exigindo paciente validado, sandbox autorizado e Edge Functions idempotentes.
+- Mensagens de erro de eventos Asaas recentes são apresentadas como falha operacional genérica; detalhes sensíveis permanecem restritos a auditoria autorizada.
+- Variáveis necessárias para Supabase/service-role e Asaas foram verificadas como presentes no ambiente sem imprimir valores; smoke mutável de provider/sandbox continua pendente por exigir usuário sintético e execução controlada.
 
 ### 7.7 `/clinic/inbox`
 
