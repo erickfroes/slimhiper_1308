@@ -27,6 +27,7 @@ import PageHeader from '@/components/PageHeader';
 import {
   createClinicReportRun,
   downloadClinicReportExport,
+  getClinicReportRun,
   listClinicReportDefinitions,
   type ClinicReportDefinition,
   type ClinicReportFilters,
@@ -89,6 +90,7 @@ export default function ClinicReportsContent() {
   const [lastRun, setLastRun] = useState<ClinicReportRun | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [downloadState, setDownloadState] = useState<string | null>(null);
+  const [statusRefreshing, setStatusRefreshing] = useState(false);
 
   const selectedDefinition = useMemo(
     () => definitions.find((definition) => definition.key === selectedKey) ?? null,
@@ -134,8 +136,27 @@ export default function ClinicReportsContent() {
     setLastRun(result.data);
   }
 
-  async function handleDownload() {
+  async function handleRefreshRun() {
     if (!lastRun) return;
+
+    setStatusRefreshing(true);
+    setRunError(null);
+    const result = await getClinicReportRun(lastRun.id);
+    setStatusRefreshing(false);
+
+    if (result.error || !result.data) {
+      setRunError(result.error?.message ?? 'Nao foi possivel consultar o status do relatorio.');
+      return;
+    }
+
+    setLastRun(result.data);
+  }
+
+  async function handleDownload() {
+    if (!lastRun?.exportToken) {
+      setDownloadState('Exportacao indisponivel ou expirada para este run.');
+      return;
+    }
 
     setDownloadState('Preparando exportacao segura...');
     const result = await downloadClinicReportExport(lastRun);
@@ -152,6 +173,18 @@ export default function ClinicReportsContent() {
 
   const resultColumns = lastRun?.rows.length
     ? Array.from(new Set(lastRun.rows.flatMap((row) => Object.keys(row))))
+    : [];
+  const summaryEntries = lastRun
+    ? Object.entries(lastRun.resultSummary).filter(
+        ([key, value]) =>
+          [
+            'rowCount',
+            'minimized',
+            'containsPii',
+            'requiresFinancialRead',
+            'requiresSensitiveRead',
+          ].includes(key) && typeof value !== 'object'
+      )
     : [];
 
   return (
@@ -244,6 +277,11 @@ export default function ClinicReportsContent() {
                         <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
                           {definition.description}
                         </span>
+                        {!definition.exportEnabled && (
+                          <span className="mt-2 block text-xs font-medium text-slate-600">
+                            Exportacao desabilitada no cadastro ativo.
+                          </span>
+                        )}
                         {!definition.canRun && (
                           <span className="mt-2 block text-xs font-medium text-amber-700">
                             {definition.disabledReason ?? 'Permissao insuficiente.'}
@@ -345,7 +383,11 @@ export default function ClinicReportsContent() {
           <div className="flex flex-col gap-2 pt-2">
             <button
               type="button"
-              disabled={!selectedDefinition?.canRun || running !== null}
+              disabled={
+                !selectedDefinition?.canRun ||
+                !selectedDefinition?.exportEnabled ||
+                running !== null
+              }
               onClick={() => void handleRun('csv')}
               className="btn-primary justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -353,7 +395,11 @@ export default function ClinicReportsContent() {
             </button>
             <button
               type="button"
-              disabled={!selectedDefinition?.canRun || running !== null}
+              disabled={
+                !selectedDefinition?.canRun ||
+                !selectedDefinition?.exportEnabled ||
+                running !== null
+              }
               onClick={() => void handleRun('pdf')}
               className="btn-secondary justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -381,13 +427,24 @@ export default function ClinicReportsContent() {
             </p>
           </div>
           {lastRun && (
-            <button
-              type="button"
-              onClick={() => void handleDownload()}
-              className="btn-secondary gap-2"
-            >
-              <Download size={15} /> Baixar export seguro
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRefreshRun()}
+                disabled={statusRefreshing}
+                className="btn-secondary gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCcw size={15} /> {statusRefreshing ? 'Consultando...' : 'Consultar status'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDownload()}
+                disabled={!lastRun.exportToken}
+                className="btn-secondary gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Download size={15} /> Baixar export seguro
+              </button>
+            </div>
           )}
         </div>
 
@@ -422,7 +479,29 @@ export default function ClinicReportsContent() {
               </div>
             </div>
 
+            {summaryEntries.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {summaryEntries.map(([key, value]) => (
+                  <span
+                    key={key}
+                    className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                  >
+                    {key}: {formatValue(value)}
+                  </span>
+                ))}
+              </div>
+            )}
+
             {downloadState && <p className="text-xs text-muted-foreground">{downloadState}</p>}
+
+            {runError && (
+              <p
+                role="alert"
+                className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
+              >
+                {runError}
+              </p>
+            )}
 
             {resultColumns.length === 0 ? (
               <div className="rounded-2xl border border-border p-4 text-sm text-muted-foreground">

@@ -80,7 +80,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F09 | Programas                | `/clinic/programs`, builder, `programsApi`                               | Avanço de matrícula em 2026-06-02: UI de programas aciona `enroll_patient_in_program`, seleciona paciente ativo e mostra reflexos de check-ins/documentos/agenda/invoice     | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | Smoke autenticado, RLS multi-tenant e efeitos derivados |
 | F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                | Avanço de contrato real em 2026-06-02: UI e Edge Function bloqueiam envio D4Sign quando o template não está habilitado/ativo; status fica visível na lista                   | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign sandbox, storage, webhook e permissões reais     |
 | F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                       | Avanço de idempotência em 2026-06-02: criação de cobrança/assinatura usa chave por tentativa e Edge Functions reutilizam registros locais antes de chamar Asaas              | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas sandbox, webhook real e RLS multi-tenant          |
-| F12 | Relatórios clínica       | `/clinic/reports`, `clinicReportsApi`                                    | Contrato dependente                                                                                                                                                          | Execução/exportação validada   | Executar relatório e baixar exportação                                                                                               | Edge Function `clinic-reports`                          |
+| F12 | Relatórios clínica       | `/clinic/reports`, `clinicReportsApi`                                    | Avanço de contrato real em 2026-06-02: Edge Function revalida definição/permissão/export antes do run; UI consulta status e bloqueia export desabilitado                     | Execução/exportação validada   | Executar relatório, consultar status e baixar exportação segura                                                                      | Smoke Supabase/browser com usuário sintético            |
 | F13 | Configurações            | `/clinic/settings`, `clinicSettingsApi`                                  | Integrado por leitura                                                                                                                                                        | Real validado                  | Ler, atualizar clínica e unidade                                                                                                     | RPCs de settings e permissões                           |
 | F14 | Inbox                    | `/clinic/inbox`, `notificationsApi`, `chatApi`                           | Mock/real misto                                                                                                                                                              | Real validado                  | Marcar lido, arquivar, atribuir e responder                                                                                          | RPCs de comunicações e RLS                              |
 | F15 | CRM                      | `/clinic/crm`, `crmApi`                                                  | Mock/real misto                                                                                                                                                              | Real validado                  | Criar lead, mover etapa e converter paciente                                                                                         | RPCs CRM e duplicidade de PII                           |
@@ -480,12 +480,12 @@ D4Sign -> status atualizado -> URL assinada -> liberação ao paciente.
 
 **Checklist clínica:**
 
-- [ ] Lista definições de relatórios clínicos.
-- [ ] Executa relatório autorizado.
-- [ ] Consulta status de processamento.
-- [ ] Exporta arquivo.
-- [ ] Trata relatório sem dados.
-- [ ] Bloqueia perfil sem permissão.
+- [x] Lista definições de relatórios clínicos. Código usa Edge Function `clinic-reports` e RPC allowlist `list_clinic_report_definitions`; validação Supabase/RLS pendente.
+- [x] Executa relatório autorizado. Edge Function revalida definição disponível, `canRun` e `exportEnabled` antes de chamar `create_clinic_report_run`; smoke real pendente.
+- [x] Consulta status de processamento. UI passou a chamar `getClinicReportRun` via ação `get` para atualizar o último run; validação real pendente.
+- [x] Exporta arquivo. Download usa Edge Function `clinic-report-export`, sessão bearer, token curto e `Cache-Control: no-store`; prova real pendente.
+- [x] Trata relatório sem dados. UI mostra estado explícito quando o run retorna zero linhas.
+- [x] Bloqueia perfil sem permissão. Catálogo exibe definição indisponível por `canRun=false`, botões ficam desabilitados e backend recusa run sem permissão/export; validação com perfis sintéticos pendente.
 
 **Checklist paciente:**
 
@@ -720,7 +720,7 @@ Use esta seção para controlar bloqueios durante a execução.
 | 2026-06-02 | F02    | Revisar divergência de `canAccessPatientPortal` | Alta       | Codex       | Endpoint e middleware agora usam helper canônico; validar perfis sintéticos em homologação | Parcialmente resolvido |
 | 2026-06-02 | F10    | Validar contratos D4Sign/documentos             | Alta       | A definir   | Preparar ambiente sandbox autorizado                                                       | Aberto                 |
 | 2026-06-02 | F11    | Validar Asaas/billing com sandbox               | Alta       | A definir   | Preparar dados sintéticos e webhooks                                                       | Aberto                 |
-| 2026-06-02 | F12    | Fechar contrato de `clinic-reports`             | Média      | A definir   | Validar Edge Function e exportação                                                         | Aberto                 |
+| 2026-06-02 | F12    | Fechar contrato de `clinic-reports`             | Média      | A definir   | Edge Function e UI reforçadas por código; validar execução/exportação em Supabase real     | Aprovado por código    |
 | 2026-06-02 | F19    | Testar admin tenant detail com audit log        | Alta       | A definir   | Criar cenários admin sintéticos                                                            | Aberto                 |
 | 2026-06-02 | F06    | Blindar gráfico de peso com dados vazios        | Média      | Codex       | Componente corrigido; validar visualmente no Paciente 360 com paciente sem histórico       | Parcialmente resolvido |
 
@@ -1009,6 +1009,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado com paciente sintético e sandbox Asaas autorizado.
 - Status: aprovado por código; validação real em homologação/sandbox pendente.
 - Pendências: validar customer/cobrança/assinatura em sandbox, webhook idempotente/autenticado, reconciliação com divergências sintéticas, isolamento RLS multi-tenant e evidência visual.
+
+### Evidência — F12 Relatórios clínicos e export seguro
+
+- Data: 2026-06-02.
+- Ambiente: local, validação por código e checks obrigatórios; Edge Functions/RPCs reais não foram invocados contra Supabase remoto nesta execução.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; validação estática usou contratos RLS/RPC/Edge Functions já versionados.
+- Tenant sintético: pendente para executar `/clinic/reports` com `NEXT_PUBLIC_USE_MOCK_DATA=false`, usuário com `reports.read` e perfis sem permissões financeiras/sensíveis.
+- Mock habilitado? fluxo de relatórios clínicos usa Supabase Functions/RPCs reais; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/clinic/reports`, `clinicReportsApi`, Edge Functions `clinic-reports` e `clinic-report-export`, RPCs `list_clinic_report_definitions`, `create_clinic_report_run`, `get_clinic_report_run` e `get_clinic_report_export`.
+- Passos executados:
+  1. Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente da ordem, F12.
+  2. A Edge Function `clinic-reports` passou a validar `report_key`, reconsultar o catálogo allowlist, recusar definições indisponíveis, recusar `canRun=false` e bloquear run quando `exportEnabled=false` antes de chamar a RPC de criação.
+  3. A UI de `/clinic/reports` passou a mostrar quando a exportação está desabilitada, bloquear botões de CSV/PDF nesses casos e oferecer ação de consulta de status do último run via `getClinicReportRun`.
+  4. A área de resultado passou a exibir resumo operacional minimizado do run e mantém estado explícito para relatório sem linhas.
+  5. A Edge Function `clinic-report-export` passou a recusar métodos fora de GET/POST, validar sessão com `auth.getUser`, exigir `run_id` e token antes da RPC e registrar erros sem mensagem bruta de banco/provedor.
+- Resultado esperado: avançar F12 na ordem do plano sem criar migração, sem imprimir segredos e fechando o contrato frontend/Edge Function para listagem, execução, status e exportação segura.
+- Resultado observado: checks obrigatórios executados após as mudanças; smoke Supabase/browser com usuário sintético e download real continuam pendentes.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de provider ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado em `/clinic/reports` com tenant sintético.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: executar relatório com dados e sem dados, baixar CSV/PDF, validar expiração de token, perfil sem `reports.read`, perfil sem `financial.read`/`timeline.sensitive.read` e isolamento RLS multi-tenant.
 
 ## 18. Sequência recomendada de implementação
 
