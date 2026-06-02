@@ -142,6 +142,24 @@ function normalizeOptionalText(value: string | null | undefined) {
   return normalized ? normalized : null;
 }
 
+function sanitizePatientSearchQuery(value: string | null | undefined) {
+  return Array.from(value ?? '')
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return code <= 31 || code === 127 ? ' ' : char;
+    })
+    .join('')
+    .normalize('NFKC')
+    .replace(/[,%_*\\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+}
+
+function normalizeDigits(value: string) {
+  return value.replace(/\D/g, '').slice(0, 20);
+}
+
 function calculateAge(birthDate: string | null | undefined) {
   if (!birthDate) return 0;
   const date = new Date(`${birthDate}T00:00:00`);
@@ -272,19 +290,37 @@ async function resolveActiveTenantId() {
 }
 
 async function getSearchMatchedPatientIds(tenantId: string, search: string) {
-  const query = search.trim();
+  const query = sanitizePatientSearchQuery(search);
   if (!query) return null;
 
-  const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase
-    .from('patient_pii')
-    .select('patient_id')
-    .eq('tenant_id', tenantId)
-    .ilike('full_name', `%${query}%`)
-    .limit(250);
+  const digits = normalizeDigits(query);
+  const terms = Array.from(new Set([query, digits].filter((term) => term.length >= 2)));
+  if (terms.length === 0) return null;
 
-  if (error) throw error;
-  return (data ?? []).map((row) => row.patient_id as string);
+  const supabase = createBrowserSupabaseClient();
+  const columns = ['full_name', 'cpf_masked', 'phone', 'email'] as const;
+  const results = await Promise.all(
+    terms.flatMap((term) =>
+      columns.map((column) =>
+        supabase
+          .from('patient_pii')
+          .select('patient_id')
+          .eq('tenant_id', tenantId)
+          .ilike(column, `%${term}%`)
+          .limit(250)
+      )
+    )
+  );
+
+  const patientIds = new Set<string>();
+  for (const result of results) {
+    if (result.error) throw result.error;
+    for (const row of result.data ?? []) {
+      patientIds.add(row.patient_id as string);
+    }
+  }
+
+  return Array.from(patientIds).slice(0, 250);
 }
 
 async function getPatientRows(

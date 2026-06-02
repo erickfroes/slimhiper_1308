@@ -73,7 +73,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F02 | Correção portal paciente | `canAccessPatientPortal` no endpoint de sessão                           | Corrigido por código em 2026-06-02                                                              | Corrigido e testado            | Endpoint reutiliza helper canônico de destino; validação real por perfis segue pendente sem usuários sintéticos/Supabase homologação | Usuários sintéticos e ambiente Supabase homologação     |
 | F03 | Shell clínico            | `DashboardShell`, polling, busca, logout, menus                          | Blindado por código em 2026-06-02                                                               | Resiliente a falhas            | Polling e ações de leitura tratam exceções localmente; browser smoke segue pendente                                                  | Ambiente/browser autenticado para smoke                 |
 | F04 | Dashboard clínico        | `/clinic/dashboard`, `dashboardApi`                                      | Mock/real misto                                                                                 | Real validado                  | Smoke sem mock com métricas, fila e alertas                                                                                          | Contratos de métricas e insights                        |
-| F05 | Pacientes                | `/clinic/patients`, `patientsApi`                                        | Mock/real misto                                                                                 | CRUD real validado             | Criar, editar, listar, filtrar e abrir 360                                                                                           | RLS em PII e paginação                                  |
+| F05 | Pacientes                | `/clinic/patients`, `patientsApi`                                        | Avanço de contrato real em 2026-06-02: busca sanitizada em PII, filtro real por status, refresh concorrente protegido e ações acessíveis | CRUD real validado             | Criar, editar, listar, filtrar e abrir 360; `npm run type-check` passou após avanço de código                                         | RLS em PII, paginação real >100 e smoke autenticado     |
 | F06 | Paciente 360             | `/clinic/patients/[patientId]` e abas                                    | Correção de gráfico aplicada em 2026-06-02; demais abas mock/real misto                         | Real validado por aba          | `WeightEvolutionChart` trata vazio/nulo/inválido sem `NaN`; smoke por paciente sintético segue pendente                              | Edge Functions, permissões por aba e paciente sintético |
 | F07 | Atendimento SOAP         | `/clinic/patients/[patientId]/encounter`, `encounterApi`                 | Mock/real misto                                                                                 | Escrita real validada          | Salvar rascunho e finalizar atendimento                                                                                              | Timeline e audit log                                    |
 | F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                            | Mock/real misto                                                                                 | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                     |
@@ -275,16 +275,24 @@ alertas e agenda.
 
 **Checklist:**
 
-- [ ] Lista pacientes reais do tenant.
-- [ ] Busca por nome/documento sanitizado.
-- [ ] Filtros funcionam.
-- [ ] Ordenação funciona.
-- [ ] Paginação funciona.
-- [ ] Seleção em massa funciona sem expor ações indevidas.
-- [ ] Criar paciente grava dados em tabelas corretas.
-- [ ] Editar paciente atualiza dados e respeita RLS.
-- [ ] Abrir Paciente 360 usa `patientId` correto.
-- [ ] Tenant A não acessa paciente do tenant B.
+- [x] Lista pacientes reais do tenant. Código usa `getPatientListPage`/Supabase quando `NEXT_PUBLIC_USE_MOCK_DATA` não é `true`; validação Supabase/browser segue pendente.
+- [x] Busca por nome/documento sanitizado. Em 2026-06-02 `patientsApi` passou a normalizar a busca, remover curingas perigosos e pesquisar em `full_name`, `cpf_masked`, `phone` e `email` da `patient_pii` por tenant.
+- [x] Filtros funcionam. Em 2026-06-02 o filtro de status passou a ser aplicado no contrato real (`patients.status`); filtros derivados de programa/financeiro/adesão continuam client-side sobre linhas carregadas.
+- [x] Ordenação funciona. Código mantém ordenação client-side por colunas da tabela; validação browser pendente.
+- [ ] Paginação funciona. Parcial: UI pagina os resultados carregados e o serviço aceita `page/pageSize`; a tela ainda carrega até 100 linhas para preservar filtros derivados client-side até contrato de filtros agregados.
+- [x] Seleção em massa funciona sem expor ações indevidas. Em 2026-06-02 ações em massa continuam desabilitadas quando não há escrita segura e checkboxes ganharam rótulos acessíveis.
+- [x] Criar paciente grava dados em tabelas corretas. Código grava `patients` e `patient_pii` no tenant ativo; validação Supabase/RLS pendente.
+- [x] Editar paciente atualiza dados e respeita RLS. Código atualiza por `tenant_id` e `id`/`patient_id`; validação multi-tenant real pendente.
+- [x] Abrir Paciente 360 usa `patientId` correto. Link e clique de linha usam `/clinic/patients/${patient.id}`.
+- [ ] Tenant A não acessa paciente do tenant B. Pendente validação com usuários sintéticos e RLS em homologação.
+
+**Progresso registrado em 2026-06-02:**
+
+- `patientsApi` recebeu sanitização explícita da busca de pacientes para remover caracteres de controle e curingas de `ilike`, limitar o tamanho do termo e pesquisar nome, CPF mascarado, telefone e email sem expor valores em logs.
+- A listagem `/clinic/patients` passou a chamar `getPatientListPage` com busca/status em vez de carregar tudo pelo helper legado, mantendo total retornado pelo contrato real e protegendo respostas obsoletas em refresh concorrente.
+- O filtro operacional de status foi adicionado ao painel de filtros e aplicado no Supabase por `patients.status`; filtros derivados seguem client-side enquanto o contrato agregado não suporta todos os campos.
+- Ações de linha deixaram de depender de hover para cumprir o requisito touch/teclado, e seleção em massa recebeu labels acessíveis mantendo ações não autorizadas desabilitadas.
+- Validação browser autenticada, criação/edição real e isolamento Tenant A/B continuam pendentes até homologação com usuários sintéticos.
 
 ### 7.3 `/clinic/patients/[patientId]` — Paciente 360
 
@@ -792,6 +800,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado.
 - Status: aprovado por código; browser smoke pendente.
 - Pendências: validar `/clinic/dashboard`, `/clinic/patients`, busca e logout em sessão sintética.
+
+### Evidência — F05 avanço de contrato da lista de pacientes
+
+- Data: 2026-06-02.
+- Ambiente: local dev, validação por código e checks obrigatórios.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: não aplicável nesta etapa; browser autenticado pendente.
+- Tenant sintético: pendente para criação/edição e isolamento Tenant A/B.
+- Mock habilitado? código preserva mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/clinic/patients` e `patientsApi`.
+- Passos executados:
+  1. Revisada a implementação de `patientsApi` e da tela `PatientListContent`.
+  2. Sanitizada busca real em `patient_pii` por nome, documento mascarado, telefone e email.
+  3. Alterada a tela para usar `getPatientListPage` com busca/status e controle de resposta obsoleta.
+  4. Adicionado filtro real de status e mantidos filtros derivados client-side até contrato agregado completo.
+  5. Tornadas ações de linha sempre visíveis e seleção em massa acessível, sem habilitar ações sem escrita segura.
+- Resultado esperado: avançar F05 na ordem do plano sem criar migração nem depender de mock para busca/status.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check` passaram após as mudanças; lint/build mantêm 13 warnings conhecidos não relacionados. Smoke Supabase/browser ainda pendente.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: validar criar/editar/listar/filtrar/abrir 360 com usuários sintéticos, fechar paginação real acima de 100 linhas e provar isolamento Tenant A/B.
 
 ## 18. Sequência recomendada de implementação
 
