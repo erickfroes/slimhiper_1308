@@ -409,6 +409,90 @@ function AppointmentFormModal({
   );
 }
 
+function CancelAppointmentModal({
+  appointment,
+  reason,
+  error,
+  submitting,
+  onChangeReason,
+  onClose,
+  onConfirm,
+}: {
+  appointment: AppointmentSummary;
+  reason: string;
+  error: string | null;
+  submitting: boolean;
+  onChangeReason: (reason: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-base font-semibold text-foreground">Cancelar consulta</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Informe o motivo operacional para registrar a alteração na fila e manter a trilha de
+            atendimento.
+          </p>
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
+            <p className="font-semibold text-foreground">{appointment.patientName}</p>
+            <p className="text-xs text-muted-foreground">
+              {appointmentTypeLabel[appointment.type]} ·{' '}
+              {new Date(appointment.scheduledAt).toLocaleString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+          </div>
+
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+            Motivo do cancelamento
+            <textarea
+              value={reason}
+              onChange={(event) => onChangeReason(event.target.value)}
+              className="input-base min-h-24 resize-none text-sm"
+              maxLength={240}
+              required
+            />
+          </label>
+
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="btn-secondary text-sm disabled:opacity-60"
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={submitting || reason.trim().length < 3}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <XCircle size={14} />
+              {submitting ? 'Cancelando...' : 'Confirmar cancelamento'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface MiniCalendarProps {
   selectedDate: string;
   calendarEvents: Record<string, number>;
@@ -676,11 +760,17 @@ function KanbanColumn({
 
 interface DayScheduleProps {
   appointments: AppointmentSummary[];
+  transitioningId: string | null;
   onEditAppointment: (appointment: AppointmentSummary) => void;
   onCancelAppointment: (appointment: AppointmentSummary) => void;
 }
 
-function DaySchedule({ appointments, onEditAppointment, onCancelAppointment }: DayScheduleProps) {
+function DaySchedule({
+  appointments,
+  transitioningId,
+  onEditAppointment,
+  onCancelAppointment,
+}: DayScheduleProps) {
   const sorted = [...appointments].sort(
     (a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
   );
@@ -742,7 +832,10 @@ function DaySchedule({ appointments, onEditAppointment, onCancelAppointment }: D
                 <button
                   type="button"
                   onClick={() => onCancelAppointment(appt)}
-                  disabled={['concluido', 'cancelado', 'falta'].includes(appt.status)}
+                  disabled={
+                    transitioningId === appt.id ||
+                    ['concluido', 'cancelado', 'falta'].includes(appt.status)
+                  }
                   className="rounded-lg p-1.5 text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
                   title="Cancelar consulta"
                 >
@@ -980,6 +1073,10 @@ export default function AgendaContent() {
   const [appointmentFormSubmitting, setAppointmentFormSubmitting] = useState(false);
   const [patientOptions, setPatientOptions] = useState<PatientListRow[]>([]);
   const [patientOptionsLoading, setPatientOptionsLoading] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<AppointmentSummary | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
 
   const loadAgenda = useCallback(async () => {
     setIsLoading(true);
@@ -1088,21 +1185,45 @@ export default function AgendaContent() {
     await loadAgenda();
   };
 
-  const handleCancelAppointment = async (appointment: AppointmentSummary) => {
-    const confirmed = window.confirm(`Cancelar a consulta de ${appointment.patientName}?`);
-    if (!confirmed) return;
+  const handleCancelAppointment = (appointment: AppointmentSummary) => {
+    setCancelTarget(appointment);
+    setCancelReason('');
+    setCancelError(null);
+  };
 
-    setTransitioningId(appointment.id);
+  const closeCancelAppointment = () => {
+    if (cancelSubmitting) return;
+    setCancelTarget(null);
+    setCancelReason('');
+    setCancelError(null);
+  };
+
+  const confirmCancelAppointment = async () => {
+    if (!cancelTarget) return;
+
+    const reason = cancelReason.trim();
+    if (reason.length < 3) {
+      setCancelError('Informe um motivo de cancelamento com pelo menos 3 caracteres.');
+      return;
+    }
+
+    setCancelSubmitting(true);
+    setTransitioningId(cancelTarget.id);
     setLoadError(null);
+    setCancelError(null);
 
-    const result = await cancelAppointment(appointment.id, 'Cancelada pela agenda clinica.');
+    const result = await cancelAppointment(cancelTarget.id, reason);
     if (result.error) {
-      setLoadError(result.error.message);
+      setCancelError(result.error.message);
     } else {
+      setCancelTarget(null);
+      setCancelReason('');
+      setCancelError(null);
       await loadAgenda();
     }
 
     setTransitioningId(null);
+    setCancelSubmitting(false);
   };
 
   const formattedDate = (() => {
@@ -1129,6 +1250,18 @@ export default function AgendaContent() {
           onChange={(patch) => setAppointmentForm((current) => ({ ...current, ...patch }))}
           onClose={closeAppointmentForm}
           onSubmit={handleSubmitAppointmentForm}
+        />
+      )}
+
+      {cancelTarget && (
+        <CancelAppointmentModal
+          appointment={cancelTarget}
+          reason={cancelReason}
+          error={cancelError}
+          submitting={cancelSubmitting}
+          onChangeReason={setCancelReason}
+          onClose={closeCancelAppointment}
+          onConfirm={confirmCancelAppointment}
         />
       )}
 
@@ -1267,6 +1400,7 @@ export default function AgendaContent() {
           ) : (
             <DaySchedule
               appointments={appointments}
+              transitioningId={transitioningId}
               onEditAppointment={openEditAppointment}
               onCancelAppointment={handleCancelAppointment}
             />

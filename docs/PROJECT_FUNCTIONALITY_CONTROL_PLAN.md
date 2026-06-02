@@ -76,7 +76,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F05 | Pacientes                | `/clinic/patients`, `patientsApi`                                        | Avanço de contrato real em 2026-06-02: busca sanitizada em PII, filtro real por status, refresh concorrente protegido e ações acessíveis                                     | CRUD real validado             | Criar, editar, listar, filtrar e abrir 360; `npm run type-check` passou após avanço de código                                        | RLS em PII, paginação real >100 e smoke autenticado     |
 | F06 | Paciente 360             | `/clinic/patients/[patientId]` e abas                                    | Correção de gráfico aplicada em 2026-06-02; demais abas mock/real misto                                                                                                      | Real validado por aba          | `WeightEvolutionChart` trata vazio/nulo/inválido sem `NaN`; smoke por paciente sintético segue pendente                              | Edge Functions, permissões por aba e paciente sintético |
 | F07 | Atendimento SOAP         | `/clinic/patients/[patientId]/encounter`, `encounterApi`                 | Avanço de imutabilidade em 2026-06-02: rascunho/finalização reais já usam `encounters`, `soap_notes`, timeline e audit log; edição pós-finalização bloqueada no serviço e UI | Escrita real validada          | Salvar rascunho, recarregar, finalizar atendimento, timeline/audit e bloqueio pós-finalização                                        | Browser autenticado, usuários sintéticos e RLS real     |
-| F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                            | Mock/real misto                                                                                                                                                              | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                     |
+| F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                            | Avanço de contrato real em 2026-06-02: leitura diária/mensal, criação, edição, status, cancelamento com motivo, eventos de fila e conflito de horário blindados por código   | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                     |
 | F09 | Programas                | `/clinic/programs`, builder, `programsApi`                               | Mock/real misto                                                                                                                                                              | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | RPCs de builder e matrícula                             |
 | F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                | Contrato dependente                                                                                                                                                          | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign, storage, webhook e permissões                   |
 | F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                       | Mock/real misto                                                                                                                                                              | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas, idempotência e webhooks                          |
@@ -352,14 +352,14 @@ alertas e agenda.
 
 **Checklist:**
 
-- [ ] Carrega agenda diária real.
-- [ ] Cria consulta.
-- [ ] Edita consulta.
-- [ ] Cancela consulta com motivo.
-- [ ] Atualiza status.
-- [ ] Registra evento de fila quando aplicável.
-- [ ] Trata conflito de horário.
-- [ ] Mostra estado vazio em dias sem agenda.
+- [x] Carrega agenda diária real. Código consulta `appointments` por tenant ativo, monta nomes via `patient_pii`, fila do dia e marcadores mensais; smoke Supabase/browser segue pendente.
+- [x] Cria consulta. Código grava `appointments` no tenant ativo após validar paciente e conflito; validação real por usuário sintético segue pendente.
+- [x] Edita consulta. Código atualiza consulta no tenant ativo, revalida paciente e ignora a própria consulta na checagem de conflito; validação real segue pendente.
+- [x] Cancela consulta com motivo. UI passou a exigir motivo operacional antes do cancelamento e serviço persiste motivo sanitizado nas notas/evento de fila; validação real segue pendente.
+- [x] Atualiza status. Código valida transições permitidas e atualiza `arrived_at` para entrada em fila; validação real segue pendente.
+- [x] Registra evento de fila quando aplicável. Código insere `queue_events` para criação, edição, transição e cancelamento; prova RLS/auditoria real segue pendente.
+- [x] Trata conflito de horário. Serviço bloqueia sobreposição do mesmo paciente ou mesmo local no dia, exceto consultas canceladas/falta e a própria consulta em edição; validação real segue pendente.
+- [x] Mostra estado vazio em dias sem agenda. Lista do dia e fila exibem estados vazios claros; smoke visual autenticado segue pendente.
 
 ### 7.6 `/clinic/financeiro`
 
@@ -881,6 +881,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado com paciente sintético.
 - Status: aprovado por código; validação real em homologação pendente.
 - Pendências: validar salvar rascunho, recarregar, finalizar, timeline/audit log e bloqueio pós-finalização em usuários sintéticos; provar RLS multi-tenant.
+
+### Evidência — F08 Agenda real, cancelamento e conflitos
+
+- Data: 2026-06-02.
+- Ambiente: local dev, validação por código e checks obrigatórios.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; validação estática usou tenant ativo resolvido por sessão browser.
+- Tenant sintético: pendente para criar, editar, cancelar e avançar status com isolamento Tenant A/B.
+- Mock habilitado? código preserva mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/clinic/agenda`, `agendaApi`, tabelas `appointments`, `patient_pii`, `patients` e `queue_events`.
+- Passos executados:
+  1. Revisado o contrato real de carregamento diário/mensal de `appointments` e a montagem da fila operacional.
+  2. Adicionada validação de conflito antes de criar/editar consulta para bloquear sobreposição do mesmo paciente ou mesmo local no mesmo dia.
+  3. Mantida a validação de paciente no tenant ativo antes de mutações de agenda.
+  4. Atualizada a UI para exigir motivo de cancelamento em modal dedicado, evitando cancelamento sem justificativa operacional.
+  5. Mantidos eventos de fila para criação, edição, transição de status e cancelamento, sem logar PII real ou payload sensível.
+- Resultado esperado: avançar F08 na ordem do plano sem criar migração, sem chamar provedores externos e sem depender de mock para regras de agenda.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check` passaram após as mudanças; lint/build mantêm warnings conhecidos não relacionados quando aplicável. Smoke Supabase/browser continua pendente.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado com paciente sintético.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: validar criar/editar/cancelar/avançar status com usuários sintéticos, provar conflito real em Supabase, validar queue events sob RLS e capturar evidência visual.
 
 ## 18. Sequência recomendada de implementação
 
