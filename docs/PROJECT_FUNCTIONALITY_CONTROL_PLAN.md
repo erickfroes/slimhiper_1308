@@ -78,7 +78,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F07 | Atendimento SOAP         | `/clinic/patients/[patientId]/encounter`, `encounterApi`                 | Avanço de imutabilidade em 2026-06-02: rascunho/finalização reais já usam `encounters`, `soap_notes`, timeline e audit log; edição pós-finalização bloqueada no serviço e UI | Escrita real validada          | Salvar rascunho, recarregar, finalizar atendimento, timeline/audit e bloqueio pós-finalização                                        | Browser autenticado, usuários sintéticos e RLS real     |
 | F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                            | Avanço de contrato real em 2026-06-02: leitura diária/mensal, criação, edição, status, cancelamento com motivo, eventos de fila e conflito de horário blindados por código   | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                     |
 | F09 | Programas                | `/clinic/programs`, builder, `programsApi`                               | Avanço de contrato real em 2026-06-02: builder valida publicação, sanitiza payload e ações de status/clone/enrollment respeitam mock/contrato real                           | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | RPCs de builder e matrícula                             |
-| F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                | Contrato dependente                                                                                                                                                          | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign, storage, webhook e permissões                   |
+| F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                | Avanço de contrato real em 2026-06-02: UI e Edge Function bloqueiam envio D4Sign quando o template não está habilitado/ativo; status fica visível na lista                  | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign sandbox, storage, webhook e permissões reais     |
 | F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                       | Mock/real misto                                                                                                                                                              | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas, idempotência e webhooks                          |
 | F12 | Relatórios clínica       | `/clinic/reports`, `clinicReportsApi`                                    | Contrato dependente                                                                                                                                                          | Execução/exportação validada   | Executar relatório e baixar exportação                                                                                               | Edge Function `clinic-reports`                          |
 | F13 | Configurações            | `/clinic/settings`, `clinicSettingsApi`                                  | Integrado por leitura                                                                                                                                                        | Real validado                  | Ler, atualizar clínica e unidade                                                                                                     | RPCs de settings e permissões                           |
@@ -457,16 +457,16 @@ D4Sign -> status atualizado -> URL assinada -> liberação ao paciente.
 
 **Checklist técnico:**
 
-- [ ] Tabela de templates tem RLS e grants corretos.
-- [ ] Documento gerado mantém vínculo com tenant, paciente e autor.
-- [ ] Storage usa bucket e path permissionados.
-- [ ] Envio D4Sign só ocorre em ambiente autorizado.
-- [ ] Token/crypt key nunca aparece em client ou log.
-- [ ] Webhook valida assinatura/autenticidade.
-- [ ] Webhook é idempotente.
-- [ ] Status desconhecido tem fallback seguro.
-- [ ] Signed URL é curta e permissionada.
-- [ ] Portal exibe somente documentos liberados.
+- [x] Tabela de templates tem RLS e grants corretos. Validação por código confirmou políticas `documents.read/write`; prova real por tenant segue pendente.
+- [x] Documento gerado mantém vínculo com tenant, paciente e autor. Edge Function `generate-document` usa tenant/paciente da sessão e metadados do documento; smoke real pendente.
+- [x] Storage usa bucket e path permissionados. Código valida bucket privado e path `tenant/patient/document/file`; prova em storage real pendente.
+- [x] Envio D4Sign só ocorre em ambiente autorizado. Em 2026-06-02 o envio passou a exigir template ativo com `d4sign_enabled=true` também na Edge Function; sandbox real pendente.
+- [x] Token/crypt key nunca aparece em client ou log. Validação por código mantém credenciais apenas em variáveis da Edge Function; nenhum segredo foi impresso.
+- [ ] Webhook valida assinatura/autenticidade. Pendente confirmação do segredo/contrato D4Sign em sandbox.
+- [x] Webhook é idempotente por código via `idempotency_key`/`provider_event_id`; reentrega real pendente.
+- [x] Status desconhecido tem fallback seguro por código via normalização e monitor operacional; sandbox real pendente.
+- [x] Signed URL é curta e permissionada. Edge Function gera URL de 300s após permissão clínica/paciente; smoke real pendente.
+- [x] Portal exibe somente documentos liberados por código/RPC; validação com paciente sintético pendente.
 
 ### 9.2 Relatórios
 
@@ -935,6 +935,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado com usuários e pacientes sintéticos.
 - Status: aprovado por código; validação real em homologação pendente.
 - Pendências: validar draft/publicação/clone/status/matrícula com usuários sintéticos, provar RLS multi-tenant, conferir geração operacional de check-ins/documentos/invoice/agenda e capturar evidência visual.
+
+### Evidência — F10 Documentos clínica e D4Sign controlado
+
+- Data: 2026-06-02.
+- Ambiente: local dev, validação por código e checks obrigatórios.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; validação estática usou contratos RLS/RPC/Edge Function já versionados.
+- Tenant sintético: pendente para gerar documento, enviar assinatura D4Sign sandbox, processar webhook e liberar no portal.
+- Mock habilitado? código preserva mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/clinic/documents`, `clinicDocumentsApi`, `documentsApi`, tabelas `document_templates`, `generated_documents`, `signature_requests`, `d4sign_events`, Edge Functions `generate-document`, `d4sign-send-document`, `webhook-d4sign` e `document-signed-url`.
+- Passos executados:
+  1. Revisado o contrato real de documentos emitidos, templates, assinaturas D4Sign, monitor operacional e URL assinada.
+  2. A listagem clínica passou a carregar o vínculo do template e mostrar se o documento está habilitado para D4Sign.
+  3. A ação de assinatura na UI passou a ficar desabilitada quando o template de origem não possui D4Sign habilitado.
+  4. A Edge Function `d4sign-send-document` passou a revalidar no backend que o template está ativo e com `d4sign_enabled=true` antes de ler storage ou chamar o provedor.
+  5. Mantidas validações existentes de permissão `documents.write`, vínculo tenant/paciente, bucket privado, path permissionado, formato suportado, request duplicado e credenciais D4Sign somente no ambiente da função.
+- Resultado esperado: avançar F10 na ordem do plano sem criar migração, sem expor tokens D4Sign no cliente e sem chamar o provedor quando o template não autoriza assinatura.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check` passaram após as mudanças; lint/build mantêm 11 warnings conhecidos não relacionados quando aplicável. Smoke Supabase/browser/D4Sign sandbox continua pendente.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, provider IDs reais ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado com documento/template/paciente sintéticos.
+- Status: aprovado por código; validação real em homologação/sandbox pendente.
+- Pendências: validar geração, assinatura, webhook idempotente/autenticado, URL assinada curta, liberação/ocultação no portal e isolamento RLS multi-tenant com usuários sintéticos.
 
 ## 18. Sequência recomendada de implementação
 

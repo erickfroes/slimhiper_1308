@@ -37,6 +37,7 @@ export interface ClinicDocumentRow {
   generatedAt: string;
   updatedAt: string;
   canRequestSignature: boolean;
+  d4signEnabled: boolean;
 }
 
 export interface ClinicDocumentMonitorEvent {
@@ -79,6 +80,14 @@ type GeneratedDocumentRow = {
   category: string | null;
   status: string | null;
   released_to_patient: boolean | null;
+  document_templates?:
+    | {
+        d4sign_enabled: boolean | null;
+      }
+    | Array<{
+        d4sign_enabled: boolean | null;
+      }>
+    | null;
   generated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -158,6 +167,15 @@ function formatDate(value: string | null | undefined) {
   }).format(date);
 }
 
+function getDocumentTemplate(row: GeneratedDocumentRow) {
+  const template = row.document_templates;
+  return Array.isArray(template) ? (template[0] ?? null) : (template ?? null);
+}
+
+function isD4SignEnabled(row: GeneratedDocumentRow) {
+  return getDocumentTemplate(row)?.d4sign_enabled === true;
+}
+
 function mapSignatureStatus(row: GeneratedDocumentRow) {
   const signature = row.signature_requests?.[0] ?? null;
   if (!signature) return 'nao_requerido';
@@ -171,6 +189,7 @@ function mapSignatureStatus(row: GeneratedDocumentRow) {
 
 function canRequestSignature(row: GeneratedDocumentRow) {
   const status = String(row.status ?? '').toLowerCase();
+  if (!isD4SignEnabled(row)) return false;
   const signature = row.signature_requests?.[0] ?? null;
   const signatureStatus = String(signature?.status ?? '').toLowerCase();
   if (
@@ -201,6 +220,7 @@ function mapDocument(
     generatedAt: formatDate(row.generated_at ?? row.created_at),
     updatedAt: formatDate(row.updated_at ?? row.created_at),
     canRequestSignature: canRequestSignature(row),
+    d4signEnabled: isD4SignEnabled(row),
   };
 }
 
@@ -246,7 +266,7 @@ export async function getClinicDocumentsWorkspace(): Promise<{
       supabase
         .from('generated_documents')
         .select(
-          'id,patient_id,name,category,status,released_to_patient,generated_at,created_at,updated_at,signature_requests(id,status,provider_document_id,created_at)'
+          'id,patient_id,name,category,status,released_to_patient,generated_at,created_at,updated_at,document_templates!generated_documents_template_same_tenant(d4sign_enabled),signature_requests(id,status,provider_document_id,created_at)'
         )
         .order('created_at', { ascending: false })
         .limit(100),

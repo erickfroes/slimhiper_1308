@@ -411,6 +411,7 @@ export default function ClinicDocumentsContent() {
                     'Tipo',
                     'Status',
                     'Assinatura',
+                    'D4Sign',
                     'Portal',
                     'Atualizado',
                     'Acoes',
@@ -425,7 +426,7 @@ export default function ClinicDocumentsContent() {
                 {data.documents.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
                       Nenhum documento gerado para o tenant ativo.
@@ -449,6 +450,17 @@ export default function ClinicDocumentsContent() {
                       <td className="px-4 py-3 text-foreground">{document.category}</td>
                       <td className="px-4 py-3">{statusBadge(document.status)}</td>
                       <td className="px-4 py-3">{signatureBadge(document.signatureStatus)}</td>
+                      <td className="px-4 py-3">
+                        {document.d4signEnabled ? (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            habilitado
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                            desabilitado
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{releaseBadge(document.releasedToPatient)}</td>
                       <td className="px-4 py-3 text-foreground">{document.updatedAt}</td>
                       <td className="px-4 py-3">
@@ -480,7 +492,9 @@ export default function ClinicDocumentsContent() {
                             title={
                               document.canRequestSignature
                                 ? undefined
-                                : 'Assinatura indisponivel neste status'
+                                : document.d4signEnabled
+                                  ? 'Assinatura indisponivel neste status'
+                                  : 'Template sem D4Sign habilitado'
                             }
                             className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
                           >
