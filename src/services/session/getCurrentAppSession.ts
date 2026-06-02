@@ -43,6 +43,19 @@ export interface AppSession {
   canAccessPatientPortal: () => boolean;
 }
 
+export function getAppSessionTargetRoute(session: AppSession | null): string {
+  if (!session) return '/auth/login';
+
+  const hasActiveTenantMembership = session.tenantMemberships.some(
+    (membership) => membership.status === 'active'
+  );
+
+  if (session.canAccessPlatformAdmin()) return '/admin';
+  if (session.canAccessClinicWorkspace() && hasActiveTenantMembership) return '/clinic/dashboard';
+  if (session.canAccessPatientPortal()) return '/patient';
+  return '/no-workspace';
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 }

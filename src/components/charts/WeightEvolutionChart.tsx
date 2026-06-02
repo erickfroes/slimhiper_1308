@@ -37,14 +37,23 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 }
 
 interface WeightEvolutionChartProps {
-  data: WeightDataPoint[];
+  data?: Array<Partial<WeightDataPoint>> | null;
   goalWeightKg: number;
 }
 
-export default function WeightEvolutionChart({ data, goalWeightKg }: WeightEvolutionChartProps) {
-  const chartData = data.filter(
-    (point) => Number.isFinite(point.week) && Number.isFinite(point.weightKg)
+function isValidWeightPoint(
+  point: Partial<WeightDataPoint> | null | undefined
+): point is WeightDataPoint {
+  return Boolean(
+    point &&
+    Number.isFinite(point.week) &&
+    Number.isFinite(point.weightKg) &&
+    typeof point.date === 'string'
   );
+}
+
+export default function WeightEvolutionChart({ data, goalWeightKg }: WeightEvolutionChartProps) {
+  const chartData = Array.isArray(data) ? data.filter(isValidWeightPoint) : [];
   const safeGoalWeight = Number.isFinite(goalWeightKg)
     ? goalWeightKg
     : (chartData.at(-1)?.weightKg ?? 0);
@@ -52,7 +61,7 @@ export default function WeightEvolutionChart({ data, goalWeightKg }: WeightEvolu
   if (chartData.length === 0) {
     return (
       <div className="flex h-[200px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center text-xs text-muted-foreground">
-        Sem historico de peso para exibir.
+        Nenhum historico de peso valido para exibir.
       </div>
     );
   }

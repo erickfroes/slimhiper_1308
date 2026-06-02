@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
-import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
+import {
+  getAppSessionTargetRoute,
+  getCurrentAppSession,
+  type AppSession,
+} from '@/services/session/getCurrentAppSession';
 
 type MiddlewareUserContext = {
   canAccessPlatformAdmin: boolean;
@@ -10,7 +14,8 @@ type MiddlewareUserContext = {
   sessionError: boolean;
 };
 
-function getTargetRoute(context: MiddlewareUserContext) {
+function getFallbackTargetRoute(context: MiddlewareUserContext) {
+  if (context.sessionError) return '/auth/login';
   if (context.canAccessPlatformAdmin) return '/admin';
   if (context.canAccessClinicWorkspace && context.hasActiveTenantMembership)
     return '/clinic/dashboard';
@@ -50,8 +55,9 @@ export async function middleware(request: NextRequest) {
   if (!user) return response;
 
   let context: MiddlewareUserContext;
+  let appSession: AppSession | null = null;
   try {
-    const appSession = await getCurrentAppSession(supabase);
+    appSession = await getCurrentAppSession(supabase);
     const hasActiveTenantMembership =
       appSession?.tenantMemberships.some((membership) => membership.status === 'active') ?? false;
 
@@ -73,11 +79,21 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname === '/' || pathname.startsWith('/auth/login')) {
-    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
+    return NextResponse.redirect(
+      new URL(
+        appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context),
+        request.url
+      )
+    );
   }
 
   if (pathname.startsWith('/admin') && !context.canAccessPlatformAdmin) {
-    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
+    return NextResponse.redirect(
+      new URL(
+        appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context),
+        request.url
+      )
+    );
   }
 
   if (
@@ -87,11 +103,21 @@ export async function middleware(request: NextRequest) {
     if (context.sessionError || context.hasActiveTenantMembership) {
       return response;
     }
-    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
+    return NextResponse.redirect(
+      new URL(
+        appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context),
+        request.url
+      )
+    );
   }
 
   if (pathname.startsWith('/patient') && !context.canAccessPatientPortal) {
-    return NextResponse.redirect(new URL(getTargetRoute(context), request.url));
+    return NextResponse.redirect(
+      new URL(
+        appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context),
+        request.url
+      )
+    );
   }
 
   return response;
