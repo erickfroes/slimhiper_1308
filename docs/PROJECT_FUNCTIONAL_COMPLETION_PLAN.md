@@ -273,7 +273,7 @@ Criterios de aceite:
 
 ## P2 - UI, acessibilidade e responsividade
 
-- [ ] Proteger `WeightEvolutionChart` contra `data=[]` e dominios invalidos de
+- [V] Proteger `WeightEvolutionChart` contra `data=[]` e dominios invalidos de
   Recharts.
 - [ ] Remover dependencia de hover-only nas acoes de pacientes; botoes precisam
   funcionar por teclado e touch.
@@ -298,6 +298,12 @@ Criterios de aceite:
 - Sem tela branca, overlay de framework ou erro relevante de console.
 - Textos e controles nao se sobrepoem nos viewports obrigatorios.
 - Fluxos principais funcionam por mouse, teclado e touch quando aplicavel.
+
+Evidencia em andamento:
+
+- 2026-06-02: `WeightEvolutionChart` passou a filtrar pontos invalidos,
+  renderizar estado vazio estavel quando `data=[]` e calcular dominio do eixo
+  incluindo a meta. Browser smoke do Paciente 360 permanece pendente.
 
 ## P2 - Seguranca, Rocket, CSP e go-live
 

@@ -42,12 +42,31 @@ interface WeightEvolutionChartProps {
 }
 
 export default function WeightEvolutionChart({ data, goalWeightKg }: WeightEvolutionChartProps) {
-  const minWeight = Math.min(...data.map((d) => d.weightKg), goalWeightKg) - 2;
-  const maxWeight = Math.max(...data.map((d) => d.weightKg)) + 1;
+  const chartData = data.filter(
+    (point) => Number.isFinite(point.week) && Number.isFinite(point.weightKg)
+  );
+  const safeGoalWeight = Number.isFinite(goalWeightKg)
+    ? goalWeightKg
+    : (chartData.at(-1)?.weightKg ?? 0);
+
+  if (chartData.length === 0) {
+    return (
+      <div className="flex h-[200px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-4 text-center text-xs text-muted-foreground">
+        Sem historico de peso para exibir.
+      </div>
+    );
+  }
+
+  const weightValues = [...chartData.map((d) => d.weightKg), safeGoalWeight];
+  const lowestWeight = Math.min(...weightValues);
+  const highestWeight = Math.max(...weightValues);
+  const domainPadding = lowestWeight === highestWeight ? 2 : 1;
+  const minWeight = lowestWeight - domainPadding;
+  const maxWeight = highestWeight + domainPadding;
 
   return (
     <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+      <LineChart data={chartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
         <defs>
           <linearGradient id="weightGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.15} />
@@ -71,12 +90,12 @@ export default function WeightEvolutionChart({ data, goalWeightKg }: WeightEvolu
         />
         <Tooltip content={<CustomTooltip />} />
         <ReferenceLine
-          y={goalWeightKg}
+          y={safeGoalWeight}
           stroke="var(--accent)"
           strokeDasharray="4 4"
           strokeWidth={1.5}
           label={{
-            value: `Meta: ${goalWeightKg}kg`,
+            value: `Meta: ${safeGoalWeight}kg`,
             position: 'right',
             fontSize: 10,
             fill: 'var(--accent)',
