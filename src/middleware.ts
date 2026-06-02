@@ -23,6 +23,19 @@ function getFallbackTargetRoute(context: MiddlewareUserContext) {
   return '/no-workspace';
 }
 
+function redirectUnlessAlreadyThere(
+  request: NextRequest,
+  response: NextResponse,
+  targetRoute: string
+) {
+  if (request.nextUrl.pathname === targetRoute) return response;
+  return NextResponse.redirect(new URL(targetRoute, request.url));
+}
+
+function getResolvedTargetRoute(appSession: AppSession | null, context: MiddlewareUserContext) {
+  return appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context);
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const { supabase, response } = updateSession(request);
@@ -34,7 +47,7 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith('/clinic') ||
       pathname.startsWith('/patient')
     ) {
-      return NextResponse.redirect(new URL('/auth/login', request.url));
+      return redirectUnlessAlreadyThere(request, response, '/auth/login');
     }
     return response;
   }
@@ -49,7 +62,7 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith('/clinic') ||
       pathname.startsWith('/patient'))
   ) {
-    return NextResponse.redirect(new URL('/auth/login', request.url));
+    return redirectUnlessAlreadyThere(request, response, '/auth/login');
   }
 
   if (!user) return response;
@@ -78,22 +91,19 @@ export async function middleware(request: NextRequest) {
     };
   }
 
+  const targetRoute = getResolvedTargetRoute(appSession, context);
+
   if (pathname === '/' || pathname.startsWith('/auth/login')) {
-    return NextResponse.redirect(
-      new URL(
-        appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context),
-        request.url
-      )
-    );
+    return redirectUnlessAlreadyThere(request, response, targetRoute);
+  }
+
+  if (pathname.startsWith('/no-workspace')) {
+    if (targetRoute === '/no-workspace' || context.sessionError) return response;
+    return redirectUnlessAlreadyThere(request, response, targetRoute);
   }
 
   if (pathname.startsWith('/admin') && !context.canAccessPlatformAdmin) {
-    return NextResponse.redirect(
-      new URL(
-        appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context),
-        request.url
-      )
-    );
+    return redirectUnlessAlreadyThere(request, response, targetRoute);
   }
 
   if (
@@ -103,26 +113,23 @@ export async function middleware(request: NextRequest) {
     if (context.sessionError || context.hasActiveTenantMembership) {
       return response;
     }
-    return NextResponse.redirect(
-      new URL(
-        appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context),
-        request.url
-      )
-    );
+    return redirectUnlessAlreadyThere(request, response, targetRoute);
   }
 
   if (pathname.startsWith('/patient') && !context.canAccessPatientPortal) {
-    return NextResponse.redirect(
-      new URL(
-        appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context),
-        request.url
-      )
-    );
+    return redirectUnlessAlreadyThere(request, response, targetRoute);
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ['/', '/auth/login', '/admin/:path*', '/clinic/:path*', '/patient/:path*'],
+  matcher: [
+    '/',
+    '/auth/login',
+    '/no-workspace',
+    '/admin/:path*',
+    '/clinic/:path*',
+    '/patient/:path*',
+  ],
 };
