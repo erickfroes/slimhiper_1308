@@ -20,11 +20,13 @@ import {
   Pencil,
 } from 'lucide-react';
 import type { Patient360Summary } from '@/domain/types';
+import type { UserContext } from '@/lib/auth/getCurrentUserContext';
 import StatusBadge from './StatusBadge';
 
 interface PatientHeaderCardProps {
   data: Patient360Summary;
   patientId: string;
+  userContext: UserContext | null;
 }
 
 const clinicalRiskConfig = {
@@ -55,8 +57,15 @@ const packageStatusConfig = {
   aguardando: { label: 'Aguardando', className: 'bg-blue-50 text-blue-700 border-blue-200' },
 };
 
-function formatDateTime(isoString: string): string {
+function parseValidDate(isoString?: string | null): Date | null {
+  if (!isoString) return null;
   const date = new Date(isoString);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateTime(isoString: string): string {
+  const date = parseValidDate(isoString);
+  if (!date) return 'Data não informada';
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
@@ -66,7 +75,8 @@ function formatDateTime(isoString: string): string {
 }
 
 function formatAppointmentDate(isoString: string): string {
-  const date = new Date(isoString);
+  const date = parseValidDate(isoString);
+  if (!date) return 'Data não informada';
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const hours = String(date.getHours()).padStart(2, '0');
@@ -75,13 +85,19 @@ function formatAppointmentDate(isoString: string): string {
 }
 
 function isToday(isoString: string): boolean {
-  const date = new Date(isoString);
+  const date = parseValidDate(isoString);
+  if (!date) return false;
   const now = new Date();
   return (
     date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
     date.getDate() === now.getDate()
   );
+}
+
+function hasAnyPermission(permissions: string[], expected: string[]) {
+  const permissionSet = new Set(permissions);
+  return expected.some((permission) => permissionSet.has(permission));
 }
 
 interface InfoItemProps {
@@ -129,7 +145,11 @@ function BadgePill({ label, className }: BadgePillProps) {
   );
 }
 
-export default function PatientHeaderCard({ data, patientId }: PatientHeaderCardProps) {
+export default function PatientHeaderCard({
+  data,
+  patientId,
+  userContext,
+}: PatientHeaderCardProps) {
   const {
     profile,
     activePackage,
@@ -146,19 +166,63 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
     (a) => isToday(a.scheduledAt) && a.status === 'agendado'
   );
 
+  const permissions = userContext?.permissions ?? [];
+  const canWriteEncounter = hasAnyPermission(permissions, ['encounters.write', 'soap.write']);
+  const canWriteAgenda = hasAnyPermission(permissions, ['agenda.write', 'appointments.write']);
+  const canUsePrimaryAction = hasTodayAppointment ? canWriteEncounter : canWriteAgenda;
   const primaryAction = hasTodayAppointment
-    ? { label: 'Iniciar atendimento', icon: <Play size={15} /> }
-    : { label: 'Novo agendamento', icon: <CalendarPlus size={15} /> };
+    ? {
+        label: 'Iniciar atendimento',
+        icon: <Play size={15} />,
+        href: `/clinic/patients/${patientId}/encounter`,
+      }
+    : {
+        label: 'Novo agendamento',
+        icon: <CalendarPlus size={15} />,
+        href: `/clinic/agenda?patientId=${patientId}`,
+      };
 
   const secondaryActions = [
-    { label: 'Novo agendamento', icon: <CalendarPlus size={14} /> },
-    { label: 'Criar documento', icon: <FileText size={14} /> },
-    { label: 'Enviar mensagem', icon: <MessageSquare size={14} /> },
-    { label: 'Registrar pagamento', icon: <CreditCard size={14} /> },
-    { label: 'Relatório', icon: <BarChart2 size={14} /> },
+    {
+      label: 'Novo agendamento',
+      icon: <CalendarPlus size={14} />,
+      href: `/clinic/agenda?patientId=${patientId}`,
+      allowed: hasAnyPermission(permissions, ['agenda.write', 'appointments.write']),
+      blockedTitle: 'Requer permissão de escrita em agenda.',
+    },
+    {
+      label: 'Criar documento',
+      icon: <FileText size={14} />,
+      href: `/clinic/patients/${patientId}?tab=documentos`,
+      allowed: hasAnyPermission(permissions, ['documents.write']),
+      blockedTitle: 'Requer permissão de escrita em documentos.',
+    },
+    {
+      label: 'Enviar mensagem',
+      icon: <MessageSquare size={14} />,
+      href: `/clinic/patients/${patientId}?tab=chat`,
+      allowed: hasAnyPermission(permissions, ['chat.write']),
+      blockedTitle: 'Requer permissão de escrita em chat.',
+    },
+    {
+      label: 'Registrar pagamento',
+      icon: <CreditCard size={14} />,
+      href: `/clinic/patients/${patientId}?tab=financeiro`,
+      allowed: hasAnyPermission(permissions, ['financial.write']),
+      blockedTitle: 'Requer permissão de escrita financeira.',
+    },
+    {
+      label: 'Relatório',
+      icon: <BarChart2 size={14} />,
+      href: `/clinic/patients/${patientId}?tab=relatorios`,
+      allowed: hasAnyPermission(permissions, ['reports.read', 'reports.write']),
+      blockedTitle: 'Requer permissão de relatórios.',
+    },
   ];
 
   const patientName = profile.name?.trim() || 'Paciente sem nome';
+  const patientPhone = profile.phone?.trim() || 'Telefone não informado';
+  const patientEmail = profile.email?.trim() || 'Email não informado';
 
   const initials = patientName
     .split(' ')
@@ -174,6 +238,7 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
     ? (financialStatusConfig[financial.status] ?? financialStatusConfig.em_dia)
     : null;
   const riskConfig = clinicalRisk ? clinicalRiskConfig[clinicalRisk] : null;
+  const canViewFinancial = userContext?.canViewFinancial ?? false;
 
   return (
     <div className="card-base mb-5 overflow-hidden">
@@ -224,11 +289,11 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Phone size={13} className="text-muted-foreground/70" />
-                {profile.phone}
+                {patientPhone}
               </span>
               <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Mail size={13} className="text-muted-foreground/70" />
-                {profile.email}
+                {patientEmail}
               </span>
             </div>
           </div>
@@ -236,30 +301,61 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2 flex-shrink-0 lg:ml-auto">
             {/* Primary action */}
-            <Link
-              href={`/clinic/patients/${patientId}/encounter`}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors"
-            >
-              {primaryAction.icon}
-              {primaryAction.label}
-            </Link>
+            {canUsePrimaryAction ? (
+              <Link
+                href={primaryAction.href}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors"
+              >
+                {primaryAction.icon}
+                {primaryAction.label}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                title={
+                  hasTodayAppointment
+                    ? 'Requer permissão para criar ou editar atendimento.'
+                    : 'Requer permissão de escrita em agenda.'
+                }
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold shadow-sm cursor-not-allowed opacity-55"
+              >
+                {primaryAction.icon}
+                {primaryAction.label}
+              </button>
+            )}
 
             {/* Secondary actions */}
-            {secondaryActions.map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors border border-border"
-              >
-                {action.icon}
-                <span className="hidden sm:inline">{action.label}</span>
-              </button>
-            ))}
+            {secondaryActions.map((action) =>
+              action.allowed ? (
+                <Link
+                  key={action.label}
+                  href={action.href}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors border border-border"
+                >
+                  {action.icon}
+                  <span className="hidden sm:inline">{action.label}</span>
+                </Link>
+              ) : (
+                <button
+                  key={action.label}
+                  type="button"
+                  disabled
+                  title={action.blockedTitle}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium transition-colors border border-border cursor-not-allowed opacity-55"
+                >
+                  {action.icon}
+                  <span className="hidden sm:inline">{action.label}</span>
+                </button>
+              )
+            )}
 
             {/* Editar */}
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors border border-border"
+              disabled
+              title="Edição direta bloqueada até contrato seguro de atualização do paciente."
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium transition-colors border border-border cursor-not-allowed opacity-55"
             >
               <Pencil size={14} />
               <span className="hidden sm:inline">Editar</span>
@@ -308,10 +404,14 @@ export default function PatientHeaderCard({ data, patientId }: PatientHeaderCard
           ) : (
             <span className="text-sm text-muted-foreground">Sem pacote ativo</span>
           )}
-          {finStatus ? (
-            <BadgePill label={finStatus.label} className={finStatus.className} />
+          {canViewFinancial ? (
+            finStatus ? (
+              <BadgePill label={finStatus.label} className={finStatus.className} />
+            ) : (
+              <span className="text-sm text-muted-foreground">Financeiro não disponível</span>
+            )
           ) : (
-            <span className="text-sm text-muted-foreground">Financeiro não disponível</span>
+            <span className="text-sm text-muted-foreground">Financeiro restrito</span>
           )}
           {riskConfig && <BadgePill label={riskConfig.label} className={riskConfig.className} />}
         </div>

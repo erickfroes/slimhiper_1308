@@ -193,7 +193,14 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
             requiredPermission={activeTabRule.description}
           />
         )}
-        {activeTab === 'resumo' && <TabResumo data={data} />}
+        {activeTab === 'resumo' && (
+          <TabResumo
+            data={data}
+            canViewDocuments={canAccessTab('documentos', userContext)}
+            canViewFinancial={userContext?.canViewFinancial ?? false}
+            canViewChat={canAccessTab('chat', userContext)}
+          />
+        )}
         {!isActiveTabForbidden && activeTab === 'timeline' && (
           <TabTimeline events={data.recentTimeline} patientId={data.profile.id} />
         )}

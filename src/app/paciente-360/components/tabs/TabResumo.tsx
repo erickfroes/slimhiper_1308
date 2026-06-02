@@ -19,13 +19,13 @@ import {
   Bell,
   ClipboardList,
   CreditCard,
+  ShieldOff,
 } from 'lucide-react';
 import type { Patient360Summary } from '@/domain/types';
 import AlertPanel from '@/components/AlertPanel';
 
 import PackageProgressCard from '@/components/PackageProgressCard';
 import StatusBadge from '@/components/StatusBadge';
-import Icon from '@/components/ui/AppIcon';
 
 const WeightEvolutionChart = dynamic(() => import('@/components/charts/WeightEvolutionChart'), {
   ssr: false,
@@ -156,9 +156,29 @@ function TaskItem({ task }: { task: Patient360Summary['tasks'][0] }) {
 
 interface TabResumoProps {
   data: Patient360Summary;
+  canViewDocuments?: boolean;
+  canViewFinancial?: boolean;
+  canViewChat?: boolean;
 }
 
-export default function TabResumo({ data }: TabResumoProps) {
+function RestrictedSummaryCard({ label }: { label: string }) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-xs text-amber-800">
+      <div className="flex items-center gap-2 font-semibold">
+        <ShieldOff size={14} />
+        <span>{label} restrito</span>
+      </div>
+      <p className="mt-1">Seu perfil não possui permissão para visualizar este resumo.</p>
+    </div>
+  );
+}
+
+export default function TabResumo({
+  data,
+  canViewDocuments = false,
+  canViewFinancial = false,
+  canViewChat = false,
+}: TabResumoProps) {
   const {
     clinicalStatus,
     alerts,
@@ -171,8 +191,6 @@ export default function TabResumo({ data }: TabResumoProps) {
   } = data;
 
   const pendingTasks = tasks.filter((t) => !t.isCompleted);
-  const completedTasks = tasks.filter((t) => t.isCompleted);
-
   // KPI derived values
   if (!clinicalStatus) {
     return (
@@ -182,10 +200,14 @@ export default function TabResumo({ data }: TabResumoProps) {
     );
   }
 
-  const pendingDocs = documents.filter(
+  const visibleDocuments = canViewDocuments ? documents : [];
+  const visibleFinancial = canViewFinancial ? financial : null;
+  const visibleChat = canViewChat ? chat : null;
+
+  const pendingDocs = visibleDocuments.filter(
     (d) => d.status === 'pendente_assinatura' || d.status === 'em_analise'
   ).length;
-  const docsAwaitingSignature = documents.filter((d) => d.status === 'pendente_assinatura');
+  const docsAwaitingSignature = visibleDocuments.filter((d) => d.status === 'pendente_assinatura');
   const bmiCategory =
     clinicalStatus.currentBmi < 18.5
       ? 'Abaixo do peso'
@@ -210,7 +232,7 @@ export default function TabResumo({ data }: TabResumoProps) {
         : clinicalStatus.adherenceLevel === 'bom'
           ? 'bg-teal-50'
           : 'bg-amber-50';
-  const financialStatus = financial?.status;
+  const financialStatus = visibleFinancial?.status;
   const financialColor =
     financialStatus === 'em_dia'
       ? 'text-positive'
@@ -223,14 +245,18 @@ export default function TabResumo({ data }: TabResumoProps) {
       : financialStatus === 'inadimplente'
         ? 'bg-red-50'
         : 'bg-amber-50';
-  const financialLabel = !financial
-    ? 'Não disponível'
-    : financialStatus === 'em_dia'
-      ? 'Em dia'
-      : financialStatus === 'inadimplente'
-        ? 'Inadimplente'
-        : 'Pendente';
-  const saldoAberto = financial ? financial.totalPending + financial.totalOverdue : 0;
+  const financialLabel = !canViewFinancial
+    ? 'Restrito'
+    : !visibleFinancial
+      ? 'Não disponível'
+      : financialStatus === 'em_dia'
+        ? 'Em dia'
+        : financialStatus === 'inadimplente'
+          ? 'Inadimplente'
+          : 'Pendente';
+  const saldoAberto = visibleFinancial
+    ? visibleFinancial.totalPending + visibleFinancial.totalOverdue
+    : 0;
   const programProgressLabel = activePackage
     ? `Sem. ${activePackage.currentWeek} / ${activePackage.totalWeeks}`
     : 'Sem pacote ativo';
@@ -521,11 +547,13 @@ export default function TabResumo({ data }: TabResumoProps) {
               iconBg="bg-violet-50"
               iconColor="text-violet-600"
             />
-            {documents.length === 0 ? (
+            {!canViewDocuments ? (
+              <RestrictedSummaryCard label="Documentos" />
+            ) : visibleDocuments.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhum documento encontrado.</p>
             ) : (
               <div className="space-y-2">
-                {documents.slice(0, 5).map((doc) => (
+                {visibleDocuments.slice(0, 5).map((doc) => (
                   <div
                     key={doc.id}
                     className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors"
@@ -654,7 +682,9 @@ export default function TabResumo({ data }: TabResumoProps) {
                 ) : undefined
               }
             />
-            {docsAwaitingSignature.length === 0 ? (
+            {!canViewDocuments ? (
+              <RestrictedSummaryCard label="Documentos" />
+            ) : docsAwaitingSignature.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhum documento pendente.</p>
             ) : (
               <div className="space-y-2">
@@ -685,26 +715,32 @@ export default function TabResumo({ data }: TabResumoProps) {
               iconBg={financialBg}
               iconColor={financialColor}
             />
-            <div className="space-y-2">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
-                <span className="text-xs text-muted-foreground">Saldo em aberto</span>
-                <span className={['text-sm font-bold tabular-nums', financialColor].join(' ')}>
-                  R$ {saldoAberto.toLocaleString('pt-BR')}
-                </span>
-              </div>
-              {financial.nextDueDate && (
-                <div className="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50">
-                  <span className="text-xs text-amber-700">Próx. vencimento</span>
-                  <span className="text-xs font-semibold text-amber-800">
-                    {financial.nextDueDate}
+            {!canViewFinancial ? (
+              <RestrictedSummaryCard label="Financeiro" />
+            ) : visibleFinancial ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
+                  <span className="text-xs text-muted-foreground">Saldo em aberto</span>
+                  <span className={['text-sm font-bold tabular-nums', financialColor].join(' ')}>
+                    R$ {saldoAberto.toLocaleString('pt-BR')}
                   </span>
                 </div>
-              )}
-              <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                <span>Status</span>
-                <StatusBadge status={financial.status} size="xs" />
+                {visibleFinancial.nextDueDate && (
+                  <div className="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50">
+                    <span className="text-xs text-amber-700">Próx. vencimento</span>
+                    <span className="text-xs font-semibold text-amber-800">
+                      {visibleFinancial.nextDueDate}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                  <span>Status</span>
+                  <StatusBadge status={visibleFinancial.status} size="xs" />
+                </div>
               </div>
-            </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Financeiro não disponível.</p>
+            )}
           </div>
 
           {/* Chat não respondido */}
@@ -712,45 +748,55 @@ export default function TabResumo({ data }: TabResumoProps) {
             <SectionHeader
               icon={MessageCircle}
               label="Chat"
-              iconBg={chat?.unreadCount && chat.unreadCount > 0 ? 'bg-red-50' : 'bg-slate-50'}
+              iconBg={
+                visibleChat?.unreadCount && visibleChat.unreadCount > 0
+                  ? 'bg-red-50'
+                  : 'bg-slate-50'
+              }
               iconColor={
-                chat?.unreadCount && chat.unreadCount > 0 ? 'text-red-500' : 'text-slate-500'
+                visibleChat?.unreadCount && visibleChat.unreadCount > 0
+                  ? 'text-red-500'
+                  : 'text-slate-500'
               }
               badge={
-                chat?.unreadCount && chat.unreadCount > 0 ? (
+                visibleChat?.unreadCount && visibleChat.unreadCount > 0 ? (
                   <span className="text-xs bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded-full font-semibold">
-                    {chat.unreadCount} não lida{chat.unreadCount > 1 ? 's' : ''}
+                    {visibleChat.unreadCount} não lida{visibleChat.unreadCount > 1 ? 's' : ''}
                   </span>
                 ) : undefined
               }
             />
-            {!chat ? (
+            {!canViewChat ? (
+              <RestrictedSummaryCard label="Chat" />
+            ) : !visibleChat ? (
               <p className="text-sm text-muted-foreground">Sem mensagens.</p>
             ) : (
               <div
                 className={[
                   'p-3 rounded-xl border',
-                  chat.unreadCount > 0 ? 'border-red-200 bg-red-50' : 'border-border bg-muted/30',
+                  visibleChat.unreadCount > 0
+                    ? 'border-red-200 bg-red-50'
+                    : 'border-border bg-muted/30',
                 ].join(' ')}
               >
                 <p
                   className={[
                     'text-xs font-medium mb-1',
-                    chat.unreadCount > 0 ? 'text-red-700' : 'text-foreground',
+                    visibleChat.unreadCount > 0 ? 'text-red-700' : 'text-foreground',
                   ].join(' ')}
                 >
-                  {chat.lastMessageFrom}
+                  {visibleChat.lastMessageFrom}
                 </p>
                 <p className="text-xs text-muted-foreground line-clamp-2 italic">
-                  &quot;{chat.lastMessagePreview}&quot;
+                  &quot;{visibleChat.lastMessagePreview}&quot;
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-1.5">
-                  {new Date(chat.lastMessageAt).toLocaleDateString('pt-BR', {
+                  {new Date(visibleChat.lastMessageAt).toLocaleDateString('pt-BR', {
                     day: '2-digit',
                     month: '2-digit',
                   })}
                   {' às '}
-                  {new Date(chat.lastMessageAt).toLocaleTimeString('pt-BR', {
+                  {new Date(visibleChat.lastMessageAt).toLocaleTimeString('pt-BR', {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
