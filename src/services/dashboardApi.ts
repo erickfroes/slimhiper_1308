@@ -169,7 +169,7 @@ async function resolveActiveTenantId() {
   if (userError) throw userError;
   if (!user) throw new Error('unauthenticated');
 
-  const [{ data: profile }, { data: memberships, error: membershipsError }] = await Promise.all([
+  const [profileResult, { data: memberships, error: membershipsError }] = await Promise.all([
     supabase.from('profiles').select('active_tenant_id').eq('id', user.id).maybeSingle(),
     supabase
       .from('tenant_memberships')
@@ -178,11 +178,14 @@ async function resolveActiveTenantId() {
       .eq('status', 'active'),
   ]);
 
+  if (profileResult.error) throw profileResult.error;
   if (membershipsError) throw membershipsError;
 
   const activeMemberships = memberships ?? [];
   const preferredTenantId =
-    typeof profile?.active_tenant_id === 'string' ? profile.active_tenant_id : null;
+    typeof profileResult.data?.active_tenant_id === 'string'
+      ? profileResult.data.active_tenant_id
+      : null;
   const preferredMembership = preferredTenantId
     ? activeMemberships.find((membership) => membership.tenant_id === preferredTenantId)
     : null;

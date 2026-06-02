@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   CalendarDays,
@@ -125,6 +125,13 @@ const apptTypeLabel: Record<string, string> = {
 
 // ─── Main Dashboard Content ───────────────────────────────────────────────────
 
+const dashboardDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+  weekday: 'long',
+  day: '2-digit',
+  month: 'long',
+  year: 'numeric',
+});
+
 export default function DashboardContent() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [queue, setQueue] = useState<WaitingQueueEntry[]>([]);
@@ -134,8 +141,11 @@ export default function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequestIdRef = useRef(0);
 
   const loadData = async (isRefresh = false) => {
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setLoadError(null);
@@ -147,6 +157,8 @@ export default function DashboardContent() {
         getDashboardAlerts(),
         getPatientsNeedingReview(),
       ]);
+      if (requestId !== loadRequestIdRef.current) return;
+
       setStats(s);
       setQueue(q);
       setAppointments(a);
@@ -158,17 +170,21 @@ export default function DashboardContent() {
         dashboardError instanceof Error
           ? dashboardError.message
           : 'Falha ao carregar dados do dashboard.';
+      if (requestId !== loadRequestIdRef.current) return;
+
       console.error('[DashboardContent] load error:', message);
       setStats(null);
       setQueue([]);
       setAppointments([]);
       setClinicAlerts([]);
       setReviewPatients([]);
-      setLoadError(message);
+      setLoadError('Nao foi possivel validar os contratos reais do dashboard.');
       toast.error('Falha ao carregar dados do dashboard. Tente novamente.');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -231,15 +247,28 @@ export default function DashboardContent() {
       'checkout',
     ].includes(a.status)
   ).length;
+  const formattedToday = dashboardDateFormatter.format(new Date());
+  const hasOperationalData =
+    stats.consultasHoje > 0 ||
+    stats.filaEspera > 0 ||
+    stats.programasAtivos > 0 ||
+    stats.alertasClinicos > 0 ||
+    stats.mensagensNaoLidas > 0 ||
+    stats.documentosPendentes > 0 ||
+    stats.inadimplentes > 0 ||
+    queue.length > 0 ||
+    appointments.length > 0 ||
+    clinicAlerts.length > 0 ||
+    reviewPatients.length > 0;
 
   return (
     <div className="p-6 xl:p-8 max-w-screen-2xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Bom dia, Ana 👋</h1>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Dashboard clinico</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Quinta-feira, 07 de maio de 2026 · Clínica SlimCenter SP
+            {formattedToday} · dados do tenant ativo
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -257,6 +286,24 @@ export default function DashboardContent() {
           </Link>
         </div>
       </div>
+
+      {!hasOperationalData && (
+        <div className="card-base border-dashed border-border bg-muted/30 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Activity size={16} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Sem movimentos para hoje</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                O dashboard real carregou sem registros de agenda, fila, alertas, documentos,
+                mensagens ou revisoes para o tenant ativo. Use Atualizar para revalidar os contratos
+                depois que novos dados forem criados.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPI Bento Grid — 6 cards: 3+3 across two breakpoints */}
       {/* Grid plan: 6 cards → grid-cols-2 md:grid-cols-3 xl:grid-cols-6 */}
