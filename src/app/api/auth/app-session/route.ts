@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
+import {
+  getAppSessionTargetRoute,
+  getCurrentAppSession,
+} from '@/services/session/getCurrentAppSession';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import {
   createObservabilityContext,
@@ -36,13 +39,7 @@ export async function GET(request: Request) {
   const canAccessPlatformAdmin = canAccessPlatformAdminFromSession(session);
   const canAccessClinicWorkspace = session.canAccessClinicWorkspace();
   const canAccessPatientPortal = session.canAccessPatientPortal();
-  const targetRoute = canAccessPlatformAdmin
-    ? '/admin'
-    : canAccessClinicWorkspace && hasActiveTenantMembership
-      ? '/clinic/dashboard'
-      : canAccessPatientPortal
-        ? '/patient'
-        : '/no-workspace';
+  const targetRoute = getAppSessionTargetRoute(session);
 
   logObservedEvent(context, 'auth_session_resolved', 'info', 'success', {
     auth_state: 'authenticated',

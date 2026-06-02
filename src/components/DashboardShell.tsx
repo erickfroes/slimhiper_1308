@@ -121,17 +121,25 @@ export default function DashboardShell({ children }: DashboardShellProps) {
 
     async function loadSummary() {
       setCommunicationsLoading(true);
-      const result = await getCommunicationsSummary();
-      if (!mounted) return;
 
-      if (result.error) {
-        setCommunicationsError('Nao foi possivel carregar inbox e notificacoes.');
+      try {
+        const result = await getCommunicationsSummary();
+        if (!mounted) return;
+
+        if (result.error) {
+          setCommunicationsError('Nao foi possivel carregar inbox e notificacoes.');
+          setSummary(null);
+        } else {
+          setCommunicationsError(null);
+          setSummary(result.data);
+        }
+      } catch {
+        if (!mounted) return;
+        setCommunicationsError('Comunicacoes temporariamente indisponiveis.');
         setSummary(null);
-      } else {
-        setCommunicationsError(null);
-        setSummary(result.data);
+      } finally {
+        if (mounted) setCommunicationsLoading(false);
       }
-      setCommunicationsLoading(false);
     }
 
     void loadSummary();
@@ -173,6 +181,26 @@ export default function DashboardShell({ children }: DashboardShellProps) {
     router.push(
       query ? `/clinic/patients?search=${encodeURIComponent(query)}` : '/clinic/patients'
     );
+  }
+
+  async function handleMarkThreadRead(threadId: string) {
+    try {
+      const result = await markThreadRead(threadId);
+      if (result.data) setSummary(result.data);
+      if (result.error) setCommunicationsError('Nao foi possivel atualizar a conversa.');
+    } catch {
+      setCommunicationsError('Nao foi possivel atualizar a conversa.');
+    }
+  }
+
+  async function handleMarkNotificationRead(notificationId: string) {
+    try {
+      const result = await markNotificationRead(notificationId);
+      if (result.data) setSummary(result.data);
+      if (result.error) setCommunicationsError('Nao foi possivel atualizar a notificacao.');
+    } catch {
+      setCommunicationsError('Nao foi possivel atualizar a notificacao.');
+    }
   }
 
   return (
@@ -385,10 +413,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                             {message.unreadCount > 0 && (
                               <button
                                 type="button"
-                                onClick={async () => {
-                                  const result = await markThreadRead(message.threadId);
-                                  if (result.data) setSummary(result.data);
-                                }}
+                                onClick={() => void handleMarkThreadRead(message.threadId)}
                                 className="btn-ghost p-1.5"
                                 aria-label={`Marcar conversa de ${message.patientName} como lida`}
                               >
@@ -478,12 +503,9 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                             {notification.status === 'unread' && (
                               <button
                                 type="button"
-                                onClick={async () => {
-                                  const result = await markNotificationRead(
-                                    notification.notificationId
-                                  );
-                                  if (result.data) setSummary(result.data);
-                                }}
+                                onClick={() =>
+                                  void handleMarkNotificationRead(notification.notificationId)
+                                }
                                 className="btn-ghost p-1.5"
                                 aria-label={`Marcar notificacao ${notification.title} como lida`}
                               >
