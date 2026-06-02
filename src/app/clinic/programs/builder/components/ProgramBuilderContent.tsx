@@ -16,6 +16,7 @@ import {
   getProgramBuilderOptions,
   programToBuilderDraft,
   saveProgramDraft,
+  validateProgramDraft,
 } from '@/services/programsApi';
 import StepDadosGerais from './steps/StepDadosGerais';
 import StepFases from './steps/StepFases';
@@ -75,6 +76,9 @@ export default function ProgramBuilderContent() {
 
   const totalSteps = BUILDER_STEPS.length;
   const step = BUILDER_STEPS[currentStep];
+  const validationIssues = validateProgramDraft(draft);
+  const publishBlockingIssues = validationIssues.filter((issue) => issue.blockingForPublish);
+  const canPublish = publishBlockingIssues.length === 0;
 
   const loadBuilder = useCallback(async () => {
     setLoading(true);
@@ -125,6 +129,14 @@ export default function ProgramBuilderContent() {
   };
 
   const persistDraft = async (publish: boolean) => {
+    if (publish && !canPublish) {
+      setError(
+        publishBlockingIssues[0]?.message ?? 'Revise os campos obrigatorios antes de publicar.'
+      );
+      setFeedback(null);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setFeedback(null);
@@ -176,7 +188,10 @@ export default function ProgramBuilderContent() {
             <button
               type="button"
               onClick={() => void persistDraft(true)}
-              disabled={saving || loading}
+              disabled={saving || loading || !canPublish}
+              title={
+                !canPublish ? 'Resolva as pendencias obrigatorias antes de publicar.' : undefined
+              }
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
             >
               <Send size={14} />
@@ -268,6 +283,24 @@ export default function ProgramBuilderContent() {
               <p className="text-sm text-muted-foreground mt-1">{step.description}</p>
             </div>
 
+            {!loading && validationIssues.length > 0 && (
+              <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                  Pendencias para publicacao real
+                </p>
+                <ul className="mt-2 space-y-1 text-xs text-amber-800">
+                  {validationIssues.slice(0, 4).map((issue) => (
+                    <li key={`${issue.field}-${issue.message}`}>- {issue.message}</li>
+                  ))}
+                </ul>
+                {validationIssues.length > 4 && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    +{validationIssues.length - 4} pendencias adicionais.
+                  </p>
+                )}
+              </div>
+            )}
+
             {loading ? (
               <div className="space-y-3">
                 <div className="h-24 rounded-lg border border-border bg-card animate-pulse" />
@@ -301,7 +334,12 @@ export default function ProgramBuilderContent() {
                 <button
                   type="button"
                   onClick={() => void persistDraft(true)}
-                  disabled={saving || loading}
+                  disabled={saving || loading || !canPublish}
+                  title={
+                    !canPublish
+                      ? 'Resolva as pendencias obrigatorias antes de publicar.'
+                      : undefined
+                  }
                   className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
                 >
                   <Send size={15} />
