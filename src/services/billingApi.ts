@@ -24,6 +24,10 @@ export interface PatientBillingIdentityInput {
   cpfCnpj?: string;
 }
 
+export interface BillingActionOptions {
+  idempotencyKey?: string;
+}
+
 export interface ClinicFinanceOverview {
   metrics: {
     monthlyRevenue: number;
@@ -142,6 +146,11 @@ function validateAmountCents(amount: number): number | null {
   return Math.round(amount * 100);
 }
 
+function normalizeIdempotencyKey(value: string | undefined) {
+  const normalized = value?.trim();
+  return normalized && normalized.length <= 120 ? normalized : undefined;
+}
+
 export async function getPatientFinancialSummary(patientId: string) {
   if (!patientId.trim()) {
     return {
@@ -200,7 +209,8 @@ export async function createPatientInvoice(
   amount: number,
   description: string,
   dueDate: string,
-  billingIdentity?: PatientBillingIdentityInput
+  billingIdentity?: PatientBillingIdentityInput,
+  options?: BillingActionOptions
 ) {
   if (!patientId.trim()) {
     return { data: null, error: { message: 'Paciente invalido para criar cobranca.' } };
@@ -229,11 +239,13 @@ export async function createPatientInvoice(
   const customer = await createPatientCustomer(patientId, billingIdentity);
   if (customer.error) return { data: null, error: customer.error };
 
+  const idempotencyKey = normalizeIdempotencyKey(options?.idempotencyKey);
   const payload = {
     patient_id: patientId,
     amount_cents: amountCents,
     description: description.trim(),
     due_date: dueDate,
+    ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };
   const res = await invoke<unknown>('asaas-create-patient-invoice', payload);
   if (res.error) return { data: null, error: res.error };
@@ -251,7 +263,8 @@ export async function createPatientSubscription(
   packageId: string,
   amount: number,
   interval: string,
-  billingIdentity?: PatientBillingIdentityInput
+  billingIdentity?: PatientBillingIdentityInput,
+  options?: BillingActionOptions
 ) {
   if (!patientId.trim()) {
     return { data: null, error: { message: 'Paciente invalido para criar assinatura.' } };
@@ -274,12 +287,14 @@ export async function createPatientSubscription(
   const customer = await createPatientCustomer(patientId, billingIdentity);
   if (customer.error) return { data: null, error: customer.error };
 
+  const idempotencyKey = normalizeIdempotencyKey(options?.idempotencyKey);
   const payload = {
     patient_id: patientId,
     package_id: packageId,
     amount_cents: amountCents,
     cycle: interval,
     next_due_date: new Date().toISOString().slice(0, 10),
+    ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };
   const res = await invoke<unknown>('asaas-create-patient-subscription', payload);
   if (res.error) return { data: null, error: res.error };

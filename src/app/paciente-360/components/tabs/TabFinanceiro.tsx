@@ -36,6 +36,14 @@ function formatDate(dateStr: string) {
   return `${d}/${m}/${y}`;
 }
 
+function createBillingActionKey(prefix: 'invoice' | 'subscription', patientId?: string) {
+  const randomId =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${prefix}:${patientId ?? 'unknown'}:${randomId}`;
+}
+
 const METHOD_LABELS: Record<string, string> = {
   pix: 'PIX',
   cartao_credito: 'Cartão de Crédito',
@@ -261,6 +269,12 @@ export default function TabFinanceiro({
   const [description, setDescription] = useState('Cobrança avulsa');
   const [dueDate, setDueDate] = useState(new Date().toISOString().slice(0, 10));
   const [billingDocument, setBillingDocument] = useState('');
+  const [invoiceActionKey, setInvoiceActionKey] = useState(() =>
+    createBillingActionKey('invoice', patientId)
+  );
+  const [subscriptionActionKey, setSubscriptionActionKey] = useState(() =>
+    createBillingActionKey('subscription', patientId)
+  );
   const canWriteFinancial = permissions.includes('financial.write');
   const creatingCharge = creatingInvoice || creatingSubscription;
 
@@ -290,12 +304,14 @@ export default function TabFinanceiro({
 
   const handleOpenInvoiceModal = () => {
     resetCreationFeedback();
+    setInvoiceActionKey(createBillingActionKey('invoice', patientId));
     setSubModal(false);
     setInvoiceModal(true);
   };
 
   const handleOpenSubscriptionModal = () => {
     resetCreationFeedback();
+    setSubscriptionActionKey(createBillingActionKey('subscription', patientId));
     setInvoiceModal(false);
     setSubModal(true);
   };
@@ -327,7 +343,8 @@ export default function TabFinanceiro({
         parsedAmount,
         trimmedDescription,
         dueDate,
-        billingIdentity
+        billingIdentity,
+        { idempotencyKey: invoiceActionKey }
       );
       if (result.error) {
         setCreationError(`Falha na Edge Function: ${result.error.message}`);
@@ -343,6 +360,7 @@ export default function TabFinanceiro({
           ? 'Cobranca criada. Link de pagamento disponivel abaixo.'
           : `Cobranca criada (${result.data.id}), mas sem link retornado pela Edge Function.`
       );
+      setInvoiceActionKey(createBillingActionKey('invoice', patientId));
       setInvoiceModal(false);
     } catch (err) {
       setCreationError(
@@ -371,7 +389,8 @@ export default function TabFinanceiro({
         'default-package',
         parsedAmount,
         'monthly',
-        billingIdentity
+        billingIdentity,
+        { idempotencyKey: subscriptionActionKey }
       );
       if (result.error) {
         setCreationError(`Falha na Edge Function: ${result.error.message}`);
@@ -387,6 +406,7 @@ export default function TabFinanceiro({
           ? 'Assinatura criada. Link de pagamento disponivel abaixo.'
           : `Assinatura criada (${result.data.id}), mas sem link retornado pela Edge Function.`
       );
+      setSubscriptionActionKey(createBillingActionKey('subscription', patientId));
       setSubModal(false);
     } catch (err) {
       setCreationError(
@@ -677,8 +697,8 @@ export default function TabFinanceiro({
             />
           </label>
           <p className="text-xs text-muted-foreground">
-            Contrato local seguro: pacote padrao e ciclo mensal; provider Asaas permanece atras da
-            Edge Function.
+            Contrato local seguro: pacote padrao, ciclo mensal e chave de idempotencia por
+            tentativa; provider Asaas permanece atras da Edge Function.
           </p>
           <label className="block space-y-1">
             <span className="text-xs font-medium text-muted-foreground">

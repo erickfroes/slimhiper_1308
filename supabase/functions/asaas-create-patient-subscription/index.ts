@@ -46,6 +46,12 @@ function bearerToken(req: Request) {
   return auth.startsWith('Bearer ') ? auth.slice(7) : '';
 }
 
+function safeIdempotencyKey(value: unknown) {
+  const key = asString(value);
+  if (!key) return '';
+  return key.length <= 120 ? key : '';
+}
+
 function safeErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (error && typeof error === 'object' && 'message' in error) {
@@ -183,6 +189,7 @@ Deno.serve(async (req) => {
     const nextDueDate = asString(body?.next_due_date);
     const description = asString(body?.description, 'Assinatura SlimHiper').slice(0, 240);
     const cycle = cycleMap[String(body?.cycle ?? 'monthly').toLowerCase()] ?? cycleMap.monthly;
+    const idempotencyKey = safeIdempotencyKey(body?.idempotency_key ?? body?.idempotencyKey);
 
     if (!patientId || !amountCents || !nextDueDate || !isDateInput(nextDueDate)) {
       return jsonResponse(400, {
@@ -198,6 +205,28 @@ Deno.serve(async (req) => {
     const tenantResolution = await resolvePatientTenant({ supabase, userId: user.id, patientId });
     if (tenantResolution.error) return tenantResolution.error;
     const tenantId = tenantResolution.tenantId as string;
+
+    if (idempotencyKey) {
+      const { data: existingSubscription, error: existingSubscriptionError } = await admin
+        .from('patient_subscriptions')
+        .select('id, status')
+        .eq('tenant_id', tenantId)
+        .eq('patient_id', patientId)
+        .eq('metadata->>idempotency_key', idempotencyKey)
+        .maybeSingle();
+
+      if (existingSubscriptionError) throw existingSubscriptionError;
+      if (existingSubscription?.id) {
+        return jsonResponse(200, {
+          ok: true,
+          data: {
+            id: existingSubscription.id,
+            status: existingSubscription.status,
+          },
+          meta: { tenantId, timestamp, reused: true },
+        });
+      }
+    }
 
     const { data: customer, error: customerError } = await admin
       .from('patient_customers')
@@ -264,7 +293,7 @@ Deno.serve(async (req) => {
         cycle: cycle.local,
         amount_cents: amountCents,
         next_due_date: nextDueDate,
-        metadata: { provider: 'asaas', description },
+        metadata: { provider: 'asaas', description, idempotency_key: idempotencyKey || null },
       })
       .select('id, status')
       .single();
