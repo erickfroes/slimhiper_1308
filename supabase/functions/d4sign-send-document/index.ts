@@ -24,6 +24,10 @@ type GeneratedDocumentRecord = {
   status: string | null;
   storage_bucket: string;
   storage_path: string;
+  document_templates?:
+    | { d4sign_enabled?: boolean | null; status?: string | null }
+    | Array<{ d4sign_enabled?: boolean | null; status?: string | null }>
+    | null;
 };
 
 declare const Deno: {
@@ -94,6 +98,16 @@ function isValidStoragePath(path: string, tenantId: string, patientId: string, d
     parts[2] === documentId &&
     parts[3].length > 0
   );
+}
+
+function getDocumentTemplate(record: GeneratedDocumentRecord) {
+  const template = record.document_templates;
+  return Array.isArray(template) ? (template[0] ?? null) : (template ?? null);
+}
+
+function templateAllowsD4Sign(record: GeneratedDocumentRecord) {
+  const template = getDocumentTemplate(record);
+  return template?.d4sign_enabled === true && String(template.status ?? 'active') === 'active';
 }
 
 function isProviderSupportedDocument(path: string) {
@@ -314,7 +328,9 @@ Deno.serve(async (req) => {
 
     const { data: generatedDocument, error: generatedDocumentError } = await supabase
       .from('generated_documents')
-      .select('id, tenant_id, patient_id, name, category, status, storage_bucket, storage_path')
+      .select(
+        'id, tenant_id, patient_id, name, category, status, storage_bucket, storage_path, document_templates!generated_documents_template_same_tenant(d4sign_enabled,status)'
+      )
       .eq('id', generatedDocumentId)
       .eq('tenant_id', tenantId)
       .eq('patient_id', patientId)
@@ -330,6 +346,17 @@ Deno.serve(async (req) => {
     }
 
     const documentRecord = generatedDocument as GeneratedDocumentRecord;
+
+    if (!templateAllowsD4Sign(documentRecord)) {
+      return jsonResponse(422, {
+        ok: false,
+        error: {
+          code: 'd4sign_disabled_for_template',
+          message: 'This document template is not enabled for D4Sign signature.',
+        },
+        meta: { timestamp },
+      });
+    }
 
     if (isPrescriptionCategory(documentRecord.category ?? '')) {
       return jsonResponse(422, {
