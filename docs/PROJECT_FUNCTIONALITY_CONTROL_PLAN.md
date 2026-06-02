@@ -78,7 +78,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F07 | Atendimento SOAP         | `/clinic/patients/[patientId]/encounter`, `encounterApi`                 | Avanço de imutabilidade em 2026-06-02: rascunho/finalização reais já usam `encounters`, `soap_notes`, timeline e audit log; edição pós-finalização bloqueada no serviço e UI | Escrita real validada          | Salvar rascunho, recarregar, finalizar atendimento, timeline/audit e bloqueio pós-finalização                                        | Browser autenticado, usuários sintéticos e RLS real     |
 | F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                            | Avanço de contrato real em 2026-06-02: leitura diária/mensal, criação, edição, status, cancelamento com motivo, eventos de fila e conflito de horário blindados por código   | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                     |
 | F09 | Programas                | `/clinic/programs`, builder, `programsApi`                               | Avanço de contrato real em 2026-06-02: builder valida publicação, sanitiza payload e ações de status/clone/enrollment respeitam mock/contrato real                           | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | RPCs de builder e matrícula                             |
-| F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                | Avanço de contrato real em 2026-06-02: UI e Edge Function bloqueiam envio D4Sign quando o template não está habilitado/ativo; status fica visível na lista                  | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign sandbox, storage, webhook e permissões reais     |
+| F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                | Avanço de contrato real em 2026-06-02: UI e Edge Function bloqueiam envio D4Sign quando o template não está habilitado/ativo; status fica visível na lista                   | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign sandbox, storage, webhook e permissões reais     |
 | F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                       | Mock/real misto                                                                                                                                                              | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas, idempotência e webhooks                          |
 | F12 | Relatórios clínica       | `/clinic/reports`, `clinicReportsApi`                                    | Contrato dependente                                                                                                                                                          | Execução/exportação validada   | Executar relatório e baixar exportação                                                                                               | Edge Function `clinic-reports`                          |
 | F13 | Configurações            | `/clinic/settings`, `clinicSettingsApi`                                  | Integrado por leitura                                                                                                                                                        | Real validado                  | Ler, atualizar clínica e unidade                                                                                                     | RPCs de settings e permissões                           |
@@ -387,14 +387,22 @@ alertas e agenda.
 
 **Checklist:**
 
-- [ ] Lista threads reais.
-- [ ] Abre thread.
-- [ ] Envia mensagem.
-- [ ] Marca como lida.
-- [ ] Arquiva.
-- [ ] Atribui responsável.
-- [ ] Atualiza status.
-- [ ] Falha de envio não duplica mensagem no retry.
+- [x] Lista threads reais. Código consome `list_clinic_inbox` via `notificationsApi` quando `NEXT_PUBLIC_USE_MOCK_DATA` não é `true`; validação browser autenticada segue pendente.
+- [x] Abre thread. Em 2026-06-02 a tela passou a selecionar a thread por querystring/botão e carregar as mensagens via `getPatientChat`, com skeleton e erro sanitizado.
+- [x] Envia mensagem. Em 2026-06-02 o inbox ganhou composer operacional que chama `sendPatientChatMessage` usando a thread/paciente selecionados; envio real depende de sessão/RLS.
+- [x] Marca como lida. Código chama `mark_thread_read` e recarrega contadores sem expor detalhes de erro; validação real segue pendente.
+- [x] Arquiva. Em 2026-06-02 foi adicionada ação de arquivamento de conversa com atualização de `status='archived'`/`archived_at` no tenant autorizado; prova RLS/auditoria real segue pendente.
+- [x] Atribui responsável. Código chama `assign_chat_thread` para assumir a conversa e recarregar o inbox; validação com usuário sintético segue pendente.
+- [x] Atualiza status. Código chama `set_chat_thread_status` para abrir/fechar a thread; validação real segue pendente.
+- [x] Falha de envio não duplica mensagem no retry. Em 2026-06-02 o composer bloqueia envio concorrente e o serviço passou a usar `client_message_id` em `metadata` para detectar mensagem já gravada antes de inserir novamente.
+
+**Progresso registrado em 2026-06-02:**
+
+- `/clinic/inbox` agora mantém seleção de thread, abre mensagens autorizadas em painel dedicado e preserva estados de loading, vazio e falha sem revelar detalhes internos de Supabase/RLS.
+- A listagem de conversas ganhou ações explícitas de abrir thread, abrir Paciente 360, marcar como lida, assumir, abrir/fechar e arquivar, todas acionadas por botões visíveis para teclado/toque.
+- O envio de resposta pelo inbox reutiliza o contrato de chat do Paciente 360 e inclui uma chave local de idempotência (`client_message_id`) para reduzir risco de duplicidade quando o usuário tenta novamente após falha.
+- Mutators do inbox passaram a respeitar fallback mock nas ações principais, mantendo a tela exercitável quando `NEXT_PUBLIC_USE_MOCK_DATA=true`.
+- Validação browser autenticada, RLS multi-tenant e auditoria real das mutações continuam pendentes até homologação com usuários sintéticos.
 
 ## 8. Fase 4 — Programas, CRM e inventário
 
