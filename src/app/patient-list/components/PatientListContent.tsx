@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -28,7 +28,7 @@ import { SkeletonTableRow } from '@/components/LoadingSkeleton';
 import {
   createPatient,
   getPatientFormSnapshot,
-  getPatientList,
+  getPatientListPage,
   updatePatient,
   type PatientMutationInput,
 } from '@/services/patientsApi';
@@ -85,7 +85,7 @@ function AdherenceBar({ value, level }: { value: number; level: AdherenceLevel }
       <div className="w-16 bg-muted rounded-full h-1.5 flex-shrink-0">
         <div
           className={['rounded-full h-1.5 transition-all', color].join(' ')}
-          style={{ width: `${value}%` }}
+          style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
         />
       </div>
       <span className={['text-xs font-semibold tabular-nums', adherenceBg(level)].join(' ')}>
@@ -343,9 +343,11 @@ export default function PatientListContent() {
   const searchParams = useSearchParams();
   const initialSearch = searchParams.get('search') ?? '';
   const [patients, setPatients] = useState<PatientListRow[]>([]);
+  const [totalPatients, setTotalPatients] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState(initialSearch);
+  const [filterStatus, setFilterStatus] = useState<PatientStatus | ''>('');
   const [filterProgram, setFilterProgram] = useState<ProgramType | ''>('');
   const [filterFinancial, setFilterFinancial] = useState<FinancialStatus | ''>('');
   const [filterAdherence, setFilterAdherence] = useState<AdherenceLevel | ''>('');
@@ -361,23 +363,36 @@ export default function PatientListContent() {
   const [patientFormError, setPatientFormError] = useState<string | null>(null);
   const [patientFormLoading, setPatientFormLoading] = useState(false);
   const [patientFormSubmitting, setPatientFormSubmitting] = useState(false);
+  const loadRequestIdRef = useRef(0);
 
   const loadPatients = useCallback(async () => {
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
     setLoading(true);
     setLoadError(null);
-    try {
-      const rows = await getPatientList();
-      setPatients(rows);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Falha ao carregar lista de pacientes.';
+
+    const result = await getPatientListPage({
+      search,
+      status: filterStatus,
+      page: 1,
+      pageSize: 100,
+    });
+
+    if (loadRequestIdRef.current !== requestId) return;
+
+    if (result.error || !result.data) {
       setPatients([]);
-      setLoadError(message);
-      toast.error('Falha ao carregar lista de pacientes.');
-    } finally {
+      setTotalPatients(0);
+      setLoadError(result.error?.message ?? 'Falha ao carregar lista de pacientes.');
       setLoading(false);
+      toast.error('Falha ao carregar lista de pacientes.');
+      return;
     }
-  }, []);
+
+    setPatients(result.data.rows);
+    setTotalPatients(result.data.total);
+    setLoading(false);
+  }, [filterStatus, search]);
 
   useEffect(() => {
     void loadPatients();
@@ -398,15 +413,6 @@ export default function PatientListContent() {
 
   const filtered = useMemo(() => {
     let result = [...patients];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.phone.includes(q) ||
-          p.activePackage.toLowerCase().includes(q)
-      );
-    }
     if (filterProgram) result = result.filter((p) => p.programType === filterProgram);
     if (filterFinancial) result = result.filter((p) => p.financialStatus === filterFinancial);
     if (filterAdherence) result = result.filter((p) => p.adherenceLevel === filterAdherence);
@@ -422,9 +428,9 @@ export default function PatientListContent() {
       });
     }
     return result;
-  }, [patients, search, filterProgram, filterFinancial, filterAdherence, sortKey, sortDir]);
+  }, [patients, filterProgram, filterFinancial, filterAdherence, sortKey, sortDir]);
 
-  const totalPages = Math.ceil(filtered.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const toggleSelect = (id: string) => {
@@ -442,6 +448,7 @@ export default function PatientListContent() {
   };
 
   const clearFilters = () => {
+    setFilterStatus('');
     setFilterProgram('');
     setFilterFinancial('');
     setFilterAdherence('');
@@ -515,7 +522,9 @@ export default function PatientListContent() {
     await loadPatients();
   };
 
-  const activeFilters = [filterProgram, filterFinancial, filterAdherence].filter(Boolean).length;
+  const activeFilters = [filterStatus, filterProgram, filterFinancial, filterAdherence].filter(
+    Boolean
+  ).length;
 
   return (
     <div className="p-6 xl:p-8 max-w-screen-2xl mx-auto">
@@ -534,7 +543,7 @@ export default function PatientListContent() {
 
       <PageHeader
         title="Pacientes"
-        subtitle={`${patients.length} pacientes cadastrados · ${patients.filter((p) => p.status === 'ativo').length} ativos`}
+        subtitle={`${totalPatients} pacientes no contrato real · ${patients.filter((p) => p.status === 'ativo').length} ativos carregados`}
         actions={
           <button type="button" onClick={openCreatePatient} className="btn-primary text-sm">
             <Users size={15} />
@@ -563,7 +572,7 @@ export default function PatientListContent() {
           />
           <input
             type="text"
-            placeholder="Buscar por nome, telefone, programa..."
+            placeholder="Buscar por nome, documento, telefone..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -599,7 +608,7 @@ export default function PatientListContent() {
 
       {/* Filter panel */}
       {filterOpen && (
-        <div className="card-base p-4 mb-4 grid grid-cols-1 sm:grid-cols-3 gap-4 fade-in">
+        <div className="card-base p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 fade-in">
           <div>
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
               Programa
@@ -618,6 +627,26 @@ export default function PatientListContent() {
                   {programTypeLabel[k]}
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+              Status
+            </label>
+            <select
+              value={filterStatus}
+              onChange={(e) => {
+                setFilterStatus(e.target.value as PatientStatus | '');
+                setPage(1);
+              }}
+              className="input-base text-sm"
+            >
+              <option value="">Todos</option>
+              <option value="ativo">Ativo</option>
+              <option value="pausado">Pausado</option>
+              <option value="inativo">Inativo</option>
+              <option value="concluido">Concluido</option>
+              <option value="cancelado">Cancelado</option>
             </select>
           </div>
           <div>
@@ -704,6 +733,7 @@ export default function PatientListContent() {
                     checked={selectedIds.size === paginated.length && paginated.length > 0}
                     onChange={toggleAll}
                     className="rounded border-input accent-primary cursor-pointer"
+                    aria-label="Selecionar pacientes da pagina"
                   />
                 </th>
                 <SortableHeader
@@ -798,6 +828,7 @@ export default function PatientListContent() {
                         onChange={() => toggleSelect(patient.id)}
                         onClick={(e) => e.stopPropagation()}
                         className="rounded border-input accent-primary cursor-pointer"
+                        aria-label={`Selecionar ${patient.name}`}
                       />
                     </td>
 
@@ -903,9 +934,9 @@ export default function PatientListContent() {
                       <StatusBadge status={patient.financialStatus} size="xs" />
                     </td>
 
-                    {/* Actions (visible on row hover) */}
+                    {/* Actions */}
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1">
                         <Link
                           href={`/clinic/patients/${patient.id}`}
                           onClick={(e) => e.stopPropagation()}
