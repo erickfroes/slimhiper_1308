@@ -719,10 +719,13 @@ export async function enrollPatientInProgram(
       data: {
         id: asString(result.id),
         status: 'ativo',
-        checkinsCreated: asNumber(result.checkinsCreated),
-        appointmentId: asString(result.appointmentId),
-        invoiceId: asString(result.invoiceId),
-        documentTasksCreated: asNumber(result.documentTasksCreated),
+        checkinsCreated: asNumber(result.checkinsCreated, asNumber(result.checkins_created)),
+        appointmentId: asString(result.appointmentId, asString(result.appointment_id)),
+        invoiceId: asString(result.invoiceId, asString(result.invoice_id)),
+        documentTasksCreated: asNumber(
+          result.documentTasksCreated,
+          asNumber(result.document_tasks_created)
+        ),
       },
       error: null,
     };
