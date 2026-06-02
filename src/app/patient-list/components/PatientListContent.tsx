@@ -337,6 +337,7 @@ function SortableHeader({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const PAGE_SIZES = [10, 20, 50];
+const DERIVED_FILTER_LOAD_LIMIT = 100;
 
 export default function PatientListContent() {
   const router = useRouter();
@@ -365,6 +366,9 @@ export default function PatientListContent() {
   const [patientFormSubmitting, setPatientFormSubmitting] = useState(false);
   const loadRequestIdRef = useRef(0);
 
+  const hasDerivedFilters = Boolean(filterProgram || filterFinancial || filterAdherence);
+  const usesServerPagination = !hasDerivedFilters;
+
   const loadPatients = useCallback(async () => {
     const requestId = loadRequestIdRef.current + 1;
     loadRequestIdRef.current = requestId;
@@ -374,8 +378,8 @@ export default function PatientListContent() {
     const result = await getPatientListPage({
       search,
       status: filterStatus,
-      page: 1,
-      pageSize: 100,
+      page: usesServerPagination ? page : 1,
+      pageSize: usesServerPagination ? pageSize : DERIVED_FILTER_LOAD_LIMIT,
     });
 
     if (loadRequestIdRef.current !== requestId) return;
@@ -392,7 +396,7 @@ export default function PatientListContent() {
     setPatients(result.data.rows);
     setTotalPatients(result.data.total);
     setLoading(false);
-  }, [filterStatus, search]);
+  }, [filterStatus, page, pageSize, search, usesServerPagination]);
 
   useEffect(() => {
     void loadPatients();
@@ -430,8 +434,24 @@ export default function PatientListContent() {
     return result;
   }, [patients, filterProgram, filterFinancial, filterAdherence, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const effectiveTotalPatients = usesServerPagination ? totalPatients : filtered.length;
+  const totalPages = Math.max(1, Math.ceil(effectiveTotalPatients / pageSize));
+  const paginated = usesServerPagination
+    ? filtered
+    : filtered.slice((page - 1) * pageSize, page * pageSize);
+  const firstVisiblePatient = effectiveTotalPatients === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastVisiblePatient = usesServerPagination
+    ? Math.min((page - 1) * pageSize + paginated.length, effectiveTotalPatients)
+    : Math.min(page * pageSize, effectiveTotalPatients);
+  const pageWindowStart = Math.max(1, Math.min(page - 2, Math.max(1, totalPages - 4)));
+  const visiblePageNumbers = Array.from(
+    { length: Math.min(5, totalPages - pageWindowStart + 1) },
+    (_, index) => pageWindowStart + index
+  );
+
+  useEffect(() => {
+    if (!loading && page > totalPages) setPage(totalPages);
+  }, [loading, page, totalPages]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -543,7 +563,7 @@ export default function PatientListContent() {
 
       <PageHeader
         title="Pacientes"
-        subtitle={`${totalPatients} pacientes no contrato real · ${patients.filter((p) => p.status === 'ativo').length} ativos carregados`}
+        subtitle={`${totalPatients} pacientes no contrato real · ${patients.filter((p) => p.status === 'ativo').length} ativos nesta carga`}
         actions={
           <button type="button" onClick={openCreatePatient} className="btn-primary text-sm">
             <Users size={15} />
@@ -982,12 +1002,12 @@ export default function PatientListContent() {
         </div>
 
         {/* Pagination */}
-        {!loading && filtered.length > 0 && (
+        {!loading && effectiveTotalPatients > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>
-                Exibindo {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} de{' '}
-                {filtered.length} pacientes
+                Exibindo {firstVisiblePatient}–{lastVisiblePatient} de {effectiveTotalPatients}{' '}
+                pacientes
               </span>
               <select
                 value={pageSize}
@@ -1007,33 +1027,39 @@ export default function PatientListContent() {
 
             <div className="flex items-center gap-1">
               <button
+                type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
+                aria-label="Pagina anterior"
                 className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft size={14} />
               </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const pageNum = i + 1;
-                return (
-                  <button
-                    key={`page-${pageNum}`}
-                    onClick={() => setPage(pageNum)}
-                    className={[
-                      'w-7 h-7 rounded-lg text-xs font-semibold transition-colors',
-                      page === pageNum
-                        ? 'bg-primary text-primary-foreground'
-                        : 'border border-border hover:bg-muted text-muted-foreground',
-                    ].join(' ')}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-              {totalPages > 5 && <span className="text-xs text-muted-foreground px-1">…</span>}
+              {pageWindowStart > 1 && <span className="text-xs text-muted-foreground px-1">…</span>}
+              {visiblePageNumbers.map((pageNum) => (
+                <button
+                  key={`page-${pageNum}`}
+                  type="button"
+                  onClick={() => setPage(pageNum)}
+                  aria-label={`Ir para pagina ${pageNum}`}
+                  className={[
+                    'w-7 h-7 rounded-lg text-xs font-semibold transition-colors',
+                    page === pageNum
+                      ? 'bg-primary text-primary-foreground'
+                      : 'border border-border hover:bg-muted text-muted-foreground',
+                  ].join(' ')}
+                >
+                  {pageNum}
+                </button>
+              ))}
+              {pageWindowStart + visiblePageNumbers.length - 1 < totalPages && (
+                <span className="text-xs text-muted-foreground px-1">…</span>
+              )}
               <button
+                type="button"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
+                aria-label="Proxima pagina"
                 className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight size={14} />

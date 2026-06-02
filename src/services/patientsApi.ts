@@ -507,10 +507,20 @@ export async function getPatientListPage(
   const pageSize = Math.min(100, Math.max(1, Math.floor(params.pageSize ?? DEFAULT_PAGE_SIZE)));
 
   if (isMockExplicitlyEnabled()) {
-    const rows = await getMockPatientList();
+    const search = sanitizePatientSearchQuery(params.search).toLocaleLowerCase('pt-BR');
+    const rows = (await getMockPatientList()).filter((row) => {
+      const matchesStatus = params.status ? row.status === params.status : true;
+      const matchesSearch = search
+        ? [row.name, row.phone, row.activePackage].some((value) =>
+            value.toLocaleLowerCase('pt-BR').includes(search)
+          )
+        : true;
+      return matchesStatus && matchesSearch;
+    });
+    const from = (page - 1) * pageSize;
     return {
       data: {
-        rows,
+        rows: rows.slice(from, from + pageSize),
         total: rows.length,
         page,
         pageSize,

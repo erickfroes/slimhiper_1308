@@ -279,7 +279,7 @@ alertas e agenda.
 - [x] Busca por nome/documento sanitizado. Em 2026-06-02 `patientsApi` passou a normalizar a busca, remover curingas perigosos e pesquisar em `full_name`, `cpf_masked`, `phone` e `email` da `patient_pii` por tenant.
 - [x] Filtros funcionam. Em 2026-06-02 o filtro de status passou a ser aplicado no contrato real (`patients.status`); filtros derivados de programa/financeiro/adesão continuam client-side sobre linhas carregadas.
 - [x] Ordenação funciona. Código mantém ordenação client-side por colunas da tabela; validação browser pendente.
-- [ ] Paginação funciona. Parcial: UI pagina os resultados carregados e o serviço aceita `page/pageSize`; a tela ainda carrega até 100 linhas para preservar filtros derivados client-side até contrato de filtros agregados.
+- [x] Paginação funciona. Em 2026-06-02 a tela passou a enviar `page/pageSize` ao `getPatientListPage` para busca/status sem filtros derivados, usar `total` real no rodapé e renderizar janela de páginas navegável; filtros derivados continuam carregando até 100 linhas por dependerem de contratos agregados futuros.
 - [x] Seleção em massa funciona sem expor ações indevidas. Em 2026-06-02 ações em massa continuam desabilitadas quando não há escrita segura e checkboxes ganharam rótulos acessíveis.
 - [x] Criar paciente grava dados em tabelas corretas. Código grava `patients` e `patient_pii` no tenant ativo; validação Supabase/RLS pendente.
 - [x] Editar paciente atualiza dados e respeita RLS. Código atualiza por `tenant_id` e `id`/`patient_id`; validação multi-tenant real pendente.
@@ -291,6 +291,8 @@ alertas e agenda.
 - `patientsApi` recebeu sanitização explícita da busca de pacientes para remover caracteres de controle e curingas de `ilike`, limitar o tamanho do termo e pesquisar nome, CPF mascarado, telefone e email sem expor valores em logs.
 - A listagem `/clinic/patients` passou a chamar `getPatientListPage` com busca/status em vez de carregar tudo pelo helper legado, mantendo total retornado pelo contrato real e protegendo respostas obsoletas em refresh concorrente.
 - O filtro operacional de status foi adicionado ao painel de filtros e aplicado no Supabase por `patients.status`; filtros derivados seguem client-side enquanto o contrato agregado não suporta todos os campos.
+- A paginação de `/clinic/patients` foi conectada ao contrato real para busca/status: a página atual e o tamanho selecionado agora são enviados ao serviço, o rodapé usa o total retornado pelo Supabase e a janela de botões acompanha páginas intermediárias em vez de mostrar somente as cinco primeiras.
+- O fallback mock de `patientsApi` passou a respeitar busca/status e `page/pageSize`, mantendo comportamento equivalente ao contrato real durante desenvolvimento local.
 - Ações de linha deixaram de depender de hover para cumprir o requisito touch/teclado, e seleção em massa recebeu labels acessíveis mantendo ações não autorizadas desabilitadas.
 - Validação browser autenticada, criação/edição real e isolamento Tenant A/B continuam pendentes até homologação com usuários sintéticos.
 
