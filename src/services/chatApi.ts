@@ -296,7 +296,8 @@ export async function openPatientChatThread(
 export async function sendPatientChatMessage(
   patientId: string,
   threadId: string,
-  body: string
+  body: string,
+  clientMessageId?: string
 ): Promise<{ data: PatientChatSummary | null; error: SafeServiceError | null }> {
   const message = body.trim();
   if (!patientId.trim() || !threadId.trim() || !message) {
@@ -356,6 +357,30 @@ export async function sendPatientChatMessage(
       };
     }
 
+    const safeClientMessageId = clientMessageId?.trim().slice(0, 80);
+    if (safeClientMessageId) {
+      const { data: duplicateMessage, error: duplicateError } = await supabase
+        .from('patient_chat_messages')
+        .select('id')
+        .eq('tenant_id', thread.tenant_id)
+        .eq('thread_id', thread.id)
+        .eq('patient_id', patientId)
+        .eq('sender_user_id', user.id)
+        .eq('metadata->>client_message_id', safeClientMessageId)
+        .maybeSingle();
+
+      if (duplicateError) {
+        return {
+          data: null,
+          error: { message: duplicateError.message, code: duplicateError.code },
+        };
+      }
+
+      if (duplicateMessage?.id) {
+        return await fetchChatFromSupabase(patientId);
+      }
+    }
+
     const now = new Date().toISOString();
     const { error: insertError } = await supabase.from('patient_chat_messages').insert({
       tenant_id: thread.tenant_id,
@@ -364,7 +389,10 @@ export async function sendPatientChatMessage(
       sender_user_id: user.id,
       sender_label: 'Equipe',
       body: message,
-      metadata: { sender_type: 'staff' },
+      metadata: {
+        sender_type: 'staff',
+        ...(safeClientMessageId ? { client_message_id: safeClientMessageId } : {}),
+      },
       moderation_status: 'approved',
       retention_until: new Date(Date.now() + 6 * 365 * 24 * 60 * 60 * 1000).toISOString(),
       created_at: now,

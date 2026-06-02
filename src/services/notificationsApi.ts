@@ -370,6 +370,8 @@ export async function listClinicInbox(filters: ClinicInboxFilters = {}): Promise
 
 export async function markNotificationRead(notificationId: string) {
   try {
+    if (isMockEnabled()) return { data: mockSummary(), error: null };
+
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('mark_notification_read', {
       p_notification_id: notificationId,
@@ -383,6 +385,8 @@ export async function markNotificationRead(notificationId: string) {
 
 export async function archiveNotification(notificationId: string) {
   try {
+    if (isMockEnabled()) return { data: mockSummary(), error: null };
+
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('archive_notification', {
       p_notification_id: notificationId,
@@ -396,6 +400,8 @@ export async function archiveNotification(notificationId: string) {
 
 export async function markThreadRead(threadId: string) {
   try {
+    if (isMockEnabled()) return { data: mockSummary(), error: null };
+
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('mark_thread_read', { p_thread_id: threadId });
     if (error) return { data: null, error: serviceError(error, 'Falha ao marcar conversa.') };
@@ -407,6 +413,8 @@ export async function markThreadRead(threadId: string) {
 
 export async function assignThreadToMe(threadId: string) {
   try {
+    if (isMockEnabled()) return { data: mockSummary(), error: null };
+
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('assign_chat_thread', {
       p_thread_id: threadId,
@@ -421,6 +429,8 @@ export async function assignThreadToMe(threadId: string) {
 
 export async function setThreadStatus(threadId: string, status: 'open' | 'closed') {
   try {
+    if (isMockEnabled()) return { data: mockSummary(), error: null };
+
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('set_chat_thread_status', {
       p_thread_id: threadId,
@@ -430,5 +440,26 @@ export async function setThreadStatus(threadId: string, status: 'open' | 'closed
     return { data: normalizeInbox(data), error: null };
   } catch (error) {
     return { data: null, error: serviceError(error, 'Falha ao alterar conversa.') };
+  }
+}
+
+export async function archiveChatThread(threadId: string) {
+  try {
+    if (isMockEnabled()) return { data: mockSummary(), error: null };
+
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase
+      .from('patient_chat_threads')
+      .update({
+        status: 'archived',
+        archived_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', threadId);
+
+    if (error) return { data: null, error: serviceError(error, 'Falha ao arquivar conversa.') };
+    return await listClinicInbox({ tab: 'conversas', limit: 50 });
+  } catch (error) {
+    return { data: null, error: serviceError(error, 'Falha ao arquivar conversa.') };
   }
 }

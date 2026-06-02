@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Archive,
   Bell,
+  Send,
   Check,
   Filter,
   Inbox,
@@ -17,6 +18,7 @@ import {
 import EmptyState from '@/components/EmptyState';
 import PageHeader from '@/components/PageHeader';
 import {
+  archiveChatThread,
   archiveNotification,
   assignThreadToMe,
   listClinicInbox,
@@ -27,6 +29,8 @@ import {
   type InboxConversation,
   type InboxTab,
 } from '@/services/notificationsApi';
+import { getPatientChat, sendPatientChatMessage } from '@/services/chatApi';
+import type { PatientChatSummary } from '@/domain/types';
 
 const tabs: Array<{ key: InboxTab; label: string; icon: React.ElementType }> = [
   { key: 'conversas', label: 'Conversas', icon: MessageSquare },
@@ -77,6 +81,13 @@ export default function ClinicInboxContent() {
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState(searchParams.get('thread') ?? '');
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [thread, setThread] = useState<PatientChatSummary | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [sendInFlight, setSendInFlight] = useState(false);
+  const [lastClientMessageId, setLastClientMessageId] = useState('');
 
   const conversations = useMemo(() => payload?.conversations ?? [], [payload]);
   const notifications = useMemo(() => payload?.notifications ?? [], [payload]);
@@ -87,6 +98,10 @@ export default function ClinicInboxContent() {
   const unreadNotificationCount = notifications.filter(
     (notification) => notification.status === 'unread'
   ).length;
+  const selectedConversation = useMemo(
+    () => conversations.find((conversation) => conversation.threadId === selectedThreadId) ?? null,
+    [conversations, selectedThreadId]
+  );
 
   const loadInbox = useCallback(async () => {
     setLoading(true);
@@ -100,7 +115,7 @@ export default function ClinicInboxContent() {
     });
 
     if (result.error) {
-      setError(result.error.message);
+      setError('Nao foi possivel carregar o inbox clinico.');
       setPayload(null);
     } else {
       setPayload(result.data);
@@ -112,11 +127,72 @@ export default function ClinicInboxContent() {
     void loadInbox();
   }, [loadInbox]);
 
-  async function runAction(id: string, action: () => Promise<unknown>) {
+  useEffect(() => {
+    if (!selectedConversation) {
+      setThread(null);
+      return;
+    }
+
+    let cancelled = false;
+    setThreadLoading(true);
+    setActionError(null);
+    void getPatientChat(selectedConversation.patientId).then((result) => {
+      if (cancelled) return;
+      if (result.error) {
+        setActionError('Nao foi possivel abrir a thread selecionada.');
+        setThread(null);
+      } else {
+        setThread(result.data);
+      }
+      setThreadLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedConversation]);
+
+  async function runAction(
+    id: string,
+    action: () => Promise<{ error?: { message: string } | null } | unknown>
+  ) {
     setActionId(id);
-    await action();
+    setActionError(null);
+    const result = await action();
+    const maybeError =
+      result && typeof result === 'object' && 'error' in result ? result.error : null;
+    if (maybeError) {
+      setActionError('A acao solicitada nao pode ser concluida.');
+    }
     await loadInbox();
     setActionId(null);
+  }
+
+  async function handleSendReply() {
+    const message = replyText.trim();
+    if (!selectedConversation || !message || sendInFlight) return;
+
+    setSendInFlight(true);
+    setActionError(null);
+    const clientMessageId =
+      lastClientMessageId || `inbox-${selectedConversation.threadId}-${Date.now()}`;
+    setLastClientMessageId(clientMessageId);
+    const result = await sendPatientChatMessage(
+      selectedConversation.patientId,
+      selectedConversation.threadId,
+      message,
+      clientMessageId
+    );
+
+    if (result.error) {
+      setActionError('Nao foi possivel enviar a mensagem. Tente novamente sem duplicar o envio.');
+    } else {
+      setReplyText('');
+      setLastClientMessageId('');
+      setThread(result.data);
+      await loadInbox();
+    }
+    setSendInFlight(false);
   }
 
   return (
@@ -146,6 +222,15 @@ export default function ClinicInboxContent() {
           <p className="mt-1 text-xs text-muted-foreground">Sem push/email/WhatsApp nesta fase.</p>
         </div>
       </section>
+
+      {actionError && (
+        <div
+          role="alert"
+          className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+        >
+          {actionError}
+        </div>
+      )}
 
       <section className="card-base overflow-hidden">
         <div className="border-b border-border p-4">
@@ -348,8 +433,15 @@ export default function ClinicInboxContent() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedThreadId(conversation.threadId)}
+                    className="btn-secondary py-1.5 text-xs"
+                  >
+                    Abrir thread
+                  </button>
                   <Link href={conversation.href} className="btn-secondary py-1.5 text-xs">
-                    Abrir paciente
+                    Paciente 360
                   </Link>
                   {conversation.unreadCount > 0 && (
                     <button
@@ -388,12 +480,122 @@ export default function ClinicInboxContent() {
                   >
                     {conversation.status === 'closed' ? 'Reabrir' : 'Fechar'}
                   </button>
+                  <button
+                    type="button"
+                    disabled={actionId === conversation.id}
+                    onClick={() =>
+                      void runAction(conversation.id, () =>
+                        archiveChatThread(conversation.threadId)
+                      )
+                    }
+                    className="btn-secondary py-1.5 text-xs disabled:opacity-60"
+                  >
+                    <Archive size={13} /> Arquivar
+                  </button>
                 </div>
               </article>
             ))}
           </div>
         )}
       </section>
+
+      {selectedConversation && (
+        <section className="card-base overflow-hidden">
+          <div className="border-b border-border p-4">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">
+                  Thread: {selectedConversation.patientName}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  {selectedConversation.unreadCount} não lidas ·{' '}
+                  {statusLabel(selectedConversation.status)} ·{' '}
+                  {selectedConversation.assignedToName
+                    ? `Resp. ${selectedConversation.assignedToName}`
+                    : 'Sem responsável'}
+                </p>
+              </div>
+              <Link href={selectedConversation.href} className="btn-secondary py-1.5 text-xs">
+                Abrir Paciente 360
+              </Link>
+            </div>
+          </div>
+
+          {threadLoading ? (
+            <div className="space-y-3 p-4" aria-label="Carregando thread">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="h-16 animate-pulse rounded-2xl bg-muted" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4 p-4">
+              <div className="max-h-80 space-y-3 overflow-y-auto rounded-2xl border border-border bg-muted/30 p-3">
+                {(thread?.messages ?? []).length === 0 ? (
+                  <EmptyState
+                    icon={MessageSquare}
+                    title="Thread sem mensagens visíveis"
+                    description="Quando houver mensagens autorizadas, elas serão exibidas aqui sem expor payloads sensíveis."
+                  />
+                ) : (
+                  (thread?.messages ?? []).map((message) => (
+                    <div
+                      key={message.id}
+                      className={`rounded-2xl p-3 text-sm ${
+                        message.from === 'staff'
+                          ? 'ml-auto bg-primary text-primary-foreground'
+                          : 'mr-auto bg-background text-foreground'
+                      } max-w-[85%]`}
+                    >
+                      <p>{message.text}</p>
+                      <p className="mt-1 text-[11px] opacity-70">
+                        {message.from === 'staff' ? 'Equipe' : 'Paciente'} ·{' '}
+                        {formatDateTime(message.time)}
+                        {message.read ? ' · lida' : ' · não lida'}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="inbox-reply"
+                  className="text-xs font-semibold text-muted-foreground"
+                >
+                  Responder paciente
+                </label>
+                <textarea
+                  id="inbox-reply"
+                  value={replyText}
+                  onChange={(event) => setReplyText(event.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  className="input-base min-h-24 resize-y py-2 text-sm"
+                  placeholder="Digite uma resposta operacional. Não inclua dados sensíveis desnecessários."
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    O botão fica bloqueado durante envio e o serviço usa chave local para reduzir
+                    duplicidade no retry.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void handleSendReply()}
+                    disabled={
+                      !replyText.trim() ||
+                      sendInFlight ||
+                      selectedConversation.status === 'archived'
+                    }
+                    className="btn-primary gap-2 disabled:opacity-60"
+                  >
+                    <Send size={14} /> {sendInFlight ? 'Enviando...' : 'Enviar resposta'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
