@@ -107,10 +107,11 @@ Using placeholder emails:
 3. Creates `tenant_memberships` for the seeded clinic roles:
    `clinic_admin`, `physician`, `nutritionist`, `financial_user`.
    `tenant_memberships.role` mirrors `role_code`.
-4. Skips patient tenant membership for now. Patient/guardian portal identity is
-   represented by `patient_accounts` and `guardian_links`, whose own-link RLS is
-   validated separately; the patient portal remains fail-closed until scoped UI
-   and data contracts are implemented.
+4. Skips patient tenant membership in this core bootstrap. Patient/guardian
+   portal identity is represented by active patient/guardian memberships plus
+   `patient_accounts` and `guardian_links`, whose own-link RLS and scoped portal
+   RPCs are validated separately. Use the patient linkage/portal contracts when
+   `/patient` needs to open in a smoke environment.
 5. Assigns roles and permissions by upserting tenant-scoped `roles`,
    `permissions`, and `role_permissions` for the clinic roles above.
    `clinic_admin` includes `packages.read` and `packages.write` for the

@@ -276,7 +276,8 @@ components.
 - `src/app/clinic/layout.tsx` applies the guard to all clinic routes and renders
   stable server-side state screens instead of letting pages mount against an
   invalid workspace context.
-- `/patient` paths require `isPatient()`.
+- `/patient` paths require `canAccessPatientPortal()`, which means an active
+  patient/guardian membership plus `patient_portal.access`.
 - `src/app/admin/layout.tsx` also performs a server-side admin guard.
 - `PlatformAdminGuard` performs a client-side confirmation through
   `/api/auth/app-session`.
@@ -310,13 +311,15 @@ components.
 
 ### Patient Portal
 
-- Current app logic treats only explicit `platform_role = patient` as patient
-  portal access.
-- Dedicated `patient_accounts` and `guardian_links` rows now have RLS policies
-  for reading only the authenticated user's active linkage row.
-- `/patient` remains fail-closed because linked patient/guardian users are not
-  yet allowed to read clinical/PII data directly and no scoped portal UI contract
-  exists yet.
+- Current app logic opens patient portal access through
+  `canAccessPatientPortal()`.
+- Portal access requires an active patient/guardian membership and one of the
+  `patient_portal.access` permission aliases.
+- Dedicated `patient_accounts` and `guardian_links` rows have RLS policies for
+  reading only the authenticated user's active linkage row.
+- `/patient` validates the scoped `get_patient_portal_snapshot` RPC before
+  rendering the portal shell. Users without portal scope receive a local access
+  denied state instead of clinical data.
 
 ## Mock And Fallback Points
 
@@ -334,9 +337,9 @@ components.
 1. `getCurrentAppSession` previously selected non-existent permission fields
    from `permissions`. The code now selects `permissions.code`, matching the
    migrations.
-2. Patient portal access is backed by linkage rows only at the RLS contract
-   level. `/patient` intentionally remains fail-closed until scoped portal data
-   contracts and UI are implemented.
+2. Patient portal access is now surfaced consistently through app session,
+   middleware, login routing and `/api/auth/app-session`. Full release still
+   requires browser/RLS smokes with patient and guardian linkage fixtures.
 3. Platform support is allowed through frontend admin guards, while backend RLS
    distinguishes support from platform admin. Admin screens need explicit
    support policy review.

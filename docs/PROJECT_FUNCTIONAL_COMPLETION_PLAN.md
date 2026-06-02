@@ -105,7 +105,7 @@ Criterios de aceite:
 
 ## P0 - Auth, sessao e RBAC
 
-- [ ] Corrigir o drift de `canAccessPatientPortal`: `/api/auth/app-session`
+- [V] Corrigir o drift de `canAccessPatientPortal`: `/api/auth/app-session`
   deve usar o mesmo calculo de `session.canAccessPatientPortal()` usado por
   `getCurrentAppSession` e pelo middleware.
 - [ ] Revisar o comportamento fail-open do middleware em erro de sessao clinica
@@ -114,7 +114,7 @@ Criterios de aceite:
   usuario clinico, paciente/responsavel vinculado e usuario sem workspace.
 - [ ] Validar bloqueio de `/admin`, `/clinic` e `/patient` para usuarios sem
   sessao, revogados, sem permissao e cross-tenant.
-- [ ] Atualizar `docs/auth/AUTH_RBAC_SESSION_CONTRACT.md` e
+- [V] Atualizar `docs/auth/AUTH_RBAC_SESSION_CONTRACT.md` e
   `docs/supabase/CORE_AUTH_RBAC_RUNBOOK.md` para o estado real do portal
   paciente.
 - [ ] Validar que `src/services/mockSession.ts` nao participa do fluxo real de
@@ -128,6 +128,14 @@ Criterios de aceite:
   `patient_portal.access`.
 - Acesso sem permissao retorna redirect/forbidden consistente, sem dados
   clinicos expostos.
+
+Evidencia em andamento:
+
+- 2026-06-02: `/api/auth/app-session` passou a usar
+  `session.canAccessPatientPortal()` e a registrar
+  `can_access_patient_portal` na observabilidade sanitizada. Os runbooks de
+  Auth/RBAC e Core Auth foram alinhados ao portal minimo. Smokes reais por
+  perfil permanecem pendentes ate ambiente Supabase autorizado.
 
 ## P1 - Supabase, RLS e contratos reais
 

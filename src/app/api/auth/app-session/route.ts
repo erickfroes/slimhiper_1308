@@ -35,7 +35,7 @@ export async function GET(request: Request) {
   );
   const canAccessPlatformAdmin = canAccessPlatformAdminFromSession(session);
   const canAccessClinicWorkspace = session.canAccessClinicWorkspace();
-  const canAccessPatientPortal = false;
+  const canAccessPatientPortal = session.canAccessPatientPortal();
   const targetRoute = canAccessPlatformAdmin
     ? '/admin'
     : canAccessClinicWorkspace && hasActiveTenantMembership
@@ -48,6 +48,7 @@ export async function GET(request: Request) {
     auth_state: 'authenticated',
     can_access_platform_admin: canAccessPlatformAdmin,
     can_access_clinic_workspace: canAccessClinicWorkspace,
+    can_access_patient_portal: canAccessPatientPortal,
     has_active_tenant_membership: hasActiveTenantMembership,
   });
 
