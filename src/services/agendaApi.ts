@@ -63,6 +63,11 @@ type AppointmentStatusRow = {
   arrived_at: string | null;
 };
 
+type AppointmentConflictRow = Pick<
+  AppointmentRow,
+  'id' | 'patient_id' | 'status' | 'scheduled_at' | 'duration_minutes' | 'location'
+>;
+
 type PatientTenantRow = {
   id: string;
   tenant_id: string;
@@ -240,6 +245,14 @@ function normalizeOptionalText(value: string | null | undefined) {
   return normalized ? normalized : null;
 }
 
+function normalizeComparableText(value: string | null | undefined) {
+  return normalizeOptionalText(value)?.toLocaleLowerCase('pt-BR') ?? null;
+}
+
+function rangesOverlap(startA: number, endA: number, startB: number, endB: number) {
+  return startA < endB && startB < endA;
+}
+
 function waitingMinutes(scheduledAt: string, arrivedAt: string | null) {
   const reference = arrivedAt ? new Date(arrivedAt).getTime() : new Date(scheduledAt).getTime();
   if (Number.isNaN(reference)) return 0;
@@ -291,6 +304,57 @@ async function assertPatientInTenant(patientId: string, tenantId: string) {
   if (error) throw error;
   if (!data) throw new Error('patient_not_found_or_forbidden');
   return data as PatientTenantRow;
+}
+
+async function assertNoAppointmentConflict(
+  tenantId: string,
+  input: AppointmentMutationInput,
+  excludeAppointmentId?: string
+) {
+  const supabase = createBrowserSupabaseClient();
+  const scheduledAt = new Date(input.scheduledAt);
+  const durationMinutes = input.durationMinutes ?? 30;
+  const requestedStart = scheduledAt.getTime();
+  const requestedEnd = requestedStart + durationMinutes * 60000;
+  const day = dayRange(localDateValue(scheduledAt));
+  const normalizedLocation = normalizeComparableText(input.location);
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id,patient_id,status,scheduled_at,duration_minutes,location')
+    .eq('tenant_id', tenantId)
+    .gte('scheduled_at', day.start)
+    .lt('scheduled_at', day.end)
+    .not('status', 'in', '(cancelado,falta)');
+
+  if (error) throw error;
+
+  const conflict = ((data ?? []) as AppointmentConflictRow[]).find((row) => {
+    if (excludeAppointmentId && row.id === excludeAppointmentId) return false;
+
+    const rowStart = new Date(row.scheduled_at).getTime();
+    if (Number.isNaN(rowStart)) return false;
+
+    const rowDuration = row.duration_minutes ?? 30;
+    const rowEnd = rowStart + rowDuration * 60000;
+    if (!rangesOverlap(requestedStart, requestedEnd, rowStart, rowEnd)) return false;
+
+    const samePatient = row.patient_id === input.patientId;
+    const sameLocation =
+      !!normalizedLocation && normalizeComparableText(row.location) === normalizedLocation;
+
+    return samePatient || sameLocation;
+  });
+
+  if (!conflict) return;
+
+  const samePatient = conflict.patient_id === input.patientId;
+  const conflictTime = timeLabel(conflict.scheduled_at);
+  throw new Error(
+    samePatient
+      ? `Conflito de horario: este paciente ja possui consulta as ${conflictTime}.`
+      : `Conflito de horario: o local informado ja possui consulta as ${conflictTime}.`
+  );
 }
 
 async function getPatientNames(tenantId: string, patientIds: string[]) {
@@ -456,6 +520,7 @@ const supabaseAgendaProvider: AgendaProvider = {
     const supabase = createBrowserSupabaseClient();
     const tenantId = await resolveActiveTenantId();
     await assertPatientInTenant(input.patientId, tenantId);
+    await assertNoAppointmentConflict(tenantId, input);
     const now = new Date().toISOString();
 
     const { data, error } = await supabase
@@ -498,6 +563,7 @@ const supabaseAgendaProvider: AgendaProvider = {
     const supabase = createBrowserSupabaseClient();
     const tenantId = await resolveActiveTenantId();
     await assertPatientInTenant(input.patientId, tenantId);
+    await assertNoAppointmentConflict(tenantId, input, appointmentId);
     const now = new Date().toISOString();
 
     const { data, error } = await supabase
@@ -557,7 +623,7 @@ const supabaseAgendaProvider: AgendaProvider = {
       .update({
         status: 'cancelado',
         updated_at: now,
-        notes: normalizeOptionalText(reason) ?? undefined,
+        notes: normalizeOptionalText(reason) ?? 'Cancelada sem motivo operacional informado.',
       })
       .eq('id', appointmentId)
       .eq('tenant_id', row.tenant_id);
