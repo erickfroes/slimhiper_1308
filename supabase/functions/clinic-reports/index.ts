@@ -28,6 +28,16 @@ function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizeExportFormat(value: unknown): 'csv' | 'pdf' | null {
+  const format = asString(value, 'csv').toLowerCase();
+  if (format === 'csv' || format === 'pdf') return format;
+  return null;
+}
+
 Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
 
@@ -89,10 +99,65 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'run') {
+      const reportKey = asString(body.report_key);
+      const exportFormat = normalizeExportFormat(body.export_format);
+
+      if (!reportKey) {
+        return jsonResponse(400, {
+          ok: false,
+          error: { code: 'invalid_report_key', message: 'Report key is required.' },
+          meta: { timestamp },
+        });
+      }
+
+      if (!exportFormat) {
+        return jsonResponse(400, {
+          ok: false,
+          error: { code: 'invalid_export_format', message: 'Export format must be csv or pdf.' },
+          meta: { timestamp },
+        });
+      }
+
+      const { data: definitions, error: definitionsError } = await supabase.rpc(
+        'list_clinic_report_definitions'
+      );
+      if (definitionsError) throw definitionsError;
+
+      const definition = asArray(definitions)
+        .map(asRecord)
+        .find((item) => asString(item.key) === reportKey);
+
+      if (!definition) {
+        return jsonResponse(404, {
+          ok: false,
+          error: { code: 'report_not_found', message: 'Report definition is not available.' },
+          meta: { timestamp },
+        });
+      }
+
+      if (definition.canRun !== true) {
+        return jsonResponse(403, {
+          ok: false,
+          error: { code: 'forbidden', message: 'Permissao insuficiente para relatorios.' },
+          meta: { timestamp },
+        });
+      }
+
+      if (definition.exportEnabled === false) {
+        return jsonResponse(403, {
+          ok: false,
+          error: {
+            code: 'export_disabled',
+            message: 'Exportacao desabilitada para este relatorio.',
+          },
+          meta: { timestamp },
+        });
+      }
+
       const { data, error } = await supabase.rpc('create_clinic_report_run', {
-        p_report_key: asString(body.report_key),
+        p_report_key: reportKey,
         p_filters: asRecord(body.filters),
-        p_export_format: asString(body.export_format, 'csv'),
+        p_export_format: exportFormat,
         p_patient_id: asString(body.patient_id) || null,
       });
       if (error) throw error;
@@ -100,8 +165,17 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'get') {
+      const runId = asString(body.run_id);
+      if (!runId) {
+        return jsonResponse(400, {
+          ok: false,
+          error: { code: 'invalid_run_id', message: 'Report run id is required.' },
+          meta: { timestamp },
+        });
+      }
+
       const { data, error } = await supabase.rpc('get_clinic_report_run', {
-        p_run_id: asString(body.run_id),
+        p_run_id: runId,
       });
       if (error) throw error;
       return jsonResponse(200, { ok: true, data, meta: { timestamp } });
@@ -115,13 +189,16 @@ Deno.serve(async (req) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const status = /forbidden|permission|42501|financial|sensitive/i.test(message) ? 403 : 500;
-    console.error('[clinic-reports] unexpected_error', { message });
+    console.error('[clinic-reports] unexpected_error', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+    });
 
     return jsonResponse(status, {
       ok: false,
       error: {
         code: status === 403 ? 'forbidden' : 'internal_error',
-        message: status === 403 ? 'Permissao insuficiente para relatorios.' : 'Unexpected server error.',
+        message:
+          status === 403 ? 'Permissao insuficiente para relatorios.' : 'Unexpected server error.',
       },
       meta: { timestamp },
     });

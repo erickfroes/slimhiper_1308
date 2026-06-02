@@ -117,6 +117,14 @@ Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return jsonResponse(405, {
+      ok: false,
+      error: { code: 'method_not_allowed', message: 'Only GET or POST is allowed.' },
+      meta: { timestamp },
+    });
+  }
+
   try {
     const authHeader = req.headers.get('Authorization') ?? '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -143,14 +151,36 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
 
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return jsonResponse(401, {
+        ok: false,
+        error: { code: 'unauthorized', message: 'Invalid or expired token.' },
+        meta: { timestamp },
+      });
+    }
+
     const body =
       req.method === 'POST'
         ? asRecord(await req.json().catch(() => ({})))
         : Object.fromEntries(new URL(req.url).searchParams.entries());
 
+    const runId = asString(body.run_id);
+    const exportToken = asString(body.token);
+    if (!runId || !exportToken) {
+      return jsonResponse(400, {
+        ok: false,
+        error: { code: 'invalid_export_request', message: 'Report run and token are required.' },
+        meta: { timestamp },
+      });
+    }
+
     const { data, error } = await supabase.rpc('get_clinic_report_export', {
-      p_run_id: asString(body.run_id),
-      p_export_token: asString(body.token),
+      p_run_id: runId,
+      p_export_token: exportToken,
     });
     if (error) throw error;
 
@@ -183,7 +213,9 @@ Deno.serve(async (req) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const status = /forbidden|permission|expired|invalid|42501/i.test(message) ? 403 : 500;
-    console.error('[clinic-report-export] unexpected_error', { message });
+    console.error('[clinic-report-export] unexpected_error', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+    });
 
     return jsonResponse(status, {
       ok: false,
