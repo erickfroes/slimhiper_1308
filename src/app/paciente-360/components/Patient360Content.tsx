@@ -111,7 +111,7 @@ export default function Patient360Content({ patientId, userContext }: Patient360
           { label: data.profile.name?.trim() || 'Paciente sem nome' },
         ]}
       />
-      <PatientHeaderCard data={data} patientId={patientId} />
+      <PatientHeaderCard data={data} patientId={patientId} userContext={userContext} />
       <Patient360Tabs data={data} patientId={patientId} userContext={userContext} />
     </div>
   );
