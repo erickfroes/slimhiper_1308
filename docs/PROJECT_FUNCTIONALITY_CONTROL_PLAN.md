@@ -251,14 +251,22 @@ insights.
 
 **Checklist:**
 
-- [ ] Carrega métricas reais sem mock.
-- [ ] Mostra fila do dia.
-- [ ] Mostra agenda do dia.
-- [ ] Mostra alertas ativos.
-- [ ] Mostra pacientes que precisam de revisão.
-- [ ] Estado vazio quando não há dados.
-- [ ] Estado de erro quando RPC falha.
-- [ ] Refresh não duplica dados.
+- [x] Carrega métricas reais sem mock. Código usa `dashboardApi` real quando `NEXT_PUBLIC_USE_MOCK_DATA` não é `true`; validação Supabase/browser ainda depende de homologação.
+- [x] Mostra fila do dia. Código consome `appointments` reais do tenant ativo; evidência browser pendente.
+- [x] Mostra agenda do dia. Código consome `appointments` reais do tenant ativo; evidência browser pendente.
+- [x] Mostra alertas ativos. Código consome `patient_alerts` reais do tenant ativo; evidência browser pendente.
+- [x] Mostra pacientes que precisam de revisão. Código deriva lista dos alertas ativos reais; evidência browser pendente.
+- [x] Estado vazio quando não há dados. Em 2026-06-02 foi adicionado banner operacional para tenant sem agenda/fila/alertas/documentos/mensagens/revisões.
+- [x] Estado de erro quando RPC falha. Em 2026-06-02 a UI passou a exibir erro genérico e retry sem vazar detalhes do contrato real.
+- [x] Refresh não duplica dados. Em 2026-06-02 foi adicionado controle de requisição ativa para ignorar respostas antigas durante refresh concorrente.
+
+**Progresso registrado em 2026-06-02:**
+
+- Removidos textos fixos de demonstração no cabeçalho do dashboard; a tela agora mostra a data corrente e indica que os dados pertencem ao tenant ativo.
+- `DashboardContent` passou a ignorar respostas obsoletas de carregamentos concorrentes para evitar sobrescrita/duplicidade visual no refresh.
+- A falha de carregamento do dashboard mantém detalhes sensíveis no console mínimo e mostra mensagem genérica com ação de retry para o usuário.
+- `dashboardApi` passou a propagar erro da leitura de `profiles.active_tenant_id`, evitando escolher tenant de fallback quando o contrato de perfil falha.
+- Validação real em navegador, Supabase de homologação e usuários sintéticos continua pendente.
 
 ### 7.2 `/clinic/patients`
 
