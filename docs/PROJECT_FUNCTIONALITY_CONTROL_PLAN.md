@@ -84,7 +84,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F13 | Configurações            | `/clinic/settings`, `clinicSettingsApi`                                  | Integrado por leitura                                                                                                                                                        | Real validado                  | Ler, atualizar clínica e unidade                                                                                                     | RPCs de settings e permissões                           |
 | F14 | Inbox                    | `/clinic/inbox`, `notificationsApi`, `chatApi`                           | Mock/real misto                                                                                                                                                              | Real validado                  | Marcar lido, arquivar, atribuir e responder                                                                                          | RPCs de comunicações e RLS                              |
 | F15 | CRM                      | `/clinic/crm`, `crmApi`                                                  | Mock/real misto                                                                                                                                                              | Real validado                  | Criar lead, mover etapa e converter paciente                                                                                         | RPCs CRM e duplicidade de PII                           |
-| F16 | Inventário               | `/clinic/inventory`, `inventoryApi`                                      | Mock/real misto                                                                                                                                                              | Real validado                  | Criar item/lote/movimento/transferência                                                                                              | Estoque negativo e auditoria                            |
+| F16 | Inventário               | `/clinic/inventory`, `inventoryApi`                                      | Avanço de contrato real em 2026-06-03: UI usa RPCs reais de snapshot/item/lote/movimento/transferência, valida dados antes de gravar e expõe alertas/ledger auditado                                                                                                                                                              | Real validado                  | Criar item/lote/movimento/transferência                                                                                              | Estoque negativo e auditoria                            |
 | F17 | Portal paciente          | `/patient`, `patientPortalApi`                                           | Integrado por leitura                                                                                                                                                        | Real validado                  | Snapshot, mensagem, check-in e notificação                                                                                           | Vínculo paciente, RLS e liberação                       |
 | F18 | Admin overview           | `/admin` e seções derivadas                                              | Integrado por leitura                                                                                                                                                        | Real validado                  | Snapshot admin e navegação de seções                                                                                                 | Permissão platform admin                                |
 | F19 | Admin tenants            | `/admin/tenants`, `/admin/tenants/[tenantId]`                            | Detalhe contrato dependente                                                                                                                                                  | Real validado                  | Convite, membership, suporte, break-glass e audit log                                                                                | Service role server-side e justificativas               |
@@ -452,17 +452,24 @@ alertas e agenda.
 
 **Checklist:**
 
-- [ ] Lista snapshot real.
-- [ ] Cria item.
-- [ ] Edita item.
-- [ ] Cria lote.
-- [ ] Cria movimentação de entrada.
-- [ ] Cria movimentação de saída.
-- [ ] Transfere estoque entre unidades.
-- [ ] Bloqueia estoque negativo quando aplicável.
-- [ ] Gera alerta de estoque baixo.
-- [ ] Gera alerta de vencimento.
-- [ ] Registra auditoria de movimentações.
+- [x] Lista snapshot real. Código consome `list_inventory_operations_snapshot` com custo permissionado; validação Supabase/browser segue pendente.
+- [x] Cria item. UI aciona `upsert_inventory_item` com nome/unidade e números validados antes da chamada real; prova com usuário sintético segue pendente.
+- [x] Edita item. Clique acessível em saldo preenche o formulário e reutiliza `upsert_inventory_item`; prova real segue pendente.
+- [x] Cria lote. Recebimento com lote/validade chama `create_inventory_lot` antes do ledger; validação real segue pendente.
+- [x] Cria movimentação de entrada. UI chama `create_inventory_movement` com quantidade positiva e motivo obrigatório; prova real segue pendente.
+- [x] Cria movimentação de saída. UI chama `create_inventory_movement` para consumo/perda com quantidade positiva e motivo obrigatório; prova real segue pendente.
+- [x] Transfere estoque entre unidades. UI valida origem/destino distintos por seleção e chama `transfer_inventory_stock`; prova real segue pendente.
+- [x] Bloqueia estoque negativo quando aplicável. RPC `create_inventory_movement` mantém bloqueio transacional `negative_stock_blocked`; smoke real segue pendente.
+- [x] Gera alerta de estoque baixo. Snapshot real retorna alertas `minimum_stock` e UI permite emitir notificações operacionais; validação real segue pendente.
+- [x] Gera alerta de vencimento. Snapshot real retorna alertas `lot_expiry` por janela de validade; validação real segue pendente.
+- [x] Registra auditoria de movimentações. RPCs registram `audit_logs` para item/lote/movimento e ledger imutável; prova real segue pendente.
+
+**Progresso registrado em 2026-06-03:**
+
+- `/clinic/inventory` foi conferida contra o contrato real de inventário: `inventoryApi` usa RPCs reais quando `NEXT_PUBLIC_USE_MOCK_DATA` não está explicitamente `true`, preservando mock apenas como modo opt-in.
+- A tela de inventário passou a validar nome/unidade, estoque mínimo, custo, quantidade, origem/destino de transferência e motivo obrigatório antes de chamar RPCs reais, reduzindo chamadas inválidas ao Supabase.
+- A troca de modo/local de movimentação agora limpa lote/destino incompatíveis para evitar envio de combinações obsoletas ao ledger.
+- Permanecem pendentes as provas em Supabase homologação com usuários sintéticos, isolamento Tenant A/B, smoke autenticado no browser e execução controlada do script local de CRM/inventário quando o ambiente estiver apontado para sandbox autorizado.
 
 ## 9. Fase 5 — Documentos, relatórios e provedores
 
