@@ -16,6 +16,17 @@ function hasEnv(name: string) {
   return Boolean(process.env[name]?.trim());
 }
 
+function hasAnyEnv(names: string[]) {
+  return names.some((name) => hasEnv(name));
+}
+
+function hasSupabasePublicConfig() {
+  return (
+    hasEnv('NEXT_PUBLIC_SUPABASE_URL') &&
+    hasAnyEnv(['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'])
+  );
+}
+
 function currentEnvironment() {
   return (
     process.env.SLIMHIPER_ENVIRONMENT ||
@@ -34,10 +45,12 @@ export async function GET(request: Request) {
 
   const components: Record<string, HealthComponent> = {
     next: { status: 'ok', detail: 'Next.js route handler respondeu.' },
-    supabasePublicConfig:
-      hasEnv('NEXT_PUBLIC_SUPABASE_URL') && hasEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
-        ? { status: 'ok', detail: 'Variaveis publicas Supabase configuradas.' }
-        : { status: 'warn', detail: 'Variaveis publicas Supabase ausentes neste ambiente.' },
+    supabasePublicConfig: hasSupabasePublicConfig()
+      ? { status: 'ok', detail: 'Variaveis publicas Supabase configuradas.' }
+      : {
+          status: 'warn',
+          detail: 'Variaveis publicas Supabase URL/chave publicavel ausentes neste ambiente.',
+        },
     mockDataPolicy:
       productionLike && mockEnabled
         ? { status: 'fail', detail: 'Mocks nao podem estar habilitados em staging/producao.' }

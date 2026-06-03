@@ -5,6 +5,31 @@ export function requireEnv(keys) {
   }
 }
 
+const supabasePublishableKeyCandidates = [
+  'SUPABASE_ANON_KEY',
+  'SUPABASE_PUBLISHABLE_KEY',
+  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+];
+
+export function getSupabasePublishableKey() {
+  for (const key of supabasePublishableKeyCandidates) {
+    const value = process.env[key];
+    if (value?.trim()) return value;
+  }
+  return '';
+}
+
+export function requireSupabasePublishableKey() {
+  const value = getSupabasePublishableKey();
+  if (!value) {
+    throw new Error(
+      `Missing Supabase publishable/anon key env var. Set one of: ${supabasePublishableKeyCandidates.join(', ')}`
+    );
+  }
+  return value;
+}
+
 function decodeJwtPayload(jwt) {
   const parts = jwt.split('.');
   if (parts.length < 2) return null;
