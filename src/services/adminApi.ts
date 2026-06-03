@@ -203,6 +203,18 @@ function serviceValidationError(message: string) {
   return { error: { message } satisfies SafeServiceError };
 }
 
+function sanitizeOperationalText(value: unknown, fallback = '', maxLength = 240) {
+  const normalized = normalizeText(asString(value, fallback), maxLength);
+  return normalized.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]');
+}
+
+function redactOperationalIdentifier(value: unknown, fallback = '') {
+  const normalized = normalizeText(asString(value, fallback), 160);
+  if (!normalized) return '';
+  if (normalized.length <= 10) return normalized;
+  return `${normalized.slice(0, 4)}...${normalized.slice(-6)}`;
+}
+
 function asServiceError(error: unknown, fallback: string): SafeServiceError {
   const record = asRecord(error);
   return {
@@ -372,17 +384,17 @@ function mapWebhook(value: unknown): AdminWebhookEventSummary {
   return {
     id: asString(record.id),
     provider: asString(record.provider) === 'D4Sign' ? 'D4Sign' : 'Asaas',
-    eventType: asString(record.eventType, 'unknown'),
-    tenant: asString(record.tenant, 'N/A'),
+    eventType: sanitizeOperationalText(record.eventType, 'unknown', 120),
+    tenant: sanitizeOperationalText(record.tenant, 'N/A', 160),
     tenantId: asString(record.tenantId),
-    patientRef: asNullableString(record.patientRef),
-    externalId: asString(record.externalId, asString(record.id)),
-    idempotencyKey: asString(record.idempotencyKey, asString(record.id)),
+    patientRef: asNullableString(redactOperationalIdentifier(record.patientRef)),
+    externalId: redactOperationalIdentifier(record.externalId, asString(record.id)),
+    idempotencyKey: redactOperationalIdentifier(record.idempotencyKey, asString(record.id)),
     receivedAt: asString(record.receivedAt),
     processedAt: asNullableString(record.processedAt),
     status: normalizeWebhookStatus(record.status, retryCount),
     retryCount,
-    errorSummary: asNullableString(record.errorSummary),
+    errorSummary: asNullableString(sanitizeOperationalText(record.errorSummary, '', 240)),
   };
 }
 

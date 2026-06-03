@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -170,7 +170,8 @@ function EventDrawer({ event, onClose }: { event: AdminWebhookEventSummary; onCl
 
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             Payload bruto, headers e assinaturas nao sao exibidos neste painel. A tela consome
-            apenas o resumo operacional retornado pelo RPC de plataforma.
+            apenas o resumo operacional retornado pelo RPC de plataforma. Identificadores externos e
+            chaves de idempotencia chegam redigidos pelo servico de frontend.
           </div>
 
           {event.errorSummary && (
@@ -195,15 +196,22 @@ export default function WebhookMonitorContent() {
   const [events, setEvents] = useState<AdminWebhookEventSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const loadSequenceRef = useRef(0);
 
   const loadEvents = useCallback(() => {
+    const sequence = loadSequenceRef.current + 1;
+    loadSequenceRef.current = sequence;
     setIsLoading(true);
     setLoadError(null);
-    listWebhookSummaries(100).then(({ data, error }) => {
-      setEvents(data);
-      setLoadError(error?.message ?? null);
-      setIsLoading(false);
-    });
+    listWebhookSummaries(100)
+      .then(({ data, error }) => {
+        if (loadSequenceRef.current !== sequence) return;
+        setEvents(data);
+        setLoadError(error?.message ?? null);
+      })
+      .finally(() => {
+        if (loadSequenceRef.current === sequence) setIsLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -227,6 +235,14 @@ export default function WebhookMonitorContent() {
     });
   }, [events, providerFilter, search, statusFilter]);
 
+  const providerCounts = events.reduce<Record<WebhookProvider, number>>(
+    (acc, event) => {
+      acc[event.provider] += 1;
+      return acc;
+    },
+    { Asaas: 0, D4Sign: 0 }
+  );
+
   const processed = events.filter((event) => event.status === 'processed').length;
   const failed = events.filter(
     (event) => event.status === 'failed' || event.status === 'dead_letter'
@@ -244,8 +260,8 @@ export default function WebhookMonitorContent() {
           </p>
           <h1 className="text-2xl font-bold text-foreground">Monitor de webhooks</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Resumo sanitizado de eventos Asaas e D4Sign, com erros operacionais e idempotencia sem
-            expor payloads brutos.
+            Resumo sanitizado de eventos Asaas e D4Sign, com erros operacionais, filtros por
+            provider/status e idempotencia redigida sem expor payloads brutos.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -286,7 +302,12 @@ export default function WebhookMonitorContent() {
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatCard icon={Webhook} label="Eventos" value={events.length} tone="slate" />
+        <StatCard
+          icon={Webhook}
+          label="Eventos"
+          value={`${events.length} (${providerCounts.Asaas} Asaas / ${providerCounts.D4Sign} D4Sign)`}
+          tone="slate"
+        />
         <StatCard icon={CheckCircle} label="Processados" value={processed} tone="emerald" />
         <StatCard icon={Clock} label="Pendentes" value={pending} tone="amber" />
         <StatCard icon={XCircle} label="Falhas" value={failed} tone="red" />
@@ -391,6 +412,12 @@ export default function WebhookMonitorContent() {
                         <Eye size={13} />
                         Ver
                       </button>
+                      <span
+                        className="ml-2 inline-flex rounded-lg border border-border bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground"
+                        title="Este contrato ainda nao expoe reprocessamento; quando existir, deve ser server-side e auditado."
+                      >
+                        Reprocesso indisponivel
+                      </span>
                     </td>
                   </tr>
                 ))
