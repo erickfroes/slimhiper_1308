@@ -389,8 +389,8 @@ alertas e agenda.
 - [x] Mostra cobranças por status. Em 2026-06-02 a tela passou a exibir cards por status calculados sobre as cobranças recentes do contrato real.
 - [x] Ações Asaas ficam bloqueadas sem ambiente autorizado. Em 2026-06-02 o painel da clínica passou a exibir ações de customer/cobrança/assinatura explicitamente desabilitadas fora do fluxo autorizado por paciente.
 - [ ] Em sandbox autorizado, cria customer/invoice/subscription. Pendente execução controlada com usuário sintético e sandbox Asaas autorizado.
-- [ ] Webhook atualiza status financeiro.
-- [ ] Idempotência impede cobrança duplicada.
+- [x] Webhook atualiza status financeiro por código: `webhook-asaas` resolve a invoice pelo `asaas_invoice_id`, atualiza `patient_invoices`, faz upsert de `payments` e registra timeline financeira; prova sandbox real segue pendente.
+- [x] Idempotência impede cobrança duplicada por código: invoices/subscriptions/customers usam chaves/contratos idempotentes, o webhook deduplica por hash e a criação de subconta agora cria um lock local antes de chamar Asaas para evitar múltiplas subcontas por tenant em chamadas concorrentes; prova sandbox real segue pendente.
 
 **Progresso registrado em 2026-06-02:**
 
@@ -399,6 +399,7 @@ alertas e agenda.
 - O painel de operações Asaas agora deixa explícito que criação de customer, cobrança e assinatura permanece bloqueada nesse contexto, exigindo paciente validado, sandbox autorizado e Edge Functions idempotentes.
 - Mensagens de erro de eventos Asaas recentes são apresentadas como falha operacional genérica; detalhes sensíveis permanecem restritos a auditoria autorizada.
 - Variáveis necessárias para Supabase/service-role e Asaas foram verificadas como presentes no ambiente sem imprimir valores; smoke mutável de provider/sandbox continua pendente por exigir usuário sintético e execução controlada.
+- Progresso em 2026-06-03: `asaas-create-tenant-subaccount` passou a inserir um registro `tenant_billing_accounts` pendente antes de chamar `/accounts` no Asaas. Como `tenant_id` é único, uma segunda chamada concorrente reaproveita o lock local e retorna `creation_in_progress` sem disparar nova chamada ao provider. Falhas de provider marcam o lock como `disabled` com metadado sanitizado, mantendo segredo/payload fora de logs e respostas.
 
 ### 7.7 `/clinic/inbox`
 
@@ -541,7 +542,7 @@ webhook -> reconciliação -> timeline/financeiro.
 
 **Checklist técnico:**
 
-- [ ] Subconta tenant criada somente uma vez.
+- [x] Subconta tenant criada somente uma vez por código: a Edge Function cria um lock local `tenant_billing_accounts` antes da chamada ao provider e reutiliza/retorna chamadas concorrentes sem criar nova subconta; sandbox real pendente.
 - [x] Customer paciente idempotente por código: a Edge Function reutiliza `patient_customers` existente por tenant/paciente antes de chamar Asaas; sandbox real pendente.
 - [x] Invoice idempotente por código: UI envia chave por tentativa e a Edge Function reutiliza cobrança local com a mesma chave antes de chamar Asaas; sandbox real pendente.
 - [x] Subscription idempotente por código: UI envia chave por tentativa e a Edge Function reutiliza assinatura local com a mesma chave antes de chamar Asaas; sandbox real pendente.
