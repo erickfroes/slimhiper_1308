@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
       return jsonResponse(403, {
         ok: false,
         error: { code: 'forbidden' },
-        meta: { timestamp, tenant_id: tenantId },
+        meta: { timestamp },
       });
     }
 
@@ -188,14 +188,14 @@ Deno.serve(async (req) => {
       return jsonResponse(403, {
         ok: false,
         error: { code: 'forbidden', message: 'Missing documents.read permission.' },
-        meta: { timestamp, tenant_id: tenantId },
+        meta: { timestamp },
       });
     }
 
     const { data: rows, error } = await supabase
       .from('generated_documents')
       .select(
-        'id,patient_id,name,category,status,generated_at,created_at,signature_requests(id,status,provider_document_id,created_at)'
+        'id,patient_id,name,category,status,generated_at,created_at,signature_requests(id,status,created_at)'
       )
       .eq('tenant_id', tenantId)
       .eq('patient_id', patientId)
@@ -234,7 +234,6 @@ Deno.serve(async (req) => {
         signature: signatureRequest
           ? {
               provider: 'd4sign',
-              providerDocumentId: signatureRequest.provider_document_id ?? null,
               signatureRequestId: signatureRequest.id,
               status: signatureStatus,
             }
@@ -245,7 +244,7 @@ Deno.serve(async (req) => {
     return jsonResponse(200, {
       ok: true,
       data: { documents },
-      meta: { timestamp, tenant_id: tenantId, patient_id: patientId, count: documents.length },
+      meta: { timestamp, count: documents.length },
     });
   } catch (error) {
     console.error('[patient-documents] unexpected_error', {

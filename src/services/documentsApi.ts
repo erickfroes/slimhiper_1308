@@ -17,7 +17,6 @@ interface GeneratedDocumentResult {
 }
 interface SendForSignatureResult {
   requestId: string;
-  providerDocumentId?: string;
   status: string;
 }
 
@@ -130,16 +129,12 @@ export async function sendDocumentForSignature(
     if (normalizedSigners.length > 0) body.signers = normalizedSigners;
     const res = await invokeSafe<{
       signature_request_id: string;
-      provider_document_id?: string;
       status: string;
     }>('d4sign-send-document', body);
     if (res.error) return { data: null, error: res.error };
     return {
       data: {
         requestId: String(res.data?.signature_request_id ?? ''),
-        providerDocumentId: res.data?.provider_document_id
-          ? String(res.data.provider_document_id)
-          : undefined,
         status: String(res.data?.status ?? 'sent'),
       },
       error: null,

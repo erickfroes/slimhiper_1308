@@ -196,12 +196,7 @@ Deno.serve(async (req) => {
     return jsonResponse(200, {
       ok: true,
       data: { url: data.signedUrl, expiresInSeconds },
-      meta: {
-        timestamp,
-        tenant_id: tenantId,
-        patient_id: documentPatientId,
-        generated_document_id: documentId,
-      },
+      meta: { timestamp },
     });
   } catch (error) {
     console.error('[document-signed-url] unexpected_error', {

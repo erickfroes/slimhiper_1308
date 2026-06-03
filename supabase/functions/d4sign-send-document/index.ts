@@ -628,12 +628,11 @@ Deno.serve(async (req) => {
     return jsonResponse(200, {
       ok: true,
       data: {
-        provider_document_id: signatureRequest.provider_document_id,
         signature_request_id: signatureRequest.id,
         status: signatureRequest.status,
         signer_source: signerSource,
       },
-      meta: { timestamp, tenant_id: tenantId, patient_id: patientId },
+      meta: { timestamp },
     });
   } catch (error) {
     console.error('[d4sign-send-document] unexpected_error', {
