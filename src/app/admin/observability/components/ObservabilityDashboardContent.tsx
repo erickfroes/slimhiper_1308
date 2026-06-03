@@ -1,4 +1,7 @@
+'use client';
+
 import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -12,8 +15,10 @@ import {
   Webhook,
 } from 'lucide-react';
 import AdminShell from '@/app/admin/components/AdminShell';
+import { listWebhookSummaries, type AdminWebhookEventSummary } from '@/services/adminApi';
 
 type MonitorStatus = 'ok' | 'watch' | 'critical';
+type HealthStatus = 'ok' | 'warn' | 'fail' | 'unknown';
 
 type MonitorCard = {
   title: string;
@@ -21,7 +26,17 @@ type MonitorCard = {
   owner: string;
   target: string;
   signal: string;
+  source: 'live' | 'static';
+  evidence: string;
   icon: React.ElementType;
+};
+
+type HealthResponse = {
+  status?: HealthStatus;
+  environment?: string;
+  checkedAt?: string;
+  requestId?: string;
+  components?: Record<string, { status?: HealthStatus; detail?: string }>;
 };
 
 const statusConfig = {
@@ -39,15 +54,7 @@ const statusConfig = {
   },
 };
 
-const monitors: MonitorCard[] = [
-  {
-    title: 'Frontend Next.js',
-    status: 'ok',
-    owner: 'Platform on-call',
-    target: '/api/health + rotas anonimas/protegidas',
-    signal: '5xx, latencia p95, erro de hidratacao e falha de deploy',
-    icon: Activity,
-  },
+const staticMonitorTemplates: Array<Omit<MonitorCard, 'source' | 'evidence'>> = [
   {
     title: 'Auth e sessoes SSR',
     status: 'watch',
@@ -63,14 +70,6 @@ const monitors: MonitorCard[] = [
     target: 'Paciente 360, documentos, relatorios, nutricao e billing',
     signal: '5xx, envelope invalido, retries e latencia por funcao',
     icon: ServerCog,
-  },
-  {
-    title: 'Webhooks D4Sign/Asaas',
-    status: 'watch',
-    owner: 'Integrations on-call',
-    target: 'webhook-d4sign e webhook-asaas',
-    signal: 'signature failures, idempotencia, dead-letter e divergencia',
-    icon: Webhook,
   },
   {
     title: 'Banco e RPCs criticos',
@@ -101,6 +100,27 @@ const alertRules = [
   ['S4', 'Ruido, melhoria de dashboard, documentacao ou follow-up nao urgente', '2 dias uteis'],
 ] as const;
 
+function formatDate(value: string | null | undefined) {
+  if (!value) return 'N/D';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/D';
+  return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function mapHealthToMonitor(status: HealthStatus | undefined): MonitorStatus {
+  if (status === 'fail') return 'critical';
+  if (status === 'warn' || status === 'unknown' || !status) return 'watch';
+  return 'ok';
+}
+
+function mapWebhookStatus(events: AdminWebhookEventSummary[]): MonitorStatus {
+  if (events.some((event) => event.status === 'dead_letter')) return 'critical';
+  if (events.some((event) => ['failed', 'retrying', 'pending'].includes(event.status))) {
+    return 'watch';
+  }
+  return 'ok';
+}
+
 function StatusBadge({ status }: { status: MonitorStatus }) {
   const config = statusConfig[status];
   return (
@@ -110,12 +130,110 @@ function StatusBadge({ status }: { status: MonitorStatus }) {
   );
 }
 
+function SourceBadge({ source }: { source: MonitorCard['source'] }) {
+  const classes =
+    source === 'live'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : 'border-slate-200 bg-slate-50 text-slate-600';
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classes}`}>
+      {source === 'live' ? 'Sinal real' : 'Catalogo estatico'}
+    </span>
+  );
+}
+
 export default function ObservabilityDashboardContent() {
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [webhooks, setWebhooks] = useState<AdminWebhookEventSummary[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const loadSequenceRef = useRef(0);
+
+  const loadSignals = useCallback(() => {
+    const sequence = loadSequenceRef.current + 1;
+    loadSequenceRef.current = sequence;
+    setIsLoading(true);
+    setLoadError(null);
+
+    Promise.allSettled([
+      fetch('/api/health', { cache: 'no-store' }).then(async (response) => {
+        const body = (await response.json()) as HealthResponse;
+        if (!response.ok && body.status !== 'fail') throw new Error('health_unavailable');
+        return body;
+      }),
+      listWebhookSummaries(50),
+    ])
+      .then(([healthResult, webhookResult]) => {
+        if (loadSequenceRef.current !== sequence) return;
+
+        if (healthResult.status === 'fulfilled') {
+          setHealth(healthResult.value);
+        } else {
+          setHealth({ status: 'unknown' });
+        }
+
+        if (webhookResult.status === 'fulfilled') {
+          setWebhooks(webhookResult.value.data);
+          setLoadError(webhookResult.value.error?.message ?? null);
+        } else {
+          setWebhooks([]);
+          setLoadError('Falha ao carregar sinais de webhook.');
+        }
+      })
+      .finally(() => {
+        if (loadSequenceRef.current === sequence) setIsLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    loadSignals();
+  }, [loadSignals]);
+
+  const monitors = useMemo<MonitorCard[]>(() => {
+    const failedWebhooks = webhooks.filter((event) =>
+      ['failed', 'dead_letter', 'retrying'].includes(event.status)
+    );
+
+    return [
+      {
+        title: 'Frontend Next.js',
+        status: mapHealthToMonitor(health?.status),
+        owner: 'Platform on-call',
+        target: '/api/health + rotas anonimas/protegidas',
+        signal: '5xx, latencia p95, erro de hidratacao e falha de deploy',
+        source: 'live',
+        evidence: health
+          ? `Health ${health.status ?? 'unknown'} em ${health.environment ?? 'ambiente desconhecido'}; request ${health.requestId ?? 'N/D'}.`
+          : 'Aguardando resposta do healthcheck local.',
+        icon: Activity,
+      },
+      {
+        title: 'Webhooks D4Sign/Asaas',
+        status: mapWebhookStatus(webhooks),
+        owner: 'Integrations on-call',
+        target: 'webhook-d4sign e webhook-asaas',
+        signal: 'signature failures, idempotencia, dead-letter e divergencia',
+        source: 'live',
+        evidence: `${webhooks.length} eventos recentes via RPC; ${failedWebhooks.length} requerem atencao.`,
+        icon: Webhook,
+      },
+      ...staticMonitorTemplates.map((monitor) => ({
+        ...monitor,
+        source: 'static' as const,
+        evidence:
+          'Monitor catalogado no runbook; conectar metricas externas/APM para trocar para sinal real.',
+      })),
+    ];
+  }, [health, webhooks]);
+
+  const healthComponents = Object.entries(health?.components ?? {});
+
   return (
     <AdminShell
       activeSection="observability"
       title="Observabilidade operacional"
       description="Painel de prontidao por ambiente, sem dados sensiveis, alinhado ao runbook da PR 10.2."
+      onRefresh={loadSignals}
     >
       <div className="space-y-6">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -126,6 +244,10 @@ export default function ObservabilityDashboardContent() {
             <p className="text-xs leading-relaxed text-muted-foreground">
               `/api/health` retorna status seguro por ambiente, request id e componentes sem expor
               secrets, cookies, PII/PHI, payloads de provider ou URLs assinadas.
+            </p>
+            <p className="mt-3 text-xs font-semibold text-foreground">
+              Estado atual: {health?.status ?? (isLoading ? 'carregando' : 'indisponivel')} ·{' '}
+              {formatDate(health?.checkedAt)}
             </p>
           </div>
           <div className="card-base p-5">
@@ -148,6 +270,12 @@ export default function ObservabilityDashboardContent() {
           </div>
         </div>
 
+        {loadError && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            {loadError}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {monitors.map((monitor) => {
             const Icon = monitor.icon;
@@ -163,7 +291,10 @@ export default function ObservabilityDashboardContent() {
                       <p className="text-xs text-muted-foreground">{monitor.owner}</p>
                     </div>
                   </div>
-                  <StatusBadge status={monitor.status} />
+                  <div className="flex flex-col items-end gap-2">
+                    <StatusBadge status={monitor.status} />
+                    <SourceBadge source={monitor.source} />
+                  </div>
                 </div>
                 <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
                   <div>
@@ -174,10 +305,74 @@ export default function ObservabilityDashboardContent() {
                     <dt className="font-semibold text-muted-foreground">Sinais monitorados</dt>
                     <dd className="mt-1 text-foreground">{monitor.signal}</dd>
                   </div>
+                  <div className="sm:col-span-2">
+                    <dt className="font-semibold text-muted-foreground">Evidencia atual</dt>
+                    <dd className="mt-1 text-foreground">{monitor.evidence}</dd>
+                  </div>
                 </dl>
               </div>
             );
           })}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="card-base overflow-hidden">
+            <div className="border-b border-border px-5 py-4">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
+                <Activity size={16} className="text-emerald-600" /> Componentes do healthcheck
+              </h2>
+            </div>
+            <div className="divide-y divide-border text-xs">
+              {healthComponents.length === 0 ? (
+                <p className="p-5 text-muted-foreground">Nenhum componente real carregado.</p>
+              ) : (
+                healthComponents.map(([name, component]) => (
+                  <div key={name} className="flex items-start justify-between gap-4 p-4">
+                    <div>
+                      <p className="font-mono font-semibold text-foreground">{name}</p>
+                      <p className="mt-1 text-muted-foreground">
+                        {component.detail ?? 'Sem detalhe.'}
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-border bg-muted px-2 py-0.5 font-semibold text-foreground">
+                      {component.status ?? 'unknown'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="card-base overflow-hidden">
+            <div className="border-b border-border px-5 py-4">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
+                <Webhook size={16} className="text-amber-600" /> Sinais recentes de webhook
+              </h2>
+            </div>
+            <div className="divide-y divide-border text-xs">
+              {webhooks.length === 0 ? (
+                <p className="p-5 text-muted-foreground">
+                  Nenhum evento recente retornado pelo RPC.
+                </p>
+              ) : (
+                webhooks.slice(0, 6).map((event) => (
+                  <div key={event.id} className="grid gap-2 p-4 sm:grid-cols-[1fr_auto]">
+                    <div>
+                      <p className="font-semibold text-foreground">
+                        {event.provider} · {event.eventType}
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        {event.tenant} · recebido {formatDate(event.receivedAt)}
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-border bg-muted px-2 py-0.5 font-semibold text-foreground">
+                      {event.status}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="card-base overflow-hidden">
