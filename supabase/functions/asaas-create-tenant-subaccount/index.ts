@@ -167,6 +167,78 @@ Deno.serve(async (req) => {
       });
     }
 
+    let billingAccount: {
+      id: string;
+      status?: string | null;
+      wallet_id_masked?: string | null;
+    } | null = null;
+    const { data: createdAccount, error: accountCreateError } = await supabase
+      .from('tenant_billing_accounts')
+      .insert({
+        tenant_id: tenantId,
+        provider: 'asaas',
+        status: 'pending',
+        metadata: { provider: 'asaas', creation_started_at: timestamp },
+      })
+      .select('id, status, wallet_id_masked')
+      .single();
+
+    if (accountCreateError) {
+      if (accountCreateError.code !== '23505') throw accountCreateError;
+
+      const { data: pendingAccount, error: pendingAccountError } = await supabase
+        .from('tenant_billing_accounts')
+        .select('id, status, wallet_id_masked')
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+      if (pendingAccountError) throw pendingAccountError;
+
+      if (pendingAccount?.id && pendingAccount.status === 'disabled') {
+        const { data: retryAccount, error: retryAccountError } = await supabase
+          .from('tenant_billing_accounts')
+          .update({
+            status: 'pending',
+            metadata: { provider: 'asaas', retry_started_at: timestamp },
+          })
+          .eq('id', pendingAccount.id)
+          .eq('tenant_id', tenantId)
+          .eq('status', 'disabled')
+          .select('id, status, wallet_id_masked')
+          .maybeSingle();
+
+        if (retryAccountError) throw retryAccountError;
+        billingAccount = retryAccount?.id ? retryAccount : null;
+      }
+
+      if (!billingAccount?.id) {
+        return jsonResponse(202, {
+          ok: true,
+          data: {
+            id: pendingAccount?.id ?? null,
+            status: pendingAccount?.status ?? 'pending',
+            wallet_id_masked: pendingAccount?.wallet_id_masked ?? null,
+          },
+          meta: {
+            tenantId,
+            timestamp,
+            reused: true,
+            creation_in_progress: true,
+          },
+        });
+      }
+    } else {
+      billingAccount = createdAccount;
+    }
+
+    if (!billingAccount?.id) {
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'account_lock_failed', message: 'Billing account lock was not created.' },
+        meta: { tenantId, timestamp },
+      });
+    }
+
     const body = await req.json().catch(() => ({}));
     const payload = {
       name: asString(body?.name, 'SlimHiper Clinic'),
@@ -180,6 +252,15 @@ Deno.serve(async (req) => {
     });
 
     if (!providerResponse.ok) {
+      await supabase
+        .from('tenant_billing_accounts')
+        .update({
+          status: 'disabled',
+          metadata: { provider: 'asaas', last_error: 'provider_error' },
+        })
+        .eq('id', billingAccount.id)
+        .eq('tenant_id', tenantId);
+
       console.error('[asaas-create-tenant-subaccount] provider_error', {
         status: providerResponse.status,
       });
@@ -193,6 +274,15 @@ Deno.serve(async (req) => {
     const providerData = await providerResponse.json().catch(() => ({}));
     const providerAccountId = asString(providerData.id);
     if (!providerAccountId) {
+      await supabase
+        .from('tenant_billing_accounts')
+        .update({
+          status: 'disabled',
+          metadata: { provider: 'asaas', last_error: 'invalid_provider_response' },
+        })
+        .eq('id', billingAccount.id)
+        .eq('tenant_id', tenantId);
+
       return jsonResponse(502, {
         ok: false,
         error: { code: 'asaas_invalid_response', message: 'Billing provider response invalid.' },
@@ -201,30 +291,13 @@ Deno.serve(async (req) => {
     }
 
     const walletMasked = maskWalletId(providerData.walletId);
-    const { data: account, error: accountError } = await supabase
-      .from('tenant_billing_accounts')
-      .upsert(
-        {
-          tenant_id: tenantId,
-          provider: 'asaas',
-          status: 'active',
-          wallet_id: asString(providerData.walletId) || null,
-          wallet_id_masked: walletMasked,
-          metadata: { provider: 'asaas' },
-        },
-        { onConflict: 'tenant_id' }
-      )
-      .select('id')
-      .single();
-
-    if (accountError) throw accountError;
 
     const { data: subaccount, error: subaccountError } = await supabase
       .from('asaas_subaccounts')
       .upsert(
         {
           tenant_id: tenantId,
-          tenant_billing_account_id: account.id,
+          tenant_billing_account_id: billingAccount.id,
           asaas_account_id: providerAccountId,
           wallet_id: asString(providerData.walletId) || null,
           wallet_id_masked: walletMasked,
@@ -238,6 +311,19 @@ Deno.serve(async (req) => {
       .single();
 
     if (subaccountError) throw subaccountError;
+
+    const { error: accountUpdateError } = await supabase
+      .from('tenant_billing_accounts')
+      .update({
+        status: 'active',
+        wallet_id: asString(providerData.walletId) || null,
+        wallet_id_masked: walletMasked,
+        metadata: { provider: 'asaas', activated_at: timestamp },
+      })
+      .eq('id', billingAccount.id)
+      .eq('tenant_id', tenantId);
+
+    if (accountUpdateError) throw accountUpdateError;
 
     return jsonResponse(200, {
       ok: true,
