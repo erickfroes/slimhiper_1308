@@ -430,15 +430,23 @@ alertas e agenda.
 
 **Checklist:**
 
-- [ ] Lista pipeline real.
-- [ ] Cria lead.
-- [ ] Edita lead.
-- [ ] Move etapa.
-- [ ] Registra atividade.
-- [ ] Cria tarefa.
-- [ ] Converte lead em paciente.
-- [ ] Evita duplicidade de paciente/PII.
-- [ ] Notificações operacionais são geradas.
+- [x] Lista pipeline real. Código usa `list_crm_leads`/`crm_pipeline_stages` quando `NEXT_PUBLIC_USE_MOCK_DATA` não é `true`; validação Supabase/browser autenticada segue pendente.
+- [x] Cria lead. Código chama `create_crm_lead` com payload sanitizado e valida nome + contato antes do submit; prova RLS real segue pendente.
+- [x] Edita lead. Em 2026-06-02 o painel de detalhe ganhou ação de edição e chama `update_crm_lead` com payload sanitizado; validação real segue pendente.
+- [x] Move etapa. Código chama `move_crm_lead_stage`, bloqueia lead convertido e recarrega pipeline/detalhe; validação browser segue pendente.
+- [x] Registra atividade. Código chama `record_crm_lead_activity` com título/descrição sanitizados; prova audit/RLS real segue pendente.
+- [x] Cria tarefa. Código chama `create_crm_lead_task` com título e data normalizados; prova notificação real segue pendente.
+- [x] Converte lead em paciente. Código chama `convert_crm_lead_to_patient` com agendamento opcional normalizado e exibe falha de consentimento sem vazar detalhes; validação real segue pendente.
+- [x] Evita duplicidade de paciente/PII. Contrato da RPC deduplica por e-mail/telefone normalizados antes de criar `patient_pii`; prova com dados sintéticos segue pendente.
+- [x] Notificações operacionais são geradas. Código expõe ação `emit_crm_operational_notifications` e RPCs de tarefa/conversão inserem notificações; validação real segue pendente.
+
+**Progresso registrado em 2026-06-02:**
+
+- `crmApi` passou a normalizar payloads de busca, criação, edição, nota, tarefa e conversão, removendo caracteres de controle, curingas de busca e datas inválidas antes de acionar RPCs reais.
+- A tela `/clinic/crm` passou a validar nome e ao menos um contato antes de criar/editar lead, evitando chamadas reais com payload operacionalmente incompleto.
+- O painel de detalhe ganhou ação de edição não dependente de hover para alterar dados comerciais permitidos do lead, recarregando pipeline e detalhe após `update_crm_lead`.
+- A conversão com consulta inicial passou a enviar somente campos normalizados para a RPC e continua sem chamar financeiro ou provedores externos.
+- Validação com Supabase homologação, usuários sintéticos, isolamento Tenant A/B, notificações reais e browser smoke seguem pendentes.
 
 ### 8.3 Inventário
 
@@ -1031,6 +1039,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado em `/clinic/reports` com tenant sintético.
 - Status: aprovado por código; validação real em homologação pendente.
 - Pendências: executar relatório com dados e sem dados, baixar CSV/PDF, validar expiração de token, perfil sem `reports.read`, perfil sem `financial.read`/`timeline.sensitive.read` e isolamento RLS multi-tenant.
+
+### Evidência — F13 CRM operacional
+
+- Data: 2026-06-02.
+- Ambiente: local, validação por código e checks obrigatórios parciais nesta execução; RPCs reais não foram invocadas contra Supabase remoto.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; UI usa sessão browser e serviço usa cliente Supabase anon/session-scoped.
+- Tenant sintético: pendente para criar, editar, mover, registrar atividade/tarefa, converter e provar isolamento Tenant A/B.
+- Mock habilitado? código preserva mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/clinic/crm`, `crmApi`, RPCs `list_crm_leads`, `create_crm_lead`, `update_crm_lead`, `move_crm_lead_stage`, `record_crm_lead_activity`, `create_crm_lead_task`, `convert_crm_lead_to_patient` e `emit_crm_operational_notifications`.
+- Passos executados:
+  1. Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem, CRM.
+  2. Adicionada normalização local de termos de busca, UUIDs, datas e textos livres antes de chamadas RPC reais, sem imprimir payloads sensíveis.
+  3. Adicionada validação de nome e contato mínimo para criar/editar lead na UI.
+  4. Adicionada ação de edição no painel de detalhe e submit para `update_crm_lead`, com refresh do pipeline e do detalhe após sucesso.
+  5. Revisado que criação, movimentação, atividade, tarefa, conversão, deduplicação por contrato e notificações operacionais já estão conectadas às RPCs versionadas.
+- Resultado esperado: avançar F13 na ordem do plano sem criar migração, sem chamar provedores externos e sem depender de mock para o contrato de CRM.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check` e smoke local com `npm run dev` + `curl -I http://localhost:4028/clinic/crm` passaram após as mudanças; lint/build mantêm 11 warnings conhecidos não relacionados e a rota protegida respondeu `307` para `/auth/login` sem sessão. Smoke Supabase/browser autenticado e execução real das RPCs continuam pendentes para o fechamento de release.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de provider ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado em `/clinic/crm` com tenant e lead sintéticos.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: validar CRUD/movimentação/conversão com usuários sintéticos, provar bloqueio para perfil sem `crm.write`/`crm.convert`, confirmar audit logs/notificações e isolamento RLS multi-tenant.
 
 ## 18. Sequência recomendada de implementação
 

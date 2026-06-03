@@ -158,6 +158,67 @@ const MOCK_LEADS: CrmLead[] = [
   },
 ];
 
+const SEARCH_WILDCARDS = /[%_]/g;
+
+function removeControlCharacters(value: string): string {
+  return Array.from(value)
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || code === 127 ? ' ' : character;
+    })
+    .join('');
+}
+
+function cleanText(value: unknown, maxLength = 160): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const cleaned = removeControlCharacters(value).replace(/\s+/g, ' ').trim();
+  return cleaned ? cleaned.slice(0, maxLength) : undefined;
+}
+
+function cleanSearchTerm(value: unknown): string | undefined {
+  const cleaned = cleanText(value, 80)?.replace(SEARCH_WILDCARDS, '');
+  return cleaned || undefined;
+}
+
+function cleanDateTime(value: unknown): string | undefined {
+  const cleaned = cleanText(value, 80);
+  if (!cleaned) return undefined;
+  const date = new Date(cleaned);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function cleanUuid(value: unknown): string | undefined {
+  const cleaned = cleanText(value, 80);
+  return cleaned &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleaned)
+    ? cleaned
+    : undefined;
+}
+
+function compactPayload<T extends Record<string, unknown>>(payload: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(payload).filter(
+      ([, value]) => value !== undefined && value !== null && value !== ''
+    )
+  ) as Partial<T>;
+}
+
+function normalizeLeadPayload(input: CreateCrmLeadInput | UpdateCrmLeadInput) {
+  return compactPayload({
+    fullName: cleanText(input.fullName, 120),
+    email: cleanText(input.email, 160),
+    phone: cleanText(input.phone, 40),
+    source: cleanText(input.source, 80),
+    campaign: cleanText(input.campaign, 120),
+    contactPreference: cleanText(input.contactPreference, 40),
+    contactConsent: typeof input.contactConsent === 'boolean' ? input.contactConsent : undefined,
+    consentPurpose: cleanText(input.consentPurpose, 180),
+    nextFollowUpAt: cleanDateTime(input.nextFollowUpAt),
+    stageCode: 'stageCode' in input ? cleanText(input.stageCode, 40) : undefined,
+    ownerUserId: 'ownerUserId' in input ? cleanUuid(input.ownerUserId) : undefined,
+  });
+}
+
 function isMockExplicitlyEnabled() {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 }
@@ -216,9 +277,9 @@ export async function getCrmPipeline(filters?: {
     const supabase = createBrowserSupabaseClient();
     const [{ data: rpcData, error }, stages] = await Promise.all([
       supabase.rpc('list_crm_leads', {
-        p_status: filters?.status || null,
-        p_stage_id: filters?.stageId || null,
-        p_search: filters?.search || null,
+        p_status: cleanText(filters?.status, 30) || null,
+        p_stage_id: cleanUuid(filters?.stageId) || null,
+        p_search: cleanSearchTerm(filters?.search) || null,
         p_limit: 100,
       }),
       getStages(),
@@ -284,7 +345,8 @@ export async function createCrmLead(input: CreateCrmLeadInput): ServiceEnvelope<
 
   try {
     const supabase = createBrowserSupabaseClient();
-    const { data, error } = await supabase.rpc('create_crm_lead', { p_payload: input });
+    const payload = normalizeLeadPayload(input);
+    const { data, error } = await supabase.rpc('create_crm_lead', { p_payload: payload });
     if (error) throw error;
     return { data: data as { id: string }, error: null };
   } catch (error) {
@@ -302,7 +364,7 @@ export async function updateCrmLead(
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('update_crm_lead', {
       p_lead_id: leadId,
-      p_payload: input,
+      p_payload: normalizeLeadPayload(input),
     });
     if (error) throw error;
     return { data: data as { id: string }, error: null };
@@ -344,8 +406,8 @@ export async function recordCrmLeadActivity(
     const { data, error } = await supabase.rpc('record_crm_lead_activity', {
       p_lead_id: leadId,
       p_activity_type: 'note',
-      p_title: title,
-      p_description: description || null,
+      p_title: cleanText(title, 160) || 'Atividade registrada',
+      p_description: cleanText(description, 1000) || null,
       p_metadata: {},
     });
     if (error) throw error;
@@ -365,7 +427,10 @@ export async function createCrmLeadTask(
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('create_crm_lead_task', {
       p_lead_id: leadId,
-      p_payload: input,
+      p_payload: compactPayload({
+        title: cleanText(input.title, 160),
+        dueAt: cleanDateTime(input.dueAt),
+      }),
     });
     if (error) throw error;
     return { data: data as { id: string }, error: null };
@@ -395,7 +460,12 @@ export async function convertCrmLeadToPatient(
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('convert_crm_lead_to_patient', {
       p_lead_id: leadId,
-      p_payload: input,
+      p_payload: compactPayload({
+        createAppointment: input.createAppointment === true,
+        scheduledAt: cleanDateTime(input.scheduledAt),
+        appointmentType: cleanText(input.appointmentType, 80),
+        location: cleanText(input.location, 120),
+      }),
     });
     if (error) throw error;
     return { data: data as ConvertCrmLeadResult, error: null };
