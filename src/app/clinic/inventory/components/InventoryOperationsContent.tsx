@@ -96,6 +96,27 @@ function getAlertTone(severity: string) {
   return 'border-amber-200 bg-amber-50 text-amber-800';
 }
 
+function parsePositiveNumber(value: string, fieldLabel: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${fieldLabel} deve ser maior que zero.`);
+  }
+  return parsed;
+}
+
+function parseNonNegativeNumber(value: string, fieldLabel: string) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${fieldLabel} nao pode ser negativo.`);
+  }
+  return parsed;
+}
+
+function toOptionalCents(value: string) {
+  if (!value) return undefined;
+  return Math.round(parseNonNegativeNumber(value, 'Custo') * 100);
+}
+
 export default function InventoryOperationsContent() {
   const [snapshot, setSnapshot] = useState<InventorySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -175,17 +196,32 @@ export default function InventoryOperationsContent() {
     setSaving(true);
     setError(null);
     setNotice(null);
+    let minimumQuantity = 0;
+    let defaultUnitCostCents: number | undefined;
+    try {
+      if (!itemForm.name.trim()) {
+        throw new Error('Informe o nome do item.');
+      }
+      if (!itemForm.unit.trim()) {
+        throw new Error('Informe a unidade do item.');
+      }
+      minimumQuantity = parseNonNegativeNumber(itemForm.minimumQuantity, 'Estoque minimo');
+      defaultUnitCostCents = toOptionalCents(itemForm.defaultUnitCost);
+    } catch (validationError) {
+      setError(validationError instanceof Error ? validationError.message : 'Dados invalidos.');
+      setSaving(false);
+      return;
+    }
+
     const result = await saveInventoryItem({
       id: itemForm.id || undefined,
-      sku: itemForm.sku || undefined,
-      name: itemForm.name,
+      sku: itemForm.sku.trim() || undefined,
+      name: itemForm.name.trim(),
       categoryId: itemForm.categoryId || undefined,
-      unit: itemForm.unit,
+      unit: itemForm.unit.trim(),
       status: itemForm.status,
-      minimumQuantity: Number(itemForm.minimumQuantity || 0),
-      defaultUnitCostCents: itemForm.defaultUnitCost
-        ? Math.round(Number(itemForm.defaultUnitCost) * 100)
-        : undefined,
+      minimumQuantity,
+      defaultUnitCostCents,
     });
     if (result.error) {
       setError(result.error.message);
@@ -206,16 +242,34 @@ export default function InventoryOperationsContent() {
     const mode = movementForm.mode;
     const option = movementOptions.find((item) => item.value === mode) ?? movementOptions[0];
     let lotId = movementForm.lotId || undefined;
+    let quantity = 0;
+    let unitCostCents: number | undefined;
 
-    if (mode === 'receipt' && (movementForm.lotCode || movementForm.expiresAt)) {
+    try {
+      quantity = parsePositiveNumber(movementForm.quantity, 'Quantidade');
+      unitCostCents = toOptionalCents(movementForm.unitCost);
+      if (mode === 'transfer' && !movementForm.locationId) {
+        throw new Error('Informe o local de origem para transferencia.');
+      }
+      if (mode === 'transfer' && !movementForm.toLocationId) {
+        throw new Error('Informe o local de destino para transferencia.');
+      }
+      if (!movementForm.reasonNote.trim()) {
+        throw new Error('Informe o motivo obrigatorio para auditoria.');
+      }
+    } catch (validationError) {
+      setError(validationError instanceof Error ? validationError.message : 'Dados invalidos.');
+      setSaving(false);
+      return;
+    }
+
+    if (mode === 'receipt' && (movementForm.lotCode.trim() || movementForm.expiresAt)) {
       const lotResult = await createInventoryLot({
         itemId: movementForm.itemId,
         locationId: movementForm.locationId || undefined,
-        lotCode: movementForm.lotCode || undefined,
+        lotCode: movementForm.lotCode.trim() || undefined,
         expiresAt: movementForm.expiresAt || undefined,
-        unitCostCents: movementForm.unitCost
-          ? Math.round(Number(movementForm.unitCost) * 100)
-          : undefined,
+        unitCostCents,
       });
       if (lotResult.error || !lotResult.data) {
         setError(lotResult.error?.message ?? 'Nao foi possivel cadastrar o lote.');
@@ -225,11 +279,6 @@ export default function InventoryOperationsContent() {
       lotId = lotResult.data.id;
     }
 
-    const quantity = Number(movementForm.quantity || 0);
-    const unitCostCents = movementForm.unitCost
-      ? Math.round(Number(movementForm.unitCost) * 100)
-      : undefined;
-
     const result =
       mode === 'transfer'
         ? await transferInventoryStock({
@@ -238,7 +287,7 @@ export default function InventoryOperationsContent() {
             fromLocationId: movementForm.locationId,
             toLocationId: movementForm.toLocationId,
             quantity,
-            reasonNote: movementForm.reasonNote,
+            reasonNote: movementForm.reasonNote.trim(),
           })
         : await createInventoryMovement({
             itemId: movementForm.itemId,
@@ -248,7 +297,7 @@ export default function InventoryOperationsContent() {
             reason: mode as InventoryMovementReason,
             quantity,
             unitCostCents,
-            reasonNote: movementForm.reasonNote,
+            reasonNote: movementForm.reasonNote.trim(),
           });
 
     if (result.error) {
@@ -631,6 +680,8 @@ export default function InventoryOperationsContent() {
                 setMovementForm((current) => ({
                   ...current,
                   mode: event.target.value as MovementMode,
+                  lotId: '',
+                  toLocationId: '',
                 }))
               }
               className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
@@ -666,7 +717,13 @@ export default function InventoryOperationsContent() {
               <select
                 value={movementForm.locationId}
                 onChange={(event) =>
-                  setMovementForm((current) => ({ ...current, locationId: event.target.value }))
+                  setMovementForm((current) => ({
+                    ...current,
+                    locationId: event.target.value,
+                    lotId: '',
+                    toLocationId:
+                      current.toLocationId === event.target.value ? '' : current.toLocationId,
+                  }))
                 }
                 className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
               >
