@@ -85,7 +85,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 
 | ID  | Frente                   | Escopo                                                                                                 | Status inicial                                                                                                                                                                                                        | Status alvo                    | Evidência obrigatória                                                                                                                | Bloqueios esperados                                            |
 | --- | ------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| F00 | Baseline técnica         | TypeScript, lint, build e diff check                                                                   | Executado localmente em 2026-06-02                                                                                                                                                                                    | Aprovado                       | `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check` passaram; lint/build mantêm 11 warnings conhecidos         | Sem bloqueio local                                             |
+| F00 | Baseline técnica         | TypeScript, lint, build e diff check                                                                   | Executado localmente em 2026-06-02; usuários sintéticos formalizados no bootstrap em 2026-06-03                                                                                                                       | Aprovado                       | `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check`; bootstrap define admin, clínica, paciente e no-workspace  | Supabase remoto atual respondeu `fetch failed` no bootstrap    |
 | F01 | Auth e guardas           | `/`, `/auth/login`, `/no-workspace`, middleware, `/api/auth/app-session`                               | Blindado por código em 2026-06-02 para evitar self-redirect e tratar `/no-workspace` sem sessão                                                                                                                       | Aprovado em browser e contrato | Matriz de redirecionamento por perfil; validação estática confirmou alvo canônico e ausência de redirect para a própria rota         | Sessões sintéticas e vínculos de usuário                       |
 | F02 | Correção portal paciente | `canAccessPatientPortal` no endpoint de sessão                                                         | Corrigido por código em 2026-06-02                                                                                                                                                                                    | Corrigido e testado            | Endpoint reutiliza helper canônico de destino; validação real por perfis segue pendente sem usuários sintéticos/Supabase homologação | Usuários sintéticos e ambiente Supabase homologação            |
 | F03 | Shell clínico            | `DashboardShell`, polling, busca, logout, menus                                                        | Blindado por código em 2026-06-02                                                                                                                                                                                     | Resiliente a falhas            | Polling e ações de leitura tratam exceções localmente; browser smoke segue pendente                                                  | Ambiente/browser autenticado para smoke                        |
@@ -132,7 +132,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 - [x] Registrar erros pré-existentes antes de alterações funcionais. Lint/build passaram com 11 warnings conhecidos após a limpeza de warnings locais em componentes não relacionados.
 - [x] Confirmar que `.env` não foi lido nem impresso.
 - [x] Confirmar variáveis esperadas somente por `.env.example` e referências de código. Nenhuma leitura de `.env` foi feita nesta execução.
-- [ ] Definir usuários sintéticos para admin, clínica, paciente e usuário sem workspace. Bloqueado nesta execução local sem ambiente de homologação/autorização.
+- [x] Definir usuários sintéticos para admin, clínica, paciente e usuário sem workspace. Em 2026-06-03 o bootstrap `scripts/supabase/bootstrap-core-auth.mjs` passou a definir `platform.admin@example.com`, perfis clínicos, `patient.demo@example.com` com role `patient` e `no.workspace.demo@example.com` sem membership; a execução remota autorizada ficou bloqueada por `TypeError: fetch failed` sem impressão de valores de ambiente.
 
 ### 4.3 Evidência mínima por execução
 
@@ -1338,6 +1338,30 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: não aplicável; alteração de scripts/healthcheck/documentação, sem mudança perceptível em UI.
 - Status: aprovado por código; validação real em homologação pendente.
 - Pendências: executar `scripts/supabase/test-rls-cross-tenant-contract.mjs` e `scripts/supabase/test-patient-linkage-contract.mjs` em Supabase local/homologação aprovada, validar unidade/colaborador, audit log admin real e storage/signed URL real.
+
+### Evidência — F00 usuários sintéticos e bootstrap de Auth/RBAC
+
+- Data: 2026-06-03.
+- Ambiente: local, usando variáveis já salvas no ambiente somente para execução do bootstrap autorizado; valores de secrets, tokens e URLs completas não foram impressos.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: foram formalizados perfis sintéticos para admin plataforma, clínica, paciente e usuário sem workspace.
+- Tenant sintético: `demo-clinic` pelo valor padrão do bootstrap, com possibilidade de override por `SUPABASE_BOOTSTRAP_TENANT_SLUG`.
+- Mock habilitado? não aplicável ao bootstrap server-side; `NEXT_PUBLIC_USE_MOCK_DATA` não foi alterado.
+- Rota/API/RPC/Edge Function: `scripts/supabase/bootstrap-core-auth.mjs`, Auth Admin Supabase, tabelas `profiles`, `tenant_memberships`, `roles`, `permissions`, `role_permissions` e linkage opcional `patient_accounts`.
+- Passos executados:
+  1. Confirmada a existência de `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md`.
+  2. Avanço feito no primeiro item aberto na ordem do arquivo: definição de usuários sintéticos da Fase 0.
+  3. O bootstrap passou a semear `patient.demo@example.com` com membership ativo `patient` e permissões de portal, em vez de perfil futuro sem role.
+  4. O bootstrap passou a semear `no.workspace.demo@example.com` com Auth/profile ativos, mas sem `tenant_memberships`, para validar o fallback `/no-workspace`.
+  5. Foi adicionada tentativa idempotente de vínculo em `patient_accounts` para o paciente demo determinístico quando a carga Patient 360 já existir.
+  6. Executado `npm run supabase:bootstrap:core-auth` com ambiente autorizado; a chamada remota falhou em transporte com `TypeError: fetch failed`, sem resposta de banco e sem valores sensíveis no log.
+  7. Executado `node scripts/supabase/test-d4sign-fixtures.mjs` como verificação local seguinte de contrato D4Sign já presente no plano; fixtures passaram e confirmaram estratégia HMAC fail-closed sem usar segredo real.
+- Resultado esperado: deixar os usuários sintéticos definidos de forma idempotente no bootstrap e registrar a tentativa de execução com variáveis salvas.
+- Resultado observado: definição por código concluída; execução contra Supabase remoto bloqueada por falha de fetch do ambiente atual antes de qualquer evidência de criação remota. Fixtures locais D4Sign passaram.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, provider IDs reais, payloads reais ou valores completos de variáveis de ambiente.
+- Screenshot/anexo: não aplicável; alteração de script/documentação, sem mudança perceptível em UI.
+- Status: aprovado por código; execução remota bloqueada por transporte.
+- Pendências: reexecutar `npm run supabase:bootstrap:core-auth` quando o host Supabase remoto estiver alcançável pelo runner, depois validar `/api/auth/app-session`, `/auth/login`, `/admin`, `/clinic/dashboard`, `/patient` e `/no-workspace` com esses perfis sintéticos.
 
 ## 18. Sequência recomendada de implementação
 

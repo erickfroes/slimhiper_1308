@@ -15,12 +15,15 @@ try {
   process.exit(1);
 }
 
-const CLINIC_MEMBERSHIP_ROLE_CODES = [
+const TENANT_MEMBERSHIP_ROLE_CODES = [
   'clinic_admin',
   'physician',
   'nutritionist',
   'financial_user',
+  'patient',
 ];
+
+const DEMO_PATIENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 const usersToSeed = [
   {
@@ -40,12 +43,14 @@ const usersToSeed = [
     full_name: 'Demo Financial User',
     role_code: 'financial_user',
   },
-  // Patient is seeded as auth + profile only for now.
-  // Do not create tenant_membership until schema supports a valid patient-facing membership role.
   {
     email: 'patient.demo@example.com',
     full_name: 'Demo Patient',
-    portal_role: 'patient_portal_future',
+    role_code: 'patient',
+  },
+  {
+    email: 'no.workspace.demo@example.com',
+    full_name: 'No Workspace Demo User',
   },
 ];
 
@@ -73,6 +78,13 @@ const permissionMatrix = {
   ],
   nutritionist: ['patients.read', 'nutrition.read', 'nutrition.write', 'reports.read'],
   financial_user: ['patients.read', 'financial.read', 'financial.write', 'reports.read'],
+  patient: [
+    'patient_portal.access',
+    'documents.read',
+    'chat.read',
+    'chat.write',
+    'notifications.read',
+  ],
 };
 
 async function ensureAuthUser(email, password) {
@@ -92,6 +104,34 @@ async function ensureAuthUser(email, password) {
   });
   if (error) throw error;
   return data.user;
+}
+
+async function ensurePatientPortalLink(tenantId, seededUsers) {
+  const patientUser = seededUsers.find((user) => user.role_code === 'patient');
+  if (!patientUser) return 'patient_user_missing';
+
+  const { data: patient, error: patientError } = await supabase
+    .from('patients')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('id', DEMO_PATIENT_ID)
+    .maybeSingle();
+  if (patientError) throw patientError;
+  if (!patient) return 'demo_patient_missing';
+
+  const { error: linkError } = await supabase.from('patient_accounts').upsert(
+    {
+      tenant_id: tenantId,
+      patient_id: patient.id,
+      user_id: patientUser.id,
+      status: 'active',
+      linked_at: new Date().toISOString(),
+    },
+    { onConflict: 'tenant_id,patient_id,user_id' }
+  );
+  if (linkError) throw linkError;
+
+  return 'linked';
 }
 
 async function run() {
@@ -117,7 +157,7 @@ async function run() {
     email: u.email,
     full_name: u.full_name,
     platform_role: u.platform_role ?? 'user',
-    active_tenant_id: CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code) ? tenant.id : null,
+    active_tenant_id: TENANT_MEMBERSHIP_ROLE_CODES.includes(u.role_code) ? tenant.id : null,
     is_active: true,
   }));
 
@@ -127,7 +167,7 @@ async function run() {
   if (profileError) throw profileError;
 
   const membershipsPayload = seededUsers
-    .filter((u) => CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code))
+    .filter((u) => TENANT_MEMBERSHIP_ROLE_CODES.includes(u.role_code))
     .map((u) => ({
       tenant_id: tenant.id,
       user_id: u.id,
@@ -202,24 +242,29 @@ async function run() {
     if (rolePermError) throw rolePermError;
   }
 
+  const patientPortalLinkStatus = await ensurePatientPortalLink(tenant.id, seededUsers);
+
   console.log('Bootstrap completed successfully.');
   console.table(
     seededUsers.map((u) => ({
       email: u.email,
       auth_seeded: 'yes',
       profile_seeded: 'yes',
-      tenant_membership: CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code)
+      tenant_membership: TENANT_MEMBERSHIP_ROLE_CODES.includes(u.role_code)
         ? u.role_code
         : 'not seeded',
       area_access:
         u.platform_role === 'platform_admin'
           ? 'Platform admin area'
-          : CLINIC_MEMBERSHIP_ROLE_CODES.includes(u.role_code)
-            ? `Clinic app (${u.role_code})`
-            : 'Patient portal (future profile-link flow)',
+          : u.role_code === 'patient'
+            ? 'Patient portal'
+            : TENANT_MEMBERSHIP_ROLE_CODES.includes(u.role_code)
+              ? `Clinic app (${u.role_code})`
+              : 'No workspace fallback',
     }))
   );
   console.log(`Tenant: ${tenant.slug} (${tenant.id})`);
+  console.log(`Patient portal linkage: ${patientPortalLinkStatus}.`);
   console.log('Access summary:');
   console.log('- platform.admin@example.com → Platform admin area only (no tenant_membership).');
   console.log('- clinic.admin@example.com → Clinic tenant app as clinic_admin.');
@@ -227,7 +272,10 @@ async function run() {
   console.log('- nutritionist.demo@example.com → Clinic tenant app as nutritionist.');
   console.log('- finance.demo@example.com → Clinic tenant app as financial_user.');
   console.log(
-    '- patient.demo@example.com → Auth + profile seeded; tenant_membership intentionally skipped until a valid patient membership schema exists.'
+    '- patient.demo@example.com → Patient portal role and optional demo patient linkage.'
+  );
+  console.log(
+    '- no.workspace.demo@example.com → Auth + profile only; expected /no-workspace fallback.'
   );
 }
 
