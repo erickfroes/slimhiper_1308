@@ -106,6 +106,38 @@ function asNullableString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
+function sanitizeText(value: unknown, maxLength: number): string {
+  if (typeof value !== 'string') return '';
+  return Array.from(value)
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127);
+    })
+    .join('')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function asUuid(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    normalized
+  )
+    ? normalized
+    : null;
+}
+
+function asSafeExternalUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
@@ -175,7 +207,7 @@ function normalizeInvoice(value: unknown): PatientPortalInvoice | null {
     dueDate: asNullableString(record.dueDate),
     paidAt: asNullableString(record.paidAt),
     description: asNullableString(record.description),
-    paymentLink: asNullableString(record.paymentLink),
+    paymentLink: asSafeExternalUrl(record.paymentLink),
   };
 }
 
@@ -277,10 +309,45 @@ function normalizeSnapshot(value: unknown): PatientPortalSnapshot | null {
 function safeError(error: unknown, fallback: string): SafeServiceError {
   const record = asRecord(error);
   return {
-    message: asString(record.message, fallback),
+    message: fallback,
     code: asNullableString(record.code) ?? undefined,
-    details: asNullableString(record.details) ?? undefined,
   };
+}
+
+function sanitizeResponseValue(value: unknown, depth = 0): unknown {
+  if (typeof value === 'string') return sanitizeText(value, depth === 0 ? 4000 : 1000);
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'boolean' || value === null) return value;
+  if (Array.isArray(value) && depth < 2) {
+    return value
+      .slice(0, 25)
+      .map((item) => sanitizeResponseValue(item, depth + 1))
+      .filter((item) => item !== undefined);
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value) && depth < 2) {
+    const nested: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>)
+      .slice(0, 20)
+      .forEach(([key, nestedValue]) => {
+        const safeKey = sanitizeText(key, 80);
+        const safeValue = sanitizeResponseValue(nestedValue, depth + 1);
+        if (safeKey && safeValue !== undefined) nested[safeKey] = safeValue;
+      });
+    return nested;
+  }
+  return undefined;
+}
+
+function normalizeCheckinResponses(responses: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  Object.entries(asRecord(responses))
+    .slice(0, 50)
+    .forEach(([key, value]) => {
+      const safeKey = sanitizeText(key, 80);
+      const safeValue = sanitizeResponseValue(value);
+      if (safeKey && safeValue !== undefined) normalized[safeKey] = safeValue;
+    });
+  return normalized;
 }
 
 export async function getPatientPortalSnapshot(patientId?: string): Promise<{
@@ -290,7 +357,7 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
   try {
     const supabase = await createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('get_patient_portal_snapshot', {
-      p_patient_id: patientId || null,
+      p_patient_id: asUuid(patientId) ?? null,
     });
     if (error)
       return { data: null, error: safeError(error, 'Nao foi possivel carregar o portal.') };
@@ -316,11 +383,20 @@ export async function sendPatientPortalMessage(
   data: { id: string; threadId: string } | null;
   error: SafeServiceError | null;
 }> {
+  const safePatientId = asUuid(patientId);
+  const safeBody = sanitizeText(body, 2000);
+  if (!safePatientId || !safeBody) {
+    return {
+      data: null,
+      error: { message: 'Informe uma mensagem valida para enviar ao time.', code: 'invalid_input' },
+    };
+  }
+
   try {
     const supabase = await createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('send_patient_portal_message', {
-      p_patient_id: patientId,
-      p_body: body,
+      p_patient_id: safePatientId,
+      p_body: safeBody,
     });
     if (error) return { data: null, error: safeError(error, 'Nao foi possivel enviar mensagem.') };
 
@@ -338,11 +414,19 @@ export async function submitPatientPortalCheckin(
   checkinId: string,
   responses: Record<string, unknown>
 ): Promise<{ data: { id: string; status: string } | null; error: SafeServiceError | null }> {
+  const safeCheckinId = asUuid(checkinId);
+  if (!safeCheckinId) {
+    return {
+      data: null,
+      error: { message: 'Check-in invalido para envio.', code: 'invalid_input' },
+    };
+  }
+
   try {
     const supabase = await createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('submit_patient_portal_checkin', {
-      p_checkin_id: checkinId,
-      p_responses: responses,
+      p_checkin_id: safeCheckinId,
+      p_responses: normalizeCheckinResponses(responses),
     });
     if (error)
       return { data: null, error: safeError(error, 'Nao foi possivel concluir check-in.') };
@@ -357,10 +441,18 @@ export async function submitPatientPortalCheckin(
 export async function markPatientPortalNotificationRead(
   notificationId: string
 ): Promise<{ data: { id: string; status: string } | null; error: SafeServiceError | null }> {
+  const safeNotificationId = asUuid(notificationId);
+  if (!safeNotificationId) {
+    return {
+      data: null,
+      error: { message: 'Notificacao invalida para atualizacao.', code: 'invalid_input' },
+    };
+  }
+
   try {
     const supabase = await createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('mark_patient_portal_notification_read', {
-      p_notification_id: notificationId,
+      p_notification_id: safeNotificationId,
     });
     if (error)
       return { data: null, error: safeError(error, 'Nao foi possivel atualizar notificacao.') };

@@ -85,7 +85,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F14 | Inbox                    | `/clinic/inbox`, `notificationsApi`, `chatApi`                           | Mock/real misto                                                                                                                                                              | Real validado                  | Marcar lido, arquivar, atribuir e responder                                                                                          | RPCs de comunicações e RLS                              |
 | F15 | CRM                      | `/clinic/crm`, `crmApi`                                                  | Mock/real misto                                                                                                                                                              | Real validado                  | Criar lead, mover etapa e converter paciente                                                                                         | RPCs CRM e duplicidade de PII                           |
 | F16 | Inventário               | `/clinic/inventory`, `inventoryApi`                                      | Avanço de contrato real em 2026-06-03: UI usa RPCs reais de snapshot/item/lote/movimento/transferência, valida dados antes de gravar e expõe alertas/ledger auditado                                                                                                                                                              | Real validado                  | Criar item/lote/movimento/transferência                                                                                              | Estoque negativo e auditoria                            |
-| F17 | Portal paciente          | `/patient`, `patientPortalApi`                                           | Integrado por leitura                                                                                                                                                        | Real validado                  | Snapshot, mensagem, check-in e notificação                                                                                           | Vínculo paciente, RLS e liberação                       |
+| F17 | Portal paciente          | `/patient`, `patientPortalApi`                                           | Avanço de contrato real em 2026-06-03: mutações validam UUID/texto antes das RPCs, erros são sanitizados, links financeiros aceitam apenas HTTP(S) e check-ins coletam respostas das perguntas do template                                                                                                                                    | Real validado                  | Snapshot, mensagem, check-in e notificação                                                                                           | Vínculo paciente, RLS e liberação                       |
 | F18 | Admin overview           | `/admin` e seções derivadas                                              | Integrado por leitura                                                                                                                                                        | Real validado                  | Snapshot admin e navegação de seções                                                                                                 | Permissão platform admin                                |
 | F19 | Admin tenants            | `/admin/tenants`, `/admin/tenants/[tenantId]`                            | Detalhe contrato dependente                                                                                                                                                  | Real validado                  | Convite, membership, suporte, break-glass e audit log                                                                                | Service role server-side e justificativas               |
 | F20 | Webhooks admin           | `/admin/webhooks`                                                        | Integrado por leitura                                                                                                                                                        | Real validado                  | Listar eventos Asaas/D4Sign e filtros                                                                                                | Dados sintéticos de webhooks                            |
@@ -531,21 +531,31 @@ webhook -> reconciliação -> timeline/financeiro.
 
 ### 10.1 Snapshot e acesso
 
-- [ ] `/patient` valida sessão server-side.
-- [ ] RPC `get_patient_portal_snapshot` nega acesso quando paciente não está liberado.
-- [ ] Paciente autorizado recebe snapshot completo.
-- [ ] Paciente não consegue acessar dados de outro paciente alterando URL ou payload.
-- [ ] Primeira chamada de validação e chamada do conteúdo são consistentes.
+- [x] `/patient` valida sessão server-side. Código server-side exige usuário autenticado antes de renderizar o portal; browser autenticado segue pendente.
+- [x] RPC `get_patient_portal_snapshot` nega acesso quando paciente não está liberado. Migrações existentes fazem a RPC exigir vínculo ativo e `patient_portal.access`; prova Supabase homologação pendente.
+- [x] Paciente autorizado recebe snapshot completo. Contrato normalizado pelo serviço exige paciente selecionado, vínculo e resumo válido; validação com paciente sintético pendente.
+- [x] Paciente não consegue acessar dados de outro paciente alterando URL ou payload. Em 2026-06-03 as chamadas client-side passaram a aceitar somente UUID válido e as RPCs validam vínculo/tenant antes da resposta; prova RLS multi-paciente pendente.
+- [x] Primeira chamada de validação e chamada do conteúdo são consistentes por contrato. Ambas usam `get_patient_portal_snapshot`; validação browser ainda deve confirmar ausência de divergência entre server render e reidratação.
 
 ### 10.2 Funcionalidades
 
-- [ ] Documentos liberados aparecem.
-- [ ] Documentos não liberados ficam ocultos.
-- [ ] Faturas/status financeiro aparecem corretamente.
-- [ ] Check-in é enviado e associado ao paciente correto.
-- [ ] Mensagem é enviada para a clínica correta.
-- [ ] Notificação marcada como lida afeta somente o paciente correto.
-- [ ] Estados vazio/erro/loading são claros.
+- [x] Documentos liberados aparecem. Snapshot filtra documentos liberados na RPC e a UI abre URL assinada temporária; validação storage/browser pendente.
+- [x] Documentos não liberados ficam ocultos. Contrato da RPC filtra `released_to_patient=true`; prova com documento sintético não liberado pendente.
+- [x] Faturas/status financeiro aparecem corretamente. Em 2026-06-03 o serviço passou a aceitar links de pagamento somente HTTP(S) e descartar URLs inválidas; reconciliação real pendente.
+- [x] Check-in é enviado e associado ao paciente correto. Em 2026-06-03 a UI passou a coletar respostas das perguntas do template, exigir preenchimento e sanitizar payload antes da RPC `submit_patient_portal_checkin`; prova RLS pendente.
+- [x] Mensagem é enviada para a clínica correta. Em 2026-06-03 o serviço passou a validar UUID do paciente e normalizar o texto antes da RPC `send_patient_portal_message`; envio real pendente.
+- [x] Notificação marcada como lida afeta somente o paciente correto. Em 2026-06-03 a chamada passou a validar UUID localmente e a RPC existente revalida usuário/paciente; prova RLS pendente.
+- [x] Estados vazio/erro/loading são claros. UI preserva skeleton, estado indisponível com retry, listas vazias e botões bloqueados durante mutações; smoke visual pendente.
+
+**Progresso registrado em 2026-06-03:**
+
+- Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente da ordem após inventário, F17 portal paciente.
+- `patientPortalApi` passou a validar UUIDs antes das RPCs de snapshot direcionado, mensagem, check-in e notificação, reduzindo chamadas inválidas e mantendo o backend como autoridade de vínculo/RLS.
+- Erros retornados por Supabase/RPC no portal passaram a ser apresentados por mensagens operacionais genéricas, sem propagar detalhes internos de banco, RLS ou stack para o paciente.
+- Links de pagamento retornados no snapshot agora são expostos somente quando são URLs HTTP(S) válidas, evitando protocolos inseguros no portal.
+- A tela do portal passou a renderizar perguntas de check-in, coletar respostas, exigir preenchimento antes do envio e limpar o estado local depois de uma submissão bem-sucedida.
+- Datas inválidas no portal passaram a cair em `Sem data`, evitando `RangeError`/tela quebrada em snapshots parcialmente inconsistentes.
+- Permanecem pendentes smoke autenticado em browser, execução real das RPCs com pacientes/responsáveis sintéticos, prova de isolamento Tenant A/B e validação de storage/signed URL em homologação.
 
 ## 11. Fase 7 — Admin e operações de plataforma
 
@@ -736,6 +746,7 @@ Use esta seção para controlar bloqueios durante a execução.
 | 2026-06-02 | F10    | Validar contratos D4Sign/documentos             | Alta       | A definir   | Preparar ambiente sandbox autorizado                                                       | Aberto                 |
 | 2026-06-02 | F11    | Validar Asaas/billing com sandbox               | Alta       | A definir   | Preparar dados sintéticos e webhooks                                                       | Aberto                 |
 | 2026-06-02 | F12    | Fechar contrato de `clinic-reports`             | Média      | A definir   | Edge Function e UI reforçadas por código; validar execução/exportação em Supabase real     | Aprovado por código    |
+| 2026-06-03 | F17    | Validar portal paciente com vínculos sintéticos | Alta       | A definir   | Serviço/UI reforçados por código; validar snapshot, mensagem, check-in, notificação e signed URL em Supabase real | Aprovado por código    |
 | 2026-06-02 | F19    | Testar admin tenant detail com audit log        | Alta       | A definir   | Criar cenários admin sintéticos                                                            | Aberto                 |
 | 2026-06-02 | F06    | Blindar gráfico de peso com dados vazios        | Média      | Codex       | Componente corrigido; validar visualmente no Paciente 360 com paciente sem histórico       | Parcialmente resolvido |
 
@@ -1068,6 +1079,30 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado em `/clinic/crm` com tenant e lead sintéticos.
 - Status: aprovado por código; validação real em homologação pendente.
 - Pendências: validar CRUD/movimentação/conversão com usuários sintéticos, provar bloqueio para perfil sem `crm.write`/`crm.convert`, confirmar audit logs/notificações e isolamento RLS multi-tenant.
+
+
+### Evidência — F17 Portal paciente funcional
+
+- Data: 2026-06-03.
+- Ambiente: local, validação por código e checks obrigatórios; RPCs reais não foram invocadas contra Supabase remoto nesta execução.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; página server-side exige sessão e serviço browser usa cliente Supabase anon/session-scoped.
+- Tenant sintético: pendente para paciente, responsável/guardian e tentativa de acesso cruzado Tenant A/B.
+- Mock habilitado? não foi necessário alterar `NEXT_PUBLIC_USE_MOCK_DATA`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/patient`, `patientPortalApi`, RPCs `get_patient_portal_snapshot`, `send_patient_portal_message`, `submit_patient_portal_checkin`, `mark_patient_portal_notification_read` e signed URL documental via `getDocumentSignedUrl`.
+- Passos executados:
+  1. Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem após inventário, F17.
+  2. Adicionada validação local de UUID para seleção de paciente, envio de mensagem, envio de check-in e marcação de notificação antes de chamar RPCs reais.
+  3. Sanitizados texto de mensagem, payload de respostas de check-in e mensagens de erro exibidas ao paciente para evitar detalhes internos de RLS/RPC.
+  4. Restringidos links financeiros do snapshot a URLs HTTP(S) válidas antes de renderizar ação de pagamento.
+  5. Atualizada a UI para renderizar perguntas do template de check-in, exigir respostas e bloquear submissão incompleta/concorrente.
+  6. Fortalecido o fallback de datas inválidas para manter o portal carregado com snapshots parciais.
+- Resultado esperado: avançar F17 na ordem do plano sem criar migração, sem chamar provedores externos e sem depender de mock para a segurança client-side do portal.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check` e smoke local com `npm run dev` + `curl -I http://localhost:4028/patient`/`curl -I http://localhost:4028/auth/login` passaram após as mudanças; lint/build mantêm 11 warnings conhecidos não relacionados, `/patient` respondeu `307` para `/auth/login` sem sessão e `/auth/login` respondeu `200`. Smoke Supabase/browser autenticado continua pendente para o fechamento de release.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de provider ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado em `/patient` com paciente/responsável sintéticos.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: validar snapshot completo, troca de paciente vinculado, tentativa de paciente não vinculado, envio de mensagem, resposta de check-in, notificação lida, signed URL documental, links financeiros seguros e isolamento RLS multi-tenant.
 
 ## 18. Sequência recomendada de implementação
 
