@@ -13,6 +13,7 @@ import {
   KanbanSquare,
   Loader2,
   MessageSquarePlus,
+  Pencil,
   Phone,
   Plus,
   RefreshCw,
@@ -32,6 +33,7 @@ import {
   getCrmPipeline,
   moveCrmLeadStage,
   recordCrmLeadActivity,
+  updateCrmLead,
   type CrmLead,
   type CrmLeadDetail,
   type CrmStage,
@@ -72,6 +74,28 @@ function isOverdue(value: string | null | undefined) {
   if (!value) return false;
   const date = new Date(value);
   return !Number.isNaN(date.getTime()) && date.getTime() < Date.now();
+}
+
+function toDateTimeLocal(value: string | null | undefined) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function leadToForm(lead: CrmLead): LeadFormState {
+  return {
+    fullName: lead.fullName ?? '',
+    email: lead.email ?? '',
+    phone: lead.phone ?? '',
+    source: lead.source ?? '',
+    campaign: lead.campaign ?? '',
+    contactPreference: lead.contactPreference ?? 'whatsapp',
+    contactConsent: lead.contactConsent,
+    consentPurpose: lead.consentPurpose ?? 'Contato comercial sobre avaliacao inicial',
+    nextFollowUpAt: toDateTimeLocal(lead.nextFollowUpAt),
+  };
 }
 
 function contactLabel(lead: CrmLead) {
@@ -132,10 +156,12 @@ function CreateLeadModal({
   submitting,
   onChange,
   onClose,
+  mode = 'create',
   onSubmit,
 }: {
   form: LeadFormState;
   submitting: boolean;
+  mode?: 'create' | 'edit';
   onChange: (patch: Partial<LeadFormState>) => void;
   onClose: () => void;
   onSubmit: () => void;
@@ -151,7 +177,9 @@ function CreateLeadModal({
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-foreground">Novo lead</h2>
+            <h2 className="text-base font-semibold text-foreground">
+              {mode === 'edit' ? 'Editar lead' : 'Novo lead'}
+            </h2>
             <p className="text-xs text-muted-foreground">
               PII comercial com consentimento e retencao LGPD.
             </p>
@@ -251,8 +279,14 @@ function CreateLeadModal({
             disabled={submitting}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
           >
-            {submitting ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Criar
-            lead
+            {submitting ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : mode === 'edit' ? (
+              <Pencil size={16} />
+            ) : (
+              <Plus size={16} />
+            )}{' '}
+            {mode === 'edit' ? 'Salvar lead' : 'Criar lead'}
           </button>
         </div>
       </form>
@@ -268,6 +302,7 @@ function LeadDetailPanel({
   onClose,
   onMove,
   onRefresh,
+  onEdit,
   onConvert,
   onAddNote,
   onAddTask,
@@ -279,6 +314,7 @@ function LeadDetailPanel({
   onClose: () => void;
   onMove: (stageId: string) => void;
   onRefresh: () => void;
+  onEdit: () => void;
   onConvert: (createAppointment: boolean) => void;
   onAddNote: (title: string, description: string) => void;
   onAddTask: (title: string, dueAt: string) => void;
@@ -321,9 +357,19 @@ function LeadDetailPanel({
                 <h3 className="font-semibold text-foreground">{detail.lead.fullName}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">{contactLabel(detail.lead)}</p>
               </div>
-              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                {detail.lead.stageLabel || detail.lead.status}
-              </span>
+              <div className="flex flex-col items-end gap-2">
+                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                  {detail.lead.stageLabel || detail.lead.status}
+                </span>
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  disabled={actionLoading || detail.lead.status === 'converted'}
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  <Pencil size={13} /> Editar
+                </button>
+              </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
               <div className="rounded-lg bg-muted/50 p-2">
@@ -507,6 +553,7 @@ export default function CrmPipelineContent() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [leadForm, setLeadForm] = useState<LeadFormState>(emptyLeadForm);
 
   const loadPipeline = useCallback(async () => {
@@ -563,6 +610,10 @@ export default function CrmPipelineContent() {
   const convertedCount = filteredLeads.filter((lead) => lead.status === 'converted').length;
 
   async function handleCreateLead() {
+    if (!leadForm.fullName.trim() || (!leadForm.email.trim() && !leadForm.phone.trim())) {
+      toast.error('Informe nome e ao menos um contato para criar o lead.');
+      return;
+    }
     setActionLoading(true);
     const result = await createCrmLead({
       ...leadForm,
@@ -580,6 +631,35 @@ export default function CrmPipelineContent() {
     setLeadForm(emptyLeadForm);
     await loadPipeline();
     if (result.data?.id) setSelectedLeadId(result.data.id);
+  }
+
+  async function handleUpdateLead() {
+    if (!selectedLeadId) return;
+    if (!leadForm.fullName.trim() || (!leadForm.email.trim() && !leadForm.phone.trim())) {
+      toast.error('Informe nome e ao menos um contato para salvar o lead.');
+      return;
+    }
+    setActionLoading(true);
+    const result = await updateCrmLead(selectedLeadId, {
+      ...leadForm,
+      nextFollowUpAt: leadForm.nextFollowUpAt
+        ? new Date(leadForm.nextFollowUpAt).toISOString()
+        : undefined,
+    });
+    setActionLoading(false);
+    if (result.error) {
+      toast.error(result.error.message);
+      return;
+    }
+    toast.success('Lead atualizado com auditoria.');
+    setEditOpen(false);
+    await Promise.all([loadPipeline(), loadDetail(selectedLeadId)]);
+  }
+
+  function handleOpenEdit() {
+    if (!detail) return;
+    setLeadForm(leadToForm(detail.lead));
+    setEditOpen(true);
   }
 
   async function handleMove(stageId: string) {
@@ -689,7 +769,10 @@ export default function CrmPipelineContent() {
             </button>
             <button
               type="button"
-              onClick={() => setCreateOpen(true)}
+              onClick={() => {
+                setLeadForm(emptyLeadForm);
+                setCreateOpen(true);
+              }}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
             >
               <Plus size={16} /> Novo lead
@@ -831,6 +914,7 @@ export default function CrmPipelineContent() {
         }}
         onMove={handleMove}
         onRefresh={() => selectedLeadId && loadDetail(selectedLeadId)}
+        onEdit={handleOpenEdit}
         onConvert={handleConvert}
         onAddNote={handleAddNote}
         onAddTask={handleAddTask}
@@ -840,9 +924,21 @@ export default function CrmPipelineContent() {
         <CreateLeadModal
           form={leadForm}
           submitting={actionLoading}
+          mode="create"
           onChange={(patch) => setLeadForm((current) => ({ ...current, ...patch }))}
           onClose={() => setCreateOpen(false)}
           onSubmit={handleCreateLead}
+        />
+      ) : null}
+
+      {editOpen ? (
+        <CreateLeadModal
+          form={leadForm}
+          submitting={actionLoading}
+          mode="edit"
+          onChange={(patch) => setLeadForm((current) => ({ ...current, ...patch }))}
+          onClose={() => setEditOpen(false)}
+          onSubmit={handleUpdateLead}
         />
       ) : null}
     </div>
