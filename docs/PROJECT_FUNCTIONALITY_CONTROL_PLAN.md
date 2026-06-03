@@ -530,10 +530,10 @@ D4Sign -> status atualizado -> URL assinada -> liberação ao paciente.
 
 **Checklist paciente:**
 
-- [ ] Lista relatórios disponíveis ao paciente.
-- [ ] Oculta relatórios internos.
-- [ ] Download respeita autorização.
-- [ ] Link expira quando aplicável.
+- [x] Lista relatórios disponíveis ao paciente. Em 2026-06-03 `patient-reports` passou a derivar a lista do catálogo allowlist de relatórios clínicos e retornar somente chaves liberadas para escopo de paciente; validação Supabase/browser pendente.
+- [x] Oculta relatórios internos. Em 2026-06-03 a Edge Function passou a filtrar relatórios financeiros, sensíveis, sem `canRun` ou fora da allowlist paciente antes de responder à aba do Paciente 360.
+- [x] Download respeita autorização. Código executa exportação por `clinic-reports`, que revalida sessão, definição, permissão e vínculo do paciente antes da RPC; prova real pendente.
+- [x] Link expira quando aplicável. Exportação permanece vinculada a token curto gerado por `create_clinic_report_run` e validado por `clinic-report-export`; prova de expiração em Supabase real pendente.
 
 ### 9.3 Asaas
 
@@ -806,16 +806,17 @@ webhook -> reconciliação -> timeline/financeiro.
 
 Use esta seção para controlar bloqueios durante a execução.
 
-| Data       | Frente  | Pendência                                       | Severidade | Responsável | Próxima ação                                                                                                      | Status                 |
-| ---------- | ------- | ----------------------------------------------- | ---------- | ----------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| 2026-06-02 | F02     | Revisar divergência de `canAccessPatientPortal` | Alta       | Codex       | Endpoint e middleware agora usam helper canônico; validar perfis sintéticos em homologação                        | Parcialmente resolvido |
-| 2026-06-02 | F10     | Validar contratos D4Sign/documentos             | Alta       | A definir   | Preparar ambiente sandbox autorizado                                                                              | Aberto                 |
-| 2026-06-02 | F11     | Validar Asaas/billing com sandbox               | Alta       | A definir   | Preparar dados sintéticos e webhooks                                                                              | Aberto                 |
-| 2026-06-02 | F12     | Fechar contrato de `clinic-reports`             | Média      | A definir   | Edge Function e UI reforçadas por código; validar execução/exportação em Supabase real                            | Aprovado por código    |
-| 2026-06-03 | F17     | Validar portal paciente com vínculos sintéticos | Alta       | A definir   | Serviço/UI reforçados por código; validar snapshot, mensagem, check-in, notificação e signed URL em Supabase real | Aprovado por código    |
-| 2026-06-02 | F19     | Testar admin tenant detail com audit log        | Alta       | A definir   | Criar cenários admin sintéticos                                                                                   | Aberto                 |
-| 2026-06-03 | F20/F21 | Validar webhooks e observabilidade em browser   | Média      | A definir   | Gerar eventos sintéticos Asaas/D4Sign em homologação e conferir health/sinais reais com admin sintético           | Aprovado por código    |
-| 2026-06-02 | F06     | Blindar gráfico de peso com dados vazios        | Média      | Codex       | Componente corrigido; validar visualmente no Paciente 360 com paciente sem histórico                              | Parcialmente resolvido |
+| Data       | Frente  | Pendência                                       | Severidade | Responsável | Próxima ação                                                                                                        | Status                 |
+| ---------- | ------- | ----------------------------------------------- | ---------- | ----------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 2026-06-02 | F02     | Revisar divergência de `canAccessPatientPortal` | Alta       | Codex       | Endpoint e middleware agora usam helper canônico; validar perfis sintéticos em homologação                          | Parcialmente resolvido |
+| 2026-06-02 | F10     | Validar contratos D4Sign/documentos             | Alta       | A definir   | Preparar ambiente sandbox autorizado                                                                                | Aberto                 |
+| 2026-06-02 | F11     | Validar Asaas/billing com sandbox               | Alta       | A definir   | Preparar dados sintéticos e webhooks                                                                                | Aberto                 |
+| 2026-06-02 | F12     | Fechar contrato de `clinic-reports`             | Média      | A definir   | Edge Function e UI reforçadas por código; validar execução/exportação em Supabase real                              | Aprovado por código    |
+| 2026-06-03 | F12     | Validar relatórios do paciente no Paciente 360  | Média      | A definir   | Serviço e Edge Function filtram allowlist paciente por código; validar lista/export/expiração com usuário sintético | Aprovado por código    |
+| 2026-06-03 | F17     | Validar portal paciente com vínculos sintéticos | Alta       | A definir   | Serviço/UI reforçados por código; validar snapshot, mensagem, check-in, notificação e signed URL em Supabase real   | Aprovado por código    |
+| 2026-06-02 | F19     | Testar admin tenant detail com audit log        | Alta       | A definir   | Criar cenários admin sintéticos                                                                                     | Aberto                 |
+| 2026-06-03 | F20/F21 | Validar webhooks e observabilidade em browser   | Média      | A definir   | Gerar eventos sintéticos Asaas/D4Sign em homologação e conferir health/sinais reais com admin sintético             | Aprovado por código    |
+| 2026-06-02 | F06     | Blindar gráfico de peso com dados vazios        | Média      | Codex       | Componente corrigido; validar visualmente no Paciente 360 com paciente sem histórico                                | Parcialmente resolvido |
 
 ## 17. Modelo de evidência por fluxo
 
@@ -1124,6 +1125,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado em `/clinic/reports` com tenant sintético.
 - Status: aprovado por código; validação real em homologação pendente.
 - Pendências: executar relatório com dados e sem dados, baixar CSV/PDF, validar expiração de token, perfil sem `reports.read`, perfil sem `financial.read`/`timeline.sensitive.read` e isolamento RLS multi-tenant.
+
+### Evidência — F12 Relatórios do paciente no Paciente 360
+
+- Data: 2026-06-03.
+- Ambiente: local, validação por código e checks obrigatórios; Edge Functions/RPCs reais não foram invocados contra Supabase remoto nesta execução.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; validação estática usou permissões `patients.read` e `reports.read` já exigidas pela Edge Function.
+- Tenant sintético: pendente para executar a aba Relatórios do Paciente 360 com usuário sintético e `NEXT_PUBLIC_USE_MOCK_DATA=false`.
+- Mock habilitado? código preserva mock somente quando `NEXT_PUBLIC_USE_MOCK_DATA=true`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: aba Relatórios do Paciente 360, `reportsApi`, Edge Functions `patient-reports`, `clinic-reports` e `clinic-report-export`, RPCs `list_clinic_report_definitions`, `create_clinic_report_run` e `get_clinic_report_export`.
+- Passos executados:
+  1. Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado no próximo checklist aberto da ordem, Fase 5.2 relatórios do paciente.
+  2. `patient-reports` deixou de listar diretamente `report_definitions` ativas do tenant e passou a derivar a resposta da allowlist canônica `list_clinic_report_definitions`.
+  3. A Edge Function passou a retornar somente relatórios com chave liberada para escopo paciente, `canRun=true`, exportação habilitada e sem exigências financeiras ou sensíveis, ocultando relatórios internos da aba do paciente.
+  4. `reportsApi` passou a validar UUID do paciente antes de acionar a Edge Function real, evitando chamadas inválidas com payload de rota incorreto.
+  5. A aba Relatórios passou a bloquear execução quando a definição retornada não está presente/exportável e explicita que downloads usam token temporário.
+- Resultado esperado: fechar por código a listagem de relatórios disponíveis ao paciente, ocultação de internos, autorização de download e expiração por token curto sem criar migração nem chamar provedores externos.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check` passaram após as mudanças; lint/build mantêm 11 warnings conhecidos não relacionados. Smoke Supabase/browser e prova de expiração real seguem pendentes.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de provider ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado na aba Relatórios do Paciente 360 com paciente sintético.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: validar lista com e sem relatórios, garantir que financeiro/timeline sensível não aparecem em perfis sem permissão, baixar CSV/PDF, aguardar expiração do token curto e provar isolamento multi-tenant.
 
 ### Evidência — F15 CRM operacional
 

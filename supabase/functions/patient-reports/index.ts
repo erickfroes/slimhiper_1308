@@ -28,16 +28,38 @@ function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
+const patientVisibleReportKeys = new Set([
+  'resumo-clinico',
+  'servicos-consumidos',
+  'documentos-emitidos',
+  'adesao-plano',
+]);
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function isPatientVisibleReport(row: Record<string, unknown>) {
+  const key = asString(row.key);
+  if (!patientVisibleReportKeys.has(key)) return false;
+
+  return (
+    asBoolean(row.canRun) &&
+    asBoolean(row.exportEnabled, true) &&
+    !asBoolean(row.requiresFinancialRead) &&
+    !asBoolean(row.requiresSensitiveRead)
+  );
+}
+
 function mapReportDefinition(row: Record<string, unknown>) {
-  const definition = asRecord(row.definition);
   return {
-    key: asString(row.key, String(row.id ?? 'report')),
+    key: asString(row.key, 'report'),
     label: asString(row.label, 'Relatorio clinico'),
     description: asString(row.description, 'Relatorio disponivel para o paciente.'),
-    iconKey: asString(row.icon_key ?? definition.iconKey ?? definition.icon_key, 'FileText'),
-    badge: asString(definition.badge) || undefined,
-    badgeColor: asString(definition.badgeColor ?? definition.badge_color) || undefined,
-    exportImplemented: row.export_enabled === true,
+    iconKey: asString(row.iconKey, 'FileText'),
+    badge: asString(row.badge) || 'Paciente',
+    badgeColor: asString(row.badgeColor) || 'bg-blue-100 text-blue-700',
+    exportImplemented: asBoolean(row.exportEnabled, true),
   };
 }
 
@@ -158,19 +180,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: rows, error: reportsError } = await supabase
-      .from('report_definitions')
-      .select('id,key,label,description,icon_key,export_enabled,definition,status,updated_at')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'active')
-      .order('label', { ascending: true });
+    const { data: rows, error: reportsError } = await supabase.rpc(
+      'list_clinic_report_definitions'
+    );
 
     if (reportsError) throw reportsError;
 
+    const patientReports = Array.isArray(rows)
+      ? rows.map(asRecord).filter(isPatientVisibleReport).map(mapReportDefinition)
+      : [];
+
     return jsonResponse(200, {
       ok: true,
-      data: (rows ?? []).map((row) => mapReportDefinition(row as Record<string, unknown>)),
-      meta: { tenantId, timestamp },
+      data: patientReports,
+      meta: { tenantId, timestamp, scope: 'patient' },
     });
   } catch (error) {
     console.error('[patient-reports] unexpected_error', {

@@ -20,6 +20,12 @@ function isMockEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidUuid(value: string): boolean {
+  return UUID_PATTERN.test(value.trim());
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -83,7 +89,7 @@ function normalizeReportDefinition(item: unknown): PatientReportDefinition | nul
 export async function getPatientReportDefinitions(
   patientId: string
 ): Promise<{ data: PatientReportDefinition[]; error: SafeServiceError | null }> {
-  if (!patientId.trim()) {
+  if (!isValidUuid(patientId)) {
     return {
       data: [],
       error: { message: 'Paciente invalido para carregar relatorios clinicos.' },
