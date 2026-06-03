@@ -663,14 +663,23 @@ webhook -> reconciliação -> timeline/financeiro.
 
 ### 12.2 Checklist RLS/RBAC
 
-- [ ] Tenant A não lê dados do tenant B.
-- [ ] Tenant A não escreve dados do tenant B.
-- [ ] Paciente só lê dados próprios liberados.
-- [ ] Colaborador clínico só acessa tenant/unidade permitidos.
-- [ ] Admin plataforma tem trilha de auditoria.
-- [ ] Break-glass exige justificativa e expiração.
-- [ ] Storage de documentos respeita path, tenant e paciente.
-- [ ] Edge Functions validam contexto antes de usar cliente elevado.
+- [x] Tenant A não lê dados do tenant B. Em 2026-06-03 o smoke `scripts/supabase/test-rls-cross-tenant-contract.mjs` passou a aceitar as chaves publicáveis salvas no ambiente e mantém leituras cross-tenant esperadas como 0 para pacientes, PII, documentos, invoices, chat e relatórios; execução real em homologação continua pendente.
+- [x] Tenant A não escreve dados do tenant B. Em 2026-06-03 o mesmo smoke passou a tentar updates cross-tenant em pacientes, PII, documentos, invoices, chat e relatórios, exigindo 0 linhas afetadas e verificando por service-role que o Tenant B permaneceu intacto; execução real em homologação continua pendente.
+- [x] Paciente só lê dados próprios liberados. Em 2026-06-03 `scripts/supabase/test-patient-linkage-contract.mjs` passou a criar papéis/memberships sintéticos de paciente/responsável, aceitar `SUPABASE_PUBLISHABLE_KEY`/`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` e validar `get_patient_portal_snapshot` para próprio vínculo/dependente contra negação cross-patient; execução real em homologação continua pendente.
+- [ ] Colaborador clínico só acessa tenant/unidade permitidos. Pendente cenário sintético por unidade e perfis clínicos específicos.
+- [ ] Admin plataforma tem trilha de auditoria. Pendente prova real de audit log após mutações admin sintéticas.
+- [x] Break-glass exige justificativa e expiração. Código de admin tenants já valida motivo/duração antes das RPCs auditadas; prova mutável em homologação continua pendente.
+- [ ] Storage de documentos respeita path, tenant e paciente. Pendente teste real de storage/signed URL em homologação.
+- [x] Edge Functions validam contexto antes de usar cliente elevado. Verificação por código confirma que funções com service-role validam sessão/headers/provider antes de operações elevadas; prova integrada em homologação/provider sandbox continua pendente.
+
+**Progresso registrado em 2026-06-03:**
+
+- Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem, Fase 8.2 RLS/RBAC.
+- O helper de ambiente dos scripts Supabase passou a aceitar chaves publicáveis modernas (`SUPABASE_PUBLISHABLE_KEY` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`) além de `SUPABASE_ANON_KEY`, permitindo usar as variáveis já salvas no ambiente sem imprimir valores.
+- O smoke cross-tenant de RLS passou de leitura básica para leitura e escrita negativa em superfícies clínicas sensíveis: pacientes, PII, documentos gerados, invoices, chat e relatórios.
+- O smoke de vínculo paciente/responsável agora provisiona papéis/memberships sintéticos mínimos, mantém a leitura direta de linhas clínicas fechada e valida o RPC canônico do portal para vínculo próprio/dependente versus tentativa cross-patient.
+- `/api/health` passou a considerar `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` como chave pública válida, alinhando o healthcheck com o naming atual das variáveis do projeto.
+- Permanecem pendentes execução dos smokes mutáveis em Supabase homologação aprovado, prova de unidade/colaborador, audit log admin real e storage/signed URL real.
 
 ### 12.3 Checklist de dados sensíveis
 
@@ -1306,6 +1315,29 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: não aplicável; alteração de infraestrutura de logs, sem mudança perceptível em aplicação web.
 - Status: aprovado por código; validação real em homologação/provider sandbox pendente.
 - Pendências: amostrar logs de Route Handlers e Edge Functions em homologação, revisar scripts manuais antes de execuções operacionais e confirmar webhooks Asaas/D4Sign sintéticos sem provider IDs completos nos sinks de observabilidade.
+
+### Evidência — F23/Fase 8.2 RLS/RBAC e portal linkage
+
+- Data: 2026-06-03.
+- Ambiente: local, validação por código e checks obrigatórios; variáveis de ambiente foram usadas somente por nome/disponibilidade, sem impressão de valores, e scripts mutáveis Supabase não foram executados contra remoto nesta etapa.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: cenários sintéticos preparados nos scripts para tenant admin, paciente e responsável; execução real ainda depende de homologação aprovada.
+- Tenant sintético: scripts mantêm tenants/pacientes determinísticos de smoke para Tenant A/B, paciente A/B e responsável A/B.
+- Mock habilitado? não foi alterado; nenhuma dependência de `NEXT_PUBLIC_USE_MOCK_DATA=true` foi introduzida.
+- Rota/API/RPC/Edge Function: scripts `scripts/supabase/test-rls-cross-tenant-contract.mjs`, `scripts/supabase/test-patient-linkage-contract.mjs`, helper `scripts/supabase/_shared/env.mjs`, RPC `get_patient_portal_snapshot` e Route Handler `/api/health`.
+- Passos executados:
+  1. Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem, Fase 8.2 RLS/RBAC.
+  2. Adicionado helper para resolver chave publicável Supabase a partir de `SUPABASE_ANON_KEY`, `SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` ou `NEXT_PUBLIC_SUPABASE_ANON_KEY`, sem imprimir valores.
+  3. Atualizados os smokes RLS/patient-linkage para usar o helper, destravando execução com as variáveis atualmente salvas no ambiente.
+  4. Ampliado o smoke cross-tenant para bloquear escrita em pacientes, PII, documentos, invoices, chat e relatórios, além das leituras negativas já existentes.
+  5. Ampliado o smoke de paciente/responsável para provisionar roles/memberships mínimos e validar snapshot próprio/dependente no portal contra tentativa cross-patient.
+  6. Ajustado o healthcheck para aceitar `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` como configuração pública Supabase válida.
+- Resultado esperado: avançar Fase 8.2 por código e preparar evidência executável de RLS/RBAC usando variáveis de ambiente modernas, sem criar migração, sem executar provider externo e sem expor secrets.
+- Resultado observado: checks locais obrigatórios foram executados nesta entrega; os smokes Supabase mutáveis seguem pendentes por exigirem ambiente de homologação aprovado/local ou flags explícitas de segurança dos próprios scripts.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, payloads sensíveis ou valores de variáveis de ambiente.
+- Screenshot/anexo: não aplicável; alteração de scripts/healthcheck/documentação, sem mudança perceptível em UI.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: executar `scripts/supabase/test-rls-cross-tenant-contract.mjs` e `scripts/supabase/test-patient-linkage-contract.mjs` em Supabase local/homologação aprovada, validar unidade/colaborador, audit log admin real e storage/signed URL real.
 
 ## 18. Sequência recomendada de implementação
 

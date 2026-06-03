@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js';
-import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
+import {
+  getRequiredServiceRoleKey,
+  requireEnv,
+  requireSupabasePublishableKey,
+} from './_shared/env.mjs';
 
-const requiredEnv = [
-  'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'SUPABASE_BOOTSTRAP_PASSWORD',
-];
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_BOOTSTRAP_PASSWORD'];
 
 const IDS = {
   patientA: '10000000-0000-4000-8000-0000000000a1',
@@ -281,7 +280,7 @@ async function seedTenantData(tenant, patientId, ids, suffix) {
 }
 
 function createSignedInClient() {
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+  return createClient(process.env.SUPABASE_URL, requireSupabasePublishableKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
@@ -306,14 +305,35 @@ async function countRows(client, table, filters) {
   return count ?? 0;
 }
 
-async function updatePatientName(client, patientId, preferredName) {
-  const { data, error } = await client
-    .from('patients')
-    .update({ preferred_name: preferredName })
-    .eq('id', patientId)
-    .select('id');
+async function updateRows(client, table, filters, patch) {
+  let query = client.from(table).update(patch);
+  for (const [column, value] of Object.entries(filters)) {
+    query = query.eq(column, value);
+  }
+
+  const { data, error } = await query.select('id');
   if (error) throw error;
   return data ?? [];
+}
+
+async function updatePatientName(client, patientId, preferredName) {
+  return updateRows(client, 'patients', { id: patientId }, { preferred_name: preferredName });
+}
+
+async function selectSingle(label, table, columns, filters) {
+  let query = admin.from(table).select(columns);
+  for (const [column, value] of Object.entries(filters)) {
+    query = query.eq(column, value);
+  }
+
+  const { data, error } = await query.single();
+  if (error) {
+    const details = [error.message, error.code, error.details, error.hint]
+      .filter(Boolean)
+      .join(' | ');
+    throw new Error(`${label}: ${details || 'unknown_error'}`);
+  }
+  return data;
 }
 
 async function checkedCount(label, client, table, filters) {
@@ -436,16 +456,115 @@ async function run() {
   }
 
   currentStep = 'checking cross-tenant write blocking';
-  const crossUpdate = await updatePatientName(clientA, IDS.patientB, 'RLS leak attempt');
-  ok(crossUpdate.length === 0, 'tenant A cross-tenant update should affect 0 rows');
+  const crossWrites = [
+    [
+      'tenant A cannot update tenant B patient',
+      await updatePatientName(clientA, IDS.patientB, 'RLS leak attempt'),
+    ],
+    [
+      'tenant A cannot update tenant B PII',
+      await updateRows(
+        clientA,
+        'patient_pii',
+        { tenant_id: tenantB.id, patient_id: IDS.patientB },
+        { phone: '+5500000000000' }
+      ),
+    ],
+    [
+      'tenant A cannot update tenant B generated document',
+      await updateRows(clientA, 'generated_documents', { id: IDS.documentB }, { status: 'failed' }),
+    ],
+    [
+      'tenant A cannot update tenant B invoice',
+      await updateRows(clientA, 'patient_invoices', { id: IDS.invoiceB }, { status: 'paid' }),
+    ],
+    [
+      'tenant A cannot update tenant B chat thread',
+      await updateRows(
+        clientA,
+        'patient_chat_threads',
+        { id: IDS.chatThreadB },
+        { status: 'closed' }
+      ),
+    ],
+    [
+      'tenant A cannot update tenant B chat message',
+      await updateRows(
+        clientA,
+        'patient_chat_messages',
+        { id: IDS.chatMessageB },
+        { body: 'RLS leak attempt' }
+      ),
+    ],
+    [
+      'tenant A cannot update tenant B report definition',
+      await updateRows(
+        clientA,
+        'report_definitions',
+        { id: IDS.reportB },
+        { label: 'RLS leak attempt' }
+      ),
+    ],
+  ];
 
-  const { data: patientB, error: patientBError } = await admin
-    .from('patients')
-    .select('preferred_name')
-    .eq('id', IDS.patientB)
-    .single();
-  if (patientBError) throw patientBError;
-  ok(patientB.preferred_name === 'RLS Paciente B', 'tenant B patient should not be mutated');
+  for (const [label, rows] of crossWrites) {
+    ok(rows.length === 0, `${label}: expected 0 affected rows, received ${rows.length}`);
+  }
+
+  const tenantBPatient = await selectSingle(
+    'tenant B patient verification',
+    'patients',
+    'preferred_name',
+    {
+      id: IDS.patientB,
+    }
+  );
+  const tenantBPii = await selectSingle('tenant B PII verification', 'patient_pii', 'phone', {
+    tenant_id: tenantB.id,
+    patient_id: IDS.patientB,
+  });
+  const tenantBDocument = await selectSingle(
+    'tenant B document verification',
+    'generated_documents',
+    'status',
+    { id: IDS.documentB }
+  );
+  const tenantBInvoice = await selectSingle(
+    'tenant B invoice verification',
+    'patient_invoices',
+    'status',
+    {
+      id: IDS.invoiceB,
+    }
+  );
+  const tenantBThread = await selectSingle(
+    'tenant B chat thread verification',
+    'patient_chat_threads',
+    'status',
+    { id: IDS.chatThreadB }
+  );
+  const tenantBMessage = await selectSingle(
+    'tenant B chat message verification',
+    'patient_chat_messages',
+    'body',
+    { id: IDS.chatMessageB }
+  );
+  const tenantBReport = await selectSingle(
+    'tenant B report verification',
+    'report_definitions',
+    'label',
+    {
+      id: IDS.reportB,
+    }
+  );
+
+  ok(tenantBPatient.preferred_name === 'RLS Paciente B', 'tenant B patient should not be mutated');
+  ok(tenantBPii.phone === '', 'tenant B PII should not be mutated');
+  ok(tenantBDocument.status === 'generated', 'tenant B document should not be mutated');
+  ok(tenantBInvoice.status === 'pending', 'tenant B invoice should not be mutated');
+  ok(tenantBThread.status === 'open', 'tenant B chat thread should not be mutated');
+  ok(tenantBMessage.body === 'Mensagem RLS B', 'tenant B chat message should not be mutated');
+  ok(tenantBReport.label === 'RLS Report B', 'tenant B report should not be mutated');
 
   console.log('RLS cross-tenant contract checks passed');
 }
