@@ -139,10 +139,17 @@ export interface AdminTenantDetail {
   breakGlassRequests: AdminBreakGlassRequest[];
 }
 
+export interface PlatformAdminSupportSummary extends AdminSupportSession {
+  tenantId: string;
+  tenantName: string;
+}
+
 export interface PlatformAdminSnapshot {
   tenants: AdminTenantRow[];
   webhooks: AdminWebhookEventSummary[];
   audit: AdminAuditEntry[];
+  support: PlatformAdminSupportSummary[];
+  warnings: string[];
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -179,9 +186,8 @@ function asBoolean(value: unknown, fallback = false): boolean {
 function asServiceError(error: unknown, fallback: string): SafeServiceError {
   const record = asRecord(error);
   return {
-    message: asString(record.message, fallback),
+    message: fallback,
     code: asNullableString(record.code) ?? undefined,
-    details: asNullableString(record.details) ?? undefined,
   };
 }
 
@@ -493,25 +499,52 @@ export async function getPlatformAdminSnapshot(): Promise<{
     };
   }
 
-  const audit = tenantsResult.data
-    .flatMap((tenant) => [
-      {
-        id: `${tenant.id}-last-activity`,
-        action: 'tenant.activity',
-        description: `${tenant.clinicName}: ultima atividade registrada`,
-        admin: 'Sistema',
-        timestamp: tenant.lastActivityAt,
-        category: 'config' as const,
-      },
-    ])
+  const tenantsForOperationalDetails = tenantsResult.data
+    .filter(
+      (tenant) =>
+        tenant.auditEvents > 0 || tenant.openSupportSessions > 0 || tenant.pendingBreakGlass > 0
+    )
+    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))
+    .slice(0, 20);
+
+  const detailResults = await Promise.all(
+    tenantsForOperationalDetails.map(async (tenant) => ({
+      tenant,
+      result: await getTenantDetail(tenant.id),
+    }))
+  );
+
+  const warnings = detailResults
+    .filter(({ result }) => result.error)
+    .map(({ tenant }) => `Detalhes operacionais indisponiveis para ${tenant.clinicName}.`);
+
+  const tenantDetails = detailResults.flatMap(({ result }) => (result.data ? [result.data] : []));
+
+  const audit = tenantDetails
+    .flatMap((detail) => detail.auditLogs)
+    .filter((entry) => entry.id && entry.timestamp)
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-    .slice(0, 10);
+    .slice(0, 20);
+
+  const support = tenantDetails
+    .flatMap((detail) =>
+      detail.supportSessions.map((session) => ({
+        ...session,
+        tenantId: detail.tenant.id,
+        tenantName: detail.tenant.clinicName,
+      }))
+    )
+    .filter((session) => session.id && session.openedAt)
+    .sort((a, b) => b.lastActivity.localeCompare(a.lastActivity))
+    .slice(0, 20);
 
   return {
     data: {
       tenants: tenantsResult.data,
       webhooks: webhooksResult.data,
       audit,
+      support,
+      warnings,
     },
     error: null,
   };
