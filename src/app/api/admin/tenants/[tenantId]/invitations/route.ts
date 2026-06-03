@@ -243,7 +243,7 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
       },
       error: null,
     });
-  } catch (error) {
-    return jsonError(error instanceof Error ? error.message : 'Falha ao convidar usuario.', 500);
+  } catch {
+    return jsonError('Falha ao convidar usuario do tenant.', 500);
   }
 }

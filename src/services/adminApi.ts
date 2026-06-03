@@ -183,6 +183,26 @@ function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function normalizeText(value: string, maxLength = 500) {
+  return Array.from(value)
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return code < 32 || code === 127 ? ' ' : char;
+    })
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function serviceValidationError(message: string) {
+  return { error: { message } satisfies SafeServiceError };
+}
+
 function asServiceError(error: unknown, fallback: string): SafeServiceError {
   const record = asRecord(error);
   return {
@@ -558,16 +578,32 @@ export async function invitePlatformTenantUser(input: {
   unitId?: string | null;
   reason: string;
 }) {
+  const tenantId = input.tenantId.trim();
+  const email = normalizeText(input.email, 254).toLowerCase();
+  const fullName = normalizeText(input.fullName ?? '', 160);
+  const roleCode = normalizeText(input.roleCode, 80);
+  const unitId = input.unitId ? input.unitId.trim() : null;
+  const reason = normalizeText(input.reason, 500);
+
+  if (!isUuid(tenantId)) return serviceValidationError('Tenant invalido.');
+  if (unitId && !isUuid(unitId)) return serviceValidationError('Unidade invalida.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return serviceValidationError('E-mail invalido.');
+  }
+  if (reason.length < 16) {
+    return serviceValidationError('Informe um motivo auditavel com pelo menos 16 caracteres.');
+  }
+
   try {
-    const response = await fetch(`/api/admin/tenants/${input.tenantId}/invitations`, {
+    const response = await fetch(`/api/admin/tenants/${tenantId}/invitations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: input.email,
-        fullName: input.fullName ?? '',
-        roleCode: input.roleCode,
-        unitId: input.unitId ?? null,
-        reason: input.reason,
+        email,
+        fullName,
+        roleCode,
+        unitId,
+        reason,
       }),
     });
 
@@ -597,15 +633,27 @@ export async function updatePlatformTenantMembership(input: {
   unitId?: string | null;
   reason: string;
 }) {
+  const tenantId = input.tenantId.trim();
+  const membershipId = input.membershipId.trim();
+  const unitId = input.unitId ? input.unitId.trim() : null;
+  const reason = normalizeText(input.reason, 500);
+
+  if (!isUuid(tenantId)) return serviceValidationError('Tenant invalido.');
+  if (!isUuid(membershipId)) return serviceValidationError('Vinculo invalido.');
+  if (unitId && !isUuid(unitId)) return serviceValidationError('Unidade invalida.');
+  if (reason.length < 16) {
+    return serviceValidationError('Informe um motivo auditavel com pelo menos 16 caracteres.');
+  }
+
   try {
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.rpc('update_platform_tenant_membership', {
-      p_tenant_id: input.tenantId,
-      p_membership_id: input.membershipId,
-      p_role_code: input.roleCode ?? null,
-      p_status: input.status ?? null,
-      p_unit_id: input.unitId ?? null,
-      p_reason: input.reason,
+      p_tenant_id: tenantId,
+      p_membership_id: membershipId,
+      p_role_code: input.roleCode ? normalizeText(input.roleCode, 80) : null,
+      p_status: input.status ? normalizeText(input.status, 40) : null,
+      p_unit_id: unitId,
+      p_reason: reason,
     });
 
     if (error) return { error: asServiceError(error, 'Falha ao atualizar usuario do tenant.') };
@@ -621,12 +669,22 @@ export async function requestPlatformSupportSession(input: {
   reason: string;
   priority: AdminSupportSession['priority'];
 }) {
+  const tenantId = input.tenantId.trim();
+  const subject = normalizeText(input.subject, 160);
+  const reason = normalizeText(input.reason, 500);
+
+  if (!isUuid(tenantId)) return serviceValidationError('Tenant invalido.');
+  if (subject.length < 4) return serviceValidationError('Informe um assunto de suporte.');
+  if (reason.length < 16) {
+    return serviceValidationError('Informe um motivo auditavel com pelo menos 16 caracteres.');
+  }
+
   try {
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.rpc('request_platform_support_session', {
-      p_tenant_id: input.tenantId,
-      p_subject: input.subject,
-      p_reason: input.reason,
+      p_tenant_id: tenantId,
+      p_subject: subject,
+      p_reason: reason,
       p_priority: input.priority,
     });
 
@@ -638,10 +696,13 @@ export async function requestPlatformSupportSession(input: {
 }
 
 export async function endPlatformSupportSession(sessionId: string) {
+  const normalizedSessionId = sessionId.trim();
+  if (!isUuid(normalizedSessionId)) return serviceValidationError('Sessao de suporte invalida.');
+
   try {
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.rpc('end_platform_support_session', {
-      p_session_id: sessionId,
+      p_session_id: normalizedSessionId,
     });
 
     if (error) return { error: asServiceError(error, 'Falha ao encerrar suporte.') };
@@ -657,13 +718,27 @@ export async function requestPlatformBreakGlass(input: {
   scope: string;
   durationMinutes: number;
 }) {
+  const tenantId = input.tenantId.trim();
+  const reason = normalizeText(input.reason, 500);
+  const scope = normalizeText(input.scope, 240);
+  const durationMinutes = Math.trunc(input.durationMinutes);
+
+  if (!isUuid(tenantId)) return serviceValidationError('Tenant invalido.');
+  if (scope.length < 8) return serviceValidationError('Informe o escopo do break-glass.');
+  if (reason.length < 24) {
+    return serviceValidationError('Informe um motivo auditavel com pelo menos 24 caracteres.');
+  }
+  if (durationMinutes < 15 || durationMinutes > 240) {
+    return serviceValidationError('Duracao do break-glass deve ficar entre 15 e 240 minutos.');
+  }
+
   try {
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.rpc('request_platform_break_glass', {
-      p_tenant_id: input.tenantId,
-      p_reason: input.reason,
-      p_scope: input.scope,
-      p_duration_minutes: input.durationMinutes,
+      p_tenant_id: tenantId,
+      p_reason: reason,
+      p_scope: scope,
+      p_duration_minutes: durationMinutes,
     });
 
     if (error) return { error: asServiceError(error, 'Falha ao solicitar break-glass.') };
@@ -677,10 +752,13 @@ export async function decidePlatformBreakGlass(input: {
   requestId: string;
   decision: 'approved' | 'denied';
 }) {
+  const requestId = input.requestId.trim();
+  if (!isUuid(requestId)) return serviceValidationError('Solicitacao break-glass invalida.');
+
   try {
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.rpc('decide_platform_break_glass', {
-      p_request_id: input.requestId,
+      p_request_id: requestId,
       p_decision: input.decision,
     });
 
@@ -692,11 +770,19 @@ export async function decidePlatformBreakGlass(input: {
 }
 
 export async function revokePlatformBreakGlass(input: { requestId: string; reason: string }) {
+  const requestId = input.requestId.trim();
+  const reason = normalizeText(input.reason, 500);
+
+  if (!isUuid(requestId)) return serviceValidationError('Solicitacao break-glass invalida.');
+  if (reason.length < 12) {
+    return serviceValidationError('Informe um motivo de revogacao com pelo menos 12 caracteres.');
+  }
+
   try {
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.rpc('revoke_platform_break_glass', {
-      p_request_id: input.requestId,
-      p_reason: input.reason,
+      p_request_id: requestId,
+      p_reason: reason,
     });
 
     if (error) return { error: asServiceError(error, 'Falha ao revogar break-glass.') };
