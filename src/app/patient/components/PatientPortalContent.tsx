@@ -28,7 +28,21 @@ function formatCurrency(cents: number) {
 
 function formatDate(value?: string | null) {
   if (!value) return 'Sem data';
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(value));
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sem data';
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(date);
+}
+
+function getCheckinQuestions(questions: unknown[]) {
+  return questions
+    .map((question) => (typeof question === 'string' ? question.trim() : ''))
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+function isCheckinAnswered(questions: string[], answers?: Record<string, string>) {
+  if (questions.length === 0) return true;
+  return questions.every((_, index) => answers?.[String(index)]?.trim());
 }
 
 function MetricCard({
@@ -58,6 +72,7 @@ export default function PatientPortalContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [checkinAnswers, setCheckinAnswers] = useState<Record<string, Record<string, string>>>({});
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
@@ -93,18 +108,21 @@ export default function PatientPortalContent() {
   }
 
   async function handleSendMessage() {
-    if (!snapshot || !message.trim()) return;
+    if (!snapshot || !message.trim() || busyKey === 'chat') return;
     setBusyKey('chat');
     setActionMessage(null);
-    const result = await sendPatientPortalMessage(snapshot.selectedPatientId, message.trim());
-    if (result.error) {
-      setActionMessage(result.error.message);
-    } else {
-      setMessage('');
-      setActionMessage('Mensagem enviada para a equipe.');
-      await loadPortal(snapshot.selectedPatientId);
+    try {
+      const result = await sendPatientPortalMessage(snapshot.selectedPatientId, message);
+      if (result.error) {
+        setActionMessage(result.error.message);
+      } else {
+        setMessage('');
+        setActionMessage('Mensagem enviada para a equipe.');
+        await loadPortal(snapshot.selectedPatientId);
+      }
+    } finally {
+      setBusyKey(null);
     }
-    setBusyKey(null);
   }
 
   async function handleOpenDocument(documentId: string) {
@@ -122,31 +140,54 @@ export default function PatientPortalContent() {
   }
 
   async function handleCompleteCheckin(checkinId: string) {
+    const checkin = snapshot?.checkins.find((item) => item.id === checkinId);
+    const questions = getCheckinQuestions(checkin?.questions ?? []);
+    const answers = checkinAnswers[checkinId] ?? {};
+    if (!isCheckinAnswered(questions, answers)) {
+      setActionMessage('Preencha todas as perguntas do check-in antes de enviar.');
+      return;
+    }
+
     setBusyKey(checkinId);
     setActionMessage(null);
-    const result = await submitPatientPortalCheckin(checkinId, {
-      submittedFrom: 'patient_portal',
-      submittedAt: new Date().toISOString(),
-    });
-    if (result.error) {
-      setActionMessage(result.error.message);
-    } else {
-      setActionMessage('Check-in enviado com seguranca.');
-      await loadPortal(snapshot?.selectedPatientId);
+    try {
+      const result = await submitPatientPortalCheckin(checkinId, {
+        submittedFrom: 'patient_portal',
+        submittedAt: new Date().toISOString(),
+        answers: questions.map((question, index) => ({
+          question,
+          answer: answers[String(index)]?.trim() ?? '',
+        })),
+      });
+      if (result.error) {
+        setActionMessage(result.error.message);
+      } else {
+        setActionMessage('Check-in enviado com seguranca.');
+        setCheckinAnswers((current) => {
+          const next = { ...current };
+          delete next[checkinId];
+          return next;
+        });
+        await loadPortal(snapshot?.selectedPatientId);
+      }
+    } finally {
+      setBusyKey(null);
     }
-    setBusyKey(null);
   }
 
   async function handleReadNotification(notificationId: string) {
     setBusyKey(notificationId);
     setActionMessage(null);
-    const result = await markPatientPortalNotificationRead(notificationId);
-    if (result.error) {
-      setActionMessage(result.error.message);
-    } else {
-      await loadPortal(snapshot?.selectedPatientId);
+    try {
+      const result = await markPatientPortalNotificationRead(notificationId);
+      if (result.error) {
+        setActionMessage(result.error.message);
+      } else {
+        await loadPortal(snapshot?.selectedPatientId);
+      }
+    } finally {
+      setBusyKey(null);
     }
-    setBusyKey(null);
   }
 
   if (loading) {
@@ -239,7 +280,11 @@ export default function PatientPortalContent() {
             label="Cobrancas"
             value={String(snapshot.invoices.length)}
           />
-          <MetricCard icon={Bell} label="Notificacoes unread" value={String(unreadNotifications)} />
+          <MetricCard
+            icon={Bell}
+            label="Notificacoes nao lidas"
+            value={String(unreadNotifications)}
+          />
         </section>
 
         <nav
@@ -452,30 +497,69 @@ export default function PatientPortalContent() {
                   Nenhum check-in atribuido.
                 </p>
               ) : (
-                snapshot.checkins.map((checkin) => (
-                  <article
-                    key={checkin.id}
-                    className="flex flex-col gap-3 rounded-2xl border border-border p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <h3 className="font-semibold text-foreground">{checkin.title}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Prazo {formatDate(checkin.dueDate)} · {checkin.status}
-                      </p>
-                    </div>
-                    {checkin.status !== 'completed' && checkin.status !== 'canceled' ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleCompleteCheckin(checkin.id)}
-                        disabled={busyKey === checkin.id}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-                      >
-                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                        Enviar check-in
-                      </button>
-                    ) : null}
-                  </article>
-                ))
+                snapshot.checkins.map((checkin) => {
+                  const questions = getCheckinQuestions(checkin.questions);
+                  const answers = checkinAnswers[checkin.id] ?? {};
+                  const canSubmit = isCheckinAnswered(questions, answers);
+                  const isClosed = checkin.status === 'completed' || checkin.status === 'canceled';
+
+                  return (
+                    <article
+                      key={checkin.id}
+                      className="space-y-4 rounded-2xl border border-border p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h3 className="font-semibold text-foreground">{checkin.title}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Prazo {formatDate(checkin.dueDate)} · {checkin.status}
+                          </p>
+                        </div>
+                        {!isClosed ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleCompleteCheckin(checkin.id)}
+                            disabled={busyKey === checkin.id || !canSubmit}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                          >
+                            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                            Enviar check-in
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {questions.length > 0 ? (
+                        <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
+                          {questions.map((question, index) => (
+                            <label
+                              key={`${checkin.id}-${index}`}
+                              className="block text-sm font-medium text-foreground"
+                            >
+                              {question}
+                              <textarea
+                                value={answers[String(index)] ?? ''}
+                                onChange={(event) =>
+                                  setCheckinAnswers((current) => ({
+                                    ...current,
+                                    [checkin.id]: {
+                                      ...(current[checkin.id] ?? {}),
+                                      [String(index)]: event.target.value,
+                                    },
+                                  }))
+                                }
+                                disabled={isClosed || busyKey === checkin.id}
+                                maxLength={4000}
+                                rows={2}
+                                className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm disabled:opacity-60"
+                                placeholder="Responda de forma objetiva para a equipe acompanhar seu progresso."
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })
               )}
             </div>
           ) : null}
