@@ -6,7 +6,13 @@ type Severity = 'debug' | 'info' | 'warn' | 'error';
 type Outcome = 'success' | 'failure' | 'denied' | 'skipped';
 
 const sensitiveKeyPattern =
-  /(authorization|cookie|token|secret|key|password|email|phone|cpf|cnpj|name|patient|payload|signed|url|path|address|document)/i;
+  /(authorization|cookie|token|secret|key|password|email|phone|cpf|cnpj|name|patient|payload|signed|url|path|address|document|external|provider.*id|idempotency|webhook.*id|event_hash)/i;
+
+const tokenValuePattern =
+  /(bearer\s+)[a-z0-9._~+/=-]+|\b(eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)\b/gi;
+const emailValuePattern = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+const webhookSecretPattern = /((?:whsec|webhook|secret|token|api[_-]?key)[=:]\s*)[^\s,;]+/gi;
+const urlWithQueryPattern = /https?:\/\/[^\s"']+\?[^\s"']+/gi;
 
 async function hash(value: string) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -25,6 +31,14 @@ export function createEdgeContext(module: string, req: Request) {
   const requestId = req.headers.get('x-request-id')?.trim() || crypto.randomUUID();
   const correlationId = req.headers.get('x-correlation-id')?.trim() || requestId;
   return { module, requestId, correlationId, startedAt: Date.now() };
+}
+
+export function sanitizeLogMessage(value: string) {
+  return value
+    .replace(tokenValuePattern, (_match, prefix) => (prefix ? `${prefix}[redacted]` : '[redacted]'))
+    .replace(emailValuePattern, '[redacted-email]')
+    .replace(webhookSecretPattern, '$1[redacted]')
+    .replace(urlWithQueryPattern, '[redacted-url]');
 }
 
 async function sanitizeField(
@@ -47,6 +61,8 @@ async function sanitizeField(
     );
     return Object.fromEntries(entries.filter(([, nestedValue]) => nestedValue !== undefined));
   }
+
+  if (typeof value === 'string') return sanitizeLogMessage(value);
 
   return value;
 }

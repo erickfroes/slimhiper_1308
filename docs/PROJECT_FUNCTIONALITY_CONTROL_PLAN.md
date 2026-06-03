@@ -650,7 +650,15 @@ webhook -> reconciliação -> timeline/financeiro.
 - [x] `.env.example` contém nomes e placeholders vazios/seguros; não foram impressos valores reais.
 - [x] Nenhum `SUPABASE_SERVICE_ROLE_KEY` aparece em client component. Em `src`, a ocorrência fica no helper `src/lib/supabase/admin.ts`, marcado com `server-only`.
 - [x] Nenhum segredo real aparece em `NEXT_PUBLIC_*`; as variáveis públicas em `.env.example` são placeholders vazios/chaves publicáveis.
-- [ ] Logs não imprimem tokens, cookies, webhook secrets ou provider IDs sensíveis. Pendente validação de logs reais em homologação/provider sandbox.
+- [x] Logs não imprimem tokens, cookies, webhook secrets ou provider IDs sensíveis. Em 2026-06-03 os sanitizadores compartilhados de observabilidade passaram a redigir tokens/JWTs, e-mails, secrets em texto, URLs assinadas/com query e chaves de provider/idempotência antes de escrever linhas estruturadas; validação de logs reais em homologação/provider sandbox segue pendente.
+
+**Progresso registrado em 2026-06-03:**
+
+- Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem, Fase 8.1 checklist de logs/secrets.
+- `src/lib/observability/server.ts` e `supabase/functions/_shared/observability.ts` ampliaram a sanitização por chave para cobrir identificadores externos/provider, idempotência e hashes de webhook, preservando `request_id`/`correlation_id` operacionais.
+- Os sanitizadores também passaram a redigir padrões sensíveis quando aparecem dentro de mensagens de erro ou strings com chaves genéricas, incluindo `Bearer`, JWT, e-mails, marcadores de secret/token/API key e URLs HTTP(S) com query/signed URL.
+- A mudança reduz risco de vazamento em logs estruturados de Route Handlers/server code e Edge Functions que usam os helpers compartilhados, sem imprimir variáveis de ambiente, cookies, tokens, payloads reais ou secrets durante a execução local.
+- Permanecem pendentes amostragem de logs reais em homologação, validação dos logs diretos legados de scripts manuais antes de execução operacional e prova provider sandbox para webhooks Asaas/D4Sign.
 
 ### 12.2 Checklist RLS/RBAC
 
@@ -1252,6 +1260,28 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: não aplicável; alteração documental e varredura estática, sem mudança perceptível em aplicação web.
 - Status: aprovado para documentação; validação funcional real permanece pendente em homologação.
 - Pendências: executar `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check`, browser smoke completo, testes Supabase com usuários sintéticos e validações D4Sign/Asaas sandbox autorizadas.
+
+### Evidência — F22/Fase 8.1 Sanitização de logs estruturados
+
+- Data: 2026-06-03.
+- Ambiente: local, validação por código e checks obrigatórios; variáveis de ambiente reais não foram impressas e nenhum provider externo foi chamado.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: não aplicável; sem sessão real ou sintética nesta etapa.
+- Tenant sintético: pendente para amostragem de logs multi-tenant em homologação.
+- Mock habilitado? não foi alterado; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `src/lib/observability/server.ts`, `supabase/functions/_shared/observability.ts`, consumidores server-side de observabilidade e webhooks Asaas/D4Sign que usam `logEdgeEvent`.
+- Passos executados:
+  1. Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem, Fase 8.1 checklist de logs/secrets.
+  2. Revisados os helpers compartilhados de observabilidade usados por server code e Edge Functions.
+  3. Ampliada a redigibilidade por chave para identificadores externos/provider, idempotência e hash de webhook, evitando exposição completa de referências de integração em logs estruturados.
+  4. Adicionada redigibilidade por padrão de valor para tokens `Bearer`, JWTs, e-mails, marcadores de secret/token/API key e URLs com query, cobrindo mensagens de erro com chave genérica.
+  5. Mantidos `request_id` e `correlation_id` íntegros para troubleshooting sem expor payloads, cookies, headers, secrets ou provider IDs completos.
+- Resultado esperado: avançar Fase 8.1 sem criar migração, sem chamar Supabase mutável/provider externo e sem imprimir valores sensíveis do ambiente.
+- Resultado observado: checks locais obrigatórios foram executados nesta entrega; lint segue com warnings conhecidos não relacionados em componentes legados, mas sem erros após formatação. Validação de logs reais em homologação permanece pendente.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, provider IDs completos, signed URLs ou payloads sensíveis.
+- Screenshot/anexo: não aplicável; alteração de infraestrutura de logs, sem mudança perceptível em aplicação web.
+- Status: aprovado por código; validação real em homologação/provider sandbox pendente.
+- Pendências: amostrar logs de Route Handlers e Edge Functions em homologação, revisar scripts manuais antes de execuções operacionais e confirmar webhooks Asaas/D4Sign sintéticos sem provider IDs completos nos sinks de observabilidade.
 
 ## 18. Sequência recomendada de implementação
 

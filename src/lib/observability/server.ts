@@ -16,7 +16,13 @@ export type ObservabilityContext = {
 };
 
 const SENSITIVE_KEY_PATTERN =
-  /(authorization|cookie|token|secret|key|password|email|phone|cpf|cnpj|name|patient|payload|signed|url|path|address)/i;
+  /(authorization|cookie|token|secret|key|password|email|phone|cpf|cnpj|name|patient|payload|signed|url|path|address|external|provider.*id|idempotency|webhook.*id|event_hash)/i;
+
+const TOKEN_VALUE_PATTERN =
+  /(bearer\s+)[a-z0-9._~+/=-]+|\b(eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)\b/gi;
+const EMAIL_VALUE_PATTERN = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+const WEBHOOK_SECRET_PATTERN = /((?:whsec|webhook|secret|token|api[_-]?key)[=:]\s*)[^\s,;]+/gi;
+const URL_WITH_QUERY_PATTERN = /https?:\/\/[^\s"']+\?[^\s"']+/gi;
 
 function safeHash(value: string) {
   return createHash('sha256').update(value).digest('hex').slice(0, 16);
@@ -25,6 +31,20 @@ function safeHash(value: string) {
 export function pseudonymize(value: string | null | undefined, prefix = 'hash') {
   if (!value) return null;
   return `${prefix}_${safeHash(value)}`;
+}
+
+export function sanitizeLogMessage(value: string) {
+  return value
+    .replace(TOKEN_VALUE_PATTERN, (_match, prefix) =>
+      prefix ? `${prefix}[redacted]` : '[redacted]'
+    )
+    .replace(EMAIL_VALUE_PATTERN, '[redacted-email]')
+    .replace(WEBHOOK_SECRET_PATTERN, '$1[redacted]')
+    .replace(URL_WITH_QUERY_PATTERN, '[redacted-url]');
+}
+
+function sanitizeStringValue(value: string) {
+  return sanitizeLogMessage(value);
 }
 
 function sanitizeValue(key: string, value: JsonValue | undefined): JsonValue | undefined {
@@ -42,6 +62,8 @@ function sanitizeValue(key: string, value: JsonValue | undefined): JsonValue | u
         .filter(([, nestedValue]) => nestedValue !== undefined)
     );
   }
+
+  if (typeof value === 'string') return sanitizeStringValue(value);
 
   return value;
 }
