@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   Activity,
@@ -11,6 +11,7 @@ import {
   CreditCard,
   Database,
   HardDrive,
+  LifeBuoy,
   Link2,
   Shield,
   Users,
@@ -20,8 +21,10 @@ import {
 import AdminShell from '@/app/admin/components/AdminShell';
 import {
   getPlatformAdminSnapshot,
+  type AdminAuditEntry,
   type AdminTenantRow,
   type AdminWebhookEventSummary,
+  type PlatformAdminSupportSummary,
   type PlatformAdminSnapshot,
 } from '@/services/adminApi';
 
@@ -241,6 +244,86 @@ function WebhookList({ webhooks }: { webhooks: AdminWebhookEventSummary[] }) {
   );
 }
 
+function SupportList({ sessions }: { sessions: PlatformAdminSupportSummary[] }) {
+  return (
+    <div className="card-base overflow-hidden">
+      <div className="border-b border-border px-5 py-4">
+        <h2 className="text-sm font-bold text-foreground">Solicitacoes reais de suporte</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Dados vindos do detalhe operacional dos tenants, sem payload bruto.
+        </p>
+      </div>
+      <div className="divide-y divide-border">
+        {sessions.length === 0 ? (
+          <div className="px-5 py-8 text-sm text-muted-foreground">
+            Nenhuma solicitacao de suporte aberta no snapshot administrativo.
+          </div>
+        ) : (
+          sessions.slice(0, 10).map((session) => (
+            <div key={session.id} className="flex items-start gap-3 px-5 py-3">
+              <LifeBuoy size={15} className="mt-0.5 text-primary" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-foreground">{session.subject}</span>
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                    {session.priority}
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                    {session.status}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {session.tenantName} - ultima atividade {formatDate(session.lastActivity)}
+                </p>
+              </div>
+              <Link
+                href={`/admin/tenants/${session.tenantId}`}
+                className="text-xs font-semibold text-primary"
+              >
+                Abrir tenant
+              </Link>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AuditList({ audit }: { audit: AdminAuditEntry[] }) {
+  return (
+    <div className="card-base p-5">
+      <h2 className="mb-1 text-sm font-bold text-foreground">Auditoria recente real</h2>
+      <p className="mb-4 text-xs text-muted-foreground">
+        Eventos sanitizados de audit log agregados dos tenants com atividade operacional.
+      </p>
+      <div className="space-y-2">
+        {audit.length === 0 ? (
+          <div className="rounded-xl bg-muted/40 px-3 py-8 text-center text-sm text-muted-foreground">
+            Nenhum evento de auditoria retornado pelo contrato admin.
+          </div>
+        ) : (
+          audit.map((entry) => (
+            <div
+              key={entry.id}
+              className="flex items-start gap-3 rounded-xl px-3 py-2 hover:bg-muted/30"
+            >
+              <ClipboardList size={14} className="mt-0.5 text-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-foreground">{entry.description}</p>
+                <p className="text-xs text-muted-foreground">
+                  {entry.admin} - {entry.category}
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">{formatDate(entry.timestamp)}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Overview({ snapshot }: { snapshot: PlatformAdminSnapshot }) {
   const stats = useMemo(() => {
     const tenants = snapshot.tenants;
@@ -256,6 +339,8 @@ function Overview({ snapshot }: { snapshot: PlatformAdminSnapshot }) {
       totalMrr: tenants.reduce((sum, tenant) => sum + tenant.mrr, 0),
       failedWebhooks,
       pendingBreakGlass: tenants.reduce((sum, tenant) => sum + tenant.pendingBreakGlass, 0),
+      supportOpen: snapshot.support.filter((session) => session.status !== 'resolved').length,
+      auditEvents: snapshot.audit.length,
     };
   }, [snapshot]);
 
@@ -280,10 +365,31 @@ function Overview({ snapshot }: { snapshot: PlatformAdminSnapshot }) {
           value={stats.pendingBreakGlass}
           tone={stats.pendingBreakGlass ? 'amber' : 'slate'}
         />
+        <StatCard
+          icon={LifeBuoy}
+          label="Suportes abertos"
+          value={stats.supportOpen}
+          tone={stats.supportOpen ? 'amber' : 'slate'}
+        />
+        <StatCard
+          icon={ClipboardList}
+          label="Auditoria real"
+          value={stats.auditEvents}
+          tone="blue"
+        />
       </div>
+      {snapshot.warnings.length ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Snapshot parcialmente degradado: {snapshot.warnings.join(' ')}
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.35fr_0.85fr]">
         <TenantsTable tenants={snapshot.tenants} />
         <WebhookList webhooks={snapshot.webhooks} />
+      </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <SupportList sessions={snapshot.support} />
+        <AuditList audit={snapshot.audit.slice(0, 8)} />
       </div>
     </div>
   );
@@ -310,37 +416,17 @@ function SectionFromSnapshot({
   if (section === 'support') {
     return (
       <div className="space-y-4">
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Abertura e aprovacao de suporte ficam no detalhe do tenant para preservar contexto e
-          auditoria por tenant.
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Abertura e aprovacao continuam no detalhe do tenant para manter contexto, motivo e
+          auditoria obrigatoria por tenant.
         </div>
+        <SupportList sessions={snapshot.support} />
         <TenantsTable tenants={supportTenants.length ? supportTenants : snapshot.tenants} />
       </div>
     );
   }
 
-  if (section === 'audit') {
-    return (
-      <div className="card-base p-5">
-        <h2 className="mb-4 text-sm font-bold text-foreground">Auditoria recente</h2>
-        <div className="space-y-2">
-          {snapshot.audit.map((entry) => (
-            <div
-              key={entry.id}
-              className="flex items-start gap-3 rounded-xl px-3 py-2 hover:bg-muted/30"
-            >
-              <ClipboardList size={14} className="mt-0.5 text-primary" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-foreground">{entry.description}</p>
-                <p className="text-xs text-muted-foreground">{entry.admin}</p>
-              </div>
-              <span className="text-xs text-muted-foreground">{formatDate(entry.timestamp)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  if (section === 'audit') return <AuditList audit={snapshot.audit} />;
 
   if (section === 'security') {
     return (
@@ -360,7 +446,7 @@ function SectionFromSnapshot({
         <StatCard
           icon={ClipboardList}
           label="Eventos auditaveis"
-          value={snapshot.tenants.reduce((sum, tenant) => sum + tenant.auditEvents, 0)}
+          value={snapshot.audit.length}
           tone="blue"
         />
       </div>
@@ -449,12 +535,16 @@ export default function AdminContent({ initialSection = 'overview' }: { initialS
   ) as AdminSection;
   const [snapshot, setSnapshot] = useState<PlatformAdminSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const requestIdRef = useRef(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadSnapshot = useCallback(() => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setIsLoading(true);
     setLoadError(null);
     getPlatformAdminSnapshot().then(({ data, error }) => {
+      if (requestIdRef.current !== requestId) return;
       setSnapshot(data);
       setLoadError(error?.message ?? null);
       setIsLoading(false);

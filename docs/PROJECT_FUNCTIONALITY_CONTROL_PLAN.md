@@ -561,12 +561,21 @@ webhook -> reconciliação -> timeline/financeiro.
 
 ### 11.1 Admin overview e seções
 
-- [ ] `/admin` carrega snapshot real.
-- [ ] Seção financeira mostra dados agregados corretos.
-- [ ] Seção integrações mostra status de providers.
-- [ ] Seção segurança mostra alertas reais ou estado estático identificado.
-- [ ] Seção suporte mostra solicitações reais.
-- [ ] Seção auditoria mostra eventos reais.
+- [x] `/admin` carrega snapshot real. Em 2026-06-03 o snapshot passou a combinar `list_platform_tenants`, `list_platform_webhook_events` e detalhes operacionais por tenant via `get_platform_tenant_detail`; browser autenticado segue pendente.
+- [x] Seção financeira mostra dados agregados corretos. Código agrega MRR, trials e tenants suspensos a partir de tenants reais do contrato de plataforma; reconciliação com Supabase homologação pendente.
+- [x] Seção integrações mostra status de providers. Código mostra Asaas/D4Sign por `asaasSubaccountStatus` e `d4signStatus` normalizados do contrato real; validação sandbox pendente.
+- [x] Seção segurança mostra alertas reais ou estado estático identificado. Em 2026-06-03 a seção passou a usar contagem real de audit logs agregados e webhooks falhos, com break-glass pendente vindo do snapshot de tenants.
+- [x] Seção suporte mostra solicitações reais. Em 2026-06-03 o overview e `/admin/support` passaram a renderizar sessões reais do detalhe operacional dos tenants, com estado vazio explícito.
+- [x] Seção auditoria mostra eventos reais. Em 2026-06-03 a auditoria deixou de sintetizar eventos por última atividade e passou a exibir audit logs sanitizados retornados por `get_platform_tenant_detail`.
+
+**Progresso registrado em 2026-06-03:**
+
+- Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem, Fase 7 admin overview e seções.
+- `getPlatformAdminSnapshot` passou a montar o snapshot administrativo com tenants, webhooks, audit logs reais e sessões reais de suporte, usando os RPCs protegidos existentes sem criar migração.
+- O snapshot de admin agora busca detalhes somente dos tenants com eventos operacionais, suporte aberto ou break-glass pendente, limitando a carga transversal e preservando avisos degradados quando algum detalhe falha.
+- Erros do serviço admin foram reduzidos para mensagens operacionais genéricas, sem propagar detalhes internos de RPC/banco ao browser.
+- `/admin`, `/admin/support` e `/admin/audit` ganharam componentes explícitos para suporte e auditoria reais, com estados vazios e sem payload bruto de provider ou dados clínicos.
+- Permanecem pendentes browser smoke autenticado, prova com admin sintético em Supabase homologação, validação de integrações sandbox e conferência visual das seções.
 
 ### 11.2 Tenants
 
@@ -1103,6 +1112,30 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado em `/patient` com paciente/responsável sintéticos.
 - Status: aprovado por código; validação real em homologação pendente.
 - Pendências: validar snapshot completo, troca de paciente vinculado, tentativa de paciente não vinculado, envio de mensagem, resposta de check-in, notificação lida, signed URL documental, links financeiros seguros e isolamento RLS multi-tenant.
+
+
+### Evidência — F18 Admin overview e seções reais
+
+- Data: 2026-06-03.
+- Ambiente: local, validação por código e checks obrigatórios; RPCs reais não foram invocadas contra Supabase remoto nesta execução.
+- Branch/commit: branch `work`, commit registrado após esta execução.
+- Perfil de usuário: contexto real/sintético não executado; layout admin segue protegido por `PlatformAdminGuard` e o serviço browser usa cliente Supabase anon/session-scoped.
+- Tenant sintético: pendente para conferir MRR, providers, suporte, audit logs e break-glass por tenant.
+- Mock habilitado? não foi necessário alterar `NEXT_PUBLIC_USE_MOCK_DATA`; nenhuma variável secreta foi impressa.
+- Rota/API/RPC/Edge Function: `/admin`, `/admin/billing`, `/admin/integrations`, `/admin/security`, `/admin/support`, `/admin/audit`, `adminApi`, RPCs `list_platform_tenants`, `list_platform_webhook_events` e `get_platform_tenant_detail`.
+- Passos executados:
+  1. Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem, Fase 7 admin overview.
+  2. Ampliado `PlatformAdminSnapshot` para carregar suporte real, audit logs reais e avisos de degradação parcial, sem payload bruto nem provider secrets.
+  3. Substituída a auditoria sintética por eventos reais retornados pelo detalhe operacional dos tenants com atividade relevante.
+  4. Adicionados componentes de UI para solicitações reais de suporte e auditoria real, incluindo estados vazios e links para o detalhe do tenant.
+  5. Sanitizadas mensagens de erro do serviço admin para não vazar detalhes internos de RPC, RLS ou banco no browser.
+  6. Adicionada proteção contra respostas obsoletas no refresh do snapshot administrativo.
+- Resultado esperado: avançar Fase 7 na ordem do plano sem criar migração, sem chamar provedores externos e sem depender de mock para o overview admin.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check` e smoke local com `npm run dev` + `curl -I` em `/admin`, `/admin/support` e `/admin/audit` passaram após as mudanças; lint/build mantêm 11 warnings conhecidos não relacionados e as rotas admin responderam `307` para `/auth/login` sem sessão. Smoke Supabase/browser autenticado continua pendente para o fechamento de release.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de provider ou payloads sensíveis.
+- Screenshot/anexo: pendente de browser smoke autenticado em `/admin` com admin sintético.
+- Status: aprovado por código; validação real em homologação pendente.
+- Pendências: validar snapshot completo, seção financeira, status Asaas/D4Sign, segurança, suporte real, audit logs reais e isolamento/RBAC de admin com usuários sintéticos.
 
 ## 18. Sequência recomendada de implementação
 
