@@ -528,10 +528,8 @@ export type PatientDocumentSignatureStatus = 'assinado' | 'pendente' | 'nao_requ
 
 export interface PatientDocumentSignatureSummary {
   provider: 'd4sign';
-  providerDocumentId?: string | null;
   signatureRequestId: string;
   status: 'sent' | 'viewed' | 'signed' | 'rejected' | 'expired' | 'canceled' | 'error';
-  idempotencyKey?: string | null;
 }
 
 export interface PatientDocument360Item {

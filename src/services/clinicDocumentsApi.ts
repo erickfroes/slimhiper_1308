@@ -94,7 +94,6 @@ type GeneratedDocumentRow = {
   signature_requests?: Array<{
     id: string;
     status: string | null;
-    provider_document_id: string | null;
     created_at: string | null;
   }> | null;
 };
@@ -266,7 +265,7 @@ export async function getClinicDocumentsWorkspace(): Promise<{
       supabase
         .from('generated_documents')
         .select(
-          'id,patient_id,name,category,status,released_to_patient,generated_at,created_at,updated_at,document_templates!generated_documents_template_same_tenant(d4sign_enabled),signature_requests(id,status,provider_document_id,created_at)'
+          'id,patient_id,name,category,status,released_to_patient,generated_at,created_at,updated_at,document_templates!generated_documents_template_same_tenant(d4sign_enabled),signature_requests(id,status,created_at)'
         )
         .order('created_at', { ascending: false })
         .limit(100),

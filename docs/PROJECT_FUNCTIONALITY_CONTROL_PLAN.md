@@ -683,12 +683,21 @@ webhook -> reconciliação -> timeline/financeiro.
 
 ### 12.3 Checklist de dados sensíveis
 
-- [ ] PII de paciente é minimizada nas respostas.
-- [ ] Dados financeiros são exibidos somente a perfis autorizados.
-- [ ] Prescrições respeitam permissão médica.
-- [ ] Documentos clínicos têm signed URL curta.
-- [ ] Payloads de webhook são resumidos ou redigidos.
-- [ ] Audit log registra ação sem expor conteúdo clínico desnecessário.
+- [ ] PII de paciente é minimizada nas respostas. Em 2026-06-03 houve avanço em documentos/D4Sign: respostas e metadados de documentos deixaram de expor `tenant_id`, `patient_id`, `generated_document_id`, `provider_document_id` e idempotência quando não necessários para a UI; permanece pendente revisão completa das respostas de perfil/contato do Paciente 360 com usuários sintéticos.
+- [x] Dados financeiros são exibidos somente a perfis autorizados. Verificação de código em 2026-06-03 confirma gate por `financial.read`/`financial.write` no Paciente 360 e RPC/Edge Functions financeiras exigindo permissão financeira; smoke autenticado por perfil continua pendente.
+- [x] Prescrições respeitam permissão médica. Verificação de código em 2026-06-03 confirma gate por `prescriptions.read`/`prescriptions.write` na navegação do Paciente 360 e consulta real de prescrições somente quando `prescriptions.read` está presente; smoke autenticado por perfil continua pendente.
+- [x] Documentos clínicos têm signed URL curta. Verificação de código em 2026-06-03 confirma signed URL com expiração de 300 segundos, bucket/path validado e resposta reduzida a URL/expiração/metadado temporal.
+- [x] Payloads de webhook são resumidos ou redigidos. Em 2026-06-03 o webhook D4Sign deixou de persistir/expor `provider_document_id` em resumo/timeline/resposta e passou a registrar apenas sinal operacional de evento provider; webhooks Asaas já usam payload minimizado com hash/resumo.
+- [ ] Audit log registra ação sem expor conteúdo clínico desnecessário. Pendente revisão ponta a ponta dos inserts legados de `audit_logs` e prova real após mutações clínicas/admin sintéticas.
+
+**Progresso registrado em 2026-06-03:**
+
+- Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem, Fase 8.3 checklist de dados sensíveis.
+- `document-signed-url` manteve a validação de bucket/path/tenant/paciente e o TTL de 300 segundos, mas reduziu a resposta de sucesso para `url`, `expiresInSeconds` e `timestamp`, sem ecoar ids clínicos em `meta`.
+- `patient-documents` deixou de consultar e retornar `provider_document_id`, removeu ids clínicos de metadados de sucesso/forbidden e preservou apenas o resumo de assinatura necessário para a tela.
+- A listagem operacional de documentos da clínica deixou de selecionar `provider_document_id`, evitando carregar identificadores D4Sign que a UI não usa.
+- `d4sign-send-document` deixou de devolver `provider_document_id` e ids clínicos no `meta` da resposta; `webhook-d4sign` deixou de gravar `provider_document_id` no resumo/timeline e removeu idempotência da resposta externa.
+- Permanecem pendentes smoke autenticado por perfil para financeiro/prescrições/documentos, revisão completa de PII do Paciente 360 e amostragem de audit log com mutações sintéticas.
 
 ## 13. Fase 9 — Browser smoke obrigatório
 

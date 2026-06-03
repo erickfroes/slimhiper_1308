@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
         {
           ok: true,
           duplicate: true,
-          data: { idempotency_key: idempotencyKey, event_id: existingEvent.id },
+          data: { event_id: existingEvent.id },
           meta: { timestamp },
         },
         observedEdgeHeaders(context)
@@ -230,7 +230,7 @@ Deno.serve(async (req) => {
       await logEdgeEvent(context, 'webhook_ignored', 'warn', 'skipped', {
         provider: 'd4sign',
         reason: 'signature_request_not_found',
-        provider_document_id: providerDocumentId,
+        has_provider_document_id: Boolean(providerDocumentId),
       });
       return jsonResponse(
         202,
@@ -238,7 +238,7 @@ Deno.serve(async (req) => {
           ok: true,
           ignored: true,
           reason: 'signature_request_not_found',
-          data: { provider_document_id: providerDocumentId, idempotency_key: idempotencyKey },
+          data: { has_provider_document_id: Boolean(providerDocumentId) },
           meta: { timestamp },
         },
         observedEdgeHeaders(context)
@@ -262,8 +262,7 @@ Deno.serve(async (req) => {
         idempotency_key: idempotencyKey,
         payload_summary: {
           event_type: eventType,
-          provider_event_id: providerEventId || null,
-          provider_document_id: providerDocumentId || null,
+          has_provider_event_id: Boolean(providerEventId),
           status: normalizedStatus,
           signer_count: Array.isArray(body.signers) ? body.signers.length : 0,
           received_at: timestamp,
@@ -334,7 +333,6 @@ Deno.serve(async (req) => {
         payload: {
           signature_request_id: signatureRequest.id,
           provider: 'd4sign',
-          provider_document_id: providerDocumentId || null,
           d4sign_event_id: insertedEvent.id,
         },
       });
@@ -353,7 +351,6 @@ Deno.serve(async (req) => {
         ok: true,
         processed: true,
         data: {
-          idempotency_key: idempotencyKey,
           signature_request_id: signatureRequest.id,
           status: normalizedStatus,
         },
