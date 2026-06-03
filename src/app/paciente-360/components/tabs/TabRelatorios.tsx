@@ -77,6 +77,12 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
   }, [loadReports]);
 
   async function runPatientReport(reportKey: string, exportFormat: 'csv' | 'pdf') {
+    const report = reports.find((item) => item.key === reportKey);
+    if (!report?.exportImplemented) {
+      setActionMessage('Relatorio indisponivel para exportacao segura deste paciente.');
+      return;
+    }
+
     setRunningAction(`${reportKey}:${exportFormat}`);
     setActionMessage(null);
 
@@ -128,7 +134,7 @@ export default function TabRelatorios({ patientId, patientName }: TabRelatoriosP
         <div>
           <p className="text-sm font-semibold text-foreground">Relatórios — {patientName}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Selecione um relatório para visualizar ou exportar
+            Relatórios liberados para o escopo do paciente; exportações usam token temporário.
           </p>
         </div>
         <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
