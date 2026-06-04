@@ -12,17 +12,16 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
-import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
+import {
+  getRequiredServiceRoleKey,
+  requireEnv,
+  requireSupabasePublishableKey,
+} from './_shared/env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
 
-const requiredEnv = [
-  'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'SUPABASE_BOOTSTRAP_PASSWORD',
-];
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_BOOTSTRAP_PASSWORD'];
 
 const PATIENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SMOKE_PROGRAM_NAME = 'Phase 6 Local Smoke Program';
@@ -89,7 +88,7 @@ async function signInClinicAdmin() {
   });
   if (updateError) throw updateError;
 
-  const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+  const client = createClient(process.env.SUPABASE_URL, requireSupabasePublishableKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data, error } = await client.auth.signInWithPassword({
@@ -151,11 +150,7 @@ async function cleanupSmokeProgram(tenantId) {
     .in('program_id', ids);
   if (enrollmentError) throw enrollmentError;
 
-  const { error } = await admin
-    .from('programs')
-    .delete()
-    .eq('tenant_id', tenantId)
-    .in('id', ids);
+  const { error } = await admin.from('programs').delete().eq('tenant_id', tenantId).in('id', ids);
   if (error) throw error;
 }
 
@@ -320,8 +315,7 @@ async function run() {
   ok(
     Array.isArray(documentTasks) &&
       documentTasks.some(
-        (task) =>
-          task.status === 'open' && task.title.startsWith('Documento obrigatorio:')
+        (task) => task.status === 'open' && task.title.startsWith('Documento obrigatorio:')
       ),
     'Expected open required-document task linked to enrollment.'
   );
@@ -334,8 +328,7 @@ async function run() {
   if (summaryError) throw new Error(`patient-360-summary: ${summaryError.message}`);
   const summary = summaryEnvelope?.data;
   ok(
-    Array.isArray(summary?.activePackage?.checkins) &&
-      summary.activePackage.checkins.length >= 1,
+    Array.isArray(summary?.activePackage?.checkins) && summary.activePackage.checkins.length >= 1,
     'patient-360-summary: expected visible package check-ins.'
   );
 

@@ -10,14 +10,13 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
+import {
+  getRequiredServiceRoleKey,
+  requireEnv,
+  requireSupabasePublishableKey,
+} from './_shared/env.mjs';
 
-const requiredEnv = [
-  'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'SUPABASE_BOOTSTRAP_PASSWORD',
-];
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_BOOTSTRAP_PASSWORD'];
 
 const IDS = {
   tenantA: '18000000-0000-4000-8000-0000000000a1',
@@ -67,7 +66,10 @@ function shortError(error) {
 }
 
 async function ensureUser(email, fullName, tenantId, roleCode, activeTenantId = tenantId) {
-  const { data: list, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const { data: list, error: listError } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
   if (listError) throw listError;
 
   const existing = list.users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
@@ -121,7 +123,7 @@ async function ensureUser(email, fullName, tenantId, roleCode, activeTenantId = 
 }
 
 async function signIn(email) {
-  const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+  const client = createClient(process.env.SUPABASE_URL, requireSupabasePublishableKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data, error } = await client.auth.signInWithPassword({
@@ -136,12 +138,18 @@ async function signIn(email) {
 async function seedTenant(tenantId, slug, patientId, reportId) {
   await admin
     .from('tenants')
-    .upsert({ id: tenantId, name: `Reports Smoke ${slug}`, slug, status: 'active' }, { onConflict: 'id' })
+    .upsert(
+      { id: tenantId, name: `Reports Smoke ${slug}`, slug, status: 'active' },
+      { onConflict: 'id' }
+    )
     .throwOnError();
 
   await admin
     .from('patients')
-    .upsert({ id: patientId, tenant_id: tenantId, preferred_name: `Paciente ${slug}`, status: 'active' }, { onConflict: 'id' })
+    .upsert(
+      { id: patientId, tenant_id: tenantId, preferred_name: `Paciente ${slug}`, status: 'active' },
+      { onConflict: 'id' }
+    )
     .throwOnError();
 
   await admin
@@ -242,9 +250,19 @@ async function main() {
   currentStep = 'ensuring users';
   await ensureUser('reports-admin@example.test', 'Reports Admin', IDS.tenantA, 'clinic_admin');
   await ensureUser('reports-physician@example.test', 'Reports Physician', IDS.tenantA, 'physician');
-  await ensureUser('reports-financial@example.test', 'Reports Financial', IDS.tenantA, 'financial_user');
+  await ensureUser(
+    'reports-financial@example.test',
+    'Reports Financial',
+    IDS.tenantA,
+    'financial_user'
+  );
   await ensureUser('reports-no-read@example.test', 'Reports No Read', IDS.tenantA, 'receptionist');
-  await ensureUser('reports-tenant-b@example.test', 'Reports Tenant B', IDS.tenantB, 'clinic_admin');
+  await ensureUser(
+    'reports-tenant-b@example.test',
+    'Reports Tenant B',
+    IDS.tenantB,
+    'clinic_admin'
+  );
 
   currentStep = 'signing in users';
   const clinicAdmin = await signIn('reports-admin@example.test');
@@ -254,8 +272,16 @@ async function main() {
   const tenantB = await signIn('reports-tenant-b@example.test');
 
   currentStep = 'checking definitions';
-  const definitions = await expectRpcOk(clinicAdmin, 'list_clinic_report_definitions', {}, 'clinic_admin definitions');
-  ok(Array.isArray(definitions) && definitions.length >= 1, 'Expected report definitions for clinic_admin.');
+  const definitions = await expectRpcOk(
+    clinicAdmin,
+    'list_clinic_report_definitions',
+    {},
+    'clinic_admin definitions'
+  );
+  ok(
+    Array.isArray(definitions) && definitions.length >= 1,
+    'Expected report definitions for clinic_admin.'
+  );
 
   currentStep = 'checking clinic and patient run/export';
   const adminRun = await expectRpcOk(
@@ -305,7 +331,10 @@ async function main() {
     },
     'financial_user financial report run'
   );
-  ok(financeRun?.resultSummary?.requiresFinancialRead === true, 'Expected financial permission marker.');
+  ok(
+    financeRun?.resultSummary?.requiresFinancialRead === true,
+    'Expected financial permission marker.'
+  );
 
   await expectRpcForbidden(
     physician,
@@ -320,7 +349,12 @@ async function main() {
   );
 
   currentStep = 'checking forbidden and cross-tenant';
-  await expectRpcForbidden(noRead, 'list_clinic_report_definitions', {}, 'receptionist without reports.read');
+  await expectRpcForbidden(
+    noRead,
+    'list_clinic_report_definitions',
+    {},
+    'receptionist without reports.read'
+  );
   await expectRpcForbidden(
     tenantB,
     'create_clinic_report_run',

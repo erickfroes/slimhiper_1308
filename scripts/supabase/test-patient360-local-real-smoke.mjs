@@ -12,17 +12,16 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
-import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
+import {
+  getRequiredServiceRoleKey,
+  requireEnv,
+  requireSupabasePublishableKey,
+} from './_shared/env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
 
-const requiredEnv = [
-  'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'SUPABASE_BOOTSTRAP_PASSWORD',
-];
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_BOOTSTRAP_PASSWORD'];
 
 const IDS = {
   patientA: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -434,7 +433,9 @@ async function seedPatient360TabData(tenantId, patientId, userId) {
             examples: ['frango', 'ovos'],
           },
         ],
-        meal_adherence: [{ week: 1, label: 'S1', adherencePercent: 82, mealsLogged: 12, mealsTotal: 14 }],
+        meal_adherence: [
+          { week: 1, label: 'S1', adherencePercent: 82, mealsLogged: 12, mealsTotal: 14 },
+        ],
         metadata: { nutritionistName: 'Equipe SlimHiper', adherencePercent: 82 },
         created_by: userId,
         published_at: now,
@@ -555,7 +556,7 @@ async function seedPatient360TabData(tenantId, patientId, userId) {
 }
 
 function createSignedInClient() {
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+  return createClient(process.env.SUPABASE_URL, requireSupabasePublishableKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
@@ -662,27 +663,55 @@ async function run() {
   await runRealContract(staffSession.token, forbiddenSession.token);
 
   currentStep = 'checking tab contracts through Edge Functions';
-  await expectFunctionOk('patient-360-summary', staffSession.token, { patient_id: IDS.patientA }, (data) => {
-    ok(
-      Array.isArray(data?.activePackage?.checkins) && data.activePackage.checkins.length >= 1,
-      'patient-360-summary: expected package checkins array'
-    );
-  });
-  await expectFunctionOk('patient-documents', staffSession.token, { patient_id: IDS.patientA }, (data) => {
-    ok(Array.isArray(data?.documents), 'patient-documents: expected documents array');
-    ok(data.documents.length >= 1, 'patient-documents: expected seeded document');
-  });
-  await expectFunctionOk('patient-nutrition-plan', staffSession.token, { patient_id: IDS.patientA }, (data) => {
-    ok(data?.isActive === true, 'patient-nutrition-plan: expected active plan');
-    ok(Array.isArray(data?.meals) && data.meals.length >= 1, 'patient-nutrition-plan: expected meals');
-  });
-  await expectFunctionOk('patient-reports', staffSession.token, { patient_id: IDS.patientA }, (data) => {
-    ok(Array.isArray(data), 'patient-reports: expected definitions array');
-    ok(data.some((item) => item?.key === 'patient360_smoke'), 'patient-reports: expected smoke report');
-  });
+  await expectFunctionOk(
+    'patient-360-summary',
+    staffSession.token,
+    { patient_id: IDS.patientA },
+    (data) => {
+      ok(
+        Array.isArray(data?.activePackage?.checkins) && data.activePackage.checkins.length >= 1,
+        'patient-360-summary: expected package checkins array'
+      );
+    }
+  );
+  await expectFunctionOk(
+    'patient-documents',
+    staffSession.token,
+    { patient_id: IDS.patientA },
+    (data) => {
+      ok(Array.isArray(data?.documents), 'patient-documents: expected documents array');
+      ok(data.documents.length >= 1, 'patient-documents: expected seeded document');
+    }
+  );
+  await expectFunctionOk(
+    'patient-nutrition-plan',
+    staffSession.token,
+    { patient_id: IDS.patientA },
+    (data) => {
+      ok(data?.isActive === true, 'patient-nutrition-plan: expected active plan');
+      ok(
+        Array.isArray(data?.meals) && data.meals.length >= 1,
+        'patient-nutrition-plan: expected meals'
+      );
+    }
+  );
+  await expectFunctionOk(
+    'patient-reports',
+    staffSession.token,
+    { patient_id: IDS.patientA },
+    (data) => {
+      ok(Array.isArray(data), 'patient-reports: expected definitions array');
+      ok(
+        data.some((item) => item?.key === 'patient360_smoke'),
+        'patient-reports: expected smoke report'
+      );
+    }
+  );
 
   currentStep = 'checking tab contracts through RLS/RPC';
-  await expectCount(staffSession.client, 'consultas tab', 'appointments', { patient_id: IDS.patientA });
+  await expectCount(staffSession.client, 'consultas tab', 'appointments', {
+    patient_id: IDS.patientA,
+  });
   await expectCount(staffSession.client, 'pacotes tab', 'patient_program_enrollments', {
     patient_id: IDS.patientA,
   });

@@ -1,3 +1,49 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '..', '..', '..');
+const initialEnvKeys = new Set(Object.keys(process.env));
+
+function parseDotEnvLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#')) return null;
+
+  const match = trimmed.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+  if (!match) return null;
+
+  const [, key, rawValue] = match;
+  let value = rawValue.trim();
+
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  } else {
+    const commentIndex = value.search(/\s+#/);
+    if (commentIndex >= 0) value = value.slice(0, commentIndex).trim();
+  }
+
+  return { key, value: value.replace(/\\n/g, '\n') };
+}
+
+function loadDotEnvFile(filePath) {
+  if (!existsSync(filePath)) return;
+
+  const lines = readFileSync(filePath, 'utf8').split(/\r?\n/);
+  for (const line of lines) {
+    const parsed = parseDotEnvLine(line);
+    if (!parsed || initialEnvKeys.has(parsed.key)) continue;
+    process.env[parsed.key] = parsed.value;
+  }
+}
+
+for (const fileName of ['.env', '.env.local']) {
+  loadDotEnvFile(path.join(repoRoot, fileName));
+}
+
 const placeholderValues = new Set([
   'dummy',
   'fake',

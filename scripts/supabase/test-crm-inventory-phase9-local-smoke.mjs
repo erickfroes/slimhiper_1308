@@ -10,14 +10,13 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
+import {
+  getRequiredServiceRoleKey,
+  requireEnv,
+  requireSupabasePublishableKey,
+} from './_shared/env.mjs';
 
-const requiredEnv = [
-  'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'SUPABASE_BOOTSTRAP_PASSWORD',
-];
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_BOOTSTRAP_PASSWORD'];
 
 const IDS = {
   tenantA: '19500000-0000-4000-8000-0000000000a1',
@@ -82,7 +81,10 @@ function daysFromNow(days) {
 }
 
 async function ensureUser(email, fullName, tenantId, roleCode, unitId = null) {
-  const { data: list, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const { data: list, error: listError } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
   if (listError) throw listError;
 
   const existing = list.users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
@@ -137,7 +139,7 @@ async function ensureUser(email, fullName, tenantId, roleCode, unitId = null) {
 }
 
 async function signIn(email) {
-  const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+  const client = createClient(process.env.SUPABASE_URL, requireSupabasePublishableKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data, error } = await client.auth.signInWithPassword({
@@ -159,13 +161,19 @@ async function expectRpcError(client, fn, args, expectedFragment) {
   const { error } = await client.rpc(fn, args);
   ok(error, `Expected ${fn} to fail.`);
   const details = shortError(error);
-  ok(details.includes(expectedFragment), `Expected ${fn} error to include ${expectedFragment}, got: ${details}`);
+  ok(
+    details.includes(expectedFragment),
+    `Expected ${fn} error to include ${expectedFragment}, got: ${details}`
+  );
 }
 
 async function seedTenant(tenantId, unitId, slug) {
   await admin
     .from('tenants')
-    .upsert({ id: tenantId, name: `Phase 9 Smoke ${slug}`, slug, status: 'active' }, { onConflict: 'id' })
+    .upsert(
+      { id: tenantId, name: `Phase 9 Smoke ${slug}`, slug, status: 'active' },
+      { onConflict: 'id' }
+    )
     .throwOnError();
 
   await admin
@@ -219,7 +227,12 @@ async function cleanupSyntheticRows() {
   }
 
   await admin.from('crm_leads').delete().in('email', leadEmails).throwOnError();
-  await admin.from('inventory_items').delete().eq('tenant_id', IDS.tenantA).eq('sku', 'PHASE9-LUVA').throwOnError();
+  await admin
+    .from('inventory_items')
+    .delete()
+    .eq('tenant_id', IDS.tenantA)
+    .eq('sku', 'PHASE9-LUVA')
+    .throwOnError();
   await admin.from('inventory_locations').delete().eq('id', IDS.locationA).throwOnError();
   await admin.from('inventory_locations').delete().eq('id', IDS.locationB).throwOnError();
   await admin.from('inventory_categories').delete().eq('id', IDS.categoryA).throwOnError();
@@ -229,7 +242,12 @@ async function seedInventoryReferenceData() {
   await admin
     .from('inventory_categories')
     .upsert(
-      { id: IDS.categoryA, tenant_id: IDS.tenantA, name: 'Phase 9 insumos dummy', status: 'active' },
+      {
+        id: IDS.categoryA,
+        tenant_id: IDS.tenantA,
+        name: 'Phase 9 insumos dummy',
+        status: 'active',
+      },
       { onConflict: 'tenant_id,name' }
     )
     .throwOnError();
@@ -237,7 +255,14 @@ async function seedInventoryReferenceData() {
   await admin
     .from('inventory_locations')
     .upsert(
-      { id: IDS.locationA, tenant_id: IDS.tenantA, unit_id: IDS.unitA, code: 'P9-A', name: 'Phase 9 estoque A', status: 'active' },
+      {
+        id: IDS.locationA,
+        tenant_id: IDS.tenantA,
+        unit_id: IDS.unitA,
+        code: 'P9-A',
+        name: 'Phase 9 estoque A',
+        status: 'active',
+      },
       { onConflict: 'tenant_id,code' }
     )
     .throwOnError();
@@ -245,7 +270,14 @@ async function seedInventoryReferenceData() {
   await admin
     .from('inventory_locations')
     .upsert(
-      { id: IDS.locationB, tenant_id: IDS.tenantB, unit_id: IDS.unitB, code: 'P9-B', name: 'Phase 9 estoque B', status: 'active' },
+      {
+        id: IDS.locationB,
+        tenant_id: IDS.tenantB,
+        unit_id: IDS.unitB,
+        code: 'P9-B',
+        name: 'Phase 9 estoque B',
+        status: 'active',
+      },
       { onConflict: 'tenant_id,code' }
     )
     .throwOnError();
@@ -258,8 +290,20 @@ async function seedData() {
   await seedInventoryReferenceData();
 
   await ensureUser(EMAILS.ownerA, 'Phase 9 Owner A', IDS.tenantA, 'tenant_owner', IDS.unitA);
-  await ensureUser(EMAILS.noCrmWriteA, 'Phase 9 No CRM Write A', IDS.tenantA, 'physician', IDS.unitA);
-  await ensureUser(EMAILS.noInventoryAdjustA, 'Phase 9 No Inventory Adjust A', IDS.tenantA, 'clinic_admin', IDS.unitA);
+  await ensureUser(
+    EMAILS.noCrmWriteA,
+    'Phase 9 No CRM Write A',
+    IDS.tenantA,
+    'physician',
+    IDS.unitA
+  );
+  await ensureUser(
+    EMAILS.noInventoryAdjustA,
+    'Phase 9 No Inventory Adjust A',
+    IDS.tenantA,
+    'clinic_admin',
+    IDS.unitA
+  );
   await ensureUser(EMAILS.ownerB, 'Phase 9 Owner B', IDS.tenantB, 'tenant_owner', IDS.unitB);
 
   await removePermissionFromRole(IDS.tenantA, 'clinic_admin', 'inventory.adjust');
@@ -334,15 +378,28 @@ async function run() {
 
   const conversion = await rpc(ownerA, 'convert_crm_lead_to_patient', {
     p_lead_id: lead.id,
-    p_payload: { createAppointment: true, scheduledAt: daysFromNow(1), appointmentType: 'avaliacao_inicial' },
+    p_payload: {
+      createAppointment: true,
+      scheduledAt: daysFromNow(1),
+      appointmentType: 'avaliacao_inicial',
+    },
   });
-  ok(conversion?.status === 'converted' && conversion?.patientId, 'Expected converted lead with patient id.');
+  ok(
+    conversion?.status === 'converted' && conversion?.patientId,
+    'Expected converted lead with patient id.'
+  );
 
-  const conversionAgain = await rpc(ownerA, 'convert_crm_lead_to_patient', { p_lead_id: lead.id, p_payload: {} });
+  const conversionAgain = await rpc(ownerA, 'convert_crm_lead_to_patient', {
+    p_lead_id: lead.id,
+    p_payload: {},
+  });
   ok(conversionAgain?.idempotent === true, 'Expected idempotent conversion on second call.');
 
   const crmNotifications = await rpc(ownerA, 'emit_crm_operational_notifications');
-  ok(Number(crmNotifications?.overdueTasks ?? 0) >= 0, 'Expected CRM notification contract result.');
+  ok(
+    Number(crmNotifications?.overdueTasks ?? 0) >= 0,
+    'Expected CRM notification contract result.'
+  );
 
   currentStep = 'validating inventory ledger and RBAC';
   const item = await rpc(ownerA, 'upsert_inventory_item', {
@@ -442,7 +499,9 @@ async function run() {
     'Expected tenant B inventory snapshot not to expose tenant A item.'
   );
 
-  const inventoryNotifications = await rpc(ownerA, 'emit_inventory_operational_notifications', { p_days_to_expiry: 30 });
+  const inventoryNotifications = await rpc(ownerA, 'emit_inventory_operational_notifications', {
+    p_days_to_expiry: 30,
+  });
   ok(Number(inventoryNotifications?.alerts ?? 0) >= 1, 'Expected inventory alert contract result.');
 
   currentStep = 'validating report, dashboard, notification and governance regressions';
@@ -465,10 +524,18 @@ async function run() {
     p_export_format: 'csv',
     p_patient_id: null,
   });
-  ok(inventoryReport?.id && Array.isArray(inventoryReport?.rows), 'Expected inventory report run rows.');
+  ok(
+    inventoryReport?.id && Array.isArray(inventoryReport?.rows),
+    'Expected inventory report run rows.'
+  );
 
-  const dashboard = await rpc(ownerA, 'get_crm_inventory_dashboard_insights', { p_days_to_expiry: 30 });
-  ok(dashboard?.crm?.canRead === true && dashboard?.inventory?.canRead === true, 'Expected dashboard insights access.');
+  const dashboard = await rpc(ownerA, 'get_crm_inventory_dashboard_insights', {
+    p_days_to_expiry: 30,
+  });
+  ok(
+    dashboard?.crm?.canRead === true && dashboard?.inventory?.canRead === true,
+    'Expected dashboard insights access.'
+  );
 
   const expiredLead = await rpc(ownerA, 'create_crm_lead', {
     p_payload: {
@@ -485,11 +552,22 @@ async function run() {
   });
   ok(expiredLead?.id, 'Expected expired lead id for governance dry-run.');
 
-  const governance = await rpc(ownerA, 'get_crm_inventory_governance_snapshot', { p_days_to_expiry: 30 });
-  ok(Number(governance?.crm?.retentionDueLeads ?? 0) >= 1, 'Expected retention-due lead in governance snapshot.');
-  ok(Number(governance?.inventory?.negativeSnapshots ?? 0) === 0, 'Expected no negative inventory snapshots.');
+  const governance = await rpc(ownerA, 'get_crm_inventory_governance_snapshot', {
+    p_days_to_expiry: 30,
+  });
+  ok(
+    Number(governance?.crm?.retentionDueLeads ?? 0) >= 1,
+    'Expected retention-due lead in governance snapshot.'
+  );
+  ok(
+    Number(governance?.inventory?.negativeSnapshots ?? 0) === 0,
+    'Expected no negative inventory snapshots.'
+  );
 
-  const retentionDryRun = await rpc(admin, 'expire_crm_leads_for_retention', { p_execute: false, p_limit: 25 });
+  const retentionDryRun = await rpc(admin, 'expire_crm_leads_for_retention', {
+    p_execute: false,
+    p_limit: 25,
+  });
   ok(retentionDryRun?.execute === false, 'Expected retention helper to run in dry-run mode.');
   ok(Number(retentionDryRun?.candidateLeads ?? 0) >= 1, 'Expected dry-run candidate lead.');
 

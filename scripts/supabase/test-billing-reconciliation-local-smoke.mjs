@@ -12,17 +12,16 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
-import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
+import {
+  getRequiredServiceRoleKey,
+  requireEnv,
+  requireSupabasePublishableKey,
+} from './_shared/env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
 
-const requiredEnv = [
-  'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'SUPABASE_BOOTSTRAP_PASSWORD',
-];
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_BOOTSTRAP_PASSWORD'];
 
 const IDS = {
   patient: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -86,7 +85,9 @@ function assertNoProviderFields(value, pathLabel = 'root') {
     }
 
     if (Array.isArray(nested)) {
-      nested.forEach((item, index) => assertNoProviderFields(item, `${pathLabel}.${key}[${index}]`));
+      nested.forEach((item, index) =>
+        assertNoProviderFields(item, `${pathLabel}.${key}[${index}]`)
+      );
     } else {
       assertNoProviderFields(nested, `${pathLabel}.${key}`);
     }
@@ -118,7 +119,7 @@ async function ensureAuthUserPassword(email) {
 }
 
 async function signIn(email) {
-  const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+  const client = createClient(process.env.SUPABASE_URL, requireSupabasePublishableKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
@@ -361,7 +362,7 @@ async function run() {
   ok(data.summary.failedWebhookEvents >= 1, 'Expected failed webhook count');
   ok(data.summary.unmatchedPayments >= 1, 'Expected unmatched payment count');
 
-  const unauthClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+  const unauthClient = createClient(process.env.SUPABASE_URL, requireSupabasePublishableKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const unauth = await unauthClient.rpc('get_clinic_finance_reconciliation');

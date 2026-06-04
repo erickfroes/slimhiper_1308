@@ -112,7 +112,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 
 | ID  | Frente                   | Escopo                                                                                                 | Status inicial                                                                                                                                                                                                        | Status alvo                    | Evidência obrigatória                                                                                                                | Bloqueios esperados                                            |
 | --- | ------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| F00 | Baseline técnica         | TypeScript, lint, build e diff check                                                                   | Executado localmente em 2026-06-02; usuários sintéticos formalizados no bootstrap em 2026-06-03; migrations remotas e Edge Function F11 aplicadas em 2026-06-04                                                       | Aprovado                       | `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check`; bootstrap define admin, clínica, paciente e no-workspace  | Bootstrap/smokes remotos pendentes                             |
+| F00 | Baseline técnica         | TypeScript, lint, build e diff check                                                                   | Executado localmente em 2026-06-02; usuários sintéticos formalizados no bootstrap em 2026-06-03; em 2026-06-04 scripts passaram a carregar `.env`/`.env.local` sem imprimir valores                                  | Aprovado                       | `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check`; bootstrap define admin, clínica, paciente e no-workspace  | Bootstrap/smokes remotos pendentes                             |
 | F01 | Auth e guardas           | `/`, `/auth/login`, `/no-workspace`, middleware, `/api/auth/app-session`                               | Blindado por código em 2026-06-02 para evitar self-redirect e tratar `/no-workspace` sem sessão                                                                                                                       | Aprovado em browser e contrato | Matriz de redirecionamento por perfil; validação estática confirmou alvo canônico e ausência de redirect para a própria rota         | Sessões sintéticas e vínculos de usuário                       |
 | F02 | Correção portal paciente | `canAccessPatientPortal` no endpoint de sessão                                                         | Corrigido por código em 2026-06-02                                                                                                                                                                                    | Corrigido e testado            | Endpoint reutiliza helper canônico de destino; validação real por perfis segue pendente sem usuários sintéticos/Supabase homologação | Usuários sintéticos e ambiente Supabase homologação            |
 | F03 | Shell clínico            | `DashboardShell`, polling, busca, logout, menus                                                        | Blindado por código em 2026-06-02; reforçado em 2026-06-04 para preservar último resumo válido durante falhas temporárias de comunicações                                                                             | Resiliente a falhas            | Polling e ações de leitura tratam exceções localmente; smoke anônimo de rotas protegidas passou; browser autenticado segue pendente | Ambiente/browser autenticado para smoke                        |
@@ -135,7 +135,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F20 | Webhooks admin           | `/admin/webhooks`                                                                                      | Avanço de contrato real em 2026-06-03: monitor usa RPC real, filtros provider/status, detalhes sanitizados, proteção contra resposta obsoleta e identifica reprocesso como indisponível até existir contrato auditado | Real validado                  | Listar eventos Asaas/D4Sign e filtros; detalhes sem payload bruto; reprocessamento protegido quando existir                          | Dados sintéticos de webhooks e contrato de reprocesso          |
 | F21 | Observability            | `/admin/observability`                                                                                 | Avanço em 2026-06-03: painel combina `/api/health` e webhooks reais com monitores estáticos explicitamente rotulados                                                                                                  | Útil operacionalmente          | Checklist de monitores, links reais e distinção entre sinais reais/estáticos                                                         | Métricas externas/APM ainda não conectadas                     |
 | F22 | Segurança e privacidade  | Logs, env, service role, storage, URLs                                                                 | Verificação estática em 2026-06-03; em 2026-06-04 audit logs clínicos e erros client-side de dashboard/comunicações foram reduzidos a mensagens/códigos seguros                                                       | Aprovado                       | Checklist de ausência de vazamentos, rg de service-role/client, revisão de `.env.example`, amostra de audit logs e erros sanitizados | Validação de logs reais, storage e providers em homologação    |
-| F23 | Produção                 | Build, healthcheck, env, rollback                                                                      | Avanço em 2026-06-04: `/api/health` falha em staging/produção se Supabase público ou metadata de release estiverem ausentes/placeholder; smoke pos-deploy reprova health `fail`                                      | Go-live aprovado               | Runbook de release/rollback, `/api/health` sem `fail`, smoke pos-deploy e aprovação humana                                          | Secrets, DNS, Supabase, providers e browser autenticado        |
+| F23 | Produção                 | Build, healthcheck, env, rollback                                                                      | Avanços em 2026-06-04: health fail-closed em staging/produção; scripts de contrato/smoke aceitam chave publicável disponível no `.env` sem exigir somente `SUPABASE_ANON_KEY`                                       | Go-live aprovado               | Runbook de release/rollback, `/api/health` sem `fail`, smoke pos-deploy, scripts alinhados ao env local e aprovação humana          | Secrets, DNS, Supabase, providers e browser autenticado        |
 
 ## 4. Fase 0 — Preparação de ambiente e evidências
 
@@ -1765,6 +1765,54 @@ Copie este bloco para cada fluxo validado.
 - Pendencias: validar em sessao clinica sintetica que Inbox, Paciente 360 chat
   e Dashboard exibem falhas genericas quando RPC/RLS falham, sem ocultar erros
   operacionais.
+
+### Evidencia - F00/F23 scripts alinhados ao `.env`
+
+- Data: 2026-06-04.
+- Ambiente: local, leitura restrita de nomes/presenca de variaveis do `.env`;
+  nenhum valor foi impresso, nenhum provider externo foi chamado, nenhuma
+  migracao/bootstrap foi executado.
+- Rota/API/RPC/Edge Function: scripts em `scripts/supabase`, helper
+  `scripts/supabase/_shared/env.mjs`, `.env.example` e contrato Paciente 360.
+- Variaveis observadas por nome no `.env`: Supabase publico/server-side,
+  service-role, access token/db url, D4Sign, Asaas e entradas de teste
+  `TEST_*`. `SUPABASE_URL`, chave publicavel Supabase e service-role foram
+  detectados como nao-placeholder; `TEST_ACCESS_TOKEN` e `TEST_PATIENT_ID` nao
+  ficaram disponiveis como valores validos para modo real nesta verificacao.
+- Passos executados:
+  1. Adicionado carregamento seguro de `.env` e `.env.local` no helper
+     compartilhado de scripts, preservando variaveis ja exportadas no shell e
+     sem imprimir valores.
+  2. `getEnvValue`, `requireEnv` e helpers de chave Supabase passaram a se
+     beneficiar desse carregamento centralizado.
+  3. Smokes locais que assinavam usuarios sinteticos deixaram de exigir
+     exclusivamente `SUPABASE_ANON_KEY` e passaram a usar
+     `requireSupabasePublishableKey`, aceitando `SUPABASE_ANON_KEY`,
+     `SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` ou
+     `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+  4. `test-patient360-contract.mjs --mode=real` passou a aceitar
+     `TEST_ACCESS_TOKEN`/`TEST_PATIENT_ID` como aliases de
+     `TOKEN_WITH_PATIENTS_READ`/`PATIENT_ID_TENANT_A`, mas continua sem rodar
+     o modo real sem acionamento explicito.
+  5. `.env.example` passou a documentar `SUPABASE_ACCESS_TOKEN` e
+     `SUPABASE_DB_URL` como placeholders vazios, alinhando o template aos
+     nomes locais.
+- Resultado esperado: reduzir friccao para rodar contratos e smokes autorizados
+  a partir das variaveis realmente presentes no `.env`, mantendo fail-closed e
+  sem vazar secrets.
+- Resultado observado: import do helper confirmou por booleanos que Supabase
+  URL, chave publicavel e service-role estao configurados; fixture contract do
+  Paciente 360 passou sem chamar Supabase; `node --check` passou nos scripts
+  alterados.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, URLs assinadas,
+  provider IDs ou payloads sensiveis.
+- Screenshot/anexo: nao aplicavel; mudanca de infraestrutura de scripts.
+- Status: aprovado por codigo e checks locais seguros; smokes reais/mutaveis
+  seguem pendentes ate autorizacao explicita do script e alvo.
+- Pendencias: preencher valores reais nao-placeholder para `TEST_ACCESS_TOKEN`
+  e `TEST_PATIENT_ID` quando houver usuario/paciente sintetico aprovado,
+  escolher os scripts mutaveis a executar e confirmar flags de alvo remoto
+  somente para sandbox autorizado.
 
 ## 18. Sequência recomendada de implementação
 

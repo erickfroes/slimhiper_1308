@@ -9,8 +9,8 @@
  *
  * Real mode required env vars:
  * - SUPABASE_URL
- * - TOKEN_WITH_PATIENTS_READ
- * - PATIENT_ID_TENANT_A
+ * - TOKEN_WITH_PATIENTS_READ or TEST_ACCESS_TOKEN
+ * - PATIENT_ID_TENANT_A or TEST_PATIENT_ID
  *
  * Real mode optional env vars:
  * - TOKEN_WITHOUT_PATIENTS_READ
@@ -32,6 +32,7 @@ const defaultFixturePath = path.join(
 
 const args = parseArgs(process.argv.slice(2));
 const mode = args.mode ?? 'real';
+let readEnvValue = (key) => process.env[key]?.trim() ?? '';
 
 const VALID_PACKAGE_STATUSES = new Set([
   'ativo',
@@ -189,15 +190,17 @@ Modes:
 `);
 }
 
-function requireEnv(keys) {
-  const missing = keys.filter((key) => !process.env[key]);
-  if (missing.length) {
-    throw new Error(`Missing required env var(s) for real mode: ${missing.join(', ')}`);
+function getRequiredEnvAlias(label, keys) {
+  for (const key of keys) {
+    const value = readEnvValue(key);
+    if (value) return value;
   }
+
+  throw new Error(`Missing required env var for real mode: ${label} (${keys.join(' or ')})`);
 }
 
 async function callFunction(name, token, body) {
-  const base = process.env.SUPABASE_URL.replace(/\/$/, '');
+  const base = readEnvValue('SUPABASE_URL').replace(/\/$/, '');
   const response = await fetch(`${base}/functions/v1/${name}`, {
     method: 'POST',
     headers: {
@@ -534,40 +537,47 @@ async function runFixture() {
 }
 
 async function runReal() {
-  requireEnv(['SUPABASE_URL', 'TOKEN_WITH_PATIENTS_READ', 'PATIENT_ID_TENANT_A']);
+  const envModule = await import('./_shared/env.mjs');
+  readEnvValue = envModule.getEnvValue;
 
-  const {
-    TOKEN_WITH_PATIENTS_READ,
-    TOKEN_WITHOUT_PATIENTS_READ,
-    PATIENT_ID_TENANT_A,
-    PATIENT_ID_TENANT_B,
-  } = process.env;
+  getRequiredEnvAlias('SUPABASE_URL', ['SUPABASE_URL']);
+
+  const tokenWithPatientsRead = getRequiredEnvAlias('patients.read token', [
+    'TOKEN_WITH_PATIENTS_READ',
+    'TEST_ACCESS_TOKEN',
+  ]);
+  const patientIdTenantA = getRequiredEnvAlias('tenant A patient id', [
+    'PATIENT_ID_TENANT_A',
+    'TEST_PATIENT_ID',
+  ]);
+  const tokenWithoutPatientsRead = readEnvValue('TOKEN_WITHOUT_PATIENTS_READ');
+  const patientIdTenantB = readEnvValue('PATIENT_ID_TENANT_B');
 
   const results = [];
 
-  const summary = await callFunction('patient-360-summary', TOKEN_WITH_PATIENTS_READ, {
-    patient_id: PATIENT_ID_TENANT_A,
+  const summary = await callFunction('patient-360-summary', tokenWithPatientsRead, {
+    patient_id: patientIdTenantA,
   });
   assertSummaryContract(summary, results);
 
-  const timeline = await callFunction('patient-timeline', TOKEN_WITH_PATIENTS_READ, {
-    patient_id: PATIENT_ID_TENANT_A,
+  const timeline = await callFunction('patient-timeline', tokenWithPatientsRead, {
+    patient_id: patientIdTenantA,
     page: 1,
     page_size: 10,
   });
   assertTimelineContract(timeline, results);
 
-  const timelineWithCategory = await callFunction('patient-timeline', TOKEN_WITH_PATIENTS_READ, {
-    patient_id: PATIENT_ID_TENANT_A,
+  const timelineWithCategory = await callFunction('patient-timeline', tokenWithPatientsRead, {
+    patient_id: patientIdTenantA,
     category: 'clinical',
     page: 1,
     page_size: 10,
   });
   assertCategoryFilter(timelineWithCategory, results);
 
-  if (TOKEN_WITHOUT_PATIENTS_READ) {
-    const forbidden = await callFunction('patient-360-summary', TOKEN_WITHOUT_PATIENTS_READ, {
-      patient_id: PATIENT_ID_TENANT_A,
+  if (tokenWithoutPatientsRead) {
+    const forbidden = await callFunction('patient-360-summary', tokenWithoutPatientsRead, {
+      patient_id: patientIdTenantA,
     });
     ok(forbidden.status === 403, `expected 403 without patients.read, got ${forbidden.status}`);
     results.push('forbidden real check passed');
@@ -575,9 +585,9 @@ async function runReal() {
     results.push('forbidden real check skipped (TOKEN_WITHOUT_PATIENTS_READ not provided)');
   }
 
-  if (PATIENT_ID_TENANT_B) {
-    const crossTenant = await callFunction('patient-360-summary', TOKEN_WITH_PATIENTS_READ, {
-      patient_id: PATIENT_ID_TENANT_B,
+  if (patientIdTenantB) {
+    const crossTenant = await callFunction('patient-360-summary', tokenWithPatientsRead, {
+      patient_id: patientIdTenantB,
     });
     ok(crossTenant.status !== 200, `cross-tenant fetch should fail, got ${crossTenant.status}`);
     results.push(`cross-tenant real check passed (status ${crossTenant.status})`);
