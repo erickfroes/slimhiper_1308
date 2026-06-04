@@ -722,12 +722,12 @@ webhook -> reconciliação -> timeline/financeiro.
 
 ### 12.3 Checklist de dados sensíveis
 
-- [ ] PII de paciente é minimizada nas respostas. Em 2026-06-03 houve avanço em documentos/D4Sign: respostas e metadados de documentos deixaram de expor `tenant_id`, `patient_id`, `generated_document_id`, `provider_document_id` e idempotência quando não necessários para a UI; permanece pendente revisão completa das respostas de perfil/contato do Paciente 360 com usuários sintéticos.
+- [x] PII de paciente é minimizada nas respostas. Em 2026-06-03 houve avanço em documentos/D4Sign: respostas e metadados de documentos deixaram de expor `tenant_id`, `patient_id`, `generated_document_id`, `provider_document_id` e idempotência quando não necessários para a UI. Em 2026-06-04 o resumo do Paciente 360 passou a omitir `profile.tenantId`, manter `birthDate` em branco e devolver CPF/telefone/e-mail apenas em formato mascarado; validação real com usuários sintéticos permanece pendente.
 - [x] Dados financeiros são exibidos somente a perfis autorizados. Verificação de código em 2026-06-03 confirma gate por `financial.read`/`financial.write` no Paciente 360 e RPC/Edge Functions financeiras exigindo permissão financeira; smoke autenticado por perfil continua pendente.
 - [x] Prescrições respeitam permissão médica. Verificação de código em 2026-06-03 confirma gate por `prescriptions.read`/`prescriptions.write` na navegação do Paciente 360 e consulta real de prescrições somente quando `prescriptions.read` está presente; smoke autenticado por perfil continua pendente.
 - [x] Documentos clínicos têm signed URL curta. Verificação de código em 2026-06-03 confirma signed URL com expiração de 300 segundos, bucket/path validado e resposta reduzida a URL/expiração/metadado temporal.
 - [x] Payloads de webhook são resumidos ou redigidos. Em 2026-06-03 o webhook D4Sign deixou de persistir/expor `provider_document_id` em resumo/timeline/resposta e passou a registrar apenas sinal operacional de evento provider; webhooks Asaas já usam payload minimizado com hash/resumo.
-- [ ] Audit log registra ação sem expor conteúdo clínico desnecessário. Pendente revisão ponta a ponta dos inserts legados de `audit_logs` e prova real após mutações clínicas/admin sintéticas.
+- [ ] Audit log registra ação sem expor conteúdo clínico desnecessário. Em 2026-06-04 o convite admin deixou de gravar e-mail completo em `audit_logs.metadata`, mantendo e-mail mascarado/domínio e `targetUserId`; permanece pendente revisão ponta a ponta dos inserts legados de `audit_logs` e prova real após mutações clínicas/admin sintéticas.
 
 **Progresso registrado em 2026-06-03:**
 
@@ -736,7 +736,9 @@ webhook -> reconciliação -> timeline/financeiro.
 - `patient-documents` deixou de consultar e retornar `provider_document_id`, removeu ids clínicos de metadados de sucesso/forbidden e preservou apenas o resumo de assinatura necessário para a tela.
 - A listagem operacional de documentos da clínica deixou de selecionar `provider_document_id`, evitando carregar identificadores D4Sign que a UI não usa.
 - `d4sign-send-document` deixou de devolver `provider_document_id` e ids clínicos no `meta` da resposta; `webhook-d4sign` deixou de gravar `provider_document_id` no resumo/timeline e removeu idempotência da resposta externa.
-- Permanecem pendentes smoke autenticado por perfil para financeiro/prescrições/documentos, revisão completa de PII do Paciente 360 e amostragem de audit log com mutações sintéticas.
+- Em 2026-06-04 `patient-360-summary`, `patient360Api`, fixture e script de contrato passaram a exigir resposta minimizada para perfil/contato do Paciente 360: sem `tenantId`, sem nascimento bruto e com CPF/telefone/e-mail mascarados.
+- Em 2026-06-04 o Route Handler de convite admin passou a gravar e-mail mascarado e domínio no audit log, sem e-mail completo em `metadata`.
+- Permanecem pendentes smoke autenticado por perfil para financeiro/prescrições/documentos, validação real da resposta minimizada do Paciente 360 e amostragem de audit log com mutações sintéticas.
 
 ## 13. Fase 9 — Browser smoke obrigatório
 
@@ -1524,6 +1526,48 @@ Copie este bloco para cada fluxo validado.
   ou payloads sensiveis.
 - Status: ambiente D4Sign preparado por configuracao; validacao provider
   pendente.
+
+### Evidencia - F22/Fase 8.3 minimizacao de PII no Paciente 360
+
+- Data: 2026-06-04.
+- Ambiente: local, revisao de codigo, contrato offline e documentacao; `.env`
+  nao foi lido, nenhum provider externo foi chamado e nenhuma
+  migracao/bootstrap foi executado.
+- Rota/API/RPC/Edge Function: `patient-360-summary`, `patient360Api`,
+  `/api/admin/tenants/[tenantId]/invitations`,
+  `test-patient360-contract.mjs`, fixture `patient360-summary` e checklist
+  manual de contrato do Paciente 360.
+- Passos executados:
+  1. Confirmada a existencia de `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e
+     avancada a proxima frente aberta implementavel, Fase 8.3 dados sensiveis.
+  2. A Edge Function `patient-360-summary` passou a omitir `profile.tenantId`
+     da resposta, manter `birthDate` em branco e retornar CPF, telefone e e-mail
+     somente mascarados.
+  3. `patient360Api` passou a aplicar a mesma minimizacao defensiva no cliente,
+     cobrindo contratos antigos que ainda retornem contato bruto.
+  4. O contrato offline `test-patient360-contract.mjs`, a fixture
+     `patient360-summary.fixture.json` e o checklist manual foram atualizados
+     para exigir a resposta minimizada.
+  5. O convite admin passou a registrar no `audit_logs.metadata` apenas e-mail
+     mascarado e dominio, preservando `targetUserId` para rastreabilidade sem
+     guardar e-mail completo no metadata auditavel.
+- Resultado esperado: reduzir exposicao de PII no resumo do Paciente 360 e em
+  audit metadata de convite admin, sem criar migracao e sem chamar Supabase
+  remoto/provider externo.
+- Resultado observado: `node scripts/supabase/test-patient360-contract.mjs
+  --mode=fixture`, `npm run type-check`, `npm run lint`, `npm run build` e
+  `git diff --check` passaram. Lint/build mantiveram 11 warnings conhecidos em
+  componentes legados, sem erros. Smokes reais autenticados seguem pendentes.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de provider
+  ou payloads sensiveis.
+- Screenshot/anexo: nao aplicavel; mudanca de contrato/servico sem validacao
+  visual autenticada nesta etapa.
+- Status: aprovado por codigo e contrato offline; validacao Supabase/browser
+  autenticada pendente.
+- Pendencias: validar `patient-360-summary` real com usuarios sinteticos,
+  executar browser smoke do Paciente 360 sem mock, amostrar audit logs apos
+  convite/mutacoes admin sinteticas e concluir revisao dos inserts legados de
+  `audit_logs`.
 
 ## 18. Sequência recomendada de implementação
 

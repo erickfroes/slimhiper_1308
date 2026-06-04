@@ -32,15 +32,16 @@ The script covers all checks below.
 1. `patient-360-summary` returns `{ ok:true, data, meta }`.
 2. `data.profile.name` exists.
 3. `data.profile.id` exists.
-4. `data.activePackage.status` exists.
-5. `data.clinicalStatus.currentWeightKg` exists **or** safe fallback exists (`clinicalStatus.latestSoap` or `clinicalStatus.lastUpdatedAt`).
-6. `data.financial.status` exists.
-7. `data.upcomingAppointments` is an array.
-8. `data.recentTimeline` is an array.
-9. `patient-timeline` returns `{ ok:true, data:{ events, page, page_size, total }, meta }`.
-10. Timeline `category` filter does not error (example: `category='clinical'`).
-11. User without `patients.read` receives 403.
-12. Tenant A user cannot fetch tenant B patient (expect non-200; typically 404).
+4. `data.profile.tenantId` is omitted, `birthDate` is blank, and CPF/phone/email are blank or masked.
+5. `data.activePackage.status` exists.
+6. `data.clinicalStatus.currentWeightKg` exists **or** safe fallback exists (`clinicalStatus.latestSoap` or `clinicalStatus.lastUpdatedAt`).
+7. `data.financial.status` exists.
+8. `data.upcomingAppointments` is an array.
+9. `data.recentTimeline` is an array.
+10. `patient-timeline` returns `{ ok:true, data:{ events, page, page_size, total }, meta }`.
+11. Timeline `category` filter does not error (example: `category='clinical'`).
+12. User without `patients.read` receives 403.
+13. Tenant A user cannot fetch tenant B patient (expect non-200; typically 404).
 
 ---
 

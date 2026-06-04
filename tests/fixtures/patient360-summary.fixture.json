@@ -6,14 +6,13 @@
       "data": {
         "profile": {
           "id": "patient-fixture-001",
-          "tenantId": "tenant-fixture-001",
           "name": "Ana Contrato",
           "preferredName": "Ana",
           "age": 39,
-          "birthDate": "1987-03-14",
+          "birthDate": "",
           "cpfMasked": "***.***.***-**",
-          "phone": "+55 00 00000-0000",
-          "email": "ana.fixture@example.com",
+          "phone": "(**) *****-0000",
+          "email": "an***@example.com",
           "status": "ativo",
           "careTeam": ["Dra. Marina", "Nutri Carla"],
           "createdAt": "2026-05-01T12:00:00.000Z",
@@ -225,7 +224,6 @@
         "lastUpdate": "2026-05-18T14:00:00.000Z"
       },
       "meta": {
-        "tenantId": "tenant-fixture-001",
         "permissions": {
           "patientsRead": true,
           "soapRead": true,

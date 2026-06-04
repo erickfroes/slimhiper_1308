@@ -130,7 +130,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function asString(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback;
+  return typeof value === 'string' ? value.trim() : fallback;
 }
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -139,6 +139,28 @@ function asNumber(value: unknown, fallback = 0): number {
 
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback;
+}
+
+function maskEmail(value: unknown): string {
+  const normalized = asString(value).toLowerCase();
+  const [localPart, domain] = normalized.split('@');
+  if (!localPart || !domain) return '';
+  const visiblePrefix = localPart.slice(0, 2);
+  return `${visiblePrefix}${localPart.length > 2 ? '***' : '*'}@${domain}`;
+}
+
+function maskPhone(value: unknown): string {
+  const digits = asString(value).replace(/\D/g, '');
+  if (digits.length < 4) return '';
+  return `(**) *****-${digits.slice(-4)}`;
+}
+
+function maskCpf(value: unknown): string {
+  const normalized = asString(value);
+  if (!normalized) return '***.***.***-**';
+  const digits = normalized.replace(/\D/g, '');
+  if (digits.length >= 2) return `***.***.***-${digits.slice(-2)}`;
+  return '***.***.***-**';
 }
 
 function hasPatientSummaryIdentity(payload: unknown): boolean {
@@ -352,10 +374,10 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       preferredName:
         typeof rawProfile?.preferredName === 'string' ? rawProfile.preferredName : undefined,
       age: asNumber(rawProfile?.age),
-      birthDate: asString(rawProfile?.birthDate),
-      cpfMasked: asString(rawProfile?.cpfMasked),
-      phone: asString(rawProfile?.phone),
-      email: asString(rawProfile?.email),
+      birthDate: '',
+      cpfMasked: maskCpf(rawProfile?.cpfMasked),
+      phone: maskPhone(rawProfile?.phone),
+      email: maskEmail(rawProfile?.email),
       avatarUrl: typeof rawProfile?.avatarUrl === 'string' ? rawProfile.avatarUrl : undefined,
       status: asString(rawProfile?.status, 'inativo') as Patient360Summary['profile']['status'],
       careTeam: Array.isArray(rawProfile?.careTeam)

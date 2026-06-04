@@ -165,6 +165,28 @@ function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function maskEmail(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  const [localPart, domain] = normalized.split('@');
+  if (!localPart || !domain) return '';
+  const visiblePrefix = localPart.slice(0, 2);
+  return `${visiblePrefix}${localPart.length > 2 ? '***' : '*'}@${domain}`;
+}
+
+function maskPhone(value: string | null | undefined): string {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (digits.length < 4) return '';
+  return `(**) *****-${digits.slice(-4)}`;
+}
+
+function maskCpf(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return '***.***.***-**';
+  const digits = normalized.replace(/\D/g, '');
+  if (digits.length >= 2) return `***.***.***-${digits.slice(-2)}`;
+  return '***.***.***-**';
+}
+
 function mapAppointmentType(value: unknown): string {
   const normalized = String(value ?? '').toLowerCase();
   if (normalized === 'retorno' || normalized === 'follow_up') return 'retorno';
@@ -1045,15 +1067,14 @@ async function buildAndReturnSummary({
   const data = {
     profile: {
       id: patient.id,
-      tenantId: patient.tenant_id,
       status: 'ativo',
       name: piiRes.data?.full_name ?? patient.preferred_name ?? 'Paciente',
       preferredName: patient.preferred_name ?? undefined,
       age: calculateAge(piiRes.data?.birth_date) ?? 0,
-      birthDate: piiRes.data?.birth_date ?? patient.created_at,
-      phone: piiRes.data?.phone ?? '',
-      email: piiRes.data?.email ?? '',
-      cpfMasked: piiRes.data?.cpf_masked ?? '***.***.***-**',
+      birthDate: '',
+      phone: maskPhone(piiRes.data?.phone),
+      email: maskEmail(piiRes.data?.email),
+      cpfMasked: maskCpf(piiRes.data?.cpf_masked),
       careTeam: [],
       createdAt: patient.created_at,
     },
@@ -1148,7 +1169,6 @@ async function buildAndReturnSummary({
     ok: true,
     data,
     meta: {
-      tenantId: patient.tenant_id,
       permissions: {
         patientsRead: tenantPermissions.has('patients.read'),
         soapRead: tenantPermissions.has('soap.read'),

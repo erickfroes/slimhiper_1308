@@ -304,13 +304,22 @@ function assertSummaryContract(summary, results) {
   const profile = data.profile;
   assertString(profile?.name, '2) data.profile.name must exist');
   assertString(profile?.id, '3) data.profile.id must exist');
-  assertString(profile?.tenantId, '3) data.profile.tenantId must exist');
+  ok(profile?.tenantId === undefined, '3) data.profile.tenantId must be omitted from response');
   assertEnum(profile?.status, VALID_PATIENT_STATUSES, '3) data.profile.status must be valid');
   assertNumber(profile?.age, '3) data.profile.age must be a number');
-  assertString(profile?.birthDate, '3) data.profile.birthDate must exist');
+  ok(profile?.birthDate === '', '3) data.profile.birthDate must be blank in minimized response');
   assertString(profile?.cpfMasked, '3) data.profile.cpfMasked must exist');
+  ok(profile.cpfMasked.startsWith('***.'), '3) data.profile.cpfMasked must be masked');
   assertStringType(profile?.phone, '3) data.profile.phone must be a string');
+  ok(
+    profile.phone === '' || /^\(\*\*\) \*\*\*\*\*-\d{4}$/.test(profile.phone),
+    '3) data.profile.phone must be blank or masked'
+  );
   assertStringType(profile?.email, '3) data.profile.email must be a string');
+  ok(
+    profile.email === '' || /^[^@]*\*+@[^@]+$/.test(profile.email),
+    '3) data.profile.email must be blank or masked'
+  );
   ok(isArray(profile?.careTeam), '3) data.profile.careTeam must be an array');
   assertString(profile?.createdAt, '3) data.profile.createdAt must exist');
 
