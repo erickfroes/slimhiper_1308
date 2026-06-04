@@ -153,14 +153,10 @@ export default function DashboardContent() {
       setClinicAlerts(snapshot.alerts);
       setReviewPatients(snapshot.patientsNeedingReview);
       if (isRefresh) toast.success('Dados atualizados');
-    } catch (dashboardError) {
-      const message =
-        dashboardError instanceof Error
-          ? dashboardError.message
-          : 'Falha ao carregar dados do dashboard.';
+    } catch {
       if (requestId !== loadRequestIdRef.current) return;
 
-      console.error('[DashboardContent] load error:', message);
+      console.error('[DashboardContent] load error: dashboard_snapshot_failed');
       setStats(null);
       setQueue([]);
       setAppointments([]);

@@ -43,10 +43,22 @@ async function getMockPatient360(patientId: string) {
   return getPatient360(patientId);
 }
 
+function safeErrorCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const code = value
+    .trim()
+    .replace(/[^a-zA-Z0-9_.:-]/g, '')
+    .slice(0, 80);
+  return code || undefined;
+}
+
 function safeError(error: unknown, fallback: string): SafeServiceError {
-  if (error instanceof Error) return { message: error.message || fallback };
+  if (error instanceof Error) {
+    return { message: fallback, code: safeErrorCode(error.name) };
+  }
   if (error && typeof error === 'object' && 'message' in error) {
-    return { message: String((error as { message?: unknown }).message ?? fallback) };
+    const record = error as { code?: unknown; name?: unknown };
+    return { message: fallback, code: safeErrorCode(record.code) ?? safeErrorCode(record.name) };
   }
   return { message: fallback };
 }
@@ -179,7 +191,7 @@ async function fetchChatFromSupabase(
   if (threadError) {
     return {
       data: null,
-      error: { message: threadError.message, code: threadError.code },
+      error: safeError(threadError, 'Nao foi possivel carregar o chat.'),
     };
   }
 
@@ -199,7 +211,7 @@ async function fetchChatFromSupabase(
   if (messageError) {
     return {
       data: null,
-      error: { message: messageError.message, code: messageError.code },
+      error: safeError(messageError, 'Nao foi possivel carregar mensagens do chat.'),
     };
   }
 
@@ -247,7 +259,7 @@ export async function openPatientChatThread(
       .maybeSingle();
 
     if (existingError) {
-      return { data: null, error: { message: existingError.message, code: existingError.code } };
+      return { data: null, error: safeError(existingError, 'Nao foi possivel abrir o chat.') };
     }
 
     if (existingThread?.id) {
@@ -256,7 +268,7 @@ export async function openPatientChatThread(
         .update({ status: 'open', archived_at: null })
         .eq('id', existingThread.id)
         .eq('patient_id', patientId);
-      if (error) return { data: null, error: { message: error.message, code: error.code } };
+      if (error) return { data: null, error: safeError(error, 'Nao foi possivel abrir o chat.') };
       return await fetchChatFromSupabase(patientId);
     }
 
@@ -267,7 +279,10 @@ export async function openPatientChatThread(
       .maybeSingle();
 
     if (patientError) {
-      return { data: null, error: { message: patientError.message, code: patientError.code } };
+      return {
+        data: null,
+        error: safeError(patientError, 'Nao foi possivel validar o paciente do chat.'),
+      };
     }
 
     const tenantId = (patientRow as PatientTenantRow | null)?.tenant_id;
@@ -284,7 +299,7 @@ export async function openPatientChatThread(
     });
 
     if (insertError) {
-      return { data: null, error: { message: insertError.message, code: insertError.code } };
+      return { data: null, error: safeError(insertError, 'Nao foi possivel criar o chat.') };
     }
 
     return await fetchChatFromSupabase(patientId);
@@ -336,7 +351,10 @@ export async function sendPatientChatMessage(
     } = await supabase.auth.getUser();
 
     if (userError)
-      return { data: null, error: { message: userError.message, code: userError.name } };
+      return {
+        data: null,
+        error: safeError(userError, 'Sessao invalida para envio do chat.'),
+      };
     if (!user) return { data: null, error: { message: 'Sessao expirada para envio do chat.' } };
 
     const { data: threadData, error: threadError } = await supabase
@@ -347,7 +365,10 @@ export async function sendPatientChatMessage(
       .maybeSingle();
 
     if (threadError)
-      return { data: null, error: { message: threadError.message, code: threadError.code } };
+      return {
+        data: null,
+        error: safeError(threadError, 'Nao foi possivel validar a conversa.'),
+      };
 
     const thread = threadData as Pick<ChatThreadRow, 'id' | 'tenant_id' | 'patient_id'> | null;
     if (!thread) {
@@ -372,7 +393,7 @@ export async function sendPatientChatMessage(
       if (duplicateError) {
         return {
           data: null,
-          error: { message: duplicateError.message, code: duplicateError.code },
+          error: safeError(duplicateError, 'Nao foi possivel validar duplicidade da mensagem.'),
         };
       }
 
@@ -399,7 +420,7 @@ export async function sendPatientChatMessage(
     });
 
     if (insertError) {
-      return { data: null, error: { message: insertError.message, code: insertError.code } };
+      return { data: null, error: safeError(insertError, 'Nao foi possivel enviar a mensagem.') };
     }
 
     const { error: updateError } = await supabase
@@ -414,7 +435,7 @@ export async function sendPatientChatMessage(
       .eq('patient_id', patientId);
 
     if (updateError) {
-      return { data: null, error: { message: updateError.message, code: updateError.code } };
+      return { data: null, error: safeError(updateError, 'Nao foi possivel atualizar o chat.') };
     }
 
     return await fetchChatFromSupabase(patientId);
@@ -443,7 +464,12 @@ export async function markPatientChatAsAnswered(
     const supabase = getSupabaseClient();
     const { error } = await supabase.rpc('mark_thread_read', { p_thread_id: threadId });
 
-    if (error) return { data: null, error: { message: error.message, code: error.code } };
+    if (error) {
+      return {
+        data: null,
+        error: safeError(error, 'Nao foi possivel marcar o chat como respondido.'),
+      };
+    }
 
     return await fetchChatFromSupabase(patientId);
   } catch (error) {

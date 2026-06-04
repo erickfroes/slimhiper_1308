@@ -98,6 +98,15 @@ function asNumber(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function safeErrorCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const code = value
+    .trim()
+    .replace(/[^a-zA-Z0-9_.:-]/g, '')
+    .slice(0, 80);
+  return code || undefined;
+}
+
 function asModerationStatus(value: unknown): 'approved' | 'pending_review' | 'removed' {
   const status = asString(value, 'approved');
   return status === 'pending_review' || status === 'removed' ? status : 'approved';
@@ -116,15 +125,12 @@ function asSeverity(value: unknown): InboxSeverity {
 function serviceError(error: unknown, fallback: string): SafeServiceError {
   if (error && typeof error === 'object') {
     const record = error as {
-      message?: unknown;
       code?: unknown;
-      details?: unknown;
       name?: unknown;
     };
     return {
-      message: typeof record.message === 'string' && record.message ? record.message : fallback,
-      code: typeof record.code === 'string' ? record.code : undefined,
-      details: typeof record.details === 'string' ? record.details : undefined,
+      message: fallback,
+      code: safeErrorCode(record.code) ?? safeErrorCode(record.name),
     };
   }
   return { message: fallback };

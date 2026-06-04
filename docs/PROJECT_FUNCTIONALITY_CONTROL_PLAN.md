@@ -115,7 +115,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F00 | Baseline técnica         | TypeScript, lint, build e diff check                                                                   | Executado localmente em 2026-06-02; usuários sintéticos formalizados no bootstrap em 2026-06-03; migrations remotas e Edge Function F11 aplicadas em 2026-06-04                                                       | Aprovado                       | `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check`; bootstrap define admin, clínica, paciente e no-workspace  | Bootstrap/smokes remotos pendentes                             |
 | F01 | Auth e guardas           | `/`, `/auth/login`, `/no-workspace`, middleware, `/api/auth/app-session`                               | Blindado por código em 2026-06-02 para evitar self-redirect e tratar `/no-workspace` sem sessão                                                                                                                       | Aprovado em browser e contrato | Matriz de redirecionamento por perfil; validação estática confirmou alvo canônico e ausência de redirect para a própria rota         | Sessões sintéticas e vínculos de usuário                       |
 | F02 | Correção portal paciente | `canAccessPatientPortal` no endpoint de sessão                                                         | Corrigido por código em 2026-06-02                                                                                                                                                                                    | Corrigido e testado            | Endpoint reutiliza helper canônico de destino; validação real por perfis segue pendente sem usuários sintéticos/Supabase homologação | Usuários sintéticos e ambiente Supabase homologação            |
-| F03 | Shell clínico            | `DashboardShell`, polling, busca, logout, menus                                                        | Blindado por código em 2026-06-02                                                                                                                                                                                     | Resiliente a falhas            | Polling e ações de leitura tratam exceções localmente; browser smoke segue pendente                                                  | Ambiente/browser autenticado para smoke                        |
+| F03 | Shell clínico            | `DashboardShell`, polling, busca, logout, menus                                                        | Blindado por código em 2026-06-02; reforçado em 2026-06-04 para preservar último resumo válido durante falhas temporárias de comunicações                                                                             | Resiliente a falhas            | Polling e ações de leitura tratam exceções localmente; smoke anônimo de rotas protegidas passou; browser autenticado segue pendente | Ambiente/browser autenticado para smoke                        |
 | F04 | Dashboard clínico        | `/clinic/dashboard`, `dashboardApi`                                                                    | Avanco de contrato real em 2026-06-04: `dashboardApi` expoe snapshot unico real com KPIs, fila, agenda, alertas, revisoes e insights CRM/estoque; mock segue apenas por flag explicita                                | Real validado                  | Smoke sem mock com métricas, fila e alertas                                                                                          | Browser autenticado, Supabase homologacao e evidencias visuais |
 | F05 | Pacientes                | `/clinic/patients`, `patientsApi`                                                                      | Avanço de contrato real em 2026-06-02: busca sanitizada em PII, filtro real por status, refresh concorrente protegido e ações acessíveis                                                                              | CRUD real validado             | Criar, editar, listar, filtrar e abrir 360; `npm run type-check` passou após avanço de código                                        | RLS em PII, paginação real >100 e smoke autenticado            |
 | F06 | Paciente 360             | `/clinic/patients/[patientId]` e abas                                                                  | Avancos de contrato real: grafico de peso vazio blindado; summary/timeline normalizados; em 2026-06-04 carregamento do container ganhou anti-stale request, limpeza de snapshot antigo e erro diagnostico seguro      | Real validado por aba          | `WeightEvolutionChart` trata vazio/nulo/inválido sem `NaN`; smoke por paciente sintético segue pendente                              | Edge Functions, permissões por aba e paciente sintético        |
@@ -126,7 +126,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                                                     | Avanço de idempotência em 2026-06-02; em 2026-06-04 `asaas-create-tenant-subaccount` foi alinhada ao hardening provider-owned e publicada no projeto remoto                                                           | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas sandbox, webhook real e RLS multi-tenant                 |
 | F12 | Relatórios clínica       | `/clinic/reports`, `clinicReportsApi`                                                                  | Avanço de contrato real em 2026-06-02: Edge Function revalida definição/permissão/export antes do run; UI consulta status e bloqueia export desabilitado                                                              | Execução/exportação validada   | Executar relatório, consultar status e baixar exportação segura                                                                      | Smoke Supabase/browser com usuário sintético                   |
 | F13 | Configurações            | `/clinic/settings`, `clinicSettingsApi`                                                                | Verificado em 2026-06-03: leitura e mutações reais usam RPCs `get_clinic_settings_snapshot`, `update_clinic_settings` e `upsert_clinic_unit`; smoke autenticado pendente                                              | Real validado                  | Ler, atualizar clínica e unidade                                                                                                     | RPCs de settings, RLS e browser autenticado                    |
-| F14 | Inbox                    | `/clinic/inbox`, `notificationsApi`, `chatApi`                                                         | Verificado em 2026-06-03: inbox usa RPCs reais de resumo/listagem/marcar/arquivar/atribuir/status, com fallback mock apenas por flag explícita; smoke autenticado pendente                                            | Real validado                  | Marcar lido, arquivar, atribuir e responder                                                                                          | RPCs de comunicações, RLS e browser autenticado                |
+| F14 | Inbox                    | `/clinic/inbox`, `notificationsApi`, `chatApi`                                                         | Verificado em 2026-06-03; em 2026-06-04 erros de comunicações/chat passaram a expor mensagens genéricas e somente códigos normalizados ao browser; smoke autenticado pendente                                         | Real validado                  | Marcar lido, arquivar, atribuir, responder e falhar sem detalhe bruto de Supabase/RLS                                                 | RPCs de comunicações, RLS e browser autenticado                |
 | F15 | CRM                      | `/clinic/crm`, `crmApi`                                                                                | Verificado em 2026-06-03: pipeline usa RPCs reais para listar/criar/editar/mover/atividade/tarefa/conversão; fallback mock apenas por flag explícita; smoke autenticado pendente                                      | Real validado                  | Criar lead, mover etapa e converter paciente                                                                                         | RPCs CRM, duplicidade de PII e browser autenticado             |
 | F16 | Inventário               | `/clinic/inventory`, `inventoryApi`                                                                    | Avanço de contrato real em 2026-06-03: UI usa RPCs reais de snapshot/item/lote/movimento/transferência, valida dados antes de gravar e expõe alertas/ledger auditado                                                  | Real validado                  | Criar item/lote/movimento/transferência                                                                                              | Estoque negativo e auditoria                                   |
 | F17 | Portal paciente          | `/patient`, `patientPortalApi`                                                                         | Avanço de contrato real em 2026-06-03: mutações validam UUID/texto antes das RPCs, erros são sanitizados, links financeiros aceitam apenas HTTP(S) e check-ins coletam respostas das perguntas do template            | Real validado                  | Snapshot, mensagem, check-in e notificação                                                                                           | Vínculo paciente, RLS e liberação                              |
@@ -134,7 +134,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F19 | Admin tenants            | `/admin/tenants`, `/admin/tenants/[tenantId]`, `/api/admin/tenants/[tenantId]/invitations`             | Avanço de contrato real em 2026-06-03: detalhe, membership, suporte, break-glass e revogação usam RPCs auditadas; convite fica em Route Handler server-side com cliente admin; smoke pendente                         | Real validado                  | Convite, membership, suporte, break-glass, revogação e audit log                                                                     | Service role server-side, justificativas e usuários sintéticos |
 | F20 | Webhooks admin           | `/admin/webhooks`                                                                                      | Avanço de contrato real em 2026-06-03: monitor usa RPC real, filtros provider/status, detalhes sanitizados, proteção contra resposta obsoleta e identifica reprocesso como indisponível até existir contrato auditado | Real validado                  | Listar eventos Asaas/D4Sign e filtros; detalhes sem payload bruto; reprocessamento protegido quando existir                          | Dados sintéticos de webhooks e contrato de reprocesso          |
 | F21 | Observability            | `/admin/observability`                                                                                 | Avanço em 2026-06-03: painel combina `/api/health` e webhooks reais com monitores estáticos explicitamente rotulados                                                                                                  | Útil operacionalmente          | Checklist de monitores, links reais e distinção entre sinais reais/estáticos                                                         | Métricas externas/APM ainda não conectadas                     |
-| F22 | Segurança e privacidade  | Logs, env, service role, storage, URLs                                                                 | Verificação estática em 2026-06-03; em 2026-06-04 audit logs clínicos passaram a aceitar metadados extras por allowlist e `queue_events` deixou de duplicar motivo livre de cancelamento                            | Aprovado                       | Checklist de ausência de vazamentos, rg de service-role/client, revisão de `.env.example` e amostra de audit logs                    | Validação de logs reais, storage e providers em homologação    |
+| F22 | Segurança e privacidade  | Logs, env, service role, storage, URLs                                                                 | Verificação estática em 2026-06-03; em 2026-06-04 audit logs clínicos e erros client-side de dashboard/comunicações foram reduzidos a mensagens/códigos seguros                                                       | Aprovado                       | Checklist de ausência de vazamentos, rg de service-role/client, revisão de `.env.example`, amostra de audit logs e erros sanitizados | Validação de logs reais, storage e providers em homologação    |
 | F23 | Produção                 | Build, healthcheck, env, rollback                                                                      | Avanço em 2026-06-04: `/api/health` falha em staging/produção se Supabase público ou metadata de release estiverem ausentes/placeholder; smoke pos-deploy reprova health `fail`                                      | Go-live aprovado               | Runbook de release/rollback, `/api/health` sem `fail`, smoke pos-deploy e aprovação humana                                          | Secrets, DNS, Supabase, providers e browser autenticado        |
 
 ## 4. Fase 0 — Preparação de ambiente e evidências
@@ -236,14 +236,14 @@ polling não podem derrubar páginas filhas.
 
 - [x] Revisar chamadas a `notificationsApi` dentro do shell.
 - [x] Garantir tratamento de erro local e recuperável.
-- [x] Garantir que falha em polling não interrompa renderização dos children.
+- [x] Garantir que falha em polling não interrompa renderização dos children nem limpe último resumo válido.
 - [ ] Validar logout e busca de paciente independentemente do polling. Bloqueado sem browser autenticado.
 - [x] Adicionar mensagem discreta ou estado degradado quando comunicações falham.
 
 **Aceite:**
 
-- [ ] `/clinic/dashboard` carrega mesmo com falha de comunicações. Browser smoke pendente.
-- [ ] `/clinic/patients` carrega mesmo com falha de comunicações. Browser smoke pendente.
+- [ ] `/clinic/dashboard` carrega mesmo com falha de comunicações. Código preserva children e último resumo; browser smoke autenticado pendente.
+- [ ] `/clinic/patients` carrega mesmo com falha de comunicações. Código preserva children e último resumo; browser smoke autenticado pendente.
 - [x] Erro é visível de forma não intrusiva ou registrado sanitizado.
 
 ## 6. Fase 2 — Auth, RBAC e navegação protegida
@@ -459,6 +459,7 @@ alertas e agenda.
 - A listagem de conversas ganhou ações explícitas de abrir thread, abrir Paciente 360, marcar como lida, assumir, abrir/fechar e arquivar, todas acionadas por botões visíveis para teclado/toque.
 - O envio de resposta pelo inbox reutiliza o contrato de chat do Paciente 360 e inclui uma chave local de idempotência (`client_message_id`) para reduzir risco de duplicidade quando o usuário tenta novamente após falha.
 - Mutators do inbox passaram a respeitar fallback mock nas ações principais, mantendo a tela exercitável quando `NEXT_PUBLIC_USE_MOCK_DATA=true`.
+- Progresso em 2026-06-04: `notificationsApi` e `chatApi` deixaram de repassar mensagens/detalhes brutos de Supabase/RLS para o browser; falhas agora usam texto operacional genérico e preservam apenas `code`/`name` normalizado quando disponível.
 - Validação browser autenticada, RLS multi-tenant e auditoria real das mutações continuam pendentes até homologação com usuários sintéticos.
 
 ## 8. Fase 4 — Programas, CRM e inventário
@@ -977,8 +978,8 @@ Copie este bloco para cada fluxo validado.
 
 ### Evidência — F03 resiliência do DashboardShell
 
-- Data: 2026-06-02.
-- Ambiente: local dev, validação por código e build.
+- Data: 2026-06-02; reforço em 2026-06-04.
+- Ambiente: local dev, validação por código, build e browser smoke anônimo.
 - Branch/commit: branch `work`, commit registrado após esta execução.
 - Perfil de usuário: não aplicável nesta etapa.
 - Tenant sintético: pendente.
@@ -988,11 +989,14 @@ Copie este bloco para cada fluxo validado.
   1. Revisadas chamadas a `getCommunicationsSummary`, `markThreadRead` e `markNotificationRead`.
   2. Adicionados `try/catch/finally` para polling de comunicações.
   3. Adicionados handlers locais recuperáveis para marcar conversa/notificação como lida.
+  4. Preservado o último `CommunicationsSummary` válido durante erro de polling e protegidas respostas obsoletas por id de requisição.
+  5. Executado smoke anônimo em `/clinic/dashboard` e `/clinic/patients`: ambas redirecionaram para `/auth/login`, sem overlay e sem erros de console.
 - Resultado esperado: falhas de comunicações não derrubam children do shell.
-- Resultado observado: falhas passam a mostrar aviso discreto e limpar estado derivado sem lançar exceção para a árvore da página.
+- Resultado observado: falhas passam a mostrar aviso discreto sem limpar badges/listas já carregados e sem lançar exceção para a árvore da página; rotas protegidas sem sessão continuam falhando fechado para login.
+- Checks executados em 2026-06-04: `npm run type-check`, `npm run lint`, `npm run build` e `git diff --check`; lint/build mantêm 11 warnings conhecidos não relacionados.
 - Logs sanitizados: sem dados sensíveis.
-- Screenshot/anexo: pendente de browser smoke autenticado.
-- Status: aprovado por código; browser smoke pendente.
+- Screenshot/anexo: `C:/Users/erick/AppData/Local/Temp/slimhiper-f03-shell-guard.png` para o smoke anônimo; screenshot autenticado pendente.
+- Status: aprovado por código, checks e browser smoke anônimo; browser smoke autenticado pendente.
 - Pendências: validar `/clinic/dashboard`, `/clinic/patients`, busca e logout em sessão sintética.
 
 ### Evidência — F05 avanço de contrato da lista de pacientes
@@ -1723,6 +1727,44 @@ Copie este bloco para cada fluxo validado.
   `NEXT_PUBLIC_USE_MOCK_DATA=false`, testar contrato invalido/forbidden/not
   found em ambiente controlado, provar isolamento Tenant A/B, conferir abas por
   permissao e capturar evidencia visual autenticada.
+
+### Evidencia - F14/F22 erros de comunicacoes sanitizados
+
+- Data: 2026-06-04.
+- Ambiente: local, revisao de codigo e checks obrigatorios; `.env` nao foi lido
+  manualmente, nenhum provider externo foi chamado e nenhuma
+  migracao/bootstrap foi executado.
+- Rota/API/RPC/Edge Function: `/clinic/inbox`, shell clinico,
+  `notificationsApi`, `chatApi` e `DashboardContent`.
+- Passos executados:
+  1. Confirmada a existencia do plano em
+     `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avancada a lacuna segura de
+     F14/F22 sem depender de usuario sintetico.
+  2. `notificationsApi` passou a transformar erros de RPC em mensagem
+     operacional generica, preservando apenas `code`/`name` normalizado.
+  3. `chatApi` passou a usar o mesmo padrao em leitura, abertura, envio,
+     deduplicacao, atualizacao e marcacao de thread como respondida.
+  4. `DashboardContent` deixou de registrar mensagem bruta do erro capturado no
+     client e passou a registrar somente `dashboard_snapshot_failed`.
+- Resultado esperado: evitar que mensagens internas de Supabase, RLS, tabela,
+  Auth ou stack cheguem a toasts/alerts/logs client-side, mantendo diagnostico
+  suficiente por codigo seguro.
+- Resultado observado: varredura local dos arquivos alterados nao encontrou
+  repasse direto de `error.message`/`details` nos contratos de comunicacoes nem
+  log bruto no dashboard. `npm run type-check`, `npm run lint`,
+  `npm run build` e `git diff --check` passaram; lint/build mantem 11 warnings
+  conhecidos nao relacionados. Smoke anonimo em `/auth/login` e
+  `/clinic/inbox` confirmou redirect fail-closed para login, sem overlay e sem
+  erros de console.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, provider IDs,
+  signed URLs, payloads sensiveis ou mensagens brutas de Supabase/RLS.
+- Screenshot/anexo: tentativa de captura do smoke anonimo falhou por timeout de
+  screenshot no browser; validacao por DOM/URL/logs passou.
+- Status: aprovado por codigo, checks e smoke anonimo; validacao real
+  autenticada pendente.
+- Pendencias: validar em sessao clinica sintetica que Inbox, Paciente 360 chat
+  e Dashboard exibem falhas genericas quando RPC/RLS falham, sem ocultar erros
+  operacionais.
 
 ## 18. Sequência recomendada de implementação
 

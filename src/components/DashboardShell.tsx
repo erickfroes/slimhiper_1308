@@ -106,6 +106,8 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   const [communicationsError, setCommunicationsError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<'messages' | 'notifications' | null>(null);
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
+  const communicationsRequestIdRef = useRef(0);
+  const cachedSummaryRef = useRef<CommunicationsSummary | null>(null);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -119,31 +121,45 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   useEffect(() => {
     let mounted = true;
 
-    async function loadSummary() {
-      setCommunicationsLoading(true);
+    async function loadSummary({ background = false }: { background?: boolean } = {}) {
+      const requestId = communicationsRequestIdRef.current + 1;
+      communicationsRequestIdRef.current = requestId;
+
+      if (!background && cachedSummaryRef.current === null) {
+        setCommunicationsLoading(true);
+      }
 
       try {
         const result = await getCommunicationsSummary();
-        if (!mounted) return;
+        if (!mounted || communicationsRequestIdRef.current !== requestId) return;
 
         if (result.error) {
-          setCommunicationsError('Nao foi possivel carregar inbox e notificacoes.');
-          setSummary(null);
+          setCommunicationsError(
+            cachedSummaryRef.current
+              ? 'Comunicacoes temporariamente indisponiveis. Ultimo resumo mantido.'
+              : 'Nao foi possivel carregar inbox e notificacoes.'
+          );
         } else {
           setCommunicationsError(null);
+          cachedSummaryRef.current = result.data;
           setSummary(result.data);
         }
       } catch {
-        if (!mounted) return;
-        setCommunicationsError('Comunicacoes temporariamente indisponiveis.');
-        setSummary(null);
+        if (!mounted || communicationsRequestIdRef.current !== requestId) return;
+        setCommunicationsError(
+          cachedSummaryRef.current
+            ? 'Comunicacoes temporariamente indisponiveis. Ultimo resumo mantido.'
+            : 'Comunicacoes temporariamente indisponiveis.'
+        );
       } finally {
-        if (mounted) setCommunicationsLoading(false);
+        if (mounted && communicationsRequestIdRef.current === requestId) {
+          setCommunicationsLoading(false);
+        }
       }
     }
 
     void loadSummary();
-    const interval = window.setInterval(() => void loadSummary(), 60000);
+    const interval = window.setInterval(() => void loadSummary({ background: true }), 60000);
 
     return () => {
       mounted = false;
@@ -186,7 +202,11 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   async function handleMarkThreadRead(threadId: string) {
     try {
       const result = await markThreadRead(threadId);
-      if (result.data) setSummary(result.data);
+      if (result.data) {
+        cachedSummaryRef.current = result.data;
+        setSummary(result.data);
+        setCommunicationsError(null);
+      }
       if (result.error) setCommunicationsError('Nao foi possivel atualizar a conversa.');
     } catch {
       setCommunicationsError('Nao foi possivel atualizar a conversa.');
@@ -196,7 +216,11 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   async function handleMarkNotificationRead(notificationId: string) {
     try {
       const result = await markNotificationRead(notificationId);
-      if (result.data) setSummary(result.data);
+      if (result.data) {
+        cachedSummaryRef.current = result.data;
+        setSummary(result.data);
+        setCommunicationsError(null);
+      }
       if (result.error) setCommunicationsError('Nao foi possivel atualizar a notificacao.');
     } catch {
       setCommunicationsError('Nao foi possivel atualizar a notificacao.');
@@ -376,17 +400,18 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                     {communicationsError ? (
                       <div
                         role="alert"
-                        className="flex gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"
+                        className="mb-2 flex gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"
                       >
                         <AlertTriangle size={14} className="shrink-0" /> {communicationsError}
                       </div>
-                    ) : communicationsLoading ? (
+                    ) : null}
+                    {communicationsLoading && topMessages.length === 0 ? (
                       <div className="space-y-2 p-2" aria-label="Carregando conversas">
                         {[0, 1, 2].map((item) => (
                           <div key={item} className="h-14 animate-pulse rounded-xl bg-muted" />
                         ))}
                       </div>
-                    ) : topMessages.length === 0 ? (
+                    ) : topMessages.length === 0 && !communicationsError ? (
                       <div className="rounded-xl p-4 text-center text-xs text-muted-foreground">
                         Nenhuma conversa recente.
                       </div>
@@ -466,17 +491,18 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                     {communicationsError ? (
                       <div
                         role="alert"
-                        className="flex gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"
+                        className="mb-2 flex gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"
                       >
                         <AlertTriangle size={14} className="shrink-0" /> {communicationsError}
                       </div>
-                    ) : communicationsLoading ? (
+                    ) : null}
+                    {communicationsLoading && topNotifications.length === 0 ? (
                       <div className="space-y-2 p-2" aria-label="Carregando notificacoes">
                         {[0, 1, 2].map((item) => (
                           <div key={item} className="h-14 animate-pulse rounded-xl bg-muted" />
                         ))}
                       </div>
-                    ) : topNotifications.length === 0 ? (
+                    ) : topNotifications.length === 0 && !communicationsError ? (
                       <div className="rounded-xl p-4 text-center text-xs text-muted-foreground">
                         Nenhuma notificacao pendente.
                       </div>
