@@ -179,9 +179,10 @@ Evidencia em andamento:
   no Supabase remoto via `SUPABASE_DB_URL` sanitizada; dry-run posterior
   confirmou `Remote database is up to date`, historico remoto confirmou
   `migration_count=29`/`latest_migration=20260601233000`, e catalogo publico
-  confirmou 79 tabelas com RLS e 85 funcoes. Deploy remoto da Edge Function
-  alterada segue pendente porque o `SUPABASE_ACCESS_TOKEN` carregado nao esta no
-  formato CLI `sbp_...`.
+  confirmou 79 tabelas com RLS e 85 funcoes. O token versionado `sbp_v0_...` foi
+  normalizado em memoria para o formato legado aceito pelo CLI 2.104.0, sem
+  alterar `.env`, e `asaas-create-tenant-subaccount` foi publicada no projeto
+  remoto SlimHiper com `--use-api`.
 
 ## P1 - Fluxos clinicos
 
