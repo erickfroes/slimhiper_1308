@@ -8,9 +8,10 @@
  * `archive_expired_communications(false)` only from an authorized environment.
  */
 import { createClient } from '@supabase/supabase-js';
+import { getEnvValue, getRequiredServiceRoleKey } from './_shared/env.mjs';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = getEnvValue('SUPABASE_URL') || getEnvValue('NEXT_PUBLIC_SUPABASE_URL');
+const SERVICE_ROLE_KEY = getEnvValue('SUPABASE_SERVICE_ROLE_KEY');
 
 function fail(message) {
   console.error(`[communications-retention] ${message}`);
@@ -20,9 +21,17 @@ function fail(message) {
 if (!SUPABASE_URL) fail('Missing SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL.');
 if (!SERVICE_ROLE_KEY) fail('Missing SUPABASE_SERVICE_ROLE_KEY for backend-only read scope.');
 
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+const supabase = createClient(SUPABASE_URL, getRequiredServiceRoleKey(), {
   auth: { persistSession: false, autoRefreshToken: false },
 });
+
+function safeErrorCode(error) {
+  const raw = error?.code ?? error?.name ?? 'query_failed';
+  return String(raw)
+    .trim()
+    .replace(/[^a-zA-Z0-9_.:-]/g, '')
+    .slice(0, 80);
+}
 
 async function countExpired(table, extraFilter) {
   let query = supabase
@@ -35,7 +44,7 @@ async function countExpired(table, extraFilter) {
   if (extraFilter) query = extraFilter(query);
 
   const { count, error } = await query;
-  if (error) throw new Error(`${table}: ${error.message}`);
+  if (error) throw new Error(`${table}: ${safeErrorCode(error)}`);
   return count ?? 0;
 }
 

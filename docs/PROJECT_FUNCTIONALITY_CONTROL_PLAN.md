@@ -134,7 +134,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F19 | Admin tenants            | `/admin/tenants`, `/admin/tenants/[tenantId]`, `/api/admin/tenants/[tenantId]/invitations`             | Avanço de contrato real em 2026-06-03: detalhe, membership, suporte, break-glass e revogação usam RPCs auditadas; convite fica em Route Handler server-side com cliente admin; smoke pendente                         | Real validado                  | Convite, membership, suporte, break-glass, revogação e audit log                                                                     | Service role server-side, justificativas e usuários sintéticos |
 | F20 | Webhooks admin           | `/admin/webhooks`                                                                                      | Avanço de contrato real em 2026-06-03: monitor usa RPC real, filtros provider/status, detalhes sanitizados, proteção contra resposta obsoleta e identifica reprocesso como indisponível até existir contrato auditado | Real validado                  | Listar eventos Asaas/D4Sign e filtros; detalhes sem payload bruto; reprocessamento protegido quando existir                          | Dados sintéticos de webhooks e contrato de reprocesso          |
 | F21 | Observability            | `/admin/observability`                                                                                 | Avanço em 2026-06-03: painel combina `/api/health` e webhooks reais com monitores estáticos explicitamente rotulados                                                                                                  | Útil operacionalmente          | Checklist de monitores, links reais e distinção entre sinais reais/estáticos                                                         | Métricas externas/APM ainda não conectadas                     |
-| F22 | Segurança e privacidade  | Logs, env, service role, storage, URLs                                                                 | Verificação estática em 2026-06-03; em 2026-06-04 audit logs clínicos e erros client-side de dashboard/comunicações foram reduzidos a mensagens/códigos seguros                                                       | Aprovado                       | Checklist de ausência de vazamentos, rg de service-role/client, revisão de `.env.example`, amostra de audit logs e erros sanitizados | Validação de logs reais, storage e providers em homologação    |
+| F22 | Segurança e privacidade  | Logs, env, service role, storage, URLs                                                                 | Verificação estática em 2026-06-03; em 2026-06-04 audit logs clínicos, erros client-side e checks read-only Supabase foram reduzidos a mensagens/códigos seguros                                                       | Aprovado                       | Checklist de ausência de vazamentos, rg de service-role/client, revisão de `.env.example`, amostra de audit logs e erros sanitizados | Validação de logs reais, storage e providers em homologação    |
 | F23 | Produção                 | Build, healthcheck, env, rollback                                                                      | Avanços em 2026-06-04: health fail-closed em staging/produção; scripts de contrato/smoke aceitam chave publicável disponível no `.env` sem exigir somente `SUPABASE_ANON_KEY`                                       | Go-live aprovado               | Runbook de release/rollback, `/api/health` sem `fail`, smoke pos-deploy, scripts alinhados ao env local e aprovação humana          | Secrets, DNS, Supabase, providers e browser autenticado        |
 
 ## 4. Fase 0 — Preparação de ambiente e evidências
@@ -1797,13 +1797,18 @@ Copie este bloco para cada fluxo validado.
   5. `.env.example` passou a documentar `SUPABASE_ACCESS_TOKEN` e
      `SUPABASE_DB_URL` como placeholders vazios, alinhando o template aos
      nomes locais.
+  6. `check-auth-rbac-contract.mjs` e
+     `check-communications-retention.mjs` passaram a carregar env pelo helper,
+     validar service-role pelo contrato central e imprimir apenas codigos
+     seguros em falhas de query.
 - Resultado esperado: reduzir friccao para rodar contratos e smokes autorizados
   a partir das variaveis realmente presentes no `.env`, mantendo fail-closed e
   sem vazar secrets.
 - Resultado observado: import do helper confirmou por booleanos que Supabase
   URL, chave publicavel e service-role estao configurados; fixture contract do
   Paciente 360 passou sem chamar Supabase; `node --check` passou nos scripts
-  alterados.
+  alterados, incluindo os checks read-only que nao foram executados contra
+  Supabase nesta rodada.
 - Logs sanitizados: sem secrets, tokens, cookies, PII real, URLs assinadas,
   provider IDs ou payloads sensiveis.
 - Screenshot/anexo: nao aplicavel; mudanca de infraestrutura de scripts.

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js';
-import { requireServiceRoleKey } from './_shared/env.mjs';
+import { getEnvValue, getRequiredServiceRoleKey } from './_shared/env.mjs';
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = getEnvValue('SUPABASE_URL');
+const SERVICE_ROLE_KEY = getEnvValue('SUPABASE_SERVICE_ROLE_KEY');
 
 const tableContracts = [
   {
@@ -71,16 +71,25 @@ if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   process.exit(0);
 }
 
+let serviceRoleKey;
 try {
-  requireServiceRoleKey();
+  serviceRoleKey = getRequiredServiceRoleKey();
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+const supabase = createClient(SUPABASE_URL, serviceRoleKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
+
+function safeErrorCode(error) {
+  const raw = error?.code ?? error?.name ?? 'query_failed';
+  return String(raw)
+    .trim()
+    .replace(/[^a-zA-Z0-9_.:-]/g, '')
+    .slice(0, 80);
+}
 
 let hasFailure = false;
 
@@ -89,7 +98,7 @@ for (const contract of tableContracts) {
 
   if (error) {
     hasFailure = true;
-    console.error(`[FAIL] ${contract.table}: ${error.message}`);
+    console.error(`[FAIL] ${contract.table}: ${safeErrorCode(error)}`);
   } else {
     console.log(`[OK] ${contract.table}`);
   }
