@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
-const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_ANON_KEY;
-const token = process.env.TEST_ACCESS_TOKEN;
-const patientId = process.env.TEST_PATIENT_ID;
-const templateId = process.env.TEST_TEMPLATE_ID;
+import { getEnvValue, getSupabasePublishableKey } from './_shared/env.mjs';
+
+const url = getEnvValue('SUPABASE_URL');
+const key = getSupabasePublishableKey();
+const token = getEnvValue('TEST_ACCESS_TOKEN');
+const patientId = getEnvValue('TEST_PATIENT_ID');
+const templateId = getEnvValue('TEST_TEMPLATE_ID');
 
 if (!url || !key || !token || !patientId || !templateId) {
   console.error('Missing envs');

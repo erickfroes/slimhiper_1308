@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { envString } from '../_shared/env.ts';
 
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void;
@@ -121,11 +122,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const asaasKey = Deno.env.get('ASAAS_API_KEY');
-    const asaasBase = Deno.env.get('ASAAS_BASE_URL');
+    const supabaseUrl = envString(Deno.env, 'SUPABASE_URL');
+    const anonKey = envString(Deno.env, 'SUPABASE_ANON_KEY');
+    const serviceRoleKey = envString(Deno.env, 'SUPABASE_SERVICE_ROLE_KEY');
+    const asaasKey = envString(Deno.env, 'ASAAS_API_KEY');
+    const asaasBase = envString(Deno.env, 'ASAAS_BASE_URL');
 
     if (!supabaseUrl || !anonKey || !serviceRoleKey || !asaasKey || !asaasBase) {
       console.error('[asaas-create-patient-customer] missing environment configuration');

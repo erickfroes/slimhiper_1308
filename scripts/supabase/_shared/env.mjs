@@ -1,5 +1,53 @@
+const placeholderValues = new Set([
+  'dummy',
+  'fake',
+  'placeholder',
+  'changeme',
+  'change-me',
+  'change_me',
+  'todo',
+  'tbd',
+  'none',
+  'null',
+  'undefined',
+  'na',
+  'n/a',
+  '-',
+]);
+
+export function isPlaceholderEnvValue(value) {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  if (!normalized) return true;
+  if (placeholderValues.has(normalized)) return true;
+  return normalized.includes('dummy') || normalized.includes('placeholder');
+}
+
+export function getEnvValue(key) {
+  const value = process.env[key]?.trim() ?? '';
+  return value && !isPlaceholderEnvValue(value) ? value : '';
+}
+
+export function envFlag(key) {
+  const value = getEnvValue(key).toLowerCase();
+  return ['true', '1', 'yes', 'y', 'sim'].includes(value);
+}
+
+export function isSandboxLikeUrl(value) {
+  const normalized = String(value ?? '').toLowerCase();
+  return (
+    normalized.includes('sandbox') ||
+    normalized.includes('homolog') ||
+    normalized.includes('hml') ||
+    normalized.includes('localhost') ||
+    normalized.includes('127.0.0.1') ||
+    normalized.includes('[::1]')
+  );
+}
+
 export function requireEnv(keys) {
-  const missing = keys.filter((key) => !process.env[key]);
+  const missing = keys.filter((key) => !getEnvValue(key));
   if (missing.length) {
     throw new Error(`Missing required env vars: ${missing.join(', ')}`);
   }
@@ -14,8 +62,8 @@ const supabasePublishableKeyCandidates = [
 
 export function getSupabasePublishableKey() {
   for (const key of supabasePublishableKeyCandidates) {
-    const value = process.env[key];
-    if (value?.trim()) return value;
+    const value = getEnvValue(key);
+    if (value) return value;
   }
   return '';
 }
@@ -43,7 +91,7 @@ function decodeJwtPayload(jwt) {
 }
 
 export function requireServiceRoleKey(key = 'SUPABASE_SERVICE_ROLE_KEY') {
-  const value = process.env[key] ?? '';
+  const value = getEnvValue(key);
   if (!value) return;
 
   if (value.startsWith('sb_secret_')) {
@@ -66,5 +114,5 @@ export function requireServiceRoleKey(key = 'SUPABASE_SERVICE_ROLE_KEY') {
 
 export function getRequiredServiceRoleKey() {
   requireServiceRoleKey();
-  return process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return getEnvValue('SUPABASE_SERVICE_ROLE_KEY');
 }

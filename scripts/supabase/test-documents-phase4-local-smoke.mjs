@@ -13,14 +13,19 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
-import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
+import {
+  envFlag,
+  getEnvValue,
+  getRequiredServiceRoleKey,
+  getSupabasePublishableKey,
+  requireEnv,
+} from './_shared/env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
 
 const requiredEnv = [
   'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_BOOTSTRAP_PASSWORD',
   'D4SIGN_WEBHOOK_HMAC_SECRET',
@@ -44,9 +49,16 @@ const clinicAdminPermissions = [
 
 let currentStep = 'initializing';
 let admin;
+let supabasePublishableKey;
 
 try {
   requireEnv(requiredEnv);
+  supabasePublishableKey = getSupabasePublishableKey();
+  if (!supabasePublishableKey) {
+    throw new Error(
+      'Missing Supabase publishable/anon key env var. Set one of: SUPABASE_ANON_KEY, SUPABASE_PUBLISHABLE_KEY, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, NEXT_PUBLIC_SUPABASE_ANON_KEY'
+    );
+  }
   assertSafeTarget(process.env.SUPABASE_URL);
   admin = createClient(process.env.SUPABASE_URL, getRequiredServiceRoleKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -189,7 +201,7 @@ async function ensureRolePermissions(tenantId, roleName, permissions) {
 }
 
 async function signIn(email) {
-  const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+  const client = createClient(process.env.SUPABASE_URL, supabasePublishableKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data, error } = await client.auth.signInWithPassword({
@@ -207,7 +219,7 @@ async function callFunction(name, token, body) {
   const response = await fetch(`${base}/functions/v1/${name}`, {
     method: 'POST',
     headers: {
-      apikey: process.env.SUPABASE_ANON_KEY,
+      apikey: supabasePublishableKey,
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
@@ -436,16 +448,16 @@ async function invokeD4SignWebhook(signatureRequestId, documentId, tenantId) {
 }
 
 async function runOptionalSandboxSend(staffToken, patientId, templateId) {
-  if (process.env.RUN_D4SIGN_SANDBOX_SEND !== 'true') return false;
+  if (!envFlag('RUN_D4SIGN_SANDBOX_SEND')) return false;
 
   const required = ['D4SIGN_TOKEN_API', 'D4SIGN_CRYPT_KEY', 'D4SIGN_BASE_URL'];
-  const missing = required.filter((key) => !process.env[key]);
+  const missing = required.filter((key) => !getEnvValue(key));
   if (missing.length) {
     throw new Error(`D4Sign sandbox send requested but missing env vars: ${missing.join(', ')}`);
   }
-  if (!process.env.D4SIGN_SAFE_UUID && process.env.D4SIGN_AUTO_DISCOVER_SAFE !== 'true') {
+  if (!getEnvValue('D4SIGN_SAFE_UUID') && !envFlag('D4SIGN_AUTO_DISCOVER_SAFE')) {
     throw new Error(
-      'D4Sign sandbox send requested but D4SIGN_SAFE_UUID is missing. Set D4SIGN_AUTO_DISCOVER_SAFE=true only for approved sandbox auto-discovery.'
+      'D4Sign sandbox send requested but D4SIGN_SAFE_UUID is missing or dummy. Set D4SIGN_AUTO_DISCOVER_SAFE=true only for approved sandbox auto-discovery.'
     );
   }
 

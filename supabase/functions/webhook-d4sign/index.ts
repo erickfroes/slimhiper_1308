@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createEdgeContext, logEdgeEvent, observedEdgeHeaders } from '../_shared/observability.ts';
+import { envString } from '../_shared/env.ts';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -92,8 +93,8 @@ async function hmacSha256Hex(secret: string, message: string): Promise<string> {
 }
 
 async function isWebhookAuthentic(req: Request, rawBody: string) {
-  const sharedToken = Deno.env.get('D4SIGN_WEBHOOK_TOKEN')?.trim() ?? '';
-  const hmacSecret = Deno.env.get('D4SIGN_WEBHOOK_HMAC_SECRET')?.trim() ?? '';
+  const sharedToken = envString(Deno.env, 'D4SIGN_WEBHOOK_TOKEN');
+  const hmacSecret = envString(Deno.env, 'D4SIGN_WEBHOOK_HMAC_SECRET');
   if (!sharedToken && !hmacSecret) return { ok: false, reason: 'webhook_auth_not_configured' };
 
   const providedToken = getString(
@@ -173,8 +174,8 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      envString(Deno.env, 'SUPABASE_URL'),
+      envString(Deno.env, 'SUPABASE_SERVICE_ROLE_KEY')
     );
 
     const eventType =

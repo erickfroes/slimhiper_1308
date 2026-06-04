@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createEdgeContext, logEdgeEvent, observedEdgeHeaders } from '../_shared/observability.ts';
+import { envString } from '../_shared/env.ts';
 
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void;
@@ -116,7 +117,7 @@ Deno.serve(async (req) => {
     return json(405, { ok: false, error: 'method_not_allowed' }, observedEdgeHeaders(context));
   }
 
-  const expectedToken = Deno.env.get('ASAAS_WEBHOOK_TOKEN');
+  const expectedToken = envString(Deno.env, 'ASAAS_WEBHOOK_TOKEN');
   const receivedToken = req.headers.get('asaas-access-token');
   if (!expectedToken || !receivedToken || receivedToken !== expectedToken) {
     await logEdgeEvent(context, 'webhook_signature_failed', 'warn', 'denied', {
@@ -133,8 +134,8 @@ Deno.serve(async (req) => {
     return json(400, { ok: false, error: 'invalid_payload' }, observedEdgeHeaders(context));
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const supabaseUrl = envString(Deno.env, 'SUPABASE_URL');
+  const serviceRoleKey = envString(Deno.env, 'SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceRoleKey) {
     return internalError(context, 'server_misconfigured');
   }

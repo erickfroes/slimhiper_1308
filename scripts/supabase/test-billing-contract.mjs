@@ -1,15 +1,34 @@
 #!/usr/bin/env node
 
-const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_ANON_KEY;
-const token = process.env.TEST_ACCESS_TOKEN;
-const patientId = process.env.TEST_PATIENT_ID;
-const cpfCnpj = process.env.TEST_PATIENT_CPF_CNPJ;
-const requireProviderSuccess = process.env.REQUIRE_ASAAS_PROVIDER_SUCCESS === 'true';
+import {
+  envFlag,
+  getEnvValue,
+  getSupabasePublishableKey,
+  isSandboxLikeUrl,
+} from './_shared/env.mjs';
+
+const url = getEnvValue('SUPABASE_URL');
+const key = getSupabasePublishableKey();
+const token = getEnvValue('TEST_ACCESS_TOKEN');
+const patientId = getEnvValue('TEST_PATIENT_ID');
+const cpfCnpj = getEnvValue('TEST_PATIENT_CPF_CNPJ');
+const requireProviderSuccess = envFlag('REQUIRE_ASAAS_PROVIDER_SUCCESS');
 
 if (!url || !key || !token || !patientId) {
   console.error('Missing envs');
   process.exit(1);
+}
+
+if (requireProviderSuccess) {
+  const asaasBaseUrl = getEnvValue('ASAAS_BASE_URL');
+  if (!asaasBaseUrl) {
+    throw new Error('REQUIRE_ASAAS_PROVIDER_SUCCESS=true requires ASAAS_BASE_URL.');
+  }
+  if (!isSandboxLikeUrl(asaasBaseUrl) && !envFlag('ALLOW_ASAAS_PROVIDER_CONTRACT_NON_SANDBOX')) {
+    throw new Error(
+      'Refusing strict Asaas provider contract because ASAAS_BASE_URL is not classified as sandbox. Set ALLOW_ASAAS_PROVIDER_CONTRACT_NON_SANDBOX=true only for an explicitly approved non-sandbox run.'
+    );
+  }
 }
 
 const allowedStatuses = new Set([200, 401, 403, 404, 409, 422, 502]);

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { envBoolean, envString } from '../_shared/env.ts';
 
 type Json = Record<string, unknown>;
 
@@ -206,9 +207,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseUrl = envString(Deno.env, 'SUPABASE_URL');
+    const anonKey = envString(Deno.env, 'SUPABASE_ANON_KEY');
+    const serviceRoleKey = envString(Deno.env, 'SUPABASE_SERVICE_ROLE_KEY');
 
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       return jsonResponse(500, {
@@ -418,12 +419,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    const d4signTokenApi = Deno.env.get('D4SIGN_TOKEN_API')?.trim();
-    const d4signCryptKey = Deno.env.get('D4SIGN_CRYPT_KEY')?.trim();
-    const d4signBaseUrl = Deno.env.get('D4SIGN_BASE_URL')?.trim();
-    let d4signSafeUuid = Deno.env.get('D4SIGN_SAFE_UUID')?.trim();
-    const d4signFolderUuid = Deno.env.get('D4SIGN_FOLDER_UUID')?.trim();
-    const shouldAutoDiscoverSafe = Deno.env.get('D4SIGN_AUTO_DISCOVER_SAFE') === 'true';
+    const d4signTokenApi = envString(Deno.env, 'D4SIGN_TOKEN_API');
+    const d4signCryptKey = envString(Deno.env, 'D4SIGN_CRYPT_KEY');
+    const d4signBaseUrl = envString(Deno.env, 'D4SIGN_BASE_URL');
+    let d4signSafeUuid = envString(Deno.env, 'D4SIGN_SAFE_UUID');
+    const d4signFolderUuid = envString(Deno.env, 'D4SIGN_FOLDER_UUID');
+    const shouldAutoDiscoverSafe = envBoolean(Deno.env, 'D4SIGN_AUTO_DISCOVER_SAFE');
 
     if (!d4signTokenApi || !d4signCryptKey || !d4signBaseUrl) {
       return jsonResponse(500, {

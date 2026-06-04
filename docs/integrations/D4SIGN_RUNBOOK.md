@@ -118,7 +118,13 @@ RUN_D4SIGN_SANDBOX_SEND=true node scripts/supabase/test-documents-phase4-local-s
 ```
 
 Do this only in an approved sandbox. The current MVP local checkpoint keeps the
-provider send blocked until `D4SIGN_SAFE_UUID` is configured.
+provider send blocked until `D4SIGN_SAFE_UUID` is configured with a real cofre
+UUID or `D4SIGN_AUTO_DISCOVER_SAFE=true` is explicitly enabled for approved
+sandbox auto-discovery. Dummy/placeholder values for safe, folder, webhook token,
+or HMAC secret are treated as missing and fail closed.
+When a real sandbox cofre and folder are configured explicitly, prefer leaving
+`D4SIGN_AUTO_DISCOVER_SAFE` empty/false; the send flow will use
+`D4SIGN_SAFE_UUID` and optionally `D4SIGN_FOLDER_UUID` directly.
 
 ## Edge Function Secrets
 
@@ -128,8 +134,9 @@ Edge Function environments:
 - `D4SIGN_TOKEN_API`
 - `D4SIGN_CRYPT_KEY`
 - `D4SIGN_BASE_URL`
-- `D4SIGN_SAFE_UUID`
-- `D4SIGN_FOLDER_UUID` when documents should land in a specific D4Sign folder
+- `D4SIGN_SAFE_UUID`; dummy/placeholder values are treated as missing
+- `D4SIGN_FOLDER_UUID` when documents should land in a specific D4Sign folder;
+  dummy/placeholder values are ignored
 - `D4SIGN_AUTO_DISCOVER_SAFE=true` only for approved sandbox smoke runs when the
   account has exactly the safe you expect to use
 - D4Sign webhook token or HMAC secret used by `webhook-d4sign`
@@ -176,11 +183,12 @@ Use placeholders in docs and examples. Never commit real values.
   uploads it to the configured D4Sign safe/cofre, creates the signer list, and
   sends to signer. Tokens, raw provider responses, and storage paths are never
   returned to browser code.
-- By default the provider send requires `D4SIGN_SAFE_UUID`. In an approved
-  sandbox smoke only, `D4SIGN_AUTO_DISCOVER_SAFE=true` lets the Edge Function
-  call `GET /safes` and use the first returned safe. If no safe is returned, the
-  function fails closed with `provider_safe_not_found` and does not proceed to
-  upload.
+- By default the provider send requires a non-placeholder `D4SIGN_SAFE_UUID`.
+  In an approved sandbox smoke only, `D4SIGN_AUTO_DISCOVER_SAFE=true` lets the
+  Edge Function call `GET /safes` and use the first returned safe. If no safe is
+  returned, the function fails closed with `provider_safe_not_found` and does
+  not proceed to upload. If `D4SIGN_AUTO_DISCOVER_SAFE` is dummy or empty, it is
+  considered disabled.
 - `supabase/functions/patient-documents` exposes only safe UI hints:
   `canRequestSignature` and `signatureDisabledReason`. It must not expose
   storage paths, signed URLs, raw provider payloads, or signer PII.

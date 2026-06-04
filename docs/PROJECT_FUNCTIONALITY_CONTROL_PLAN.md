@@ -31,6 +31,15 @@ settings, inbox, CRM e admin tenants; a principal pendência transversal continu
 sendo evidência em ambiente Supabase de homologação, usuários sintéticos e browser
 smoke autenticado com `NEXT_PUBLIC_USE_MOCK_DATA=false`.
 
+**Atualizacao de ambiente em 2026-06-04:** as variaveis Supabase, D4Sign e
+Asaas agora sao tratadas como contrato de ambiente real/sandbox sem expor
+valores. Valores `dummy`/placeholder em variaveis sensiveis sao normalizados
+como ausentes nos helpers de Edge Functions e scripts. Com isso, Supabase pode
+rodar com `NEXT_PUBLIC_USE_MOCK_DATA=false`, Asaas permanece pronto para sandbox
+autorizado e, por relato do operador, `D4SIGN_SAFE_UUID`/`D4SIGN_FOLDER_UUID`
+agora apontam para valores reais de sandbox. D4Sign fica preparado para smoke
+sandbox autorizado, mas ainda nao validado contra provider nesta etapa.
+
 ## 1. Objetivo final
 
 O projeto será considerado 100% funcional quando todos os critérios abaixo forem
@@ -73,6 +82,8 @@ verdadeiros:
 5. **Provider externo só com autorização.** D4Sign e Asaas nunca devem ser
    chamados durante validação local comum; usar somente ambiente sandbox ou
    homologação explicitamente autorizado.
+   Variaveis dummy/placeholder de provider nao liberam chamada externa: sao
+   tratadas como configuracao ausente e devem retornar erro operacional seguro.
 6. **Evidência por gate.** Cada etapa deve deixar registro do comando executado,
    ambiente, usuário de teste, resultado observado e pendência restante.
 7. **Pequenas entregas reversíveis.** Corrigir e validar por domínio para reduzir
@@ -804,7 +815,11 @@ webhook -> reconciliação -> timeline/financeiro.
 ### 15.3 Gate P2 — Contratos externos
 
 - [ ] D4Sign sandbox validado.
+- [V] D4Sign cofre/pasta informados pelo operador como UUIDs reais de sandbox;
+  pendente executar smoke provider autorizado para validar upload/envio.
 - [ ] Asaas sandbox validado.
+- [ ] Asaas sandbox validado com `ASAAS_BASE_URL` classificado como sandbox e
+  sem `NEXT_PUBLIC_*` para segredos.
 - [ ] Webhooks válidos processados.
 - [ ] Webhooks inválidos rejeitados.
 - [ ] Reentrega é idempotente.
@@ -1371,6 +1386,60 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: não aplicável; alteração de script/documentação, sem mudança perceptível em UI.
 - Status: aprovado por código; execução remota bloqueada por transporte.
 - Pendências: reexecutar `npm run supabase:bootstrap:core-auth` quando o host Supabase remoto estiver alcançável pelo runner, depois validar `/api/auth/app-session`, `/auth/login`, `/admin`, `/clinic/dashboard`, `/patient` e `/no-workspace` com esses perfis sintéticos.
+
+### Evidencia - F10/F11 ambiente sandbox e variaveis dummy
+
+- Data: 2026-06-04.
+- Ambiente: local, revisao de codigo e documentacao; `.env` nao foi lido,
+  nenhum provider externo foi chamado e nenhuma migracao/bootstrap foi executado.
+- Rota/API/RPC/Edge Function: `d4sign-send-document`, `webhook-d4sign`,
+  `asaas-create-tenant-subaccount`, `asaas-create-patient-customer`,
+  `asaas-create-patient-invoice`, `asaas-create-patient-subscription`,
+  `webhook-asaas`, scripts de contrato de documentos/billing e runbooks.
+- Passos executados:
+  1. Adicionado helper compartilhado de ambiente para Edge Functions,
+     normalizando valores dummy/placeholder como ausentes.
+  2. D4Sign passou a ignorar `D4SIGN_FOLDER_UUID` dummy, bloquear
+     `D4SIGN_SAFE_UUID` dummy e considerar `D4SIGN_AUTO_DISCOVER_SAFE` dummy como
+     desabilitado.
+  3. Asaas passou a tratar API key, base URL e webhook token dummy como ausentes,
+     mantendo respostas fail-closed antes de chamadas provider.
+  4. Scripts de contrato de documentos/billing passaram a aceitar chave
+     publicavel Supabase moderna e a recusar provider strict Asaas fora de
+     sandbox sem flag explicita.
+- Resultado esperado: ambiente preparado para Supabase real/sandbox sem mock,
+  Asaas sandbox autorizado e D4Sign bloqueado ate cofre real ou auto-discovery
+  explicitamente aprovado.
+- Resultado observado: validacao provider/sandbox nao executada nesta etapa por
+  seguranca; checks locais obrigatorios devem ser registrados no fechamento da
+  tarefa.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de provider
+  ou payloads sensiveis.
+- Status: aprovado por codigo; validacao sandbox real pendente.
+
+### Evidencia - F10 D4Sign cofre/pasta sandbox configurados
+
+- Data: 2026-06-04.
+- Ambiente: local, atualizacao documental por relato do operador; `.env` nao foi
+  lido, nenhum provider externo foi chamado e nenhuma migracao/bootstrap foi
+  executado.
+- Rota/API/RPC/Edge Function: `d4sign-send-document`,
+  `test-documents-phase4-local-smoke.mjs`, runbook D4Sign e gates externos.
+- Passos executados:
+  1. Registrado que `D4SIGN_SAFE_UUID` e `D4SIGN_FOLDER_UUID` deixaram de ser
+     dummy e passaram a usar valores reais de sandbox informados pelo operador.
+  2. Mantido `D4SIGN_AUTO_DISCOVER_SAFE` como opcional; quando o cofre explicito
+     existe, auto-discovery nao e necessario para o fluxo de envio.
+  3. Mantido o fail-closed para qualquer valor dummy/placeholder futuro.
+- Resultado esperado: D4Sign pode ser validado no proximo smoke sandbox
+  autorizado com `RUN_D4SIGN_SANDBOX_SEND=true`, sem expor tokens, crypt key,
+  cofre, pasta, storage path ou payload bruto.
+- Resultado observado: provider D4Sign nao foi chamado nesta etapa; validacao
+  sandbox real permanece pendente.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de provider
+  ou payloads sensiveis.
+- Status: ambiente D4Sign preparado por configuracao; validacao provider
+  pendente.
 
 ## 18. Sequência recomendada de implementação
 

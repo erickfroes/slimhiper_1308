@@ -960,7 +960,8 @@ export default function PatientListContent() {
                         <Link
                           href={`/clinic/patients/${patient.id}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                          aria-label={`Abrir Paciente 360 de ${patient.name}`}
                           title="Abrir Paciente 360"
                         >
                           <Eye size={14} />
@@ -971,7 +972,8 @@ export default function PatientListContent() {
                             event.stopPropagation();
                             void openEditPatient(patient.id);
                           }}
-                          className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                          aria-label={`Editar paciente ${patient.name}`}
                           title="Editar paciente"
                         >
                           <Pencil size={14} />
@@ -980,6 +982,7 @@ export default function PatientListContent() {
                           type="button"
                           disabled
                           className="p-1.5 rounded-lg text-muted-foreground opacity-50 cursor-not-allowed transition-colors"
+                          aria-label={`Chat de ${patient.name} indisponivel`}
                           title="Chat real ainda não está liberado no MVP clínico."
                         >
                           <MessageSquare size={14} />
@@ -988,6 +991,7 @@ export default function PatientListContent() {
                           type="button"
                           disabled
                           className="p-1.5 rounded-lg text-muted-foreground opacity-50 cursor-not-allowed transition-colors"
+                          aria-label={`Revisao de ${patient.name} indisponivel`}
                           title="Revisão real depende de escrita segura em patientsApi."
                         >
                           <Flag size={14} />

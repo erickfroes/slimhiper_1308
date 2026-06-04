@@ -41,6 +41,9 @@ atendidos:
 - Runbook/checklist afetado atualizado ou marcado como nao aplicavel.
 - Nenhum segredo, dado real de paciente, payload bruto de provider ou signed URL
   sensivel apareceu em logs, screenshots ou evidencias.
+- Valores `dummy`/placeholder em variaveis de provider foram tratados como
+  ausentes; eles nao contam como credencial/cofre configurado nem liberam chamada
+  sandbox.
 
 ## Comandos e limites
 
@@ -241,12 +244,22 @@ Criterios de aceite:
   hash, tenant mapping, reconciliacao e payload minimizado.
 - [ ] Manter fixtures offline separadas de qualquer chamada provider sandbox ou
   real.
+- [V] Adaptar o contrato de ambiente para Supabase/Asaas/D4Sign: helpers de Edge
+  Functions e scripts normalizam `dummy`/placeholder como ausente, aceitam chave
+  publicavel Supabase moderna nos contratos de documentos/billing e recusam
+  Asaas strict provider fora de sandbox sem flag explicita.
+- [V] Preparar envio D4Sign sandbox com cofre/pasta reais informados pelo
+  operador para `D4SIGN_SAFE_UUID` e `D4SIGN_FOLDER_UUID`; smoke provider ainda
+  requer autorizacao explicita antes de rodar.
 
 Criterios de aceite:
 
 - Nenhum payload bruto, token, crypt key, signed URL sensivel, payment link ou
   provider ID sensivel aparece em logs/evidencias.
 - Provider sandbox/real so e executado com autorizacao explicita.
+- D4Sign com cofre dummy retorna configuracao ausente/fail-closed antes de
+  upload; Asaas com segredo/base dummy retorna provider misconfigured antes de
+  chamada externa.
 - Falhas provider aparecem na UI como erro operacional sem vazar dados.
 
 ## P1 - Admin, observabilidade e operacao sensivel
@@ -275,7 +288,7 @@ Criterios de aceite:
 
 - [V] Proteger `WeightEvolutionChart` contra `data=[]` e dominios invalidos de
   Recharts.
-- [ ] Remover dependencia de hover-only nas acoes de pacientes; botoes precisam
+- [V] Remover dependencia de hover-only nas acoes de pacientes; botoes precisam
   funcionar por teclado e touch.
 - [ ] Validar eventos aninhados na linha da lista de pacientes para evitar
   navegacao acidental.
@@ -304,6 +317,10 @@ Evidencia em andamento:
 - 2026-06-02: `WeightEvolutionChart` passou a filtrar pontos invalidos,
   renderizar estado vazio estavel quando `data=[]` e calcular dominio do eixo
   incluindo a meta. Browser smoke do Paciente 360 permanece pendente.
+- 2026-06-02: as acoes da lista de pacientes deixaram de depender de
+  `group-hover`/`opacity-0`, permanecem visiveis por padrao e ganharam
+  `aria-label` nos botoes icon-only. Browser smoke de `/clinic/patients`
+  permanece pendente.
 
 ## P2 - Seguranca, Rocket, CSP e go-live
 
@@ -361,7 +378,9 @@ Owner/proximo passo:
 3. Validar fluxos clinicos core com dados reais de teste.
 4. Validar Paciente 360 e portal paciente com linkage real.
 5. Validar documentos, signed URLs, D4Sign e Asaas em camadas: fixture, local
-   autorizado, sandbox autorizado.
+   autorizado, sandbox autorizado. Considerar valores dummy como bloqueio
+   operacional, nao como provider validado. Para D4Sign, usar o cofre/pasta
+   sandbox reais informados pelo operador no proximo smoke autorizado.
 6. Validar admin sensivel e observabilidade.
 7. Fechar UI/accessibilidade/responsividade por rota.
 8. Rodar release readiness, security/LGPD, browser smoke amplo e baseline final.

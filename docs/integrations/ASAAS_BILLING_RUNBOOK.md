@@ -102,12 +102,18 @@ Configure server-side only:
 - `SUPABASE_SERVICE_ROLE_KEY` (webhook only)
 
 Never place these in `NEXT_PUBLIC_*`.
+Dummy/placeholder values are treated as missing by Edge Functions and local
+contract helpers, so sandbox calls fail closed instead of reaching Asaas with a
+fake token or base URL.
 
 For sandbox validation, set `ASAAS_BASE_URL` to the Asaas sandbox API base URL
 before running any real/sandbox contract. Do not run
 `scripts/supabase/test-billing-contract.mjs` when the target cannot be
 classified as sandbox or when the local Edge Runtime does not expose the
 required `ASAAS_*` secrets by name.
+When `REQUIRE_ASAAS_PROVIDER_SUCCESS=true`, the contract script refuses to run
+unless `ASAAS_BASE_URL` is classified as sandbox/local, unless a non-sandbox run
+is explicitly authorized through `ALLOW_ASAAS_PROVIDER_CONTRACT_NON_SANDBOX=true`.
 
 ## Deploy Functions
 
