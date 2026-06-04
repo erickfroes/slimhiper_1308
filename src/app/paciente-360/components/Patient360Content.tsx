@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { getPatient360Summary } from '@/services/patient360Api';
 import type { Patient360Summary } from '@/domain/types';
 import type { UserContext } from '@/lib/auth/getCurrentUserContext';
@@ -15,32 +16,112 @@ interface Patient360ContentProps {
   userContext: UserContext | null;
 }
 
+type Patient360LoadError = {
+  title: string;
+  message: string;
+  toastMessage: string;
+};
+
+function mapPatient360LoadError(error: { message?: string; code?: string } | null) {
+  const rawCode = error?.code ?? '';
+  const rawMessage = error?.message ?? '';
+  const normalized = `${rawCode} ${rawMessage}`.toLowerCase();
+
+  if (normalized.includes('invalid_patient360_contract')) {
+    return {
+      title: 'Contrato do Paciente 360 invalido',
+      message:
+        'A resposta do backend nao possui o formato minimo esperado. O fallback mock continua bloqueado quando a flag de mock nao esta ativa.',
+      toastMessage: 'Contrato invalido no Paciente 360.',
+    };
+  }
+
+  if (
+    normalized.includes('forbidden') ||
+    normalized.includes('42501') ||
+    normalized.includes('permission')
+  ) {
+    return {
+      title: 'Acesso ao paciente negado',
+      message:
+        'Seu perfil nao possui permissao para visualizar este paciente ou o vinculo ativo nao pertence ao tenant atual.',
+      toastMessage: 'Acesso negado ao Paciente 360.',
+    };
+  }
+
+  if (
+    normalized.includes('not_found') ||
+    normalized.includes('p0002') ||
+    normalized.includes('404')
+  ) {
+    return {
+      title: 'Paciente nao encontrado',
+      message: 'Verifique se o paciente existe, esta ativo e pertence ao tenant selecionado.',
+      toastMessage: 'Paciente nao encontrado.',
+    };
+  }
+
+  return {
+    title: 'Paciente 360 indisponivel',
+    message:
+      'Nao foi possivel carregar o snapshot real do paciente. Tente novamente ou acione suporte se o erro persistir.',
+    toastMessage: 'Falha ao carregar dados do paciente.',
+  };
+}
+
 export default function Patient360Content({ patientId, userContext }: Patient360ContentProps) {
   const [data, setData] = useState<Patient360Summary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Patient360LoadError | null>(null);
+  const loadRequestIdRef = useRef(0);
 
   const loadPatient360 = useCallback(async () => {
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
+
     setLoading(true);
     setError(null);
+    setData(null);
 
     try {
       const { data: summary, error: summaryError } = await getPatient360Summary(patientId);
 
       if (summaryError) {
-        throw new Error(summaryError.message);
+        if (requestId !== loadRequestIdRef.current) return;
+        const mappedError = mapPatient360LoadError(summaryError);
+        setError(mappedError);
+        toast.error(mappedError.toastMessage);
+        console.error(
+          '[Patient360Content] load error:',
+          summaryError.code ?? 'patient360_summary_failed'
+        );
+        return;
       }
 
-      setData(summary);
-    } catch (loadError) {
-      const message = 'Falha ao carregar dados do paciente. Tente novamente.';
-      setError(message);
-      toast.error(message);
-      if (loadError instanceof Error) {
-        console.error('[Patient360Content] load error:', loadError.message);
+      if (!summary) {
+        if (requestId !== loadRequestIdRef.current) return;
+        const mappedError = mapPatient360LoadError({
+          code: 'patient360_empty_summary',
+          message: 'Patient summary returned empty.',
+        });
+        setError(mappedError);
+        toast.error(mappedError.toastMessage);
+        console.error('[Patient360Content] load error: patient360_empty_summary');
+        return;
       }
+
+      if (requestId !== loadRequestIdRef.current) return;
+      setData(summary);
+    } catch {
+      if (requestId !== loadRequestIdRef.current) return;
+      const mappedError = mapPatient360LoadError(null);
+      setError(mappedError);
+      toast.error(mappedError.toastMessage);
+      console.error('[Patient360Content] load error: patient360_unexpected_error');
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [patientId]);
 
@@ -79,21 +160,23 @@ export default function Patient360Content({ patientId, userContext }: Patient360
   if (!data) {
     return (
       <div className="p-6 xl:p-8 max-w-screen-2xl mx-auto">
-        <div className="card-base p-8 text-center">
-          <p className="text-base font-semibold text-foreground mb-1">
-            {error ? 'Falha ao carregar paciente' : 'Paciente não encontrado'}
+        <div className="card-base mx-auto max-w-2xl p-8 text-center">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <AlertTriangle size={20} />
+          </div>
+          <p className="mb-1 mt-4 text-base font-semibold text-foreground">
+            {error?.title ?? 'Paciente nao encontrado'}
           </p>
-          <p className="text-sm text-muted-foreground">
-            {error
-              ? 'Não foi possível carregar os dados. Tente novamente.'
-              : 'Verifique o ID do paciente e tente novamente.'}
+          <p className="mx-auto max-w-xl text-sm text-muted-foreground">
+            {error?.message ?? 'Verifique o ID do paciente e tente novamente.'}
           </p>
           {error && (
             <button
               type="button"
               onClick={() => void loadPatient360()}
-              className="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+              className="btn-primary mt-5 inline-flex items-center gap-2 px-4 py-2 text-sm"
             >
+              <RefreshCw size={14} />
               Tentar novamente
             </button>
           )}

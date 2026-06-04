@@ -118,7 +118,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F03 | Shell clínico            | `DashboardShell`, polling, busca, logout, menus                                                        | Blindado por código em 2026-06-02                                                                                                                                                                                     | Resiliente a falhas            | Polling e ações de leitura tratam exceções localmente; browser smoke segue pendente                                                  | Ambiente/browser autenticado para smoke                        |
 | F04 | Dashboard clínico        | `/clinic/dashboard`, `dashboardApi`                                                                    | Avanco de contrato real em 2026-06-04: `dashboardApi` expoe snapshot unico real com KPIs, fila, agenda, alertas, revisoes e insights CRM/estoque; mock segue apenas por flag explicita                                | Real validado                  | Smoke sem mock com métricas, fila e alertas                                                                                          | Browser autenticado, Supabase homologacao e evidencias visuais |
 | F05 | Pacientes                | `/clinic/patients`, `patientsApi`                                                                      | Avanço de contrato real em 2026-06-02: busca sanitizada em PII, filtro real por status, refresh concorrente protegido e ações acessíveis                                                                              | CRUD real validado             | Criar, editar, listar, filtrar e abrir 360; `npm run type-check` passou após avanço de código                                        | RLS em PII, paginação real >100 e smoke autenticado            |
-| F06 | Paciente 360             | `/clinic/patients/[patientId]` e abas                                                                  | Correção de gráfico aplicada em 2026-06-02; demais abas mock/real misto                                                                                                                                               | Real validado por aba          | `WeightEvolutionChart` trata vazio/nulo/inválido sem `NaN`; smoke por paciente sintético segue pendente                              | Edge Functions, permissões por aba e paciente sintético        |
+| F06 | Paciente 360             | `/clinic/patients/[patientId]` e abas                                                                  | Avancos de contrato real: grafico de peso vazio blindado; summary/timeline normalizados; em 2026-06-04 carregamento do container ganhou anti-stale request, limpeza de snapshot antigo e erro diagnostico seguro      | Real validado por aba          | `WeightEvolutionChart` trata vazio/nulo/inválido sem `NaN`; smoke por paciente sintético segue pendente                              | Edge Functions, permissões por aba e paciente sintético        |
 | F07 | Atendimento SOAP         | `/clinic/patients/[patientId]/encounter`, `encounterApi`                                               | Avanço de imutabilidade em 2026-06-02: rascunho/finalização reais já usam `encounters`, `soap_notes`, timeline e audit log; edição pós-finalização bloqueada no serviço e UI                                          | Escrita real validada          | Salvar rascunho, recarregar, finalizar atendimento, timeline/audit e bloqueio pós-finalização                                        | Browser autenticado, usuários sintéticos e RLS real            |
 | F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                                                          | Avanço de contrato real em 2026-06-02: leitura diária/mensal, criação, edição, status, cancelamento com motivo, eventos de fila e conflito de horário blindados por código                                            | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                            |
 | F09 | Programas                | `/clinic/programs`, builder, `programsApi`                                                             | Avanço de matrícula em 2026-06-02: UI de programas aciona `enroll_patient_in_program`, seleciona paciente ativo e mostra reflexos de check-ins/documentos/agenda/invoice                                              | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | Smoke autenticado, RLS multi-tenant e efeitos derivados        |
@@ -1674,6 +1674,55 @@ Copie este bloco para cada fluxo validado.
   alertas/insights CRM/estoque contra dados de tenant de homologacao, provar
   estados empty/error/forbidden com RLS real e capturar evidencia visual
   autenticada.
+
+### Evidencia - F06 Paciente 360 carregamento resiliente
+
+- Data: 2026-06-04.
+- Ambiente: local, revisao de codigo e checks obrigatorios; `.env` nao foi lido
+  manualmente, nenhum provider externo foi chamado e nenhuma
+  migracao/bootstrap foi executado.
+- Rota/API/RPC/Edge Function: `/clinic/patients/[patientId]`,
+  `Patient360Content`, `patient360Api`, Edge Functions `patient-360-summary` e
+  `patient-timeline`.
+- Passos executados:
+  1. Confirmada a existencia do plano em
+     `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avancada a proxima lacuna
+     implementavel da matriz, F06 Paciente 360.
+  2. `Patient360Content` passou a controlar `requestId` local para impedir que
+     respostas antigas sobrescrevam o paciente atual apos troca de rota ou
+     retry.
+  3. O container passou a limpar o snapshot anterior antes de cada nova carga,
+     evitando exibir dados stale enquanto valida o contrato real.
+  4. Erros de summary agora sao mapeados para estados seguros e acionaveis:
+     contrato invalido, acesso negado, paciente nao encontrado e indisponivel.
+  5. Logs client-side passaram a registrar somente codigos genericos/codigos de
+     erro, sem mensagem bruta do backend, PII, payload ou detalhes sensiveis.
+  6. O estado de erro ganhou icone, mensagem especifica e retry com botao
+     padronizado, mantendo forbidden/error visivel sem cair em mock silencioso.
+- Resultado esperado: reduzir risco de dados obsoletos e tornar falhas de
+  contrato/RLS do Paciente 360 mais claras sem criar migration, sem chamar
+  provider e sem depender de mock.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build`,
+  `git diff --check`, Browser smoke anonimo e
+  `node scripts/observability/post-deploy-smoke.mjs --base-url
+  http://localhost:4028` passaram. `npm run type-check` falhou uma vez quando
+  foi executado em paralelo com `next build`, porque o Next estava recriando
+  `.next/types`; a reexecucao isolada passou. Lint/build mantiveram 11 warnings
+  conhecidos em componentes legados, sem erros. O Browser confirmou que
+  `/clinic/patients/test-patient` sem sessao redireciona para `/auth/login`, a
+  tela de login renderiza sem overlay e console errors/warnings relevantes
+  ficaram em zero. O smoke HTTP confirmou `/api/health` 200 `health=warn`,
+  `/auth/login` 200, `/clinic/dashboard` 307, `/admin` 307 e `/patient` 307.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, provider IDs,
+  signed URLs ou payloads sensiveis.
+- Screenshot/anexo: pendente de browser smoke autenticado com paciente
+  sintetico; smoke anonimo protegido pode validar apenas redirect fail-closed.
+- Status: aprovado por codigo; validacao Supabase/browser autenticada permanece
+  pendente.
+- Pendencias: validar Paciente 360 autenticado com paciente sintetico e
+  `NEXT_PUBLIC_USE_MOCK_DATA=false`, testar contrato invalido/forbidden/not
+  found em ambiente controlado, provar isolamento Tenant A/B, conferir abas por
+  permissao e capturar evidencia visual autenticada.
 
 ## 18. Sequência recomendada de implementação
 
