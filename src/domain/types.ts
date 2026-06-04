@@ -604,6 +604,14 @@ export interface DashboardStats {
   operationalInsights?: DashboardOperationalInsights;
 }
 
+export interface DashboardSnapshot {
+  stats: DashboardStats;
+  waitingQueue: WaitingQueueEntry[];
+  todayAppointments: AppointmentSummary[];
+  alerts: DashboardAlert[];
+  patientsNeedingReview: PatientReviewItem[];
+}
+
 export interface WaitingQueueEntry {
   id: string;
   patientId: string;

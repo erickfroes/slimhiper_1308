@@ -116,7 +116,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F01 | Auth e guardas           | `/`, `/auth/login`, `/no-workspace`, middleware, `/api/auth/app-session`                               | Blindado por código em 2026-06-02 para evitar self-redirect e tratar `/no-workspace` sem sessão                                                                                                                       | Aprovado em browser e contrato | Matriz de redirecionamento por perfil; validação estática confirmou alvo canônico e ausência de redirect para a própria rota         | Sessões sintéticas e vínculos de usuário                       |
 | F02 | Correção portal paciente | `canAccessPatientPortal` no endpoint de sessão                                                         | Corrigido por código em 2026-06-02                                                                                                                                                                                    | Corrigido e testado            | Endpoint reutiliza helper canônico de destino; validação real por perfis segue pendente sem usuários sintéticos/Supabase homologação | Usuários sintéticos e ambiente Supabase homologação            |
 | F03 | Shell clínico            | `DashboardShell`, polling, busca, logout, menus                                                        | Blindado por código em 2026-06-02                                                                                                                                                                                     | Resiliente a falhas            | Polling e ações de leitura tratam exceções localmente; browser smoke segue pendente                                                  | Ambiente/browser autenticado para smoke                        |
-| F04 | Dashboard clínico        | `/clinic/dashboard`, `dashboardApi`                                                                    | Mock/real misto                                                                                                                                                                                                       | Real validado                  | Smoke sem mock com métricas, fila e alertas                                                                                          | Contratos de métricas e insights                               |
+| F04 | Dashboard clínico        | `/clinic/dashboard`, `dashboardApi`                                                                    | Avanco de contrato real em 2026-06-04: `dashboardApi` expoe snapshot unico real com KPIs, fila, agenda, alertas, revisoes e insights CRM/estoque; mock segue apenas por flag explicita                                | Real validado                  | Smoke sem mock com métricas, fila e alertas                                                                                          | Browser autenticado, Supabase homologacao e evidencias visuais |
 | F05 | Pacientes                | `/clinic/patients`, `patientsApi`                                                                      | Avanço de contrato real em 2026-06-02: busca sanitizada em PII, filtro real por status, refresh concorrente protegido e ações acessíveis                                                                              | CRUD real validado             | Criar, editar, listar, filtrar e abrir 360; `npm run type-check` passou após avanço de código                                        | RLS em PII, paginação real >100 e smoke autenticado            |
 | F06 | Paciente 360             | `/clinic/patients/[patientId]` e abas                                                                  | Correção de gráfico aplicada em 2026-06-02; demais abas mock/real misto                                                                                                                                               | Real validado por aba          | `WeightEvolutionChart` trata vazio/nulo/inválido sem `NaN`; smoke por paciente sintético segue pendente                              | Edge Functions, permissões por aba e paciente sintético        |
 | F07 | Atendimento SOAP         | `/clinic/patients/[patientId]/encounter`, `encounterApi`                                               | Avanço de imutabilidade em 2026-06-02: rascunho/finalização reais já usam `encounters`, `soap_notes`, timeline e audit log; edição pós-finalização bloqueada no serviço e UI                                          | Escrita real validada          | Salvar rascunho, recarregar, finalizar atendimento, timeline/audit e bloqueio pós-finalização                                        | Browser autenticado, usuários sintéticos e RLS real            |
@@ -1619,6 +1619,61 @@ Copie este bloco para cada fluxo validado.
   `NEXT_PUBLIC_USE_MOCK_DATA=false`, Supabase real, metadata de release e
   usuarios sinteticos; amostrar audit logs apos mutacoes clinicas/admin;
   exercitar rollback/mesa e confirmar owners de suporte/provider.
+
+### Evidencia - F04 dashboard clinico com snapshot real consolidado
+
+- Data: 2026-06-04.
+- Ambiente: local, revisao de codigo, build, Browser smoke anonimo e smoke
+  HTTP read-only; `.env` nao foi lido manualmente, nenhum provider externo foi
+  chamado e nenhuma migracao/bootstrap foi executado.
+- Rota/API/RPC/Edge Function: `/clinic/dashboard`, `/auth/login`,
+  `dashboardApi`, RPC `get_crm_inventory_dashboard_insights` e smoke
+  `scripts/observability/post-deploy-smoke.mjs`.
+- Passos executados:
+  1. Confirmada a existencia do plano em
+     `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avancada a frente F04, que
+     ainda estava marcada como mock/real misto na matriz principal.
+  2. Adicionado `DashboardSnapshot` ao dominio para representar o contrato
+     completo da tela: KPIs, fila, agenda, alertas, pacientes em revisao e
+     insights operacionais.
+  3. `dashboardApi` passou a expor `getDashboardSnapshot()` e a montar o
+     snapshot real com uma unica resolucao de tenant, uma unica leitura da
+     agenda do dia, uma unica leitura de alertas ativos e uma unica busca de
+     nomes de pacientes por lote.
+  4. As funcoes antigas (`getDashboardStats`, `getWaitingQueue`,
+     `getTodayAppointments`, `getDashboardAlerts` e
+     `getPatientsNeedingReview`) foram preservadas como wrappers do snapshot
+     para compatibilidade.
+  5. `DashboardContent` passou a consumir o snapshot unico, reduzindo chamadas
+     concorrentes duplicadas e mantendo o estado de erro visivel quando o
+     contrato real falha.
+  6. O mock continua disponivel somente quando
+     `NEXT_PUBLIC_USE_MOCK_DATA=true`; sem essa flag, falhas de Supabase/RPC/RLS
+     continuam aparecendo como erro operacional, sem fallback silencioso.
+- Resultado esperado: fechar a lacuna de contrato real do F04 por codigo sem
+  criar migration, sem ler secrets, sem chamar provider e sem mascarar falha de
+  producao com mock.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build`,
+  `git diff --check`, Browser smoke anonimo e
+  `node scripts/observability/post-deploy-smoke.mjs --base-url
+  http://localhost:4028` passaram. Lint/build mantiveram 11 warnings conhecidos
+  em componentes legados, sem erros. O Browser confirmou que
+  `/clinic/dashboard` sem sessao redireciona para `/auth/login`, a tela de login
+  renderiza sem overlay, console errors/warnings relevantes ficaram em zero e o
+  submit vazio manteve a rota com validacao nativa do campo obrigatorio. O smoke
+  HTTP confirmou `/api/health` 200 `health=warn`, `/auth/login` 200,
+  `/clinic/dashboard` 307, `/admin` 307 e `/patient` 307.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de
+  provider, signed URLs ou payloads sensiveis.
+- Screenshot/anexo: Browser screenshot local do redirecionamento/login gerado
+  apenas como evidencia temporaria da sessao; nao foi versionado.
+- Status: aprovado por codigo, build e smoke anonimo; validacao Supabase/browser
+  autenticada permanece pendente.
+- Pendencias: validar `/clinic/dashboard` autenticado com usuario clinico
+  sintetico e `NEXT_PUBLIC_USE_MOCK_DATA=false`, conferir KPIs/fila/agenda/
+  alertas/insights CRM/estoque contra dados de tenant de homologacao, provar
+  estados empty/error/forbidden com RLS real e capturar evidencia visual
+  autenticada.
 
 ## 18. Sequência recomendada de implementação
 

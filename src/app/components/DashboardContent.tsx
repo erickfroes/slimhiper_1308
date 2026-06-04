@@ -22,13 +22,7 @@ import StatusBadge from '@/components/StatusBadge';
 import AlertPanel from '@/components/AlertPanel';
 import QuickActionsCard from '@/components/QuickActionsCard';
 import { SkeletonCard } from '@/components/LoadingSkeleton';
-import {
-  getDashboardStats,
-  getWaitingQueue,
-  getTodayAppointments,
-  getDashboardAlerts,
-  getPatientsNeedingReview,
-} from '@/services/dashboardApi';
+import { getDashboardSnapshot } from '@/services/dashboardApi';
 import type {
   DashboardStats,
   WaitingQueueEntry,
@@ -150,20 +144,14 @@ export default function DashboardContent() {
     else setLoading(true);
     setLoadError(null);
     try {
-      const [s, q, a, alerts, review] = await Promise.all([
-        getDashboardStats(),
-        getWaitingQueue(),
-        getTodayAppointments(),
-        getDashboardAlerts(),
-        getPatientsNeedingReview(),
-      ]);
+      const snapshot = await getDashboardSnapshot();
       if (requestId !== loadRequestIdRef.current) return;
 
-      setStats(s);
-      setQueue(q);
-      setAppointments(a);
-      setClinicAlerts(alerts);
-      setReviewPatients(review);
+      setStats(snapshot.stats);
+      setQueue(snapshot.waitingQueue);
+      setAppointments(snapshot.todayAppointments);
+      setClinicAlerts(snapshot.alerts);
+      setReviewPatients(snapshot.patientsNeedingReview);
       if (isRefresh) toast.success('Dados atualizados');
     } catch (dashboardError) {
       const message =

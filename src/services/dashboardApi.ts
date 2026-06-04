@@ -4,6 +4,7 @@ import type {
   AppointmentType,
   AlertSeverity,
   DashboardAlert,
+  DashboardSnapshot,
   DashboardStats,
   PatientReviewItem,
   WaitingQueueEntry,
@@ -11,12 +12,10 @@ import type {
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 export interface DashboardProvider {
-  getDashboardStats(): Promise<DashboardStats>;
-  getWaitingQueue(): Promise<WaitingQueueEntry[]>;
-  getTodayAppointments(): Promise<AppointmentSummary[]>;
-  getDashboardAlerts(): Promise<DashboardAlert[]>;
-  getPatientsNeedingReview(): Promise<PatientReviewItem[]>;
+  getDashboardSnapshot(): Promise<DashboardSnapshot>;
 }
+
+type BrowserSupabaseClient = ReturnType<typeof createBrowserSupabaseClient>;
 
 function isMockExplicitlyEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
@@ -30,11 +29,24 @@ let mockDashboardProviderPromise: Promise<DashboardProvider> | null = null;
 
 function getMockDashboardProvider(): Promise<DashboardProvider> {
   mockDashboardProviderPromise ??= import('@/services/mockApi').then((mockApi) => ({
-    getDashboardStats: mockApi.getDashboardStats,
-    getWaitingQueue: mockApi.getWaitingQueue,
-    getTodayAppointments: mockApi.getTodayAppointments,
-    getDashboardAlerts: mockApi.getDashboardAlerts,
-    getPatientsNeedingReview: mockApi.getPatientsNeedingReview,
+    async getDashboardSnapshot() {
+      const [stats, waitingQueue, todayAppointments, alerts, patientsNeedingReview] =
+        await Promise.all([
+          mockApi.getDashboardStats(),
+          mockApi.getWaitingQueue(),
+          mockApi.getTodayAppointments(),
+          mockApi.getDashboardAlerts(),
+          mockApi.getPatientsNeedingReview(),
+        ]);
+
+      return {
+        stats,
+        waitingQueue,
+        todayAppointments,
+        alerts,
+        patientsNeedingReview,
+      };
+    },
   }));
 
   return mockDashboardProviderPromise;
@@ -127,6 +139,10 @@ function waitingMinutesFromScheduledAt(scheduledAt: string) {
   return Math.max(0, Math.floor((Date.now() - scheduled) / 60000));
 }
 
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 function normalizeDashboardInsights(payload: unknown): DashboardStats['operationalInsights'] {
   const record = payload && typeof payload === 'object' ? (payload as DashboardInsightsRpc) : {};
   const crm = record.crm ?? {};
@@ -149,8 +165,7 @@ function normalizeDashboardInsights(payload: unknown): DashboardStats['operation
   };
 }
 
-async function getOperationalInsights() {
-  const supabase = createBrowserSupabaseClient();
+async function getOperationalInsights(supabase: BrowserSupabaseClient) {
   const { data, error } = await supabase.rpc('get_crm_inventory_dashboard_insights', {
     p_days_to_expiry: 30,
   });
@@ -159,8 +174,7 @@ async function getOperationalInsights() {
   return normalizeDashboardInsights(data);
 }
 
-async function resolveActiveTenantId() {
-  const supabase = createBrowserSupabaseClient();
+async function resolveActiveTenantId(supabase: BrowserSupabaseClient) {
   const {
     data: { user },
     error: userError,
@@ -195,9 +209,12 @@ async function resolveActiveTenantId() {
   return tenantId;
 }
 
-async function getPatientNames(tenantId: string, patientIds: string[]) {
+async function getPatientNamesForClient(
+  supabase: BrowserSupabaseClient,
+  tenantId: string,
+  patientIds: string[]
+) {
   if (patientIds.length === 0) return new Map<string, string>();
-  const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase
     .from('patient_pii')
     .select('patient_id,full_name')
@@ -212,8 +229,10 @@ async function getPatientNames(tenantId: string, patientIds: string[]) {
   );
 }
 
-async function getTodayAppointmentRows(tenantId: string) {
-  const supabase = createBrowserSupabaseClient();
+async function getTodayAppointmentRows(
+  tenantId: string,
+  supabase: BrowserSupabaseClient = createBrowserSupabaseClient()
+) {
   const { start, end } = todayRange();
   const { data, error } = await supabase
     .from('appointments')
@@ -227,8 +246,11 @@ async function getTodayAppointmentRows(tenantId: string) {
   return (data ?? []) as AppointmentRow[];
 }
 
-async function getActiveAlertRows(tenantId: string, limit = 10) {
-  const supabase = createBrowserSupabaseClient();
+async function getActiveAlertRows(
+  tenantId: string,
+  limit = 10,
+  supabase: BrowserSupabaseClient = createBrowserSupabaseClient()
+) {
   const { data, error } = await supabase
     .from('patient_alerts')
     .select('id,patient_id,title,description,severity,alert_type,created_at')
@@ -241,24 +263,88 @@ async function getActiveAlertRows(tenantId: string, limit = 10) {
   return (data ?? []) as AlertRow[];
 }
 
+const queueStatuses: AppointmentStatus[] = [
+  'chegou',
+  'triagem',
+  'medidas',
+  'bioimpedancia',
+  'aguardando_medico',
+  'em_consulta',
+  'checkout',
+];
+
+function mapWaitingQueueRows(
+  rows: AppointmentRow[],
+  names: Map<string, string>
+): WaitingQueueEntry[] {
+  return rows.map((row) => ({
+    id: row.id,
+    patientId: row.patient_id,
+    patientName: names.get(row.patient_id) ?? 'Paciente sem nome',
+    appointmentType: 'consulta_medica' as AppointmentType,
+    status: mapAppointmentStatus(row.status),
+    scheduledTime: row.scheduled_at,
+    waitingMinutes: waitingMinutesFromScheduledAt(row.scheduled_at),
+    professionalName: 'Equipe clinica',
+    room: row.location ?? undefined,
+  }));
+}
+
+function mapAppointmentRows(
+  rows: AppointmentRow[],
+  names: Map<string, string>
+): AppointmentSummary[] {
+  return rows.map((row) => ({
+    id: row.id,
+    patientId: row.patient_id,
+    patientName: names.get(row.patient_id) ?? 'Paciente sem nome',
+    type: 'consulta_medica' as AppointmentType,
+    status: mapAppointmentStatus(row.status),
+    scheduledAt: row.scheduled_at,
+    durationMinutes: row.duration_minutes ?? 30,
+    professionalName: 'Equipe clinica',
+    professionalRole: 'Profissional',
+    roomName: row.location ?? undefined,
+    notes: row.notes ?? undefined,
+  }));
+}
+
+function mapAlertRows(rows: AlertRow[]): DashboardAlert[] {
+  return rows.map((row) => ({
+    id: row.id,
+    patientId: row.patient_id,
+    severity: mapAlertSeverity(row.severity),
+    title: row.title,
+    description: row.description ?? '',
+    createdAt: row.created_at,
+    isResolved: false,
+    category: 'clinico',
+  }));
+}
+
+function mapReviewRows(rows: AlertRow[], names: Map<string, string>): PatientReviewItem[] {
+  return rows.map((row) => ({
+    id: row.patient_id,
+    name: names.get(row.patient_id) ?? 'Paciente sem nome',
+    issue: row.title,
+    severity: mapAlertSeverity(row.severity),
+  }));
+}
+
 const supabaseDashboardProvider: DashboardProvider = {
-  async getDashboardStats() {
+  async getDashboardSnapshot() {
     const supabase = createBrowserSupabaseClient();
-    const tenantId = await resolveActiveTenantId();
-    const todayAppointments = await getTodayAppointmentRows(tenantId);
+    const tenantId = await resolveActiveTenantId(supabase);
+    const [todayAppointments, activeAlertRows] = await Promise.all([
+      getTodayAppointmentRows(tenantId, supabase),
+      getActiveAlertRows(tenantId, 10, supabase),
+    ]);
     const completedToday = todayAppointments.filter(
       (appointment) => mapAppointmentStatus(appointment.status) === 'concluido'
     ).length;
-    const queueStatuses: AppointmentStatus[] = [
-      'chegou',
-      'triagem',
-      'medidas',
-      'bioimpedancia',
-      'aguardando_medico',
-      'em_consulta',
-      'checkout',
-    ];
-
+    const queueRows = todayAppointments.filter((appointment) =>
+      queueStatuses.includes(mapAppointmentStatus(appointment.status))
+    );
     const [
       activeProgramsResult,
       activeAlertsResult,
@@ -292,7 +378,7 @@ const supabaseDashboardProvider: DashboardProvider = {
         .select('unread_count')
         .eq('tenant_id', tenantId)
         .gt('unread_count', 0),
-      getOperationalInsights(),
+      getOperationalInsights(supabase),
     ]);
 
     for (const result of [
@@ -309,110 +395,35 @@ const supabaseDashboardProvider: DashboardProvider = {
       (sum, row) => sum + (row.unread_count ?? 0),
       0
     );
+    const patientNames = await getPatientNamesForClient(
+      supabase,
+      tenantId,
+      uniqueValues([
+        ...todayAppointments.map((row) => row.patient_id),
+        ...activeAlertRows.map((row) => row.patient_id),
+      ])
+    );
 
     return {
-      consultasHoje: todayAppointments.length,
-      consultasConcluidas: completedToday,
-      filaEspera: todayAppointments.filter((appointment) =>
-        queueStatuses.includes(mapAppointmentStatus(appointment.status))
-      ).length,
-      programasAtivos: activeProgramsResult.count ?? 0,
-      alertasClinicos: activeAlertsResult.count ?? 0,
-      mensagensNaoLidas: unreadMessages,
-      documentosPendentes: pendingDocumentsResult.count ?? 0,
-      inadimplentes: overdueInvoicesResult.count ?? 0,
-      taxaOcupacao: todayAppointments.length
-        ? Math.round((completedToday / todayAppointments.length) * 100)
-        : 0,
-      operationalInsights,
+      stats: {
+        consultasHoje: todayAppointments.length,
+        consultasConcluidas: completedToday,
+        filaEspera: queueRows.length,
+        programasAtivos: activeProgramsResult.count ?? 0,
+        alertasClinicos: activeAlertsResult.count ?? 0,
+        mensagensNaoLidas: unreadMessages,
+        documentosPendentes: pendingDocumentsResult.count ?? 0,
+        inadimplentes: overdueInvoicesResult.count ?? 0,
+        taxaOcupacao: todayAppointments.length
+          ? Math.round((completedToday / todayAppointments.length) * 100)
+          : 0,
+        operationalInsights,
+      },
+      waitingQueue: mapWaitingQueueRows(queueRows, patientNames),
+      todayAppointments: mapAppointmentRows(todayAppointments, patientNames),
+      alerts: mapAlertRows(activeAlertRows),
+      patientsNeedingReview: mapReviewRows(activeAlertRows.slice(0, 6), patientNames),
     };
-  },
-
-  async getWaitingQueue() {
-    const tenantId = await resolveActiveTenantId();
-    const rows = await getTodayAppointmentRows(tenantId);
-    const queueStatuses: AppointmentStatus[] = [
-      'chegou',
-      'triagem',
-      'medidas',
-      'bioimpedancia',
-      'aguardando_medico',
-      'em_consulta',
-      'checkout',
-    ];
-    const queueRows = rows.filter((row) =>
-      queueStatuses.includes(mapAppointmentStatus(row.status))
-    );
-    const names = await getPatientNames(
-      tenantId,
-      queueRows.map((row) => row.patient_id)
-    );
-
-    return queueRows.map((row) => ({
-      id: row.id,
-      patientId: row.patient_id,
-      patientName: names.get(row.patient_id) ?? 'Paciente sem nome',
-      appointmentType: 'consulta_medica' as AppointmentType,
-      status: mapAppointmentStatus(row.status),
-      scheduledTime: row.scheduled_at,
-      waitingMinutes: waitingMinutesFromScheduledAt(row.scheduled_at),
-      professionalName: 'Equipe clinica',
-      room: row.location ?? undefined,
-    }));
-  },
-
-  async getTodayAppointments() {
-    const tenantId = await resolveActiveTenantId();
-    const rows = await getTodayAppointmentRows(tenantId);
-    const names = await getPatientNames(
-      tenantId,
-      rows.map((row) => row.patient_id)
-    );
-
-    return rows.map((row) => ({
-      id: row.id,
-      patientId: row.patient_id,
-      patientName: names.get(row.patient_id) ?? 'Paciente sem nome',
-      type: 'consulta_medica' as AppointmentType,
-      status: mapAppointmentStatus(row.status),
-      scheduledAt: row.scheduled_at,
-      durationMinutes: row.duration_minutes ?? 30,
-      professionalName: 'Equipe clinica',
-      professionalRole: 'Profissional',
-      roomName: row.location ?? undefined,
-      notes: row.notes ?? undefined,
-    }));
-  },
-
-  async getDashboardAlerts() {
-    const tenantId = await resolveActiveTenantId();
-    const rows = await getActiveAlertRows(tenantId);
-    return rows.map((row) => ({
-      id: row.id,
-      patientId: row.patient_id,
-      severity: mapAlertSeverity(row.severity),
-      title: row.title,
-      description: row.description ?? '',
-      createdAt: row.created_at,
-      isResolved: false,
-      category: 'clinico',
-    }));
-  },
-
-  async getPatientsNeedingReview() {
-    const tenantId = await resolveActiveTenantId();
-    const rows = await getActiveAlertRows(tenantId, 6);
-    const names = await getPatientNames(
-      tenantId,
-      rows.map((row) => row.patient_id)
-    );
-
-    return rows.map((row) => ({
-      id: row.patient_id,
-      name: names.get(row.patient_id) ?? 'Paciente sem nome',
-      issue: row.title,
-      severity: mapAlertSeverity(row.severity),
-    }));
   },
 };
 
@@ -423,24 +434,33 @@ async function runDashboardOperation<T>(
   return operation(provider);
 }
 
+export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
+  return runDashboardOperation((provider) => provider.getDashboardSnapshot());
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
-  return runDashboardOperation((provider) => provider.getDashboardStats());
+  const snapshot = await getDashboardSnapshot();
+  return snapshot.stats;
 }
 
 export async function getWaitingQueue(): Promise<WaitingQueueEntry[]> {
-  return runDashboardOperation((provider) => provider.getWaitingQueue());
+  const snapshot = await getDashboardSnapshot();
+  return snapshot.waitingQueue;
 }
 
 export async function getTodayAppointments(): Promise<AppointmentSummary[]> {
-  return runDashboardOperation((provider) => provider.getTodayAppointments());
+  const snapshot = await getDashboardSnapshot();
+  return snapshot.todayAppointments;
 }
 
 export async function getDashboardAlerts(): Promise<DashboardAlert[]> {
-  return runDashboardOperation((provider) => provider.getDashboardAlerts());
+  const snapshot = await getDashboardSnapshot();
+  return snapshot.alerts;
 }
 
 export async function getPatientsNeedingReview(): Promise<PatientReviewItem[]> {
-  return runDashboardOperation((provider) => provider.getPatientsNeedingReview());
+  const snapshot = await getDashboardSnapshot();
+  return snapshot.patientsNeedingReview;
 }
 
 async function getDashboardProvider(): Promise<DashboardProvider> {
