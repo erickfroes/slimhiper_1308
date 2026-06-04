@@ -40,6 +40,22 @@ autorizado e, por relato do operador, `D4SIGN_SAFE_UUID`/`D4SIGN_FOLDER_UUID`
 agora apontam para valores reais de sandbox. D4Sign fica preparado para smoke
 sandbox autorizado, mas ainda nao validado contra provider nesta etapa.
 
+**Atualizacao operacional em 2026-06-04:** as 29 migrations versionadas foram
+aplicadas no Supabase remoto via `SUPABASE_DB_URL`, sem imprimir a URL, senha ou
+token. O dry-run inicial listou todas as migrations de `20260530120000` ate
+`20260601233000`; o push remoto concluiu com `Finished supabase db push`; o
+dry-run posterior confirmou `Remote database is up to date`. Consulta read-only
+em `supabase_migrations.schema_migrations` confirmou `migration_count=29` e
+`latest_migration=20260601233000`; consulta de catalogo confirmou 79 tabelas
+publicas, todas com RLS habilitado, e 85 funcoes publicas. O deploy remoto da
+Edge Function alterada `asaas-create-tenant-subaccount` nao foi feito porque o
+`SUPABASE_ACCESS_TOKEN` carregado nao esta no formato de token CLI `sbp_...`.
+Com migrations remotas aplicadas, a previsao operacional atual e: ate 30 minutos
+para trocar o token CLI e publicar a funcao alterada; 1-2 dias uteis para
+bootstraps/smokes autenticados sem mock; 3-5 dias uteis para fechar evidencias
+de release se D4Sign/Asaas sandbox e browser autenticado tambem estiverem
+disponiveis.
+
 ## 1. Objetivo final
 
 O projeto será considerado 100% funcional quando todos os critérios abaixo forem
@@ -96,7 +112,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 
 | ID  | Frente                   | Escopo                                                                                                 | Status inicial                                                                                                                                                                                                        | Status alvo                    | Evidência obrigatória                                                                                                                | Bloqueios esperados                                            |
 | --- | ------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| F00 | Baseline técnica         | TypeScript, lint, build e diff check                                                                   | Executado localmente em 2026-06-02; usuários sintéticos formalizados no bootstrap em 2026-06-03                                                                                                                       | Aprovado                       | `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check`; bootstrap define admin, clínica, paciente e no-workspace  | Supabase remoto atual respondeu `fetch failed` no bootstrap    |
+| F00 | Baseline técnica         | TypeScript, lint, build e diff check                                                                   | Executado localmente em 2026-06-02; usuários sintéticos formalizados no bootstrap em 2026-06-03; migrations remotas aplicadas em 2026-06-04                                                                           | Aprovado                       | `npm run type-check`, `npm run lint`, `npm run build`, `git diff --check`; bootstrap define admin, clínica, paciente e no-workspace  | Bootstrap/smokes remotos pendentes; token CLI para deploy de Edge Functions precisa formato `sbp_...` |
 | F01 | Auth e guardas           | `/`, `/auth/login`, `/no-workspace`, middleware, `/api/auth/app-session`                               | Blindado por código em 2026-06-02 para evitar self-redirect e tratar `/no-workspace` sem sessão                                                                                                                       | Aprovado em browser e contrato | Matriz de redirecionamento por perfil; validação estática confirmou alvo canônico e ausência de redirect para a própria rota         | Sessões sintéticas e vínculos de usuário                       |
 | F02 | Correção portal paciente | `canAccessPatientPortal` no endpoint de sessão                                                         | Corrigido por código em 2026-06-02                                                                                                                                                                                    | Corrigido e testado            | Endpoint reutiliza helper canônico de destino; validação real por perfis segue pendente sem usuários sintéticos/Supabase homologação | Usuários sintéticos e ambiente Supabase homologação            |
 | F03 | Shell clínico            | `DashboardShell`, polling, busca, logout, menus                                                        | Blindado por código em 2026-06-02                                                                                                                                                                                     | Resiliente a falhas            | Polling e ações de leitura tratam exceções localmente; browser smoke segue pendente                                                  | Ambiente/browser autenticado para smoke                        |
@@ -107,7 +123,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F08 | Agenda                   | `/clinic/agenda`, `agendaApi`                                                                          | Avanço de contrato real em 2026-06-02: leitura diária/mensal, criação, edição, status, cancelamento com motivo, eventos de fila e conflito de horário blindados por código                                            | Real validado                  | Criar, editar, cancelar e mudar status                                                                                               | Queue events e conflitos de horário                            |
 | F09 | Programas                | `/clinic/programs`, builder, `programsApi`                                                             | Avanço de matrícula em 2026-06-02: UI de programas aciona `enroll_patient_in_program`, seleciona paciente ativo e mostra reflexos de check-ins/documentos/agenda/invoice                                              | Real validado                  | Criar draft, publicar, clonar e matricular paciente                                                                                  | Smoke autenticado, RLS multi-tenant e efeitos derivados        |
 | F10 | Documentos clínica       | `/clinic/documents`, `clinicDocumentsApi`                                                              | Avanço de contrato real em 2026-06-02: UI e Edge Function bloqueiam envio D4Sign quando o template não está habilitado/ativo; status fica visível na lista                                                            | Fluxo completo validado        | Gerar, assinar, liberar e consultar URL                                                                                              | D4Sign sandbox, storage, webhook e permissões reais            |
-| F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                                                     | Avanço de idempotência em 2026-06-02: criação de cobrança/assinatura usa chave por tentativa e Edge Functions reutilizam registros locais antes de chamar Asaas                                                       | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Asaas sandbox, webhook real e RLS multi-tenant                 |
+| F11 | Financeiro clínica       | `/clinic/financeiro`, `billingApi`                                                                     | Avanço de idempotência em 2026-06-02; em 2026-06-04 `asaas-create-tenant-subaccount` foi alinhada ao hardening provider-owned: valida usuário/RBAC com JWT e grava billing/subconta via service role server-side        | Real validado                  | Overview, reconciliação e ações sandbox                                                                                              | Deploy remoto da Edge Function alterada, Asaas sandbox, webhook real e RLS multi-tenant |
 | F12 | Relatórios clínica       | `/clinic/reports`, `clinicReportsApi`                                                                  | Avanço de contrato real em 2026-06-02: Edge Function revalida definição/permissão/export antes do run; UI consulta status e bloqueia export desabilitado                                                              | Execução/exportação validada   | Executar relatório, consultar status e baixar exportação segura                                                                      | Smoke Supabase/browser com usuário sintético                   |
 | F13 | Configurações            | `/clinic/settings`, `clinicSettingsApi`                                                                | Verificado em 2026-06-03: leitura e mutações reais usam RPCs `get_clinic_settings_snapshot`, `update_clinic_settings` e `upsert_clinic_unit`; smoke autenticado pendente                                              | Real validado                  | Ler, atualizar clínica e unidade                                                                                                     | RPCs de settings, RLS e browser autenticado                    |
 | F14 | Inbox                    | `/clinic/inbox`, `notificationsApi`, `chatApi`                                                         | Verificado em 2026-06-03: inbox usa RPCs reais de resumo/listagem/marcar/arquivar/atribuir/status, com fallback mock apenas por flag explícita; smoke autenticado pendente                                            | Real validado                  | Marcar lido, arquivar, atribuir e responder                                                                                          | RPCs de comunicações, RLS e browser autenticado                |
@@ -402,6 +418,12 @@ alertas e agenda.
 - [ ] Em sandbox autorizado, cria customer/invoice/subscription. Pendente execução controlada com usuário sintético e sandbox Asaas autorizado.
 - [x] Webhook atualiza status financeiro por código: `webhook-asaas` resolve a invoice pelo `asaas_invoice_id`, atualiza `patient_invoices`, faz upsert de `payments` e registra timeline financeira; prova sandbox real segue pendente.
 - [x] Idempotência impede cobrança duplicada por código: invoices/subscriptions/customers usam chaves/contratos idempotentes, o webhook deduplica por hash e a criação de subconta agora cria um lock local antes de chamar Asaas para evitar múltiplas subcontas por tenant em chamadas concorrentes; prova sandbox real segue pendente.
+- [x] Tabelas provider-owned gravadas somente por backend controlado: em
+  2026-06-04 `asaas-create-tenant-subaccount` passou a exigir
+  `SUPABASE_SERVICE_ROLE_KEY`, manter o precheck de `financial.write` no cliente
+  anon com JWT e usar cliente service-role apenas dentro da Edge Function para
+  `tenant_billing_accounts` e `asaas_subaccounts`; prova sandbox/remota segue
+  pendente.
 
 **Progresso registrado em 2026-06-02:**
 
@@ -411,6 +433,12 @@ alertas e agenda.
 - Mensagens de erro de eventos Asaas recentes são apresentadas como falha operacional genérica; detalhes sensíveis permanecem restritos a auditoria autorizada.
 - Variáveis necessárias para Supabase/service-role e Asaas foram verificadas como presentes no ambiente sem imprimir valores; smoke mutável de provider/sandbox continua pendente por exigir usuário sintético e execução controlada.
 - Progresso em 2026-06-03: `asaas-create-tenant-subaccount` passou a inserir um registro `tenant_billing_accounts` pendente antes de chamar `/accounts` no Asaas. Como `tenant_id` é único, uma segunda chamada concorrente reaproveita o lock local e retorna `creation_in_progress` sem disparar nova chamada ao provider. Falhas de provider marcam o lock como `disabled` com metadado sanitizado, mantendo segredo/payload fora de logs e respostas.
+- Progresso em 2026-06-04: `asaas-create-tenant-subaccount` foi corrigida para
+  acompanhar a migration `070`, que revoga writes diretos autenticados em tabelas
+  provider-owned. A funcao segue validando JWT, tenant ativo e
+  `financial.write` com cliente anon/session-scoped, mas faz leitura/escrita de
+  `tenant_billing_accounts` e `asaas_subaccounts` com cliente service-role
+  server-side, alinhada ao padrao ja usado por customer, invoice e subscription.
 
 ### 7.7 `/clinic/inbox`
 
@@ -553,7 +581,7 @@ webhook -> reconciliação -> timeline/financeiro.
 
 **Checklist técnico:**
 
-- [x] Subconta tenant criada somente uma vez por código: a Edge Function cria um lock local `tenant_billing_accounts` antes da chamada ao provider e reutiliza/retorna chamadas concorrentes sem criar nova subconta; sandbox real pendente.
+- [x] Subconta tenant criada somente uma vez por código: a Edge Function cria um lock local `tenant_billing_accounts` antes da chamada ao provider e reutiliza/retorna chamadas concorrentes sem criar nova subconta; desde 2026-06-04, writes provider-owned usam service role server-side apos precheck de `financial.write`; sandbox real pendente.
 - [x] Customer paciente idempotente por código: a Edge Function reutiliza `patient_customers` existente por tenant/paciente antes de chamar Asaas; sandbox real pendente.
 - [x] Invoice idempotente por código: UI envia chave por tentativa e a Edge Function reutiliza cobrança local com a mesma chave antes de chamar Asaas; sandbox real pendente.
 - [x] Subscription idempotente por código: UI envia chave por tentativa e a Edge Function reutiliza assinatura local com a mesma chave antes de chamar Asaas; sandbox real pendente.
@@ -843,7 +871,7 @@ Use esta seção para controlar bloqueios durante a execução.
 | ---------- | ------- | ----------------------------------------------- | ---------- | ----------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | 2026-06-02 | F02     | Revisar divergência de `canAccessPatientPortal` | Alta       | Codex       | Endpoint e middleware agora usam helper canônico; validar perfis sintéticos em homologação                          | Parcialmente resolvido |
 | 2026-06-02 | F10     | Validar contratos D4Sign/documentos             | Alta       | A definir   | Preparar ambiente sandbox autorizado                                                                                | Aberto                 |
-| 2026-06-02 | F11     | Validar Asaas/billing com sandbox               | Alta       | A definir   | Preparar dados sintéticos e webhooks                                                                                | Aberto                 |
+| 2026-06-02 | F11     | Validar Asaas/billing com sandbox               | Alta       | A definir   | Subconta tenant alinhada a service-role server-side; preparar dados sintéticos, migrations remotas e webhooks        | Aprovado por código    |
 | 2026-06-02 | F12     | Fechar contrato de `clinic-reports`             | Média      | A definir   | Edge Function e UI reforçadas por código; validar execução/exportação em Supabase real                              | Aprovado por código    |
 | 2026-06-03 | F12     | Validar relatórios do paciente no Paciente 360  | Média      | A definir   | Serviço e Edge Function filtram allowlist paciente por código; validar lista/export/expiração com usuário sintético | Aprovado por código    |
 | 2026-06-03 | F17     | Validar portal paciente com vínculos sintéticos | Alta       | A definir   | Serviço/UI reforçados por código; validar snapshot, mensagem, check-in, notificação e signed URL em Supabase real   | Aprovado por código    |
@@ -1136,6 +1164,61 @@ Copie este bloco para cada fluxo validado.
 - Screenshot/anexo: pendente de browser smoke autenticado com paciente sintético e sandbox Asaas autorizado.
 - Status: aprovado por código; validação real em homologação/sandbox pendente.
 - Pendências: validar customer/cobrança/assinatura em sandbox, webhook idempotente/autenticado, reconciliação com divergências sintéticas, isolamento RLS multi-tenant e evidência visual.
+
+### Evidencia - F11 subconta Asaas e migrations remotas aplicadas
+
+- Data: 2026-06-04.
+- Ambiente: local/remoto Supabase; `.env` foi usado somente para carregar
+  `SUPABASE_DB_URL`/`SUPABASE_ACCESS_TOKEN` no processo sem imprimir valores,
+  nenhum provider externo foi chamado e nenhum payload sensivel foi impresso.
+- Rota/API/RPC/Edge Function: `asaas-create-tenant-subaccount`,
+  `tenant_billing_accounts`, `asaas_subaccounts`, Supabase CLI remoto.
+- Passos executados:
+  1. Confirmada a existencia do plano em
+     `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e da pendencia aberta no
+     checklist funcional para `asaas-create-tenant-subaccount`.
+  2. Verificado que o Supabase CLI nao estava instalado globalmente nem no
+     projeto; `npx --yes supabase@latest --version` retornou `2.104.0`.
+  3. Tentado dry-run remoto seguro com
+     `npx --yes supabase@latest db push --linked --dry-run --yes`; o comando
+     falhou antes de qualquer mutacao porque o workspace nao possui project ref
+     linkado.
+  4. Tentado `projects list` para descobrir se havia login global do CLI; o
+     comando falhou por ausencia de access token.
+  5. Corrigida `asaas-create-tenant-subaccount` para exigir
+     `SUPABASE_SERVICE_ROLE_KEY` e gravar `tenant_billing_accounts`/
+     `asaas_subaccounts` com cliente service-role server-side, mantendo
+     validacao de JWT, tenant ativo e `financial.write` pelo cliente anon com
+     token do usuario.
+  6. Normalizada a `SUPABASE_DB_URL` em memoria para remover colchetes de senha
+     e percent-encodear o userinfo antes de passar ao CLI.
+  7. Executado `npx --yes supabase@latest db push --db-url <redacted> --dry-run
+     --yes`; o dry-run listou 29 migrations pendentes, de `20260530120000` a
+     `20260601233000`.
+  8. Executado `npx --yes supabase@latest db push --db-url <redacted> --yes`;
+     todas as 29 migrations foram aplicadas no Supabase remoto e o CLI concluiu
+     com `Finished supabase db push`.
+  9. Reexecutado dry-run remoto; resultado `Remote database is up to date`.
+  10. Executadas consultas read-only de catalogo: histórico remoto confirmou
+      `migration_count=29` e `latest_migration=20260601233000`; catalogo publico
+      confirmou 79 tabelas, 79 tabelas com RLS e 85 funcoes publicas.
+  11. Tentado deploy remoto da Edge Function alterada com
+      `functions deploy asaas-create-tenant-subaccount --use-api`; o CLI recusou
+      o token carregado por nao estar no formato `sbp_...`, entao nenhuma Edge
+      Function foi publicada nesta etapa.
+- Resultado esperado: aplicar migrations remotas, provar que o remoto ficou em
+  dia e fechar o drift de escrita provider-owned em subconta Asaas por codigo.
+- Resultado observado: migrations remotas aplicadas e confirmadas; correcao de
+  codigo da Edge Function concluida, mas deploy remoto da funcao pendente por
+  token CLI invalido.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de
+  provider, DB URLs, access tokens ou payloads sensiveis.
+- Screenshot/anexo: nao aplicavel; mudanca de Edge Function e operacao CLI.
+- Status: migrations remotas aprovadas; Edge Function aprovada por codigo e
+  deploy remoto pendente; validacao Asaas sandbox pendente.
+- Pendencias: substituir `SUPABASE_ACCESS_TOKEN` por token CLI no formato
+  `sbp_...`, publicar `asaas-create-tenant-subaccount`, executar
+  bootstrap/smokes autorizados e validar Asaas sandbox sem expor valores.
 
 ### Evidência — F12 Relatórios clínicos e export seguro
 

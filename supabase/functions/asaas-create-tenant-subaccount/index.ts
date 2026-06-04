@@ -33,6 +33,14 @@ function maskWalletId(value: unknown) {
   return walletId ? `${walletId.slice(0, 4)}***` : null;
 }
 
+function safeErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message?: unknown }).message);
+  }
+  return String(error);
+}
+
 async function resolveTenant(params: {
   supabase: ReturnType<typeof createClient>;
   userId: string;
@@ -98,10 +106,11 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = envString(Deno.env, 'SUPABASE_URL');
     const anonKey = envString(Deno.env, 'SUPABASE_ANON_KEY');
+    const serviceRoleKey = envString(Deno.env, 'SUPABASE_SERVICE_ROLE_KEY');
     const asaasKey = envString(Deno.env, 'ASAAS_API_KEY');
     const asaasBase = envString(Deno.env, 'ASAAS_BASE_URL');
 
-    if (!supabaseUrl || !anonKey || !asaasKey || !asaasBase) {
+    if (!supabaseUrl || !anonKey || !serviceRoleKey || !asaasKey || !asaasBase) {
       console.error('[asaas-create-tenant-subaccount] missing environment configuration');
       return jsonResponse(500, {
         ok: false,
@@ -112,6 +121,9 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const {
@@ -149,7 +161,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: existing, error: existingError } = await supabase
+    const { data: existing, error: existingError } = await admin
       .from('asaas_subaccounts')
       .select('id, status, wallet_id_masked')
       .eq('tenant_id', tenantId)
@@ -173,7 +185,7 @@ Deno.serve(async (req) => {
       status?: string | null;
       wallet_id_masked?: string | null;
     } | null = null;
-    const { data: createdAccount, error: accountCreateError } = await supabase
+    const { data: createdAccount, error: accountCreateError } = await admin
       .from('tenant_billing_accounts')
       .insert({
         tenant_id: tenantId,
@@ -187,7 +199,7 @@ Deno.serve(async (req) => {
     if (accountCreateError) {
       if (accountCreateError.code !== '23505') throw accountCreateError;
 
-      const { data: pendingAccount, error: pendingAccountError } = await supabase
+      const { data: pendingAccount, error: pendingAccountError } = await admin
         .from('tenant_billing_accounts')
         .select('id, status, wallet_id_masked')
         .eq('tenant_id', tenantId)
@@ -196,7 +208,7 @@ Deno.serve(async (req) => {
       if (pendingAccountError) throw pendingAccountError;
 
       if (pendingAccount?.id && pendingAccount.status === 'disabled') {
-        const { data: retryAccount, error: retryAccountError } = await supabase
+        const { data: retryAccount, error: retryAccountError } = await admin
           .from('tenant_billing_accounts')
           .update({
             status: 'pending',
@@ -253,7 +265,7 @@ Deno.serve(async (req) => {
     });
 
     if (!providerResponse.ok) {
-      await supabase
+      await admin
         .from('tenant_billing_accounts')
         .update({
           status: 'disabled',
@@ -275,7 +287,7 @@ Deno.serve(async (req) => {
     const providerData = await providerResponse.json().catch(() => ({}));
     const providerAccountId = asString(providerData.id);
     if (!providerAccountId) {
-      await supabase
+      await admin
         .from('tenant_billing_accounts')
         .update({
           status: 'disabled',
@@ -293,7 +305,7 @@ Deno.serve(async (req) => {
 
     const walletMasked = maskWalletId(providerData.walletId);
 
-    const { data: subaccount, error: subaccountError } = await supabase
+    const { data: subaccount, error: subaccountError } = await admin
       .from('asaas_subaccounts')
       .upsert(
         {
@@ -313,7 +325,7 @@ Deno.serve(async (req) => {
 
     if (subaccountError) throw subaccountError;
 
-    const { error: accountUpdateError } = await supabase
+    const { error: accountUpdateError } = await admin
       .from('tenant_billing_accounts')
       .update({
         status: 'active',
@@ -337,7 +349,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('[asaas-create-tenant-subaccount] unexpected_error', {
-      message: error instanceof Error ? error.message : String(error),
+      message: safeErrorMessage(error),
     });
 
     return jsonResponse(500, {

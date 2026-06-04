@@ -149,7 +149,7 @@ Evidencia em andamento:
 - [ ] Validar RLS cross-tenant para `patients`, `patient_pii`,
   `generated_documents`, `patient_chat_threads`, `patient_chat_messages`,
   billing, CRM, inventory e portal.
-- [ ] Corrigir `asaas-create-tenant-subaccount` para gravar tabelas
+- [V] Corrigir `asaas-create-tenant-subaccount` para gravar tabelas
   provider-owned via service role controlado ou RPC `security definer` auditada,
   mantendo precheck de `financial.write`, idempotencia e resposta sem IDs
   provider sensiveis.
@@ -169,6 +169,19 @@ Criterios de aceite:
 - Falhas de contrato aparecem como error/forbidden visivel, nao como mock
   silencioso.
 - Smokes mutantes ou provider so aparecem como `[R]` ate existir autorizacao.
+
+Evidencia em andamento:
+
+- 2026-06-04: `asaas-create-tenant-subaccount` passou a exigir
+  `SUPABASE_SERVICE_ROLE_KEY`, validar JWT/tenant/`financial.write` com cliente
+  anon session-scoped e gravar `tenant_billing_accounts`/`asaas_subaccounts` com
+  service role apenas dentro da Edge Function. As 29 migrations foram aplicadas
+  no Supabase remoto via `SUPABASE_DB_URL` sanitizada; dry-run posterior
+  confirmou `Remote database is up to date`, historico remoto confirmou
+  `migration_count=29`/`latest_migration=20260601233000`, e catalogo publico
+  confirmou 79 tabelas com RLS e 85 funcoes. Deploy remoto da Edge Function
+  alterada segue pendente porque o `SUPABASE_ACCESS_TOKEN` carregado nao esta no
+  formato CLI `sbp_...`.
 
 ## P1 - Fluxos clinicos
 

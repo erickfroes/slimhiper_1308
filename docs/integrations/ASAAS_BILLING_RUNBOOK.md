@@ -99,7 +99,8 @@ Configure server-side only:
 - `ASAAS_API_KEY`
 - `ASAAS_BASE_URL`
 - `ASAAS_WEBHOOK_TOKEN`
-- `SUPABASE_SERVICE_ROLE_KEY` (webhook only)
+- `SUPABASE_SERVICE_ROLE_KEY` (Edge Functions that persist provider-owned
+  billing rows and webhook handlers)
 
 Never place these in `NEXT_PUBLIC_*`.
 Dummy/placeholder values are treated as missing by Edge Functions and local
@@ -227,6 +228,12 @@ consumed by `/clinic/financeiro`.
 tenant billing account creation: it resolves the active tenant from the
 authenticated user, requires `financial.write`, reuses an existing subaccount
 when present, and returns only local subaccount id/status plus masked wallet id.
+Because authenticated insert/update policies are revoked from provider-owned
+billing tables, the function validates JWT, active tenant membership, and
+`financial.write` with the session-scoped anon client, then uses a service-role
+client only inside the Edge Function to read/write `tenant_billing_accounts` and
+`asaas_subaccounts`. Do not expose service-role credentials to browser services
+or `NEXT_PUBLIC_*`.
 
 ## Seed And Contract Test
 
