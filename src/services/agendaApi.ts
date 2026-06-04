@@ -618,12 +618,13 @@ const supabaseAgendaProvider: AgendaProvider = {
     }
 
     const now = new Date().toISOString();
+    const normalizedReason = normalizeOptionalText(reason);
     const { error: updateError } = await supabase
       .from('appointments')
       .update({
         status: 'cancelado',
         updated_at: now,
-        notes: normalizeOptionalText(reason) ?? 'Cancelada sem motivo operacional informado.',
+        notes: normalizedReason ?? 'Cancelada sem motivo operacional informado.',
       })
       .eq('id', appointmentId)
       .eq('tenant_id', row.tenant_id);
@@ -639,7 +640,7 @@ const supabaseAgendaProvider: AgendaProvider = {
       event_at: now,
       metadata: {
         fromStatus: currentStatus,
-        reason: normalizeOptionalText(reason),
+        reasonProvided: Boolean(normalizedReason),
       },
     });
 

@@ -85,6 +85,34 @@ interface SafeServiceError {
   message: string;
 }
 
+const SAFE_AUDIT_METADATA_KEYS = new Set(['encounterId', 'labOrderId', 'source', 'status']);
+
+function sanitizeAuditMetadata(
+  metadata: Record<string, unknown> | undefined
+): Record<string, string | number | boolean> {
+  if (!metadata) return {};
+
+  const sanitized: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (!SAFE_AUDIT_METADATA_KEYS.has(key)) continue;
+
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (normalized) sanitized[key] = normalized.slice(0, 120);
+      continue;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      sanitized[key] = value;
+      continue;
+    }
+
+    if (typeof value === 'boolean') sanitized[key] = value;
+  }
+
+  return sanitized;
+}
+
 type MeasurementRow = {
   id: string;
   patient_id: string;
@@ -297,7 +325,7 @@ async function insertAuditLog(input: {
     entity_id: input.entityId,
     metadata: {
       patientId: input.patientId,
-      ...input.metadata,
+      ...sanitizeAuditMetadata(input.metadata),
     },
   });
 

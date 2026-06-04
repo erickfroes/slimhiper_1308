@@ -134,8 +134,8 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F19 | Admin tenants            | `/admin/tenants`, `/admin/tenants/[tenantId]`, `/api/admin/tenants/[tenantId]/invitations`             | Avanço de contrato real em 2026-06-03: detalhe, membership, suporte, break-glass e revogação usam RPCs auditadas; convite fica em Route Handler server-side com cliente admin; smoke pendente                         | Real validado                  | Convite, membership, suporte, break-glass, revogação e audit log                                                                     | Service role server-side, justificativas e usuários sintéticos |
 | F20 | Webhooks admin           | `/admin/webhooks`                                                                                      | Avanço de contrato real em 2026-06-03: monitor usa RPC real, filtros provider/status, detalhes sanitizados, proteção contra resposta obsoleta e identifica reprocesso como indisponível até existir contrato auditado | Real validado                  | Listar eventos Asaas/D4Sign e filtros; detalhes sem payload bruto; reprocessamento protegido quando existir                          | Dados sintéticos de webhooks e contrato de reprocesso          |
 | F21 | Observability            | `/admin/observability`                                                                                 | Avanço em 2026-06-03: painel combina `/api/health` e webhooks reais com monitores estáticos explicitamente rotulados                                                                                                  | Útil operacionalmente          | Checklist de monitores, links reais e distinção entre sinais reais/estáticos                                                         | Métricas externas/APM ainda não conectadas                     |
-| F22 | Segurança e privacidade  | Logs, env, service role, storage, URLs                                                                 | Verificação estática em 2026-06-03: `.env`/`.env.local` não estão versionados; service-role em `src` aparece apenas no helper `server-only`; `.env.example` usa placeholders vazios                                   | Aprovado                       | Checklist de ausência de vazamentos, rg de service-role/client e revisão de `.env.example`                                           | Validação de logs reais, storage e providers em homologação    |
-| F23 | Produção                 | Build, healthcheck, env, rollback                                                                      | Não validado                                                                                                                                                                                                          | Go-live aprovado               | Runbook de release e rollback                                                                                                        | Secrets, DNS, Supabase e providers                             |
+| F22 | Segurança e privacidade  | Logs, env, service role, storage, URLs                                                                 | Verificação estática em 2026-06-03; em 2026-06-04 audit logs clínicos passaram a aceitar metadados extras por allowlist e `queue_events` deixou de duplicar motivo livre de cancelamento                            | Aprovado                       | Checklist de ausência de vazamentos, rg de service-role/client, revisão de `.env.example` e amostra de audit logs                    | Validação de logs reais, storage e providers em homologação    |
+| F23 | Produção                 | Build, healthcheck, env, rollback                                                                      | Avanço em 2026-06-04: `/api/health` falha em staging/produção se Supabase público ou metadata de release estiverem ausentes/placeholder; smoke pos-deploy reprova health `fail`                                      | Go-live aprovado               | Runbook de release/rollback, `/api/health` sem `fail`, smoke pos-deploy e aprovação humana                                          | Secrets, DNS, Supabase, providers e browser autenticado        |
 
 ## 4. Fase 0 — Preparação de ambiente e evidências
 
@@ -727,7 +727,7 @@ webhook -> reconciliação -> timeline/financeiro.
 - [x] Prescrições respeitam permissão médica. Verificação de código em 2026-06-03 confirma gate por `prescriptions.read`/`prescriptions.write` na navegação do Paciente 360 e consulta real de prescrições somente quando `prescriptions.read` está presente; smoke autenticado por perfil continua pendente.
 - [x] Documentos clínicos têm signed URL curta. Verificação de código em 2026-06-03 confirma signed URL com expiração de 300 segundos, bucket/path validado e resposta reduzida a URL/expiração/metadado temporal.
 - [x] Payloads de webhook são resumidos ou redigidos. Em 2026-06-03 o webhook D4Sign deixou de persistir/expor `provider_document_id` em resumo/timeline/resposta e passou a registrar apenas sinal operacional de evento provider; webhooks Asaas já usam payload minimizado com hash/resumo.
-- [ ] Audit log registra ação sem expor conteúdo clínico desnecessário. Em 2026-06-04 o convite admin deixou de gravar e-mail completo em `audit_logs.metadata`, mantendo e-mail mascarado/domínio e `targetUserId`; permanece pendente revisão ponta a ponta dos inserts legados de `audit_logs` e prova real após mutações clínicas/admin sintéticas.
+- [x] Audit log registra ação sem expor conteúdo clínico desnecessário. Em 2026-06-04 o convite admin deixou de gravar e-mail completo em `audit_logs.metadata`; os audit logs clínicos passaram a aceitar metadados extras somente por allowlist; e `queue_events` deixou de duplicar motivo livre de cancelamento, mantendo apenas `reasonProvided`. Permanece pendente prova real após mutações clínicas/admin sintéticas.
 
 **Progresso registrado em 2026-06-03:**
 
@@ -738,6 +738,7 @@ webhook -> reconciliação -> timeline/financeiro.
 - `d4sign-send-document` deixou de devolver `provider_document_id` e ids clínicos no `meta` da resposta; `webhook-d4sign` deixou de gravar `provider_document_id` no resumo/timeline e removeu idempotência da resposta externa.
 - Em 2026-06-04 `patient-360-summary`, `patient360Api`, fixture e script de contrato passaram a exigir resposta minimizada para perfil/contato do Paciente 360: sem `tenantId`, sem nascimento bruto e com CPF/telefone/e-mail mascarados.
 - Em 2026-06-04 o Route Handler de convite admin passou a gravar e-mail mascarado e domínio no audit log, sem e-mail completo em `metadata`.
+- Em 2026-06-04 o helper de audit log clínico passou a descartar metadados extras fora de allowlist (`encounterId`, `labOrderId`, `source`, `status`) e o cancelamento de agenda deixou de duplicar motivo livre em `queue_events.metadata`, mantendo o texto somente no campo operacional da consulta.
 - Permanecem pendentes smoke autenticado por perfil para financeiro/prescrições/documentos, validação real da resposta minimizada do Paciente 360 e amostragem de audit log com mutações sintéticas.
 
 ## 13. Fase 9 — Browser smoke obrigatório
@@ -857,11 +858,11 @@ webhook -> reconciliação -> timeline/financeiro.
 
 ### 15.4 Gate P3 — Produção
 
-- [ ] Healthcheck sem `fail`.
-- [ ] Mocks desabilitados.
+- [ ] Healthcheck sem `fail` em staging/producao. Em 2026-06-04 `/api/health` passou a falhar se Supabase publico ou metadata de release estiverem ausentes/placeholder em ambiente controlado, e o smoke pos-deploy passou a reprovar `fail`.
+- [ ] Mocks desabilitados em staging/producao.
 - [ ] Secrets configurados fora do repositório.
 - [ ] Observabilidade mínima ativa.
-- [ ] Runbook de rollback pronto.
+- [ ] Runbook de rollback pronto e exercitado em staging/mesa.
 - [ ] Responsáveis de suporte definidos.
 - [ ] Plano de incidente para providers definido.
 
@@ -879,6 +880,8 @@ Use esta seção para controlar bloqueios durante a execução.
 | 2026-06-03 | F17     | Validar portal paciente com vínculos sintéticos | Alta       | A definir   | Serviço/UI reforçados por código; validar snapshot, mensagem, check-in, notificação e signed URL em Supabase real   | Aprovado por código    |
 | 2026-06-02 | F19     | Testar admin tenant detail com audit log        | Alta       | A definir   | Criar cenários admin sintéticos                                                                                     | Aberto                 |
 | 2026-06-03 | F20/F21 | Validar webhooks e observabilidade em browser   | Média      | A definir   | Gerar eventos sintéticos Asaas/D4Sign em homologação e conferir health/sinais reais com admin sintético             | Aprovado por código    |
+| 2026-06-04 | F22     | Amostrar audit logs reais minimizados           | Média      | A definir   | Executar mutações clínicas/admin sintéticas e conferir que `metadata` não contém texto clínico, PII ou payload bruto | Aprovado por código    |
+| 2026-06-04 | F23     | Validar health/smoke de release em staging      | Alta       | A definir   | Rodar smoke pos-deploy com `NEXT_PUBLIC_USE_MOCK_DATA=false`, Supabase real, metadata de release e owners definidos  | Aprovado por código    |
 | 2026-06-02 | F06     | Blindar gráfico de peso com dados vazios        | Média      | Codex       | Componente corrigido; validar visualmente no Paciente 360 com paciente sem histórico                                | Parcialmente resolvido |
 
 ## 17. Modelo de evidência por fluxo
@@ -1568,6 +1571,54 @@ Copie este bloco para cada fluxo validado.
   executar browser smoke do Paciente 360 sem mock, amostrar audit logs apos
   convite/mutacoes admin sinteticas e concluir revisao dos inserts legados de
   `audit_logs`.
+
+### Evidencia - F22/F23 audit logs minimizados e health de release
+
+- Data: 2026-06-04.
+- Ambiente: local, revisao de codigo, build e smoke local; `.env` nao foi lido
+  manualmente, nenhum provider externo foi chamado e nenhuma
+  migracao/bootstrap foi executado.
+- Rota/API/RPC/Edge Function: `/api/health`,
+  `scripts/observability/post-deploy-smoke.mjs`, `clinicalRecordsApi`,
+  `agendaApi` e `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md`.
+- Passos executados:
+  1. Confirmada a existencia do plano em
+     `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avancada a proxima frente
+     implementavel entre F22/F23.
+  2. `/api/health` passou a tratar valores vazios/dummy/placeholder como
+     configuracao ausente e, em staging/producao, retorna `fail` quando
+     Supabase publico ou metadata de release nao estao configurados.
+  3. O smoke pos-deploy passou a exigir HTTP 200 no health, ler o JSON de
+     resposta e reprovar explicitamente `status=fail`.
+  4. `clinicalRecordsApi` passou a sanitizar metadados extras de `audit_logs`
+     por allowlist, evitando que texto clinico, payloads, contatos ou notas
+     entrem em auditoria por futuras chamadas do helper.
+  5. `agendaApi` deixou de duplicar motivo livre de cancelamento em
+     `queue_events.metadata`; a consulta ainda guarda o motivo operacional em
+     `appointments.notes`, enquanto o evento registra apenas `reasonProvided`.
+  6. O smoke local com `npm run dev` precisou remover o artefato gerado
+     `.next/diagnostics` apos erro de `readlink` no caminho com acento; depois
+     disso `node scripts/observability/post-deploy-smoke.mjs --base-url
+     http://localhost:4028` passou com `/api/health` em `health=warn` local e
+     rotas protegidas anonimas redirecionando para `/auth/login`.
+- Resultado esperado: avancar F22/F23 sem expor secrets/PII, sem chamar
+  Supabase remoto/provider externo e sem marcar go-live como aprovado antes de
+  staging/browser autenticado.
+- Resultado observado: `npm run type-check`, `npm run lint`, `npm run build`,
+  `git diff --check` e smoke pos-deploy local passaram. Lint/build mantiveram
+  11 warnings conhecidos em componentes legados, sem erros. `npm run lint`
+  falhou uma vez por CRLF nos trechos editados e passou apos
+  `npx prettier --write` nos arquivos tocados.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, IDs reais de
+  provider, signed URLs ou payloads sensiveis.
+- Screenshot/anexo: nao aplicavel; mudanca de health/script/servicos sem UI
+  perceptivel. Smoke local anonimo validou health/login/redirects.
+- Status: aprovado por codigo, build e smoke local; validacao staging/producao,
+  browser autenticado e amostra real de audit logs permanecem pendentes.
+- Pendencias: executar smoke pos-deploy em staging com
+  `NEXT_PUBLIC_USE_MOCK_DATA=false`, Supabase real, metadata de release e
+  usuarios sinteticos; amostrar audit logs apos mutacoes clinicas/admin;
+  exercitar rollback/mesa e confirmar owners de suporte/provider.
 
 ## 18. Sequência recomendada de implementação
 

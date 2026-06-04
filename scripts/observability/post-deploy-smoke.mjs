@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const routes = [
-  { path: '/api/health', expect: [200, 503], label: 'health endpoint' },
+  { path: '/api/health', expect: [200], label: 'health endpoint' },
   { path: '/auth/login', expect: [200], label: 'anonymous login page' },
   { path: '/clinic/dashboard', expect: [200, 302, 303, 307, 308], label: 'clinic protected route' },
   { path: '/admin', expect: [200, 302, 303, 307, 308, 403], label: 'admin protected route' },
@@ -41,12 +41,23 @@ async function request(baseUrl, route, cookie) {
       ...(cookie ? { cookie } : {}),
     },
   });
+  const bodyText = route.path === '/api/health' ? await response.text() : '';
+  const body = bodyText
+    ? (() => {
+        try {
+          return JSON.parse(bodyText);
+        } catch {
+          return null;
+        }
+      })()
+    : null;
 
   return {
     requestId,
     status: response.status,
     location: response.headers.get('location'),
     responseRequestId: response.headers.get('x-request-id'),
+    healthStatus: typeof body?.status === 'string' ? body.status : null,
   };
 }
 
@@ -65,6 +76,11 @@ async function main() {
 
     if (route.path === '/api/health') {
       assert(result.responseRequestId, 'health endpoint did not return x-request-id.');
+      assert(result.healthStatus, 'health endpoint did not return a status payload.');
+      assert(
+        result.healthStatus !== 'fail',
+        'health endpoint returned fail; release smoke cannot continue.'
+      );
     }
 
     if (!cookie && ['/clinic/dashboard', '/admin', '/patient'].includes(route.path)) {
@@ -74,12 +90,18 @@ async function main() {
       );
     }
 
-    results.push({ route: route.path, status: result.status, requestId: result.requestId });
+    results.push({
+      route: route.path,
+      status: result.status,
+      healthStatus: result.healthStatus,
+      requestId: result.requestId,
+    });
   }
 
   console.log('Post-deploy observability smoke passed.');
   for (const result of results) {
-    console.log(`- ${result.route}: ${result.status} (${result.requestId})`);
+    const healthSuffix = result.healthStatus ? ` health=${result.healthStatus}` : '';
+    console.log(`- ${result.route}: ${result.status}${healthSuffix} (${result.requestId})`);
   }
 }
 

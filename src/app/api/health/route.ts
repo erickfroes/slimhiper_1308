@@ -12,8 +12,23 @@ type HealthComponent = {
   detail: string;
 };
 
+const PLACEHOLDER_ENV_PATTERN =
+  /^(dummy|placeholder|changeme|change-me|change_me|example|fake|test|null|undefined)$/i;
+
+function readEnv(name: string) {
+  return process.env[name]?.trim() ?? '';
+}
+
+function isPlaceholderEnvValue(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return true;
+  if (PLACEHOLDER_ENV_PATTERN.test(normalized)) return true;
+  return normalized.includes('<') || normalized.includes('>');
+}
+
 function hasEnv(name: string) {
-  return Boolean(process.env[name]?.trim());
+  const value = readEnv(name);
+  return Boolean(value && !isPlaceholderEnvValue(value));
 }
 
 function hasAnyEnv(names: string[]) {
@@ -42,15 +57,23 @@ export async function GET(request: Request) {
   const environment = currentEnvironment();
   const mockEnabled = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
   const productionLike = ['staging', 'production'].includes(environment);
+  const supabasePublicConfigReady = hasSupabasePublicConfig();
+  const releaseMetadataReady = hasEnv('NEXT_PUBLIC_APP_VERSION') || hasEnv('VERCEL_GIT_COMMIT_SHA');
 
   const components: Record<string, HealthComponent> = {
     next: { status: 'ok', detail: 'Next.js route handler respondeu.' },
-    supabasePublicConfig: hasSupabasePublicConfig()
+    supabasePublicConfig: supabasePublicConfigReady
       ? { status: 'ok', detail: 'Variaveis publicas Supabase configuradas.' }
-      : {
-          status: 'warn',
-          detail: 'Variaveis publicas Supabase URL/chave publicavel ausentes neste ambiente.',
-        },
+      : productionLike
+        ? {
+            status: 'fail',
+            detail:
+              'Variaveis publicas Supabase URL/chave publicavel ausentes ou placeholder em ambiente controlado.',
+          }
+        : {
+            status: 'warn',
+            detail: 'Variaveis publicas Supabase URL/chave publicavel ausentes neste ambiente.',
+          },
     mockDataPolicy:
       productionLike && mockEnabled
         ? { status: 'fail', detail: 'Mocks nao podem estar habilitados em staging/producao.' }
@@ -60,9 +83,13 @@ export async function GET(request: Request) {
               ? 'Mocks habilitados apenas para ambiente descartavel.'
               : 'Mocks desabilitados.',
           },
-    releaseMetadata:
-      hasEnv('NEXT_PUBLIC_APP_VERSION') || hasEnv('VERCEL_GIT_COMMIT_SHA')
-        ? { status: 'ok', detail: 'Metadados de release disponiveis.' }
+    releaseMetadata: releaseMetadataReady
+      ? { status: 'ok', detail: 'Metadados de release disponiveis.' }
+      : productionLike
+        ? {
+            status: 'fail',
+            detail: 'Metadados de release obrigatorios nao configurados em ambiente controlado.',
+          }
         : { status: 'warn', detail: 'Metadados de release nao configurados.' },
   };
 
