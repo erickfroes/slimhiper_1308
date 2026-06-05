@@ -15,11 +15,17 @@ const SERVICE_ROLE_KEY = getEnvValue('SUPABASE_SERVICE_ROLE_KEY');
 
 function fail(message) {
   console.error(`[communications-retention] ${message}`);
-  process.exit(1);
+  process.exitCode = 1;
 }
 
-if (!SUPABASE_URL) fail('Missing SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL.');
-if (!SERVICE_ROLE_KEY) fail('Missing SUPABASE_SERVICE_ROLE_KEY for backend-only read scope.');
+if (!SUPABASE_URL) {
+  fail('Missing SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL.');
+  process.exit(1);
+}
+if (!SERVICE_ROLE_KEY) {
+  fail('Missing SUPABASE_SERVICE_ROLE_KEY for backend-only read scope.');
+  process.exit(1);
+}
 
 const supabase = createClient(SUPABASE_URL, getRequiredServiceRoleKey(), {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -31,6 +37,21 @@ function safeErrorCode(error) {
     .trim()
     .replace(/[^a-zA-Z0-9_.:-]/g, '')
     .slice(0, 80);
+}
+
+async function assertColumnContract(table, column) {
+  const { error } = await supabase.from(table).select(column, { head: true }).limit(1);
+  if (error) {
+    throw new Error(`${table}.${column}: schema_contract_missing`);
+  }
+}
+
+async function assertRetentionContract(table) {
+  const { error } = await supabase.from(table).select('id', { head: true }).limit(1);
+  if (error) throw new Error(`${table}: ${safeErrorCode(error)}`);
+
+  await assertColumnContract(table, 'archived_at');
+  await assertColumnContract(table, 'retention_until');
 }
 
 async function countExpired(table, extraFilter) {
@@ -49,6 +70,10 @@ async function countExpired(table, extraFilter) {
 }
 
 try {
+  await assertRetentionContract('patient_chat_messages');
+  await assertRetentionContract('notifications');
+  await assertRetentionContract('patient_chat_threads');
+
   const [messages, notifications, threads] = await Promise.all([
     countExpired('patient_chat_messages'),
     countExpired('notifications'),

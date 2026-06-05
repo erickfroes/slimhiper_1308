@@ -65,6 +65,54 @@ function ok(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function tableExists(tableName) {
+  const { error } = await admin.from(tableName).select('*', { count: 'exact', head: true });
+  return !error;
+}
+
+async function columnExists(tableName, columnName) {
+  const { error } = await admin
+    .from(tableName)
+    .select(columnName, { count: 'exact', head: true });
+  return !error;
+}
+
+async function deleteByColumnIfPresent(tableName, columnName, value) {
+  if (!(await tableExists(tableName))) return;
+  if (!(await columnExists(tableName, columnName))) return;
+
+  await admin.from(tableName).delete().eq(columnName, value).throwOnError();
+}
+
+async function resetPatientIfTenantChanged(targetTenantId, patientId) {
+  const { data: existingPatient, error } = await admin
+    .from('patients')
+    .select('id, tenant_id')
+    .eq('id', patientId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!existingPatient || existingPatient.tenant_id === targetTenantId) return;
+
+  const patientScopedDeletes = [
+    ['payments', 'patient_id'],
+    ['payment_links', 'patient_id'],
+    ['patient_invoices', 'patient_id'],
+    ['generated_documents', 'patient_id'],
+    ['patient_chat_messages', 'patient_id'],
+    ['patient_chat_threads', 'patient_id'],
+    ['patient_accounts', 'patient_id'],
+    ['guardian_links', 'patient_id'],
+    ['notifications', 'patient_id'],
+    ['patient_pii', 'patient_id'],
+  ];
+
+  for (const [tableName, columnName] of patientScopedDeletes) {
+    await deleteByColumnIfPresent(tableName, columnName, patientId);
+  }
+
+  await admin.from('patients').delete().eq('id', patientId).throwOnError();
+}
+
 async function ensureAuthUser(email) {
   const { data: list, error: listError } = await admin.auth.admin.listUsers({
     page: 1,
@@ -169,6 +217,8 @@ async function ensureMembership(user, tenantId, roleCode) {
 }
 
 async function seedTenantData(tenant, patientId, ids, suffix) {
+  await resetPatientIfTenantChanged(tenant.id, patientId);
+
   await admin
     .from('patients')
     .upsert(
@@ -274,7 +324,7 @@ async function seedTenantData(tenant, patientId, ids, suffix) {
         status: 'active',
         definition: { seeded_by: 'test-rls-cross-tenant-contract' },
       },
-      { onConflict: 'tenant_id,key' }
+      { onConflict: 'id' }
     )
     .throwOnError();
 }
@@ -311,7 +361,8 @@ async function updateRows(client, table, filters, patch) {
     query = query.eq(column, value);
   }
 
-  const { data, error } = await query.select('id');
+  const selectColumn = table === 'patient_pii' ? 'patient_id' : 'id';
+  const { data, error } = await query.select(selectColumn);
   if (error) throw error;
   return data ?? [];
 }
@@ -350,7 +401,10 @@ async function checkedCount(label, client, table, filters) {
 
 async function run() {
   currentStep = 'ensuring tenants';
-  const tenantA = await ensureTenant('demo-clinic', 'Demo Clinic');
+  const tenantA = await ensureTenant(
+    process.env.SUPABASE_BOOTSTRAP_TENANT_SLUG ?? 'demo-clinic',
+    process.env.SUPABASE_BOOTSTRAP_TENANT_NAME ?? 'Demo Clinic'
+  );
   const tenantB = await ensureTenant('demo-clinic-b', 'Demo Clinic B');
   currentStep = 'ensuring users';
   const userA = await ensureAuthUser('rls.tenant-a.admin@example.com');

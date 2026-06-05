@@ -396,7 +396,7 @@ async function seedPatient360TabData(tenantId, patientId, userId) {
         status: 'active',
         definition: { badge: 'Local' },
       },
-      { onConflict: 'tenant_id,key' }
+      { onConflict: 'id' }
     )
     .throwOnError();
 
@@ -642,7 +642,7 @@ async function run() {
   runNodeScript(path.join('scripts', 'supabase', 'bootstrap-cross-tenant-demo.mjs'));
 
   currentStep = 'ensuring tenants and users';
-  const tenantA = await ensureTenant('demo-clinic');
+  const tenantA = await ensureTenant(process.env.SUPABASE_BOOTSTRAP_TENANT_SLUG ?? 'demo-clinic');
   await ensureTenant('demo-clinic-b');
   const staff = await ensureAuthUser('patient360.staff.local@example.com');
   const forbidden = await ensureAuthUser('patient360.forbidden.local@example.com');

@@ -1819,6 +1819,122 @@ Copie este bloco para cada fluxo validado.
   escolher os scripts mutaveis a executar e confirmar flags de alvo remoto
   somente para sandbox autorizado.
 
+### Evidencia - validacao nao-provider autorizada com `.env`
+
+- Data: 2026-06-05.
+- Ambiente: local, usando `.env` atual sem imprimir valores; nenhum provider
+  externo foi chamado e nenhuma migracao/bootstrap foi executado.
+- Classificacao do alvo: `SUPABASE_URL` configurada e remota; o helper nao a
+  classificou como local/sandbox. Chave publicavel, service-role e senha de
+  bootstrap estao configuradas como nao-placeholder; `TEST_ACCESS_TOKEN` e
+  `TEST_PATIENT_ID` seguem sem valor valido para contratos reais.
+- Scripts/checks executados:
+  1. `check-auth-rbac-contract.mjs`: passou em modo read-only para tabelas
+     basicas de Auth/RBAC.
+  2. `check-communications-retention.mjs`: passou em modo read-only; expirados
+     reportados como `messages=0`, `notifications=0`, `threads=0`; mutation
+     permaneceu skipped.
+  3. `test-patient360-contract.mjs --mode=fixture`: passou sem chamar
+     Supabase.
+  4. `test-billing-fixtures.mjs` e `test-d4sign-fixtures.mjs`: passaram com
+     fixtures locais, sem chamadas a providers.
+  5. `post-deploy-smoke.mjs --base-url http://localhost:4028`: passou apos
+     subir `npm run dev`; `/api/health` respondeu `health=warn`, `/auth/login`
+     respondeu 200 e rotas protegidas responderam 307 para login.
+  6. Redirects HTTP anonimos para `/clinic/dashboard`, `/clinic/inbox`,
+     `/admin` e `/patient` confirmaram `307 /auth/login`.
+- Scripts mutaveis nao executados contra o alvo remoto: clinical core, RLS
+  cross-tenant, patient linkage, Paciente 360 real, programas, relatorios,
+  CRM/inventario, billing reconciliation, platform admin e documentos Phase 4
+  recusaram execucao antes de escrita por ausencia da flag explicita de sandbox
+  remoto aprovada para cada script.
+- Contratos reais bloqueados: `test-patient360-contract.mjs --mode=real`,
+  `test-documents-contract.mjs` e `test-billing-contract.mjs` pararam por
+  ausencia de `TEST_ACCESS_TOKEN`/`TEST_PATIENT_ID` validos no `.env`.
+- Resultado esperado: executar tudo que e seguro/nao-provider com o `.env`
+  atual e identificar claramente o que ainda precisa de dados/flags.
+- Resultado observado: validacoes read-only, fixtures e smoke local passaram;
+  smokes mutaveis falharam fechado no guard de alvo remoto; contratos reais
+  dependem de usuario/paciente sinteticos.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, provider IDs,
+  signed URLs ou payloads sensiveis.
+- Status: validacao nao-provider parcial aprovada; validacao real mutavel ainda
+  pendente de alvo local ou sandbox remoto explicitamente marcado por flags.
+- Pendencias: fornecer token de sessao sintetico e paciente sintetico validos,
+  confirmar que o Supabase remoto atual e homologacao/sandbox e liberar flags
+  especificas dos smokes mutaveis desejados.
+
+### Evidencia - validacao local com Supabase sandbox
+
+- Data: 2026-06-05.
+- Ambiente: local, usando o `.env` atual sem imprimir valores; alvo Supabase
+  classificado como local/sandbox. Nenhum provider externo foi chamado. O
+  endpoint local de Auth respondeu 200 em `/auth/v1/health`; o endpoint local
+  de Edge Functions respondeu 503 em `/functions/v1/generate-document`.
+- Migracoes locais: a base local contem 18 de 29 migrations do repositorio. A
+  ultima migration do repo marcada como aplicada foi
+  `20260531203000_150_platform_admin_audit_contracts.sql`; seguem ausentes as
+  migrations `160`, `170`, `180`, `181`, `182`, `183`, `190`, `191`, `192`,
+  `193` e `195`.
+- Implementado nesta rodada:
+  1. `check-communications-retention.mjs` passou a fazer preflight de contrato
+     para `archived_at`/`retention_until` e a falhar com
+     `schema_contract_missing`, sem erro bruto de Supabase.
+  2. `bootstrap-patient360-demo.mjs` ficou idempotente quando os UUIDs demo de
+     paciente/programa existem em tenant local antigo; o script limpa filhos
+     conhecidos antes de recriar no tenant configurado.
+  3. Smokes locais de programas, Paciente 360 e documentos passaram a respeitar
+     `SUPABASE_BOOTSTRAP_TENANT_SLUG` em vez de fixar `demo-clinic`.
+  4. `test-rls-cross-tenant-contract.mjs` passou a limpar pacientes
+     deterministicos presos a tenant antigo, usar upsert por `id` em
+     `report_definitions` e nao assumir coluna `id` em `patient_pii`.
+  5. `test-crm-inventory-phase9-local-smoke.mjs` passou a encerrar falhas com
+     `exitCode`, evitando abort do Node no Windows quando a RPC local esta
+     ausente.
+- Scripts/checks que passaram no Supabase local:
+  1. `node --check` nos scripts alterados.
+  2. `check-auth-rbac-contract.mjs`.
+  3. `test-patient360-contract.mjs --mode=fixture`.
+  4. `test-billing-fixtures.mjs`.
+  5. `test-d4sign-fixtures.mjs`.
+  6. `test-clinical-core-contract.mjs`.
+  7. `bootstrap-patient360-demo.mjs`.
+  8. `test-rls-cross-tenant-contract.mjs`.
+  9. `test-billing-reconciliation-local-smoke.mjs`.
+- Scripts/checks bloqueados no estado local atual:
+  1. `check-communications-retention.mjs`: falha corretamente com
+     `patient_chat_messages.archived_at: schema_contract_missing`, pois a
+     migration `183_communications_governance` nao esta aplicada.
+  2. `test-patient-linkage-contract.mjs`: falta a RPC
+     `get_patient_portal_snapshot`, entregue pela linha de migrations do portal
+     paciente ainda ausente.
+  3. `test-reports-phase8-local-smoke.mjs`: falta a RPC
+     `list_clinic_report_definitions`, dependente da migration `180`.
+  4. `test-platform-admin-phase7-local-smoke.mjs`: o detalhe do tenant local
+     nao retornou usuario esperado; a base tambem segue sem as migrations
+     `160`/`170` de suporte/revogacao/mutators.
+  5. `test-crm-inventory-phase9-local-smoke.mjs`: falta a RPC
+     `seed_crm_inventory_rbac_contracts`, dependente das migrations `190+`.
+  6. `test-programs-phase6-local-smoke.mjs`,
+     `test-patient360-local-real-smoke.mjs` e
+     `test-documents-phase4-local-smoke.mjs`: bloqueados por Edge Functions
+     locais retornando 503; sem chamada a provider externo.
+- Resultado esperado: deixar scripts locais repetiveis contra o `.env` atual e
+  separar problemas reais de codigo, schema local e runtime local.
+- Resultado observado: os contratos basicos, RLS cross-tenant e billing
+  reconciliation passaram; modulos dependentes das migrations `160+` e do
+  runtime local de Edge Functions seguem bloqueados por infraestrutura/schema
+  local, nao por provider externo.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, provider IDs,
+  signed URLs ou payloads sensiveis.
+- Status: validacao local avancada e scripts endurecidos; para concluir a
+  validacao completa e preciso aplicar as migrations locais pendentes e servir
+  as Edge Functions locais.
+- Pendencias: autorizacao explicita para aplicar/resetar migrations no
+  Supabase local, disponibilizar/instalar a CLI Supabase ou comando equivalente
+  para servir Functions, e repetir a bateria de smokes apos schema/runtime
+  locais ficarem alinhados ao repo.
+
 ## 18. Sequência recomendada de implementação
 
 1. Executar baseline técnica local.

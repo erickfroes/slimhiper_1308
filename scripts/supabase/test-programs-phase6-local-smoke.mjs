@@ -111,6 +111,25 @@ async function cleanupSmokeProgram(tenantId) {
   const ids = (programs ?? []).map((program) => program.id);
   if (ids.length === 0) return;
 
+  const programChildTables = [
+    'patient_program_checkins',
+    'program_team_members',
+    'program_required_documents',
+    'program_entitlements',
+    'program_services',
+    'program_phases',
+    'program_checkin_templates',
+  ];
+
+  for (const table of programChildTables) {
+    const { error } = await admin
+      .from(table)
+      .delete()
+      .eq('tenant_id', tenantId)
+      .in('program_id', ids);
+    if (error) throw error;
+  }
+
   const { error: taskCleanupError } = await admin
     .from('patient_tasks')
     .delete()
@@ -176,7 +195,7 @@ async function run() {
   runNodeScript(path.join('scripts', 'supabase', 'bootstrap-patient360-demo.mjs'));
 
   currentStep = 'preparing local smoke data';
-  const tenant = await ensureTenant('demo-clinic');
+  const tenant = await ensureTenant(process.env.SUPABASE_BOOTSTRAP_TENANT_SLUG ?? 'demo-clinic');
   await cleanupSmokeProgram(tenant.id);
   const client = await signInClinicAdmin();
 

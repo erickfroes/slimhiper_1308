@@ -492,7 +492,7 @@ async function run() {
   runNodeScript(path.join('scripts', 'supabase', 'bootstrap-document-templates-demo.mjs'));
 
   currentStep = 'ensuring tenants, users and permissions';
-  const tenantA = await ensureTenant('demo-clinic');
+  const tenantA = await ensureTenant(process.env.SUPABASE_BOOTSTRAP_TENANT_SLUG ?? 'demo-clinic');
   const tenantB = await ensureTenant('demo-clinic-b');
   const staff = await ensureAuthUser('clinic.admin@example.com', 'Clinic Admin');
   const patientUser = await ensureAuthUser('phase4.patient.local@example.com', 'Phase 4 Patient');
@@ -523,7 +523,9 @@ async function run() {
   });
   ok(
     invalid.status === 400 && invalid.json?.error?.code === 'invalid_template_variables',
-    'generate-document: protected variable override must fail closed'
+    `generate-document: protected variable override must fail closed, got ${invalid.status} ${
+      invalid.json?.error?.code ?? 'unknown_code'
+    }`
   );
 
   const generated = await callFunction('generate-document', staffSession.token, {

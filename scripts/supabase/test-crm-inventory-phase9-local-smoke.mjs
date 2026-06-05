@@ -593,5 +593,5 @@ async function run() {
 run().catch((error) => {
   console.error(`CRM/inventory Phase 9 local smoke failed during step: ${currentStep}`);
   console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+  process.exitCode = 1;
 });

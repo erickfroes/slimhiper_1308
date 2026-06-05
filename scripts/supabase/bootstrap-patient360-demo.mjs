@@ -45,6 +45,125 @@ async function tableExists(tableName) {
   return !error;
 }
 
+async function columnExists(tableName, columnName) {
+  const { error } = await supabase
+    .from(tableName)
+    .select(columnName, { count: 'exact', head: true });
+  return !error;
+}
+
+async function deleteByColumnIfPresent(tableName, columnName, value) {
+  if (!(await tableExists(tableName))) return;
+  if (!(await columnExists(tableName, columnName))) return;
+
+  await supabase.from(tableName).delete().eq(columnName, value).throwOnError();
+}
+
+async function deleteInColumnIfPresent(tableName, columnName, values) {
+  if (values.length === 0) return;
+  if (!(await tableExists(tableName))) return;
+  if (!(await columnExists(tableName, columnName))) return;
+
+  await supabase.from(tableName).delete().in(columnName, values).throwOnError();
+}
+
+async function resetPatientIfTenantChanged(targetTenantId) {
+  const { data: existingPatient, error } = await supabase
+    .from('patients')
+    .select('id, tenant_id')
+    .eq('id', IDS.patient)
+    .maybeSingle();
+  if (error) throw error;
+  if (!existingPatient || existingPatient.tenant_id === targetTenantId) return;
+
+  let signatureRequestIds = [];
+  if (
+    (await tableExists('signature_requests')) &&
+    (await columnExists('signature_requests', 'patient_id'))
+  ) {
+    const { data: signatureRequests, error: signatureError } = await supabase
+      .from('signature_requests')
+      .select('id')
+      .eq('patient_id', IDS.patient);
+    if (signatureError) throw signatureError;
+    signatureRequestIds = signatureRequests.map((request) => request.id);
+  }
+
+  await deleteInColumnIfPresent('d4sign_events', 'signature_request_id', signatureRequestIds);
+  await deleteInColumnIfPresent('signature_signers', 'signature_request_id', signatureRequestIds);
+
+  const patientScopedDeletes = [
+    ['payment_links', 'patient_id'],
+    ['payments', 'patient_id'],
+    ['patient_subscriptions', 'patient_id'],
+    ['patient_invoices', 'patient_id'],
+    ['patient_customers', 'patient_id'],
+    ['patient_accounts', 'patient_id'],
+    ['patient_program_checkins', 'patient_id'],
+    ['patient_program_enrollments', 'patient_id'],
+    ['notifications', 'patient_id'],
+    ['patient_chat_messages', 'patient_id'],
+    ['patient_chat_threads', 'patient_id'],
+    ['inventory_movements', 'related_patient_id'],
+    ['lead_patient_conversions', 'patient_id'],
+    ['leads', 'patient_id'],
+    ['queue_events', 'patient_id'],
+    ['guardian_links', 'patient_id'],
+    ['patient_contacts', 'patient_id'],
+    ['nutrition_plan_notes', 'patient_id'],
+    ['nutrition_plans', 'patient_id'],
+    ['signature_requests', 'patient_id'],
+    ['generated_documents', 'patient_id'],
+    ['patient_timeline_events', 'patient_id'],
+    ['patient_tasks', 'patient_id'],
+    ['patient_alerts', 'patient_id'],
+    ['prescriptions_placeholder', 'patient_id'],
+    ['lab_results', 'patient_id'],
+    ['lab_orders', 'patient_id'],
+    ['bioimpedance_results', 'patient_id'],
+    ['measurements', 'patient_id'],
+    ['soap_notes', 'patient_id'],
+    ['encounters', 'patient_id'],
+    ['appointments', 'patient_id'],
+    ['patient_pii', 'patient_id'],
+  ];
+
+  for (const [tableName, columnName] of patientScopedDeletes) {
+    await deleteByColumnIfPresent(tableName, columnName, IDS.patient);
+  }
+
+  await supabase.from('patients').delete().eq('id', IDS.patient).throwOnError();
+}
+
+async function resetProgramIfTenantChanged(targetTenantId) {
+  if (!(await tableExists('programs'))) return;
+
+  const { data: existingProgram, error } = await supabase
+    .from('programs')
+    .select('id, tenant_id')
+    .eq('id', IDS.program)
+    .maybeSingle();
+  if (error) throw error;
+  if (!existingProgram || existingProgram.tenant_id === targetTenantId) return;
+
+  const programScopedDeletes = [
+    ['patient_program_checkins', 'program_id'],
+    ['patient_program_enrollments', 'program_id'],
+    ['program_team_members', 'program_id'],
+    ['program_required_documents', 'program_id'],
+    ['program_entitlements', 'program_id'],
+    ['program_services', 'program_id'],
+    ['program_phases', 'program_id'],
+    ['program_checkin_templates', 'program_id'],
+  ];
+
+  for (const [tableName, columnName] of programScopedDeletes) {
+    await deleteByColumnIfPresent(tableName, columnName, IDS.program);
+  }
+
+  await supabase.from('programs').delete().eq('id', IDS.program).throwOnError();
+}
+
 async function run() {
   const tenantSlug = process.env.SUPABASE_BOOTSTRAP_TENANT_SLUG ?? 'demo-clinic';
   const tenantName = process.env.SUPABASE_BOOTSTRAP_TENANT_NAME ?? 'Demo Clinic';
@@ -55,6 +174,9 @@ async function run() {
     .select('id, slug, name')
     .single();
   if (tenantError) throw tenantError;
+
+  await resetPatientIfTenantChanged(tenant.id);
+  await resetProgramIfTenantChanged(tenant.id);
 
   const { data: physicianProfile } = await supabase
     .from('profiles')
