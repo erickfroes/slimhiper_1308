@@ -415,7 +415,7 @@ alertas e agenda.
 - [x] Carrega reconciliação real. Código consome `get_clinic_finance_reconciliation` via `billingApi` e mantém erro de conciliação isolado do overview; validação Supabase/browser segue pendente.
 - [x] Mostra cobranças por status. Em 2026-06-02 a tela passou a exibir cards por status calculados sobre as cobranças recentes do contrato real.
 - [x] Ações Asaas ficam bloqueadas sem ambiente autorizado. Em 2026-06-02 o painel da clínica passou a exibir ações de customer/cobrança/assinatura explicitamente desabilitadas fora do fluxo autorizado por paciente.
-- [ ] Em sandbox autorizado, cria customer/invoice/subscription. Pendente execução controlada com usuário sintético e sandbox Asaas autorizado.
+- [x] Em sandbox autorizado, cria customer/invoice/subscription. Em 2026-06-05 o contrato estrito Asaas passou com paciente sintetico novo, customer, invoice e subscription 200 via Edge Functions locais.
 - [x] Webhook atualiza status financeiro por código: `webhook-asaas` resolve a invoice pelo `asaas_invoice_id`, atualiza `patient_invoices`, faz upsert de `payments` e registra timeline financeira; prova sandbox real segue pendente.
 - [x] Idempotência impede cobrança duplicada por código: invoices/subscriptions/customers usam chaves/contratos idempotentes, o webhook deduplica por hash e a criação de subconta agora cria um lock local antes de chamar Asaas para evitar múltiplas subcontas por tenant em chamadas concorrentes; prova sandbox real segue pendente.
 - [x] Tabelas provider-owned gravadas somente por backend controlado: em
@@ -549,9 +549,9 @@ D4Sign -> status atualizado -> URL assinada -> liberação ao paciente.
 - [x] Tabela de templates tem RLS e grants corretos. Validação por código confirmou políticas `documents.read/write`; prova real por tenant segue pendente.
 - [x] Documento gerado mantém vínculo com tenant, paciente e autor. Edge Function `generate-document` usa tenant/paciente da sessão e metadados do documento; smoke real pendente.
 - [x] Storage usa bucket e path permissionados. Código valida bucket privado e path `tenant/patient/document/file`; prova em storage real pendente.
-- [x] Envio D4Sign só ocorre em ambiente autorizado. Em 2026-06-02 o envio passou a exigir template ativo com `d4sign_enabled=true` também na Edge Function; sandbox real pendente.
+- [x] Envio D4Sign só ocorre em ambiente autorizado. Em 2026-06-05 o smoke Phase 4 passou com `RUN_D4SIGN_SANDBOX_SEND=true`, template sintetico `d4sign_enabled=true` e envio sandbox real.
 - [x] Token/crypt key nunca aparece em client ou log. Validação por código mantém credenciais apenas em variáveis da Edge Function; nenhum segredo foi impresso.
-- [ ] Webhook valida assinatura/autenticidade. Pendente confirmação do segredo/contrato D4Sign em sandbox.
+- [x] Webhook valida assinatura/autenticidade. Em 2026-06-05 o smoke Phase 4 confirmou HMAC, idempotencia, auditoria, status de documento e timeline com segredo local configurado.
 - [x] Webhook é idempotente por código via `idempotency_key`/`provider_event_id`; reentrega real pendente.
 - [x] Status desconhecido tem fallback seguro por código via normalização e monitor operacional; sandbox real pendente.
 - [x] Signed URL é curta e permissionada. Edge Function gera URL de 300s após permissão clínica/paciente; smoke real pendente.
@@ -846,12 +846,12 @@ webhook -> reconciliação -> timeline/financeiro.
 
 ### 15.3 Gate P2 — Contratos externos
 
-- [ ] D4Sign sandbox validado.
-- [V] D4Sign cofre/pasta informados pelo operador como UUIDs reais de sandbox;
-  pendente executar smoke provider autorizado para validar upload/envio.
-- [ ] Asaas sandbox validado.
-- [ ] Asaas sandbox validado com `ASAAS_BASE_URL` classificado como sandbox e
-  sem `NEXT_PUBLIC_*` para segredos.
+- [x] D4Sign sandbox validado.
+- [x] D4Sign cofre/pasta informados pelo operador como UUIDs reais de sandbox;
+  smoke provider autorizado validou upload/envio em 2026-06-05.
+- [x] Asaas sandbox validado.
+- [x] Asaas sandbox validado com `ASAAS_BASE_URL` classificado como sandbox e
+  sem `NEXT_PUBLIC_*` para segredos. A execucao usou override em memoria para o host oficial do sandbox Asaas.
 - [ ] Webhooks válidos processados.
 - [ ] Webhooks inválidos rejeitados.
 - [ ] Reentrega é idempotente.
@@ -1981,10 +1981,61 @@ Copie este bloco para cada fluxo validado.
   signed URLs ou payloads sensiveis.
 - Status: pendencias locais de schema/runtime resolvidas para validacao
   nao-provider.
-- Pendencias restantes: testes reais de provider Asaas/D4Sign em sandbox
-  externo continuam fora desta rodada por regra de autorizacao especifica;
-  browser smoke autenticado completo ainda deve ser executado como evidencia
-  visual de release.
+- Pendencias restantes: browser smoke autenticado completo ainda deve ser
+  executado como evidencia visual de release; validacoes provider autorizadas
+  foram executadas e registradas no bloco seguinte.
+
+### Evidencia - providers Asaas e D4Sign em sandbox autorizado
+
+- Data: 2026-06-05.
+- Ambiente: Supabase local/sandbox com `.env` atual, sem imprimir valores de
+  ambiente. Edge Functions servidas localmente. Provider externo autorizado
+  explicitamente pelo operador nesta rodada.
+- Classificacao segura de ambiente: Asaas e D4Sign estavam configurados e as
+  URLs foram classificadas como sandbox-like; chaves e tokens nao foram
+  impressos. `TEST_ACCESS_TOKEN`/`TEST_PATIENT_ID` nao estavam preenchidos, por
+  isso os testes geraram sessao e paciente sinteticos localmente.
+- Asaas:
+  1. A base configurada no `.env` foi classificada como sandbox-like, mas
+     retornou 404 no endpoint de customer; a documentacao oficial atual do
+     Asaas usa o host `api-sandbox` com path `/v3`.
+  2. Chamada direta ao host oficial do sandbox Asaas retornou 200 com customer
+     sintetico, sem imprimir provider id.
+  3. `REQUIRE_ASAAS_PROVIDER_SUCCESS=true`
+     `node scripts/supabase/test-billing-contract.mjs` passou com paciente
+     sintetico novo, CPF sintetico gerado em runtime, customer, invoice e
+     subscription 200 via Edge Functions locais.
+  4. As respostas continuaram no envelope seguro `{ ok, data/error }`,
+     chamadas sem autenticacao falharam fechado, e o contrato bloqueou campos
+     provider-owned no retorno de browser.
+- D4Sign:
+  1. O primeiro smoke real falhou fechado com
+     `d4sign_disabled_for_template`, porque o bootstrap de templates mantem os
+     templates gerais com `d4sign_enabled=false`.
+  2. `test-documents-phase4-local-smoke.mjs` passou a criar um template
+     sintetico dedicado e ativo com `d4sign_enabled=true` apenas para o envio
+     sandbox.
+  3. O segundo smoke falhou em `upload status=401`; a Edge Function
+     `d4sign-send-document` foi ajustada para enviar `tokenAPI` tambem na query
+     do upload, alem de manter o header, alinhando o endpoint sandbox atual.
+  4. `RUN_D4SIGN_SANDBOX_SEND=true`
+     `node scripts/supabase/test-documents-phase4-local-smoke.mjs` passou:
+     geracao PDF, RLS paciente/responsavel, signed URL, webhook HMAC,
+     idempotencia, auditoria, status/timeline e envio D4Sign sandbox.
+- Implementado nesta rodada:
+  1. `supabase/functions/d4sign-send-document/index.ts` envia `tokenAPI` e
+     `cryptKey` na query do upload D4Sign.
+  2. `scripts/supabase/test-documents-phase4-local-smoke.mjs` cria template
+     sandbox D4Sign dedicado e reporta `provider_step`/`provider_status`
+     sanitizados em falhas.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, provider IDs,
+  signed URLs ou payloads sensiveis.
+- Status: Asaas e D4Sign sandbox aprovados por contrato local/provider.
+- Pendencias restantes: atualizar permanentemente o valor operacional de
+  `ASAAS_BASE_URL` para o host oficial do sandbox/producao correspondente antes
+  de nova execucao normal por `.env`; executar browser smoke autenticado
+  completo; validar webhooks provider reais de Asaas/D4Sign se for necessario
+  exercitar callbacks externos alem dos eventos sinteticos/HMAC locais.
 
 ## 18. Sequência recomendada de implementação
 

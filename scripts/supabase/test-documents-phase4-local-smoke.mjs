@@ -249,6 +249,43 @@ async function getActiveTemplateId(tenantId) {
   return data.id;
 }
 
+async function ensureD4SignSandboxTemplateId(tenantId) {
+  const { data, error } = await admin
+    .from('document_templates')
+    .upsert(
+      {
+        tenant_id: tenantId,
+        name: 'D4Sign sandbox consent smoke',
+        category: 'consent',
+        status: 'active',
+        template_body: `
+TERMO DE CONSENTIMENTO D4SIGN SANDBOX
+
+Paciente: {{patient_name}}
+Clinica: {{clinic_name}}
+Programa: {{program_name}}
+Data: {{date}}
+Profissional responsavel: {{professional_name}}
+
+Documento sintetico para validacao de assinatura digital em sandbox.
+`.trim(),
+        variables: {
+          patient_name: '{{patient_name}}',
+          clinic_name: '{{clinic_name}}',
+          program_name: '{{program_name}}',
+          date: '{{date}}',
+          professional_name: '{{professional_name}}',
+        },
+        d4sign_enabled: true,
+      },
+      { onConflict: 'tenant_id,name' }
+    )
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
 async function expectDocumentVisibility(client, label, documentId, expectedCount) {
   const { data, error } = await client
     .from('generated_documents')
@@ -475,11 +512,17 @@ async function runOptionalSandboxSend(staffToken, patientId, templateId) {
     patient_id: patientId,
     generated_document_id: gen.json.data.generatedDocument.id,
   });
+  const providerMeta = [
+    send.json?.meta?.provider_step && `step=${send.json.meta.provider_step}`,
+    send.json?.meta?.provider_status && `status=${send.json.meta.provider_status}`,
+  ]
+    .filter(Boolean)
+    .join(' ');
   ok(
     send.status === 200 && send.json?.ok === true,
     `D4Sign sandbox send failed with ${send.status} ${
       send.json?.error?.code ?? send.json?.error?.message ?? 'unexpected_response'
-    }`
+    }${providerMeta ? ` ${providerMeta}` : ''}`
   );
   return true;
 }
@@ -514,6 +557,7 @@ async function run() {
   const patientSession = await signIn('phase4.patient.local@example.com');
   const guardianSession = await signIn('phase4.guardian.local@example.com');
   const templateId = await getActiveTemplateId(tenantA.id);
+  const d4signTemplateId = await ensureD4SignSandboxTemplateId(tenantA.id);
 
   currentStep = 'checking generation and template variable gating';
   const invalid = await callFunction('generate-document', staffSession.token, {
@@ -612,7 +656,7 @@ async function run() {
   await invokeD4SignWebhook(IDS.signatureRequest, generatedDocumentId, tenantA.id);
 
   currentStep = 'optionally checking D4Sign sandbox send';
-  const sandboxRan = await runOptionalSandboxSend(staffSession.token, IDS.patientA, templateId);
+  const sandboxRan = await runOptionalSandboxSend(staffSession.token, IDS.patientA, d4signTemplateId);
 
   console.log('Documents Phase 4 local smoke passed');
   console.log('- generation uses active templates, allowed variables, and PDF storage');

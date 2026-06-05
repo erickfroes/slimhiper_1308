@@ -480,6 +480,7 @@ Deno.serve(async (req) => {
 
     const uploadResponse = await fetch(
       d4signUrl(d4signBaseUrl, `/documents/${d4signSafeUuid}/upload`, {
+        tokenAPI: d4signTokenApi,
         cryptKey: d4signCryptKey,
       }),
       {
