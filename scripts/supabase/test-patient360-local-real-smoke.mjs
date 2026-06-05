@@ -702,8 +702,8 @@ async function run() {
     (data) => {
       ok(Array.isArray(data), 'patient-reports: expected definitions array');
       ok(
-        data.some((item) => item?.key === 'patient360_smoke'),
-        'patient-reports: expected smoke report'
+        data.some((item) => ['resumo-clinico', 'adesao-plano'].includes(item?.key)),
+        'patient-reports: expected patient-visible report'
       );
     }
   );

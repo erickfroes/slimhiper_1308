@@ -262,7 +262,8 @@ async function checkedPortalSnapshot(label, client, patientId, shouldSucceed) {
   }
 
   ok(data && typeof data === 'object', `${label}: expected JSON object snapshot`);
-  ok(data.patient?.patientId === patientId, `${label}: expected own patient snapshot`);
+  const snapshotPatientId = data.patient?.patientId ?? data.patient?.id;
+  ok(snapshotPatientId === patientId, `${label}: expected own patient snapshot`);
   return data;
 }
 

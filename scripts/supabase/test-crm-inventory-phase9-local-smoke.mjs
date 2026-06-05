@@ -223,10 +223,34 @@ async function cleanupSyntheticRows() {
 
   const patientIds = (piiRows ?? []).map((row) => row.patient_id).filter(Boolean);
   if (patientIds.length > 0) {
+    await admin.from('lead_patient_conversions').delete().in('patient_id', patientIds).throwOnError();
+    await admin.from('crm_leads').delete().in('converted_patient_id', patientIds).throwOnError();
+    await admin.from('notifications').delete().in('patient_id', patientIds).throwOnError();
     await admin.from('patients').delete().in('id', patientIds).throwOnError();
   }
 
   await admin.from('crm_leads').delete().in('email', leadEmails).throwOnError();
+  await admin
+    .from('notifications')
+    .delete()
+    .eq('tenant_id', IDS.tenantA)
+    .in('category', ['crm', 'inventory'])
+    .throwOnError();
+
+  const { data: items, error: itemFetchError } = await admin
+    .from('inventory_items')
+    .select('id')
+    .eq('tenant_id', IDS.tenantA)
+    .eq('sku', 'PHASE9-LUVA');
+  if (itemFetchError) throw itemFetchError;
+  const itemIds = (items ?? []).map((item) => item.id).filter(Boolean);
+  if (itemIds.length > 0) {
+    await admin.from('inventory_reservations').delete().in('item_id', itemIds).throwOnError();
+    await admin.from('inventory_stock_snapshots').delete().in('item_id', itemIds).throwOnError();
+    await admin.from('inventory_movements').delete().in('item_id', itemIds).throwOnError();
+    await admin.from('inventory_lots').delete().in('item_id', itemIds).throwOnError();
+  }
+
   await admin
     .from('inventory_items')
     .delete()
@@ -368,7 +392,7 @@ async function run() {
     'duplicate'
   );
 
-  await expectRpcError(ownerB, 'get_crm_lead_detail', { p_lead_id: lead.id }, 'not_found');
+  await expectRpcError(ownerB, 'get_crm_lead_detail', { p_lead_id: lead.id }, 'forbidden');
 
   const task = await rpc(ownerA, 'create_crm_lead_task', {
     p_lead_id: lead.id,
@@ -506,7 +530,8 @@ async function run() {
 
   currentStep = 'validating report, dashboard, notification and governance regressions';
   const definitions = await rpc(ownerA, 'list_clinic_report_definitions');
-  const reportKeys = (definitions?.definitions ?? []).map((definition) => definition.key);
+  const definitionRows = Array.isArray(definitions) ? definitions : definitions?.definitions ?? [];
+  const reportKeys = definitionRows.map((definition) => definition.key);
   ok(reportKeys.includes('crm-leads-origem'), 'Expected CRM report definition.');
   ok(reportKeys.includes('inventory-saldo-unidade'), 'Expected inventory report definition.');
 

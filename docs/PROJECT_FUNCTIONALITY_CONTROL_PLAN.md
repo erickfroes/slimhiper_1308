@@ -1935,6 +1935,57 @@ Copie este bloco para cada fluxo validado.
   para servir Functions, e repetir a bateria de smokes apos schema/runtime
   locais ficarem alinhados ao repo.
 
+### Evidencia - pendencias locais resolvidas no Supabase sandbox
+
+- Data: 2026-06-05.
+- Ambiente: Supabase local/sandbox com `.env` atual, sem imprimir valores de
+  ambiente. Edge Functions servidas localmente via `npx supabase functions
+  serve --env-file .env`; nenhum provider externo foi chamado. Envio real
+  D4Sign sandbox permaneceu desativado com `RUN_D4SIGN_SANDBOX_SEND=false`.
+- Schema local: todas as migrations versionadas do repositorio foram aplicadas
+  localmente. Como a CLI recusou `migration up` por cinco versoes antigas no
+  historico local que nao existem mais no diretorio, as migrations pendentes
+  foram aplicadas uma a uma com `psql` em transacao e registradas em
+  `supabase_migrations.schema_migrations` apos sucesso.
+- Implementado nesta rodada:
+  1. Novas migrations `196`, `197`, `198` e `199` corrigem compatibilidade de
+     `pgcrypto` para relatorios, preflight de estoque negativo antes do check
+     constraint e allowlist de role em `update_platform_tenant_membership`.
+  2. Smokes locais foram alinhados aos contratos reais: portal paciente usa
+     `patient.id`, CRM detail cross-tenant espera `forbidden` fail-closed,
+     `list_clinic_report_definitions` aceita array direto, e
+     `patient-reports` espera relatorios permitidos ao paciente.
+  3. Cleanups/idempotencia foram endurecidos em bootstraps/smokes de Paciente
+     360, RLS, programas e CRM/inventario para runs locais repetidas.
+- Bateria local nao-provider executada e aprovada:
+  1. `check-auth-rbac-contract.mjs`.
+  2. `check-communications-retention.mjs`.
+  3. `test-patient360-contract.mjs --mode=fixture`.
+  4. `test-billing-fixtures.mjs`.
+  5. `test-d4sign-fixtures.mjs`.
+  6. `test-clinical-core-contract.mjs`.
+  7. `test-rls-cross-tenant-contract.mjs`.
+  8. `test-patient-linkage-contract.mjs`.
+  9. `test-billing-reconciliation-local-smoke.mjs`.
+  10. `test-programs-phase6-local-smoke.mjs`.
+  11. `test-reports-phase8-local-smoke.mjs`.
+  12. `test-platform-admin-phase7-local-smoke.mjs`.
+  13. `test-crm-inventory-phase9-local-smoke.mjs`.
+  14. `test-patient360-local-real-smoke.mjs`.
+  15. `test-documents-phase4-local-smoke.mjs`.
+- Resultado observado: Auth/RBAC, RLS cross-tenant, linkage paciente/responsavel,
+  clinical core, billing reconciliation, programas, relatorios, platform admin,
+  CRM/inventario, Paciente 360 real e documentos Phase 4 passaram contra
+  Supabase local com Edge Functions locais.
+- Logs sanitizados: sem secrets, tokens, cookies, PII real, provider IDs,
+  signed URLs ou payloads sensiveis.
+- Status: pendencias locais de schema/runtime resolvidas para validacao
+  nao-provider.
+- Pendencias restantes: testes reais de provider Asaas/D4Sign em sandbox
+  externo continuam fora desta rodada por regra de autorizacao especifica;
+  browser smoke autenticado completo ainda deve ser executado como evidencia
+  visual de release.
+
 ## 18. Sequência recomendada de implementação
 
 1. Executar baseline técnica local.
