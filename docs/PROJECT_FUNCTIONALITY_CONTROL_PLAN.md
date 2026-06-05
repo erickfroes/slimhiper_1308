@@ -2066,6 +2066,59 @@ Copie este bloco para cada fluxo validado.
   autenticado completo, validar callbacks provider reais se exigidos pelo gate
   comercial, exercitar alerta/restore e registrar aceite LGPD/security humano.
 
+### Evidencia - aplicacao local e smokes de release
+
+- Data: 2026-06-05.
+- Escopo: aplicacao local da migration de hardening e execucao de smokes
+  autorizados contra Supabase local/Docker, sem tocar no arquivo local de chaves
+  de producao e sem imprimir secrets, cookies, tokens ou payloads sensiveis.
+- Migration local:
+  1. `20260605170000_200_provider_production_hardening.sql` aplicada no
+     container Postgres local.
+  2. `supabase_migrations.schema_migrations` registrou
+     `20260605170000|200_provider_production_hardening`.
+  3. Validado que `authenticated` nao possui `insert/update/delete` em
+     `signature_requests` e que as policies remanescentes de
+     `signature_requests`/`signature_signers` sao somente `SELECT`.
+  4. Validado que `security.redact_operational_identifier()` retorna formato
+     pseudonimizado `op_[hash]`.
+- Smokes locais aprovados:
+  1. `node scripts/observability/post-deploy-smoke.mjs --base-url
+     http://localhost:4028` passou; `/api/health` retornou `warn` apenas por
+     metadata de release ausente, sem `fail`.
+  2. `check-auth-rbac-contract.mjs`, `test-clinical-core-contract.mjs`,
+     `test-patient360-local-real-smoke.mjs`, `test-rls-cross-tenant-contract.mjs`,
+     `test-patient-linkage-contract.mjs`, `test-documents-phase4-local-smoke.mjs`,
+     `test-platform-admin-phase7-local-smoke.mjs`,
+     `test-reports-phase8-local-smoke.mjs`,
+     `test-programs-phase6-local-smoke.mjs`,
+     `test-crm-inventory-phase9-local-smoke.mjs` e
+     `test-billing-reconciliation-local-smoke.mjs` passaram.
+  3. D4Sign provider send ficou explicitamente desativado nesta rodada
+     (`RUN_D4SIGN_SANDBOX_SEND=false`), mantendo validação local de HMAC,
+     idempotencia, auditoria, status e timeline.
+  4. Webhook Asaas sintetico local passou: token invalido retornou `401`, token
+     local processou `200` e repeticao retornou `idempotent=true`, sem chamada
+     provider.
+- Restore/DR:
+  1. Executado `pg_dump --schema-only` local sem dados e restore em banco
+     temporario `restore_smoke_*`.
+  2. Validada existencia de tabelas publicas e rotinas `public/security` no
+     banco restaurado.
+  3. Banco temporario e dump local foram removidos ao final.
+- Browser:
+  1. Smoke anonimo visual validou `/auth/login` e redirects fail-closed de
+     `/admin/usage` e `/admin/storage`.
+  2. Login visual autenticado no Browser local continuou limitado por erro de
+     credencial na UI do runtime, apesar de o mesmo usuario/senha autenticar com
+     a URL/chave publicas via script Supabase. Cobertura autenticada desta
+     rodada ficou pelos smokes HTTP/RPC/scripts com sessao real.
+- Pendencias restantes: configurar metadata de release para remover o `warn` do
+  health em go-live, conectar/validar sink real de alerta com ack humano, rodar
+  browser autenticado em staging com credenciais dummy, aplicar a migration em
+  homologacao/producao pela esteira oficial e colher assinatura humana
+  LGPD/security/juridica.
+
 ## 18. Sequência recomendada de implementação
 
 1. Executar baseline técnica local.

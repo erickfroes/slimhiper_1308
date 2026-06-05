@@ -594,3 +594,44 @@ smoke for settings/finance remains limited by Browser credential input support;
 RPC/HTTP/scripted authenticated coverage is the current substitute. Remaining
 issues are warning/dependency audit cleanup items and unfinished module coverage,
 not blocking command failures for this lote.
+
+## Local Production-Hardening Validation - 2026-06-05
+
+After commit `700bf72`, the local Docker Supabase database received
+`20260605170000_200_provider_production_hardening.sql` and recorded
+`20260605170000|200_provider_production_hardening` in
+`supabase_migrations.schema_migrations`.
+
+Additional local checks passed:
+
+- `node scripts/observability/post-deploy-smoke.mjs --base-url http://localhost:4028`
+  passed with `/api/health` status `warn` only because release metadata is not
+  configured locally.
+- `node scripts/supabase/check-auth-rbac-contract.mjs`
+- `node scripts/supabase/test-clinical-core-contract.mjs`
+- `node scripts/supabase/test-patient360-local-real-smoke.mjs`
+- `node scripts/supabase/test-rls-cross-tenant-contract.mjs`
+- `node scripts/supabase/test-patient-linkage-contract.mjs`
+- `node scripts/supabase/test-documents-phase4-local-smoke.mjs` with
+  `RUN_D4SIGN_SANDBOX_SEND=false`
+- `node scripts/supabase/test-platform-admin-phase7-local-smoke.mjs`
+- `node scripts/supabase/test-reports-phase8-local-smoke.mjs`
+- `node scripts/supabase/test-programs-phase6-local-smoke.mjs`
+- `node scripts/supabase/test-crm-inventory-phase9-local-smoke.mjs`
+- `node scripts/supabase/test-billing-reconciliation-local-smoke.mjs`
+
+Asaas webhook local synthetic smoke also passed: invalid token returned `401`,
+valid local token returned `200`, and duplicate delivery returned
+`idempotent=true`, without provider API calls.
+
+Restore readiness was exercised with a schema-only local `pg_dump` restored into
+a temporary local Postgres database. Public tables and `public/security`
+routines were present after restore; the temporary database and dump were
+removed.
+
+Browser anon smoke confirmed `/auth/login` and fail-closed redirects for the new
+admin routes `/admin/usage` and `/admin/storage`. Authenticated visual Browser
+login remained limited in the local Browser runtime, while the same local demo
+credential authenticated successfully through the Supabase public URL/key via
+script. Authenticated coverage for this run is therefore provided by the
+HTTP/RPC/scripted smokes above.

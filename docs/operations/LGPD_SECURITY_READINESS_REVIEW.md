@@ -64,8 +64,10 @@ Checklist final antes de producao:
 
 Evidencias tecnicas ja existentes nos checkpoints incluem smokes de RLS
 cross-tenant, linkage paciente/responsavel, Paciente 360, documentos,
-financeiro, programas, comunicacoes, CRM/estoque e admin plataforma. Esses
-smokes precisam ser reexecutados em ambiente autorizado antes do go-live.
+financeiro, programas, comunicacoes, CRM/estoque e admin plataforma. Em
+2026-06-05 esses smokes foram reexecutados contra Supabase local/Docker
+autorizado apos a migration `20260605170000_200_provider_production_hardening`;
+go-live ainda exige repeticao em staging/homologacao e assinatura humana.
 
 ## Logs, Erros E Evidencias
 
@@ -129,15 +131,15 @@ Antes de liberar dados reais, owner humano deve anexar internamente evidencia de
 
 | Gate | Status desta PR | Proximo passo |
 | --- | --- | --- |
-| CI/local `type-check`, `lint`, `build`, `git diff --check` | Executado nesta branch | Bloquear merge se regredir |
-| Headers/CSP/build hardening | Implementado | Validar em staging/browser por rota critica |
+| CI/local `type-check`, `lint`, `build`, `git diff --check` | Executado nesta branch e revalidado em 2026-06-05 | Bloquear merge se regredir |
+| Headers/CSP/build hardening | Implementado | Validar em staging/browser por rota critica autenticada |
 | Ambientes e secrets segregados | Documentado em PR 10.1 | Conferencia humana no gerenciador de secrets |
-| Observabilidade e alertas | Documentado/implementado em PR 10.2 | Teste de alerta controlado em staging |
-| Backup/restore/DR | Documentado em PR 10.3 | Restore em ambiente isolado com evidencia redigida |
+| Observabilidade e alertas | Smoke read-only local passou; health `warn` por metadata de release ausente | Configurar metadata e validar sink/ack real em staging |
+| Backup/restore/DR | Restore local schema-only sem dados passou em banco temporario | Restore isolado com politica de backup real e evidencia redigida |
 | Incidente/rotacao/rollback/operacao | Documentado em PR 10.4 | Exercicio de mesa e revisao owner |
-| Smokes Fases 1-9 + pos-deploy staging | Pendente neste ambiente | Rodar com Docker/Supabase/env autorizados |
+| Smokes Fases 1-9 + pos-deploy staging | Passaram local/Docker em 2026-06-05 | Repetir em staging/homologacao e anexar evidencia |
 | Politicas, DPA e canal LGPD | Pendente owner humano | Aprovar juridicamente antes de dado real |
-| Provider producao D4Sign/Asaas | Nao autorizado | Habilitar somente apos go/no-go e rollback |
+| Provider producao D4Sign/Asaas | Sandbox ja validado; callback sintetico Asaas local e D4Sign HMAC local passaram | Habilitar producao somente apos go/no-go, rollback e callbacks externos de staging |
 
 Decisao tecnica desta branch: **NO-GO para producao com dados reais** ate que os
 itens pendentes acima tenham owner, data, evidencia redigida e assinatura humana.
