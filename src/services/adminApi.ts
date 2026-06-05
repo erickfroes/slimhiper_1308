@@ -211,6 +211,7 @@ function sanitizeOperationalText(value: unknown, fallback = '', maxLength = 240)
 function redactOperationalIdentifier(value: unknown, fallback = '') {
   const normalized = normalizeText(asString(value, fallback), 160);
   if (!normalized) return '';
+  if (/^op_[0-9a-f]{12}$/i.test(normalized)) return normalized;
   if (normalized.length <= 10) return normalized;
   return `${normalized.slice(0, 4)}...${normalized.slice(-6)}`;
 }

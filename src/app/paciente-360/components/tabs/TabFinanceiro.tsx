@@ -224,6 +224,16 @@ function normalizeBillingDocument(value: string) {
   return digits.length === 11 || digits.length === 14 ? digits : false;
 }
 
+function asSafePaymentLink(value: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 function DisabledActionButton({
   icon,
   label,
@@ -476,6 +486,7 @@ export default function TabFinanceiro({
   const futureParcelas = liveFinancial.futureParcelas ?? 0;
   const futureParcelasAmount = liveFinancial.futureParcelasAmount ?? 0;
   const overdueParcelasCount = liveFinancial.overdueParcelasCount ?? 0;
+  const safePaymentLink = asSafePaymentLink(paymentLink);
 
   return (
     <div className="space-y-5">
@@ -604,12 +615,17 @@ export default function TabFinanceiro({
           <span>{creationError}</span>
         </div>
       )}
-      {paymentLink && (
+      {safePaymentLink && (
         <p className="text-xs text-green-700">
           Link de pagamento:{' '}
-          <a className="underline" href={paymentLink} target="_blank" rel="noreferrer">
+          <a className="underline" href={safePaymentLink} target="_blank" rel="noreferrer">
             abrir
           </a>
+        </p>
+      )}
+      {paymentLink && !safePaymentLink && (
+        <p className="text-xs text-amber-700" role="status">
+          Link de pagamento retornado em formato nao permitido e bloqueado por seguranca.
         </p>
       )}
       {invoiceModal && (

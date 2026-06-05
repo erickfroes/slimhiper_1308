@@ -587,9 +587,9 @@ billing reconciliation, bootstraps, local authenticated Patient 360/documents
 contracts, Patient 360 local-real all-tab smoke, limited HTTP smoke, Browser
 anon login/guard smoke, local settings RPC/HTTP smoke, clinic guard states,
 scripted local RLS cross-tenant coverage, patient/guardian linkage RLS coverage,
-billing reconciliation smoke, and strict Asaas sandbox customer/invoice/
-subscription contract. D4Sign provider sandbox remains blocked by missing cofre
-in the sandbox account, not by a local contract failure. Authenticated Browser
+billing reconciliation smoke, strict Asaas sandbox customer/invoice/
+subscription contract, and D4Sign sandbox send through the Phase 4 document
+smoke. Authenticated Browser
 smoke for settings/finance remains limited by Browser credential input support;
 RPC/HTTP/scripted authenticated coverage is the current substitute. Remaining
 issues are warning/dependency audit cleanup items and unfinished module coverage,

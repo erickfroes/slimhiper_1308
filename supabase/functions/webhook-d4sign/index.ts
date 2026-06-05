@@ -92,6 +92,20 @@ async function hmacSha256Hex(secret: string, message: string): Promise<string> {
     .join('');
 }
 
+function timingSafeEqual(left: string, right: string) {
+  const encoder = new TextEncoder();
+  const leftBytes = encoder.encode(left);
+  const rightBytes = encoder.encode(right);
+  const maxLength = Math.max(leftBytes.length, rightBytes.length);
+  let mismatch = leftBytes.length === rightBytes.length ? 0 : 1;
+
+  for (let index = 0; index < maxLength; index += 1) {
+    mismatch |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
+  }
+
+  return mismatch === 0;
+}
+
 async function isWebhookAuthentic(req: Request, rawBody: string) {
   const sharedToken = envString(Deno.env, 'D4SIGN_WEBHOOK_TOKEN');
   const hmacSecret = envString(Deno.env, 'D4SIGN_WEBHOOK_HMAC_SECRET');
@@ -107,12 +121,13 @@ async function isWebhookAuthentic(req: Request, rawBody: string) {
     req.headers.get('x-signature')
   ).toLowerCase();
 
-  if (sharedToken && providedToken !== sharedToken) return { ok: false, reason: 'token_mismatch' };
+  if (sharedToken && !timingSafeEqual(providedToken, sharedToken))
+    return { ok: false, reason: 'token_mismatch' };
 
   if (hmacSecret) {
     if (!providedSignature) return { ok: false, reason: 'missing_signature' };
     const expected = (await hmacSha256Hex(hmacSecret, rawBody)).toLowerCase();
-    if (providedSignature.replace(/^sha256=/, '') !== expected)
+    if (!timingSafeEqual(providedSignature.replace(/^sha256=/, ''), expected))
       return { ok: false, reason: 'signature_mismatch' };
   }
 

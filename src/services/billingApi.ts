@@ -121,18 +121,25 @@ function asChargeResult(payload: unknown): ChargeActionResult | null {
   const r = (payload && typeof payload === 'object' ? payload : {}) as Record<string, unknown>;
   const id = typeof r.id === 'string' && r.id.trim() ? r.id : null;
   if (!id) return null;
+  const paymentLink = asSafeExternalUrl(r.payment_link) ?? asSafeExternalUrl(r.invoice_url);
+  const invoiceUrl = asSafeExternalUrl(r.invoice_url);
 
   return {
     id,
     status: typeof r.status === 'string' ? r.status : undefined,
-    paymentLink:
-      typeof r.payment_link === 'string'
-        ? r.payment_link
-        : typeof r.invoice_url === 'string'
-          ? r.invoice_url
-          : null,
-    invoiceUrl: typeof r.invoice_url === 'string' ? r.invoice_url : null,
+    paymentLink,
+    invoiceUrl,
   };
+}
+
+function asSafeExternalUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function isValidDateInput(value: string) {

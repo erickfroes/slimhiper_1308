@@ -29,6 +29,20 @@ async function sha256(value: string) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+function timingSafeEqual(left: string, right: string) {
+  const encoder = new TextEncoder();
+  const leftBytes = encoder.encode(left);
+  const rightBytes = encoder.encode(right);
+  const maxLength = Math.max(leftBytes.length, rightBytes.length);
+  let mismatch = leftBytes.length === rightBytes.length ? 0 : 1;
+
+  for (let index = 0; index < maxLength; index += 1) {
+    mismatch |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
+  }
+
+  return mismatch === 0;
+}
+
 function toObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -119,7 +133,7 @@ Deno.serve(async (req) => {
 
   const expectedToken = envString(Deno.env, 'ASAAS_WEBHOOK_TOKEN');
   const receivedToken = req.headers.get('asaas-access-token');
-  if (!expectedToken || !receivedToken || receivedToken !== expectedToken) {
+  if (!expectedToken || !receivedToken || !timingSafeEqual(receivedToken, expectedToken)) {
     await logEdgeEvent(context, 'webhook_signature_failed', 'warn', 'denied', {
       reason: 'invalid_webhook_token',
     });

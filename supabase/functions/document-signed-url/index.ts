@@ -12,9 +12,8 @@ type SignedUrlRequest = {
   patient_id?: string;
 };
 
-const corsHeaders = {
+const baseCorsHeaders = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -26,8 +25,54 @@ const allowedBuckets = new Set([
   'evidence-packages',
 ]);
 
-function jsonResponse(status: number, payload: Json) {
-  return new Response(JSON.stringify(payload), { status, headers: corsHeaders });
+function configuredAllowedOrigins() {
+  return new Set(
+    [
+      ...(Deno.env.get('APP_ALLOWED_ORIGINS') ?? '').split(','),
+      Deno.env.get('SITE_URL') ?? '',
+      Deno.env.get('NEXT_PUBLIC_SITE_URL') ?? '',
+    ]
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  );
+}
+
+function isLocalOrigin(origin: string) {
+  try {
+    const url = new URL(origin);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function allowedCorsOrigin(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  if (!origin) return null;
+
+  const configured = configuredAllowedOrigins();
+  if (configured.has(origin) || isLocalOrigin(origin)) {
+    return origin;
+  }
+
+  return null;
+}
+
+function responseHeaders(req: Request) {
+  const headers: Record<string, string> = { ...baseCorsHeaders };
+  const origin = allowedCorsOrigin(req);
+  if (origin) {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers.Vary = 'Origin';
+  }
+  return headers;
+}
+
+function jsonResponse(req: Request, status: number, payload: Json) {
+  return new Response(JSON.stringify(payload), { status, headers: responseHeaders(req) });
 }
 
 function safeString(value: unknown) {
@@ -49,11 +94,15 @@ Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    const headers = responseHeaders(req);
+    if (req.headers.get('Origin') && !headers['Access-Control-Allow-Origin']) {
+      return new Response('forbidden', { status: 403, headers: { 'Content-Type': 'text/plain' } });
+    }
+    return new Response('ok', { headers });
   }
 
   if (req.method !== 'POST') {
-    return jsonResponse(405, {
+    return jsonResponse(req, 405, {
       ok: false,
       error: { code: 'method_not_allowed' },
       meta: { timestamp },
@@ -64,7 +113,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization') ?? '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
     if (!token) {
-      return jsonResponse(401, {
+      return jsonResponse(req, 401, {
         ok: false,
         error: { code: 'unauthorized' },
         meta: { timestamp },
@@ -75,7 +124,7 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-      return jsonResponse(500, {
+      return jsonResponse(req, 500, {
         ok: false,
         error: { code: 'server_misconfigured' },
         meta: { timestamp },
@@ -91,7 +140,7 @@ Deno.serve(async (req) => {
 
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError || !authData.user) {
-      return jsonResponse(401, {
+      return jsonResponse(req, 401, {
         ok: false,
         error: { code: 'unauthorized' },
         meta: { timestamp },
@@ -103,7 +152,7 @@ Deno.serve(async (req) => {
     const patientId = safeString(body?.patient_id);
 
     if (!generatedDocumentId || !patientId) {
-      return jsonResponse(400, {
+      return jsonResponse(req, 400, {
         ok: false,
         error: { code: 'invalid_request' },
         meta: { timestamp },
@@ -119,7 +168,7 @@ Deno.serve(async (req) => {
 
     if (documentError) throw documentError;
     if (!doc) {
-      return jsonResponse(404, {
+      return jsonResponse(req, 404, {
         ok: false,
         error: { code: 'not_found' },
         meta: { timestamp },
@@ -133,7 +182,7 @@ Deno.serve(async (req) => {
     const storagePath = String(doc.storage_path);
 
     if (!allowedBuckets.has(storageBucket)) {
-      return jsonResponse(500, {
+      return jsonResponse(req, 500, {
         ok: false,
         error: { code: 'invalid_storage_bucket' },
         meta: { timestamp },
@@ -141,7 +190,7 @@ Deno.serve(async (req) => {
     }
 
     if (!isValidStoragePath(storagePath, tenantId, documentPatientId, documentId)) {
-      return jsonResponse(500, {
+      return jsonResponse(req, 500, {
         ok: false,
         error: { code: 'invalid_storage_path' },
         meta: { timestamp },
@@ -180,7 +229,7 @@ Deno.serve(async (req) => {
     if (ownDocumentError) throw ownDocumentError;
 
     if (!canReadAsStaff && canReadOwnDocument !== true) {
-      return jsonResponse(403, {
+      return jsonResponse(req, 403, {
         ok: false,
         error: { code: 'forbidden' },
         meta: { timestamp },
@@ -193,17 +242,15 @@ Deno.serve(async (req) => {
       .createSignedUrl(storagePath, expiresInSeconds);
     if (error) throw error;
 
-    return jsonResponse(200, {
+    return jsonResponse(req, 200, {
       ok: true,
       data: { url: data.signedUrl, expiresInSeconds },
       meta: { timestamp },
     });
   } catch (error) {
-    console.error('[document-signed-url] unexpected_error', {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    console.error('[document-signed-url] unexpected_error');
 
-    return jsonResponse(500, {
+    return jsonResponse(req, 500, {
       ok: false,
       error: { code: 'internal_error', message: 'Unexpected server error.' },
       meta: { timestamp },

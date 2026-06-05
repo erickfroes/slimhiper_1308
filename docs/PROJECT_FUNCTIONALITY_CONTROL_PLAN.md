@@ -20,12 +20,13 @@ Functions, migrações e scripts presentes no código. A verificação cobriu `s
 `src/services`, `src/lib/supabase`, `supabase/functions`, `supabase/migrations`,
 `supabase/tests`, `scripts/supabase`, `.env.example` e `package.json`, sem ler
 `.env`, sem executar migrações/bootstraps, sem chamar Supabase remoto, D4Sign ou
-Asaas e sem dados reais. O inventário atual confirma 79 arquivos em `src/app`, 25
-serviços frontend, 17 Edge Functions, 29 migrações e 23 scripts Supabase. Também
+Asaas e sem dados reais. O inventário atual confirma 91 arquivos em `src/app`, 22
+serviços frontend, 17 Edge Functions, 34 migrações e 22 scripts Supabase. Também
 foram identificadas rotas reais que precisavam entrar explicitamente no controle:
 `/admin/billing`, `/admin/security`, `/admin/integrations`, `/admin/support`,
-`/admin/audit`, os redirecionamentos legados `/patient-list` e `/paciente-360`, e
-a API server-side de convite `/api/admin/tenants/[tenantId]/invitations`. O plano
+`/admin/audit`, `/admin/usage`, `/admin/storage`, os redirecionamentos legados
+`/patient-list` e `/paciente-360`, e a API server-side de convite
+`/api/admin/tenants/[tenantId]/invitations`. O plano
 abaixo foi atualizado para refletir esse estado: há avanço de contrato real em
 settings, inbox, CRM e admin tenants; a principal pendência transversal continua
 sendo evidência em ambiente Supabase de homologação, usuários sintéticos e browser
@@ -130,7 +131,7 @@ Use a tabela abaixo como controle vivo. Atualize `Status`, `Evidência` e
 | F15 | CRM                      | `/clinic/crm`, `crmApi`                                                                                | Verificado em 2026-06-03: pipeline usa RPCs reais para listar/criar/editar/mover/atividade/tarefa/conversão; fallback mock apenas por flag explícita; smoke autenticado pendente                                      | Real validado                  | Criar lead, mover etapa e converter paciente                                                                                         | RPCs CRM, duplicidade de PII e browser autenticado             |
 | F16 | Inventário               | `/clinic/inventory`, `inventoryApi`                                                                    | Avanço de contrato real em 2026-06-03: UI usa RPCs reais de snapshot/item/lote/movimento/transferência, valida dados antes de gravar e expõe alertas/ledger auditado                                                  | Real validado                  | Criar item/lote/movimento/transferência                                                                                              | Estoque negativo e auditoria                                   |
 | F17 | Portal paciente          | `/patient`, `patientPortalApi`                                                                         | Avanço de contrato real em 2026-06-03: mutações validam UUID/texto antes das RPCs, erros são sanitizados, links financeiros aceitam apenas HTTP(S) e check-ins coletam respostas das perguntas do template            | Real validado                  | Snapshot, mensagem, check-in e notificação                                                                                           | Vínculo paciente, RLS e liberação                              |
-| F18 | Admin overview           | `/admin`, `/admin/billing`, `/admin/security`, `/admin/integrations`, `/admin/support`, `/admin/audit` | Verificado em 2026-06-03: rotas derivadas existem e reutilizam `AdminContent` com seções reais; snapshot agrega tenants, webhooks, auditoria e suporte via contratos de plataforma; smoke pendente                    | Real validado                  | Snapshot admin, navegação de seções, billing, segurança, integrações, suporte e auditoria                                            | Permissão platform admin e browser autenticado                 |
+| F18 | Admin overview           | `/admin`, `/admin/billing`, `/admin/usage`, `/admin/storage`, `/admin/security`, `/admin/integrations`, `/admin/support`, `/admin/audit` | Verificado em 2026-06-05: rotas derivadas existem e reutilizam `AdminContent` com seções reais; snapshot agrega tenants, webhooks, auditoria, uso, armazenamento e suporte via contratos de plataforma; smoke pendente                    | Real validado                  | Snapshot admin, navegação de seções, billing, uso, armazenamento, segurança, integrações, suporte e auditoria                                            | Permissão platform admin e browser autenticado                 |
 | F19 | Admin tenants            | `/admin/tenants`, `/admin/tenants/[tenantId]`, `/api/admin/tenants/[tenantId]/invitations`             | Avanço de contrato real em 2026-06-03: detalhe, membership, suporte, break-glass e revogação usam RPCs auditadas; convite fica em Route Handler server-side com cliente admin; smoke pendente                         | Real validado                  | Convite, membership, suporte, break-glass, revogação e audit log                                                                     | Service role server-side, justificativas e usuários sintéticos |
 | F20 | Webhooks admin           | `/admin/webhooks`                                                                                      | Avanço de contrato real em 2026-06-03: monitor usa RPC real, filtros provider/status, detalhes sanitizados, proteção contra resposta obsoleta e identifica reprocesso como indisponível até existir contrato auditado | Real validado                  | Listar eventos Asaas/D4Sign e filtros; detalhes sem payload bruto; reprocessamento protegido quando existir                          | Dados sintéticos de webhooks e contrato de reprocesso          |
 | F21 | Observability            | `/admin/observability`                                                                                 | Avanço em 2026-06-03: painel combina `/api/health` e webhooks reais com monitores estáticos explicitamente rotulados                                                                                                  | Útil operacionalmente          | Checklist de monitores, links reais e distinção entre sinais reais/estáticos                                                         | Métricas externas/APM ainda não conectadas                     |
@@ -773,6 +774,8 @@ webhook -> reconciliação -> timeline/financeiro.
 | `/admin/webhooks`           | [ ]     | [ ]                 | Filtrar eventos            | [ ]       |
 | `/admin/observability`      | [ ]     | [ ]                 | Revisar monitores          | [ ]       |
 | `/admin/billing`            | [ ]     | [ ]                 | Abrir seção financeira     | [ ]       |
+| `/admin/usage`              | [ ]     | [ ]                 | Revisar uso e métricas     | [ ]       |
+| `/admin/storage`            | [ ]     | [ ]                 | Revisar armazenamento      | [ ]       |
 | `/admin/security`           | [ ]     | [ ]                 | Revisar seção segurança    | [ ]       |
 | `/admin/integrations`       | [ ]     | [ ]                 | Revisar integrações        | [ ]       |
 | `/admin/support`            | [ ]     | [ ]                 | Revisar suporte            | [ ]       |
@@ -1327,7 +1330,7 @@ Copie este bloco para cada fluxo validado.
 - Perfil de usuário: contexto real/sintético não executado; layout admin segue protegido por `PlatformAdminGuard` e o serviço browser usa cliente Supabase anon/session-scoped.
 - Tenant sintético: pendente para conferir MRR, providers, suporte, audit logs e break-glass por tenant.
 - Mock habilitado? não foi necessário alterar `NEXT_PUBLIC_USE_MOCK_DATA`; nenhuma variável secreta foi impressa.
-- Rota/API/RPC/Edge Function: `/admin`, `/admin/billing`, `/admin/integrations`, `/admin/security`, `/admin/support`, `/admin/audit`, `adminApi`, RPCs `list_platform_tenants`, `list_platform_webhook_events` e `get_platform_tenant_detail`.
+- Rota/API/RPC/Edge Function: `/admin`, `/admin/billing`, `/admin/usage`, `/admin/storage`, `/admin/integrations`, `/admin/security`, `/admin/support`, `/admin/audit`, `adminApi`, RPCs `list_platform_tenants`, `list_platform_webhook_events` e `get_platform_tenant_detail`.
 - Passos executados:
   1. Confirmada a existência do plano em `docs/PROJECT_FUNCTIONALITY_CONTROL_PLAN.md` e avanço executado na próxima frente aberta da ordem, Fase 7 admin overview.
   2. Ampliado `PlatformAdminSnapshot` para carregar suporte real, audit logs reais e avisos de degradação parcial, sem payload bruto nem provider secrets.
@@ -2036,6 +2039,32 @@ Copie este bloco para cada fluxo validado.
   de nova execucao normal por `.env`; executar browser smoke autenticado
   completo; validar webhooks provider reais de Asaas/D4Sign se for necessario
   exercitar callbacks externos alem dos eventos sinteticos/HMAC locais.
+
+### Evidencia - hardening de producao pos-auditoria
+
+- Data: 2026-06-05.
+- Escopo: pendencias P0/P1 identificadas por auditoria com subagents, sem tocar
+  no arquivo local de chaves de producao mantido pelo operador.
+- Implementado:
+  1. Funcoes Asaas acionadas por usuario passaram a exigir JWT no gateway
+     Supabase; webhooks continuam sem JWT por serem callbacks externos.
+  2. Nova migration `20260605170000_200_provider_production_hardening.sql`
+     remove escrita direta autenticada em `signature_requests` e
+     `signature_signers`, preservando leitura por RLS e writes via backend/
+     service role.
+  3. Identificadores operacionais de webhooks passaram a ser pseudonimizados em
+     SQL/RPC antes de chegarem ao frontend admin.
+  4. Links de pagamento Asaas passam por validacao `http/https` no servico e na
+     aba financeira antes de renderizar `href`.
+  5. Webhooks Asaas/D4Sign passaram a comparar tokens/assinaturas em tempo
+     constante.
+  6. `document-signed-url` passou a usar CORS por allowlist/local-only e removeu
+     log direto de mensagem de erro.
+  7. Rotas `/admin/usage` e `/admin/storage` foram criadas, e rotas criticas
+     ganharam boundaries `loading`/`error`.
+- Pendencias restantes: aplicar migration em homologacao, rodar browser smoke
+  autenticado completo, validar callbacks provider reais se exigidos pelo gate
+  comercial, exercitar alerta/restore e registrar aceite LGPD/security humano.
 
 ## 18. Sequência recomendada de implementação
 
