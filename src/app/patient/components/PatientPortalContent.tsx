@@ -15,6 +15,7 @@ import {
   MessageSquare,
   RefreshCw,
   UserRound,
+  UsersRound,
   type LucideIcon,
 } from 'lucide-react';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
@@ -25,6 +26,7 @@ import SectionPanel from '@/components/ui/SectionPanel';
 import Tabs from '@/components/ui/Tabs';
 import { getDocumentSignedUrl } from '@/services/documentsApi';
 import DailyPortalSection from './daily/DailyPortalSection';
+import PatientCommunitySection from './PatientCommunitySection';
 import PatientJourneySection from './PatientJourneySection';
 import {
   PortalChatSection,
@@ -54,6 +56,7 @@ type PortalTab =
   | 'resumo'
   | 'diario'
   | 'jornada'
+  | 'comunidade'
   | 'documentos'
   | 'financeiro'
   | 'chat'
@@ -64,6 +67,7 @@ const tabs: Array<{ id: PortalTab; label: string; shortLabel: string; icon: Luci
   { id: 'resumo', label: 'Resumo', shortLabel: 'Inicio', icon: Home },
   { id: 'diario', label: 'Diario', shortLabel: 'Hoje', icon: Activity },
   { id: 'jornada', label: 'Minha jornada', shortLabel: 'Jornada', icon: UserRound },
+  { id: 'comunidade', label: 'Comunidade', shortLabel: 'Grupo', icon: UsersRound },
   { id: 'documentos', label: 'Documentos', shortLabel: 'Docs', icon: FileText },
   { id: 'financeiro', label: 'Financeiro', shortLabel: 'Pagar', icon: CreditCard },
   { id: 'chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
@@ -470,8 +474,8 @@ export default function PatientPortalContent() {
                 Ola, {snapshot.patient.preferredName}
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Acompanhe proximas acoes, check-ins, documentos, cobrancas e conversas do seu
-                programa em um so lugar.
+                Acompanhe proximas acoes, check-ins, comunidade, documentos, cobrancas e conversas
+                do seu programa em um so lugar.
               </p>
             </div>
 
@@ -630,6 +634,10 @@ export default function PatientPortalContent() {
               />
             ) : null}
 
+            {activeTab === 'comunidade' ? (
+              <PatientCommunitySection snapshot={snapshot} onActionMessage={setActionMessage} />
+            ) : null}
+
             {activeTab === 'documentos' ? (
               <PortalDocumentsSection
                 snapshot={snapshot}
@@ -674,7 +682,7 @@ export default function PatientPortalContent() {
         className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 px-2 pt-2 shadow-lg backdrop-blur safe-bottom sm:hidden"
         aria-label="Navegacao do portal"
       >
-        <div className="mx-auto grid max-w-xl grid-cols-4 gap-1">
+        <div className="mx-auto grid max-w-xl grid-cols-5 gap-1">
           {tabs.map((tab) => {
             const TabIcon = tab.icon;
             const active = activeTab === tab.id;

@@ -4,7 +4,7 @@ import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cx } from './utils';
 
-type DialogPlacement = 'center' | 'right';
+type DialogPlacement = 'center' | 'right' | 'bottom';
 
 interface DialogProps {
   open: boolean;
@@ -84,7 +84,12 @@ export default function Dialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-slate-950/40 p-4 backdrop-blur-sm">
+    <div
+      className={cx(
+        'fixed inset-0 z-50 flex bg-slate-950/40 p-4 backdrop-blur-sm',
+        placement === 'bottom' && 'items-end sm:items-center'
+      )}
+    >
       <button
         type="button"
         className="absolute inset-0 cursor-default"
@@ -99,9 +104,10 @@ export default function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         className={cx(
           'relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl',
-          placement === 'right'
-            ? 'ml-auto w-[calc(100vw-2rem)] max-w-xl self-stretch sm:w-full'
-            : 'm-auto w-[calc(100vw-2rem)] max-w-lg sm:w-full'
+          placement === 'right' && 'ml-auto w-[calc(100vw-2rem)] max-w-xl self-stretch sm:w-full',
+          placement === 'center' && 'm-auto w-[calc(100vw-2rem)] max-w-lg sm:w-full',
+          placement === 'bottom' &&
+            'mx-auto mb-0 mt-auto w-[calc(100vw-2rem)] max-w-lg rounded-b-none sm:m-auto sm:rounded-lg'
         )}
       >
         <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">

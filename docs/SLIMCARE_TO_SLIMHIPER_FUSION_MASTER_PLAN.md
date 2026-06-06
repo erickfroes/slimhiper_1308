@@ -367,39 +367,56 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Portal paciente: tab "Comunidade" com feed simples.
-- [ ] Composer curto com guideline antes de publicar.
-- [ ] Estado "aguardando moderacao".
-- [ ] Comentarios em bottom sheet no mobile.
-- [ ] Moderacao clinica em cards, nao tabela no celular.
-- [ ] Filtros: pendentes, aprovados, rejeitados, denunciados.
-- [ ] Nenhum contador social viciante como prioridade do produto.
+- [x] Portal paciente: tab "Comunidade" com feed simples.
+- [x] Composer curto com guideline antes de publicar.
+- [x] Estado "aguardando moderacao".
+- [x] Comentarios em bottom sheet no mobile.
+- [x] Moderacao clinica em cards, nao tabela no celular.
+- [x] Filtros: pendentes, aprovados, rejeitados, denunciados.
+- [x] Nenhum contador social viciante como prioridade do produto.
 
 Checklist backend:
 
-- [ ] Criar `community_posts`, `community_comments`, `weekly_prompts`.
-- [ ] Vincular post a tenant, programa/cohort e paciente.
-- [ ] RLS: paciente le apenas comunidade permitida pelo programa.
-- [ ] RLS: paciente cria post/comment como pendente ou aprovado conforme regra.
-- [ ] Moderadores precisam permissao `community.moderate`.
-- [ ] Criar audit log para aprovacao/rejeicao/remocao.
+- [x] Criar `community_posts`, `community_comments`, `weekly_prompts`.
+- [x] Vincular post a tenant, programa/cohort e paciente.
+- [x] RLS: paciente le apenas comunidade permitida pelo programa.
+- [x] RLS: paciente cria post/comment como pendente ou aprovado conforme regra.
+- [x] Moderadores precisam permissao `community.moderate`.
+- [x] Criar audit log para aprovacao/rejeicao/remocao.
 - [ ] Opcional: storage privado para imagens de comunidade.
 
 Checklist seguranca:
 
-- [ ] Moderacao fail-closed.
-- [ ] Remocao/ocultacao auditada.
-- [ ] Comentarios de saude com disclaimers e triagem quando houver risco.
-- [ ] Denuncia de conteudo sensivel.
-- [ ] Rate limit por paciente.
-- [ ] Evitar exposicao de nome completo se configuracao exigir privacidade.
+- [x] Moderacao fail-closed.
+- [x] Remocao/ocultacao auditada.
+- [x] Comentarios de saude com disclaimers e triagem quando houver risco.
+- [x] Denuncia de conteudo sensivel.
+- [x] Rate limit por paciente.
+- [x] Evitar exposicao de nome completo se configuracao exigir privacidade.
 
 Aceite:
 
-- [ ] Paciente de programa autorizado ve feed.
-- [ ] Paciente sem beneficio ve bloqueio claro, nao dados.
-- [ ] Moderador aprova/rejeita post com motivo.
-- [ ] Conteudo rejeitado nao aparece no portal.
+- [x] Paciente de programa autorizado ve feed.
+- [x] Paciente sem beneficio ve bloqueio claro, nao dados.
+- [x] Moderador aprova/rejeita post com motivo.
+- [x] Conteudo rejeitado nao aparece no portal.
+
+Status do corte 2026-06-06:
+
+- [x] Migration `20260606220000_240_program_community_moderation.sql` criada com
+  tabelas, RLS, RPCs patient-scoped, RPCs de moderacao, denuncia, prompt semanal,
+  rate limit, triagem de risco e RBAC `community.moderate`.
+- [x] Service `communityApi` criado com mock somente sob
+  `NEXT_PUBLIC_USE_MOCK_DATA=true` e chamadas reais por RPC.
+- [x] Portal paciente recebeu aba `Comunidade` com feed por programa, composer,
+  estados de moderacao, denuncia e comentarios em bottom sheet.
+- [x] Clinica recebeu `/clinic/community` no `DashboardShell`, com cards de
+  moderacao, filtros, acoes auditadas e prompt semanal.
+- [x] Runbook `docs/COMMUNITY_MODERATION_RUNBOOK.md` documenta contratos,
+  permissoes, seguranca e checks.
+- [ ] Imagens de comunidade permanecem fora deste corte por serem opcionais; se
+  entrarem depois, devem usar storage privado, validacao de arquivo e signed URL
+  curta.
 
 ### M04 - Chat e inbox avancados
 
