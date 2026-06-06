@@ -189,6 +189,7 @@ export interface PatientReceipt {
   paymentDate: string;
   issuedBy: string;
   receiptNumber: string;
+  paymentId?: string;
 }
 
 export interface PatientNegotiation {
@@ -376,6 +377,7 @@ export interface PatientPrescriptionSummary {
   status?: 'ativo' | 'expirado' | 'cancelado' | 'pendente_assinatura' | 'rascunho';
   issueDate?: string;
   validity?: string;
+  linkedDocumentId?: string;
   linkedDocument?: string;
   signatureStatus?: 'assinado' | 'pendente' | 'nao_requerido';
   version?: string;
@@ -604,12 +606,20 @@ export interface DashboardStats {
   operationalInsights?: DashboardOperationalInsights;
 }
 
+export interface DashboardDegradedSection {
+  key: string;
+  label: string;
+  canRead: boolean;
+  error: string;
+}
+
 export interface DashboardSnapshot {
   stats: DashboardStats;
   waitingQueue: WaitingQueueEntry[];
   todayAppointments: AppointmentSummary[];
   alerts: DashboardAlert[];
   patientsNeedingReview: PatientReviewItem[];
+  degradedSections?: DashboardDegradedSection[];
 }
 
 export interface WaitingQueueEntry {

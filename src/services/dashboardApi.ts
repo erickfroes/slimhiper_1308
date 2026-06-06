@@ -4,6 +4,7 @@ import type {
   AppointmentType,
   AlertSeverity,
   DashboardAlert,
+  DashboardDegradedSection,
   DashboardSnapshot,
   DashboardStats,
   PatientReviewItem,
@@ -163,6 +164,80 @@ function normalizeDashboardInsights(payload: unknown): DashboardStats['operation
       href: typeof inventory.href === 'string' ? inventory.href : '/clinic/inventory',
     },
   };
+}
+
+function dashboardFallbackInsights(): DashboardStats['operationalInsights'] {
+  return normalizeDashboardInsights({});
+}
+
+function formatDashboardSectionError(error: unknown) {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = String((error as { message?: unknown }).message ?? '').trim();
+    if (message) return message;
+  }
+  return 'Leitura parcial indisponivel.';
+}
+
+async function readDashboardSection<T>(
+  degradedSections: DashboardDegradedSection[],
+  key: string,
+  label: string,
+  task: PromiseLike<T>,
+  fallback: T
+) {
+  try {
+    return await task;
+  } catch (error) {
+    degradedSections.push({
+      key,
+      label,
+      canRead: false,
+      error: formatDashboardSectionError(error),
+    });
+    return fallback;
+  }
+}
+
+async function readDashboardCount(
+  degradedSections: DashboardDegradedSection[],
+  key: string,
+  label: string,
+  task: PromiseLike<{ count: number | null; error: unknown }>
+) {
+  try {
+    const result = await task;
+    if (result.error) throw result.error;
+    return result.count ?? 0;
+  } catch (error) {
+    degradedSections.push({
+      key,
+      label,
+      canRead: false,
+      error: formatDashboardSectionError(error),
+    });
+    return 0;
+  }
+}
+
+async function readDashboardRows<T>(
+  degradedSections: DashboardDegradedSection[],
+  key: string,
+  label: string,
+  task: PromiseLike<{ data: unknown[] | null; error: unknown }>
+) {
+  try {
+    const result = await task;
+    if (result.error) throw result.error;
+    return (result.data ?? []) as T[];
+  } catch (error) {
+    degradedSections.push({
+      key,
+      label,
+      canRead: false,
+      error: formatDashboardSectionError(error),
+    });
+    return [] as T[];
+  }
 }
 
 async function getOperationalInsights(supabase: BrowserSupabaseClient) {
@@ -335,9 +410,22 @@ const supabaseDashboardProvider: DashboardProvider = {
   async getDashboardSnapshot() {
     const supabase = createBrowserSupabaseClient();
     const tenantId = await resolveActiveTenantId(supabase);
+    const degradedSections: DashboardDegradedSection[] = [];
     const [todayAppointments, activeAlertRows] = await Promise.all([
-      getTodayAppointmentRows(tenantId, supabase),
-      getActiveAlertRows(tenantId, 10, supabase),
+      readDashboardSection(
+        degradedSections,
+        'todayAppointments',
+        'Agenda do dia',
+        getTodayAppointmentRows(tenantId, supabase),
+        [] as AppointmentRow[]
+      ),
+      readDashboardSection(
+        degradedSections,
+        'alerts',
+        'Alertas clinicos',
+        getActiveAlertRows(tenantId, 10, supabase),
+        [] as AlertRow[]
+      ),
     ]);
     const completedToday = todayAppointments.filter(
       (appointment) => mapAppointmentStatus(appointment.status) === 'concluido'
@@ -346,62 +434,86 @@ const supabaseDashboardProvider: DashboardProvider = {
       queueStatuses.includes(mapAppointmentStatus(appointment.status))
     );
     const [
-      activeProgramsResult,
-      activeAlertsResult,
-      pendingDocumentsResult,
-      overdueInvoicesResult,
-      unreadThreadsResult,
+      activeProgramsCount,
+      activeAlertsCount,
+      pendingDocumentsCount,
+      overdueInvoicesCount,
+      unreadThreadRows,
       operationalInsights,
     ] = await Promise.all([
-      supabase
-        .from('patient_program_enrollments')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId)
-        .eq('status', 'ativo'),
-      supabase
-        .from('patient_alerts')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId)
-        .eq('status', 'active'),
-      supabase
-        .from('generated_documents')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId)
-        .in('status', ['draft', 'pending_signature', 'sent_for_signature']),
-      supabase
-        .from('patient_invoices')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId)
-        .in('status', ['OVERDUE', 'overdue', 'vencido']),
-      supabase
-        .from('patient_chat_threads')
-        .select('unread_count')
-        .eq('tenant_id', tenantId)
-        .gt('unread_count', 0),
-      getOperationalInsights(supabase),
+      readDashboardCount(
+        degradedSections,
+        'activePrograms',
+        'Programas ativos',
+        supabase
+          .from('patient_program_enrollments')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId)
+          .eq('status', 'ativo')
+      ),
+      readDashboardCount(
+        degradedSections,
+        'activeAlertsCount',
+        'Contagem de alertas',
+        supabase
+          .from('patient_alerts')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId)
+          .eq('status', 'active')
+      ),
+      readDashboardCount(
+        degradedSections,
+        'pendingDocuments',
+        'Documentos pendentes',
+        supabase
+          .from('generated_documents')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId)
+          .in('status', ['draft', 'pending_signature', 'sent_for_signature'])
+      ),
+      readDashboardCount(
+        degradedSections,
+        'overdueInvoices',
+        'Cobrancas vencidas',
+        supabase
+          .from('patient_invoices')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenantId)
+          .in('status', ['OVERDUE', 'overdue', 'vencido'])
+      ),
+      readDashboardRows<ChatThreadUnreadRow>(
+        degradedSections,
+        'unreadThreads',
+        'Mensagens nao lidas',
+        supabase
+          .from('patient_chat_threads')
+          .select('unread_count')
+          .eq('tenant_id', tenantId)
+          .gt('unread_count', 0)
+      ),
+      readDashboardSection(
+        degradedSections,
+        'operationalInsights',
+        'Inteligencia operacional',
+        getOperationalInsights(supabase),
+        dashboardFallbackInsights()
+      ),
     ]);
 
-    for (const result of [
-      activeProgramsResult,
-      activeAlertsResult,
-      pendingDocumentsResult,
-      overdueInvoicesResult,
-      unreadThreadsResult,
-    ]) {
-      if (result.error) throw result.error;
-    }
-
-    const unreadMessages = ((unreadThreadsResult.data ?? []) as ChatThreadUnreadRow[]).reduce(
-      (sum, row) => sum + (row.unread_count ?? 0),
-      0
-    );
-    const patientNames = await getPatientNamesForClient(
-      supabase,
-      tenantId,
-      uniqueValues([
-        ...todayAppointments.map((row) => row.patient_id),
-        ...activeAlertRows.map((row) => row.patient_id),
-      ])
+    const unreadMessages = unreadThreadRows.reduce((sum, row) => sum + (row.unread_count ?? 0), 0);
+    const patientNames = await readDashboardSection(
+      degradedSections,
+      'patientNames',
+      'Identificacao de pacientes',
+      getPatientNamesForClient(
+        supabase,
+        tenantId,
+        uniqueValues([
+          ...todayAppointments.map((row) => row.patient_id),
+          ...activeAlertRows.map((row) => row.patient_id),
+        ])
+      ),
+      new Map<string, string>()
     );
 
     return {
@@ -409,11 +521,11 @@ const supabaseDashboardProvider: DashboardProvider = {
         consultasHoje: todayAppointments.length,
         consultasConcluidas: completedToday,
         filaEspera: queueRows.length,
-        programasAtivos: activeProgramsResult.count ?? 0,
-        alertasClinicos: activeAlertsResult.count ?? 0,
+        programasAtivos: activeProgramsCount,
+        alertasClinicos: activeAlertsCount,
         mensagensNaoLidas: unreadMessages,
-        documentosPendentes: pendingDocumentsResult.count ?? 0,
-        inadimplentes: overdueInvoicesResult.count ?? 0,
+        documentosPendentes: pendingDocumentsCount,
+        inadimplentes: overdueInvoicesCount,
         taxaOcupacao: todayAppointments.length
           ? Math.round((completedToday / todayAppointments.length) * 100)
           : 0,
@@ -423,6 +535,7 @@ const supabaseDashboardProvider: DashboardProvider = {
       todayAppointments: mapAppointmentRows(todayAppointments, patientNames),
       alerts: mapAlertRows(activeAlertRows),
       patientsNeedingReview: mapReviewRows(activeAlertRows.slice(0, 6), patientNames),
+      degradedSections,
     };
   },
 };

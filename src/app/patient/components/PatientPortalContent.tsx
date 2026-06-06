@@ -1,7 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Bell, CheckCircle2, CreditCard, FileText, RefreshCw, Send, UserRound } from 'lucide-react';
+import {
+  Bell,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardCheck,
+  CreditCard,
+  FileText,
+  Home,
+  MessageSquare,
+  RefreshCw,
+  Send,
+  type LucideIcon,
+} from 'lucide-react';
+import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
+import MetricCard from '@/components/ui/MetricCard';
+import Tabs from '@/components/ui/Tabs';
 import { getDocumentSignedUrl } from '@/services/documentsApi';
 import {
   getPatientPortalSnapshot,
@@ -13,13 +29,13 @@ import {
 
 type PortalTab = 'resumo' | 'documentos' | 'financeiro' | 'chat' | 'notificacoes' | 'checkins';
 
-const tabs: Array<{ id: PortalTab; label: string }> = [
-  { id: 'resumo', label: 'Resumo' },
-  { id: 'documentos', label: 'Documentos' },
-  { id: 'financeiro', label: 'Financeiro' },
-  { id: 'chat', label: 'Chat' },
-  { id: 'notificacoes', label: 'Notificacoes' },
-  { id: 'checkins', label: 'Check-ins' },
+const tabs: Array<{ id: PortalTab; label: string; shortLabel: string; icon: LucideIcon }> = [
+  { id: 'resumo', label: 'Resumo', shortLabel: 'Inicio', icon: Home },
+  { id: 'documentos', label: 'Documentos', shortLabel: 'Docs', icon: FileText },
+  { id: 'financeiro', label: 'Financeiro', shortLabel: 'Pagar', icon: CreditCard },
+  { id: 'chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
+  { id: 'notificacoes', label: 'Notificacoes', shortLabel: 'Avisos', icon: Bell },
+  { id: 'checkins', label: 'Check-ins', shortLabel: 'Check', icon: ClipboardCheck },
 ];
 
 function formatCurrency(cents: number) {
@@ -43,26 +59,6 @@ function getCheckinQuestions(questions: unknown[]) {
 function isCheckinAnswered(questions: string[], answers?: Record<string, string>) {
   if (questions.length === 0) return true;
   return questions.every((_, index) => answers?.[String(index)]?.trim());
-}
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof UserRound;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        <Icon className="h-5 w-5" aria-hidden="true" />
-      </div>
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
-    </div>
-  );
 }
 
 export default function PatientPortalContent() {
@@ -102,6 +98,83 @@ export default function PatientPortalContent() {
     [snapshot]
   );
 
+  const portalCockpit = useMemo(() => {
+    if (!snapshot) return null;
+
+    const pendingCheckins = snapshot.checkins
+      .filter((checkin) => checkin.status !== 'completed' && checkin.status !== 'canceled')
+      .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
+    const openInvoices = snapshot.invoices
+      .filter((invoice) => !['paid', 'pago', 'CONFIRMED', 'RECEIVED'].includes(invoice.status))
+      .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
+    const completedCheckins = snapshot.checkins.filter(
+      (checkin) => checkin.status === 'completed'
+    ).length;
+    const progress =
+      snapshot.checkins.length > 0
+        ? Math.round((completedCheckins / snapshot.checkins.length) * 100)
+        : snapshot.documents.length > 0 || snapshot.invoices.length > 0
+          ? 25
+          : 0;
+    const firstUnreadNotification = snapshot.notifications.find(
+      (notification) => notification.status === 'unread'
+    );
+
+    if (pendingCheckins[0]) {
+      return {
+        progress,
+        pendingCheckins,
+        openInvoices,
+        nextAction: {
+          tab: 'checkins' as PortalTab,
+          title: 'Responder check-in',
+          detail: `Prazo ${formatDate(pendingCheckins[0].dueDate)}`,
+          icon: ClipboardCheck,
+        },
+      };
+    }
+
+    if (openInvoices[0]) {
+      return {
+        progress,
+        pendingCheckins,
+        openInvoices,
+        nextAction: {
+          tab: 'financeiro' as PortalTab,
+          title: 'Revisar cobranca',
+          detail: `${formatCurrency(openInvoices[0].amountCents)} ate ${formatDate(openInvoices[0].dueDate)}`,
+          icon: CreditCard,
+        },
+      };
+    }
+
+    if (firstUnreadNotification) {
+      return {
+        progress,
+        pendingCheckins,
+        openInvoices,
+        nextAction: {
+          tab: 'notificacoes' as PortalTab,
+          title: 'Ler notificacao',
+          detail: firstUnreadNotification.title,
+          icon: Bell,
+        },
+      };
+    }
+
+    return {
+      progress,
+      pendingCheckins,
+      openInvoices,
+      nextAction: {
+        tab: 'chat' as PortalTab,
+        title: 'Falar com a equipe',
+        detail: 'Envie uma mensagem quando precisar.',
+        icon: MessageSquare,
+      },
+    };
+  }, [snapshot]);
+
   async function handlePatientChange(patientId: string) {
     setSelectedPatientId(patientId);
     await loadPortal(patientId);
@@ -133,7 +206,13 @@ export default function PatientPortalContent() {
     if (result.error || !result.data?.url) {
       setActionMessage(result.error?.message ?? 'Nao foi possivel gerar o link temporario.');
     } else {
-      window.open(result.data.url, '_blank', 'noopener,noreferrer');
+      const safeUrl = asSafeDocumentUrl(result.data.url);
+      if (!safeUrl) {
+        setActionMessage('O link gerado nao passou na validacao de seguranca.');
+        setBusyKey(null);
+        return;
+      }
+      window.open(safeUrl, '_blank', 'noopener,noreferrer');
       setActionMessage(`Link temporario gerado por ${result.data.expiresInSeconds} segundos.`);
     }
     setBusyKey(null);
@@ -227,39 +306,119 @@ export default function PatientPortalContent() {
     );
   }
 
+  const nextAction = portalCockpit?.nextAction;
+  const NextActionIcon = nextAction?.icon ?? MessageSquare;
+  const tabItems = tabs.map((tab) => ({
+    id: tab.id,
+    label: tab.label,
+    badge:
+      tab.id === 'notificacoes' && unreadNotifications > 0 ? (
+        <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px]">
+          {unreadNotifications}
+        </span>
+      ) : undefined,
+  }));
+
   return (
-    <main className="min-h-screen bg-background px-4 py-6 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-background px-4 py-4 pb-24 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto max-w-6xl space-y-6">
-        <header className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-medium text-primary">Portal SlimHiper</p>
-              <h1 className="mt-1 text-2xl font-bold text-foreground sm:text-3xl">
+        <header className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                  Portal SlimHiper
+                </p>
+                <span className="rounded-full bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                  {snapshot.patient.status}
+                </span>
+              </div>
+              <h1 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">
                 Ola, {snapshot.patient.preferredName}
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Consulte documentos liberados, financeiro, mensagens, notificacoes e check-ins do
-                seu programa.
+                Acompanhe proximas acoes, check-ins, documentos, cobrancas e conversas do seu
+                programa em um so lugar.
               </p>
             </div>
 
-            {snapshot.patients.length > 1 ? (
-              <label className="flex flex-col gap-2 text-sm font-medium text-foreground">
-                Paciente vinculado
-                <select
-                  value={selectedPatientId}
-                  onChange={(event) => void handlePatientChange(event.target.value)}
-                  className="min-w-64 rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                >
-                  {snapshot.patients.map((patient) => (
-                    <option key={patient.patientId} value={patient.patientId}>
-                      {patient.displayName} (
-                      {patient.linkageType === 'guardian' ? 'responsavel' : 'paciente'})
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end lg:items-center">
+              {snapshot.patients.length > 1 ? (
+                <label className="flex flex-col gap-2 text-sm font-medium text-foreground">
+                  Paciente vinculado
+                  <select
+                    value={selectedPatientId}
+                    onChange={(event) => void handlePatientChange(event.target.value)}
+                    className="min-w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    {snapshot.patients.map((patient) => (
+                      <option key={patient.patientId} value={patient.patientId}>
+                        {patient.displayName} (
+                        {patient.linkageType === 'guardian' ? 'responsavel' : 'paciente'})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void loadPortal(snapshot.selectedPatientId)}
+                className="btn-secondary justify-center"
+              >
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                Atualizar
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+            <button
+              type="button"
+              onClick={() => nextAction && setActiveTab(nextAction.tab)}
+              className="group flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/10 p-4 text-left transition hover:bg-primary/15"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <NextActionIcon className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                    Proxima acao
+                  </p>
+                  <p className="mt-1 truncate text-base font-bold text-foreground">
+                    {nextAction?.title}
+                  </p>
+                  <p className="truncate text-sm text-muted-foreground">{nextAction?.detail}</p>
+                </div>
+              </div>
+              <ChevronRight
+                className="h-5 w-5 shrink-0 text-primary transition group-hover:translate-x-0.5"
+                aria-hidden="true"
+              />
+            </button>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Progresso do programa
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-foreground">
+                    {portalCockpit?.progress ?? 0}%
+                  </p>
+                </div>
+                <CalendarDays className="h-6 w-6 text-primary" aria-hidden="true" />
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-muted">
+                <div
+                  className="h-2 rounded-full bg-primary"
+                  style={{ width: `${portalCockpit?.progress ?? 0}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Baseado nos check-ins atribuidos para este vinculo.
+              </p>
+            </div>
           </div>
         </header>
 
@@ -269,7 +428,7 @@ export default function PatientPortalContent() {
           </div>
         ) : null}
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             icon={FileText}
             label="Documentos"
@@ -279,35 +438,31 @@ export default function PatientPortalContent() {
             icon={CreditCard}
             label="Cobrancas"
             value={String(snapshot.invoices.length)}
+            tone={portalCockpit?.openInvoices.length ? 'warning' : 'default'}
+          />
+          <MetricCard
+            icon={ClipboardCheck}
+            label="Check-ins pendentes"
+            value={String(portalCockpit?.pendingCheckins.length ?? 0)}
+            tone={portalCockpit?.pendingCheckins.length ? 'success' : 'default'}
           />
           <MetricCard
             icon={Bell}
             label="Notificacoes nao lidas"
             value={String(unreadNotifications)}
+            tone={unreadNotifications ? 'info' : 'default'}
           />
         </section>
 
-        <nav
-          className="flex gap-2 overflow-x-auto rounded-2xl border border-border bg-card p-2 shadow-sm"
-          aria-label="Abas do portal"
-        >
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                activeTab === tab.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <Tabs
+          items={tabItems}
+          value={activeTab}
+          onValueChange={setActiveTab}
+          label="Abas do portal"
+          className="hidden sm:flex"
+        />
 
-        <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
+        <section className="rounded-lg border border-border bg-card p-5 shadow-sm sm:p-6">
           {activeTab === 'resumo' ? (
             <div className="grid gap-4 md:grid-cols-2">
               <div>
@@ -565,6 +720,40 @@ export default function PatientPortalContent() {
           ) : null}
         </section>
       </div>
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 px-2 pt-2 shadow-lg backdrop-blur safe-bottom sm:hidden"
+        aria-label="Navegacao do portal"
+      >
+        <div className="mx-auto grid max-w-lg grid-cols-6 gap-1">
+          {tabs.map((tab) => {
+            const TabIcon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={[
+                  'flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-semibold transition',
+                  active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                ].join(' ')}
+              >
+                <span className="relative">
+                  <TabIcon className="h-4 w-4" aria-hidden="true" />
+                  {tab.id === 'notificacoes' && unreadNotifications > 0 ? (
+                    <span className="absolute -right-2 -top-2 h-4 min-w-4 rounded-full bg-negative px-1 text-[9px] leading-4 text-white">
+                      {unreadNotifications}
+                    </span>
+                  ) : null}
+                </span>
+                <span>{tab.shortLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </main>
   );
 }

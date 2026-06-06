@@ -19,7 +19,8 @@ type BadgeVariant =
   | 'cancelado'
   | 'em_analise'
   | 'pendente_assinatura'
-  | 'assinado';
+  | 'assinado'
+  | string;
 
 const badgeConfig: Record<string, { label: string; classes: string }> = {
   // Appointment statuses
@@ -61,19 +62,28 @@ const badgeConfig: Record<string, { label: string; classes: string }> = {
   bom: { label: 'Bom', classes: 'bg-teal-50 text-teal-700 border-teal-200' },
   regular: { label: 'Regular', classes: 'bg-amber-50 text-amber-700 border-amber-200' },
   critico: { label: 'Crítico', classes: 'bg-red-50 text-red-700 border-red-200' },
+  alto: { label: 'Alto', classes: 'bg-red-50 text-red-700 border-red-200' },
+  medio: { label: 'Medio', classes: 'bg-amber-50 text-amber-700 border-amber-200' },
+  baixo: { label: 'Baixo', classes: 'bg-blue-50 text-blue-700 border-blue-200' },
   // Package
   aguardando: { label: 'Aguardando', classes: 'bg-slate-100 text-slate-600 border-slate-200' },
+  active: { label: 'Ativo', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  inactive: { label: 'Inativo', classes: 'bg-slate-100 text-slate-600 border-slate-200' },
+  failed: { label: 'Falhou', classes: 'bg-red-50 text-red-700 border-red-200' },
+  success: { label: 'Sucesso', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  warning: { label: 'Atencao', classes: 'bg-amber-50 text-amber-700 border-amber-200' },
 };
 
 interface StatusBadgeProps {
   status: BadgeVariant;
   size?: 'xs' | 'sm' | 'md';
   dot?: boolean;
+  label?: string;
 }
 
-export default function StatusBadge({ status, size = 'sm', dot = false }: StatusBadgeProps) {
+export default function StatusBadge({ status, size = 'sm', dot = false, label }: StatusBadgeProps) {
   const config = badgeConfig[status] ?? {
-    label: status,
+    label: label ?? String(status).replaceAll('_', ' '),
     classes: 'bg-slate-100 text-slate-600 border-slate-200',
   };
 
@@ -92,7 +102,7 @@ export default function StatusBadge({ status, size = 'sm', dot = false }: Status
       ].join(' ')}
     >
       {dot && <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />}
-      {config.label}
+      {label ?? config.label}
     </span>
   );
 }

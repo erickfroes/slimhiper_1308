@@ -25,6 +25,7 @@ import {
   type ClinicDocumentRow,
   type ClinicDocumentsWorkspace,
 } from '@/services/clinicDocumentsApi';
+import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
 
 function statusBadge(status: string) {
   const normalized = status.toLowerCase();
@@ -226,7 +227,13 @@ export default function ClinicDocumentsContent() {
       return;
     }
 
-    window.open(result.data.url, '_blank', 'noopener,noreferrer');
+    const safeUrl = asSafeDocumentUrl(result.data.url);
+    if (!safeUrl) {
+      setActionError('O link gerado nao passou na validacao de seguranca.');
+      return;
+    }
+
+    window.open(safeUrl, '_blank', 'noopener,noreferrer');
     setActionMessage('Link temporario gerado.');
   }
 

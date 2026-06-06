@@ -166,7 +166,9 @@ function asBoolean(value: unknown, fallback = false): boolean {
 }
 
 function maskEmail(value: string | null | undefined): string {
-  const normalized = String(value ?? '').trim().toLowerCase();
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase();
   const [localPart, domain] = normalized.split('@');
   if (!localPart || !domain) return '';
   const visiblePrefix = localPart.slice(0, 2);
@@ -278,10 +280,18 @@ function mapPrescriptionSummary(row: Record<string, unknown>, patientId: string)
     prescribedBy: 'Equipe medica',
     isActive: status === 'final',
     notes: instructions || prescriptionText || undefined,
+    category: typeof row.category === 'string' ? row.category : undefined,
     status: mapPrescriptionStatus(status),
     issueDate: typeof row.created_at === 'string' ? row.created_at : undefined,
     validity: typeof row.end_date === 'string' ? row.end_date : undefined,
+    linkedDocumentId:
+      typeof row.linked_document_id === 'string' ? row.linked_document_id : undefined,
+    linkedDocument: typeof row.linked_document_id === 'string' ? row.linked_document_id : undefined,
     signatureStatus: 'nao_requerido',
+    version:
+      typeof row.version === 'number' || typeof row.version === 'string'
+        ? String(row.version)
+        : undefined,
   };
 }
 
@@ -720,7 +730,7 @@ async function buildAndReturnSummary({
       ? supabase
           .from('prescriptions_placeholder')
           .select(
-            'id, status, prescription_text, medication_name, dosage, frequency, instructions, start_date, end_date, created_by, created_at, updated_at'
+            'id, status, prescription_text, medication_name, dosage, frequency, instructions, start_date, end_date, created_by, created_at, updated_at, category, linked_document_id, version'
           )
           .eq('patient_id', patientId)
           .eq('tenant_id', patient.tenant_id)
@@ -799,7 +809,9 @@ async function buildAndReturnSummary({
       ? await Promise.all([
           supabase
             .from('programs')
-            .select('id, name, program_type, duration_weeks, checkins_total, checkin_frequency, updated_at')
+            .select(
+              'id, name, program_type, duration_weeks, checkins_total, checkin_frequency, updated_at'
+            )
             .eq('id', packageEnrollment.program_id)
             .eq('tenant_id', patient.tenant_id)
             .maybeSingle(),

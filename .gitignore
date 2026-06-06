@@ -5,6 +5,9 @@ node_modules/
 .env
 .env.local
 .env.*.local
+*Copia.env
+*copia.env
+*copy.env
 !.env.example
 
 # Next.js build output

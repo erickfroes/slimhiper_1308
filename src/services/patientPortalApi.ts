@@ -1,4 +1,5 @@
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
 
 export interface SafeServiceError {
   message: string;
@@ -128,16 +129,6 @@ function asUuid(value: unknown): string | null {
     : null;
 }
 
-function asSafeExternalUrl(value: unknown): string | null {
-  if (typeof value !== 'string' || !value.trim()) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
@@ -207,7 +198,7 @@ function normalizeInvoice(value: unknown): PatientPortalInvoice | null {
     dueDate: asNullableString(record.dueDate),
     paidAt: asNullableString(record.paidAt),
     description: asNullableString(record.description),
-    paymentLink: asSafeExternalUrl(record.paymentLink),
+    paymentLink: asSafePaymentUrl(record.paymentLink),
   };
 }
 
@@ -314,6 +305,19 @@ function safeError(error: unknown, fallback: string): SafeServiceError {
   };
 }
 
+function logDevelopmentDiagnostic(scope: string, error: unknown) {
+  if (process.env.NODE_ENV === 'production') return;
+
+  const record = asRecord(error);
+  const diagnostic = {
+    code: asNullableString(record.code),
+    message: sanitizeText(record.message, 160) || undefined,
+    name: asNullableString(record.name),
+    status: asNumber(record.status, 0) || undefined,
+  };
+  console.warn(`[patientPortalApi] ${scope} ${JSON.stringify(diagnostic)}`);
+}
+
 function sanitizeResponseValue(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') return sanitizeText(value, depth === 0 ? 4000 : 1000);
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -359,11 +363,16 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
     const { data, error } = await supabase.rpc('get_patient_portal_snapshot', {
       p_patient_id: asUuid(patientId) ?? null,
     });
-    if (error)
+    if (error) {
+      logDevelopmentDiagnostic('getPatientPortalSnapshot.rpc', error);
       return { data: null, error: safeError(error, 'Nao foi possivel carregar o portal.') };
+    }
 
     const snapshot = normalizeSnapshot(data);
     if (!snapshot) {
+      logDevelopmentDiagnostic('getPatientPortalSnapshot.contract', {
+        code: 'invalid_contract',
+      });
       return {
         data: null,
         error: { message: 'Contrato invalido do portal do paciente.', code: 'invalid_contract' },
@@ -372,6 +381,7 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
 
     return { data: snapshot, error: null };
   } catch (error) {
+    logDevelopmentDiagnostic('getPatientPortalSnapshot.catch', error);
     return { data: null, error: safeError(error, 'Nao foi possivel carregar o portal.') };
   }
 }

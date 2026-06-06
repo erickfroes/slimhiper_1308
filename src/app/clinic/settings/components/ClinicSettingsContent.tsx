@@ -25,7 +25,9 @@ import {
 } from 'lucide-react';
 import {
   getClinicSettings,
+  inviteClinicMember,
   saveClinicUnit,
+  updateClinicMemberRole,
   updateClinicSettings,
   type ClinicBrandingSettings,
   type ClinicFinanceSettings,
@@ -528,7 +530,81 @@ function SectionUnidades({
   );
 }
 
-function SectionEquipe({ snapshot }: { snapshot: ClinicSettingsSnapshot }) {
+const INVITABLE_ROLE_CODES = new Set([
+  'tenant_owner',
+  'clinic_admin',
+  'receptionist',
+  'physician',
+  'nutritionist',
+  'fitness_professional',
+  'financial_user',
+  'external_professional',
+]);
+
+function SectionEquipe({
+  snapshot,
+  onSnapshotUpdated,
+}: {
+  snapshot: ClinicSettingsSnapshot;
+  onSnapshotUpdated: (snapshot: ClinicSettingsSnapshot) => void;
+}) {
+  const roleOptions = useMemo(
+    () => snapshot.roles.filter((role) => INVITABLE_ROLE_CODES.has(role.name)),
+    [snapshot.roles]
+  );
+  const defaultRoleCode = roleOptions[0]?.name ?? 'clinic_admin';
+  const unitOptions = useMemo(
+    () => snapshot.units.filter((unit) => unit.status !== 'archived'),
+    [snapshot.units]
+  );
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState(defaultRoleCode);
+  const [inviteUnitId, setInviteUnitId] = useState('');
+  const [inviteReason, setInviteReason] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteNotice, setInviteNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!roleOptions.some((role) => role.name === inviteRole)) {
+      setInviteRole(defaultRoleCode);
+    }
+  }, [defaultRoleCode, inviteRole, roleOptions]);
+
+  const submitInvite = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (inviting) return;
+
+    setInviting(true);
+    setInviteError(null);
+    setInviteNotice(null);
+
+    const result = await inviteClinicMember({
+      email: inviteEmail,
+      fullName: inviteName,
+      roleCode: inviteRole,
+      unitId: inviteUnitId || null,
+      reason: inviteReason,
+    });
+
+    if (result.error || !result.data) {
+      setInviteError(result.error?.message ?? 'Nao foi possivel convidar membro.');
+    } else {
+      onSnapshotUpdated(result.data);
+      setInviteEmail('');
+      setInviteName('');
+      setInviteRole(defaultRoleCode);
+      setInviteUnitId('');
+      setInviteReason('');
+      setInviteOpen(false);
+      setInviteNotice('Convite registrado e auditado para este tenant.');
+    }
+
+    setInviting(false);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -537,14 +613,120 @@ function SectionEquipe({ snapshot }: { snapshot: ClinicSettingsSnapshot }) {
         </p>
         <button
           type="button"
-          disabled
-          className="btn-secondary py-1.5 text-xs opacity-60"
-          title="Convite de usuario exige backend Auth Admin auditado."
+          disabled={roleOptions.length === 0}
+          onClick={() => {
+            setInviteOpen((value) => !value);
+            setInviteError(null);
+            setInviteNotice(null);
+          }}
+          className="btn-secondary py-1.5 text-xs"
+          title={
+            roleOptions.length === 0
+              ? 'Configure papeis do tenant antes de convidar.'
+              : 'Convidar usuario com Auth Admin e auditoria.'
+          }
         >
-          <UserPlus size={14} />
-          Convidar membro
+          {inviteOpen ? <X size={14} /> : <UserPlus size={14} />}
+          {inviteOpen ? 'Fechar convite' : 'Convidar membro'}
         </button>
       </div>
+
+      {(inviteError || inviteNotice) && (
+        <div className="space-y-2">
+          {inviteError && <InlineAlert message={inviteError} />}
+          {inviteNotice && <InlineAlert tone="ok" message={inviteNotice} />}
+        </div>
+      )}
+
+      {inviteOpen && (
+        <form
+          onSubmit={(event) => void submitInvite(event)}
+          className="space-y-3 rounded-xl border border-border bg-muted/10 p-4"
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              E-mail
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                className="input-base mt-1"
+                placeholder="profissional@clinica.com"
+                required
+              />
+            </label>
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Nome
+              <input
+                type="text"
+                value={inviteName}
+                onChange={(event) => setInviteName(event.target.value)}
+                className="input-base mt-1"
+                placeholder="Nome do membro"
+              />
+            </label>
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Papel
+              <select
+                value={inviteRole}
+                onChange={(event) => setInviteRole(event.target.value)}
+                className="input-base mt-1"
+                required
+              >
+                {roleOptions.map((role) => (
+                  <option key={role.id} value={role.name}>
+                    {role.description || role.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Unidade
+              <select
+                value={inviteUnitId}
+                onChange={(event) => setInviteUnitId(event.target.value)}
+                className="input-base mt-1"
+              >
+                <option value="">Sem unidade</option>
+                {unitOptions.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="block space-y-1 text-xs font-medium text-muted-foreground">
+            Motivo auditavel
+            <textarea
+              value={inviteReason}
+              onChange={(event) => setInviteReason(event.target.value)}
+              className="input-base mt-1 min-h-20 resize-y"
+              placeholder="Ex.: Inclusao de profissional no fluxo operacional da clinica."
+              required
+            />
+          </label>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className="btn-secondary py-1.5 text-xs"
+              onClick={() => setInviteOpen(false)}
+              disabled={inviting}
+            >
+              <X size={14} />
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="btn-primary py-1.5 text-xs"
+              disabled={inviting || roleOptions.length === 0}
+            >
+              {inviting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+              Enviar convite
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className="space-y-2">
         {snapshot.team.length === 0 ? (
@@ -586,12 +768,45 @@ function SectionEquipe({ snapshot }: { snapshot: ClinicSettingsSnapshot }) {
   );
 }
 
-function SectionPapeis({ snapshot }: { snapshot: ClinicSettingsSnapshot }) {
+function SectionPapeis({
+  snapshot,
+  onSnapshotUpdated,
+}: {
+  snapshot: ClinicSettingsSnapshot;
+  onSnapshotUpdated: (snapshot: ClinicSettingsSnapshot) => void;
+}) {
+  const [editingRoles, setEditingRoles] = useState(false);
+  const [memberRoleDraft, setMemberRoleDraft] = useState<Record<string, string>>({});
+  const [savingMemberId, setSavingMemberId] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [roleNotice, setRoleNotice] = useState<string | null>(null);
   const permissionsByRole = useMemo(() => {
     return new Map(
       snapshot.rolePermissions.map((entry) => [entry.roleName, new Set(entry.permissions)])
     );
   }, [snapshot.rolePermissions]);
+  const roleOptions = useMemo(() => snapshot.roles.map((role) => role.name), [snapshot.roles]);
+
+  const saveMemberRole = async (member: (typeof snapshot.team)[number]) => {
+    const nextRole = memberRoleDraft[member.id] ?? member.roleCode;
+    if (nextRole === member.roleCode) {
+      setRoleNotice('Papel ja esta atualizado para este membro.');
+      setRoleError(null);
+      return;
+    }
+
+    setSavingMemberId(member.id);
+    setRoleError(null);
+    setRoleNotice(null);
+    const result = await updateClinicMemberRole(member.id, nextRole);
+    if (result.error || !result.data) {
+      setRoleError(result.error?.message ?? 'Nao foi possivel alterar papel.');
+    } else {
+      onSnapshotUpdated(result.data);
+      setRoleNotice('Papel do membro atualizado com auditoria.');
+    }
+    setSavingMemberId(null);
+  };
 
   return (
     <div className="space-y-4">
@@ -601,14 +816,74 @@ function SectionPapeis({ snapshot }: { snapshot: ClinicSettingsSnapshot }) {
         </p>
         <button
           type="button"
-          disabled
-          className="btn-secondary py-1.5 text-xs opacity-60"
-          title="Alteracao de role/permissao fica bloqueada ate RPC auditada."
+          className="btn-secondary py-1.5 text-xs"
+          onClick={() => setEditingRoles((value) => !value)}
         >
           <ShieldCheck size={14} />
-          Alterar roles
+          {editingRoles ? 'Ocultar edicao' : 'Alterar roles'}
         </button>
       </div>
+
+      {(roleError || roleNotice) && (
+        <div className="space-y-2">
+          {roleError && <InlineAlert message={roleError} />}
+          {roleNotice && <InlineAlert tone="ok" message={roleNotice} />}
+        </div>
+      )}
+
+      {editingRoles && (
+        <div className="rounded-xl border border-border bg-background p-4">
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-foreground">Membros e papeis</p>
+            <p className="text-xs text-muted-foreground">
+              Altera membros existentes. Convites continuam no backend Auth Admin.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {snapshot.team.map((member) => (
+              <div
+                key={member.id}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">{member.fullName}</p>
+                  <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+                </div>
+                <select
+                  className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs"
+                  value={memberRoleDraft[member.id] ?? member.roleCode}
+                  disabled={savingMemberId !== null}
+                  onChange={(event) =>
+                    setMemberRoleDraft((current) => ({
+                      ...current,
+                      [member.id]: event.target.value,
+                    }))
+                  }
+                >
+                  {roleOptions.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn-secondary py-1.5 text-xs"
+                  disabled={savingMemberId !== null}
+                  onClick={() => void saveMemberRole(member)}
+                >
+                  {savingMemberId === member.id ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Save size={14} />
+                  )}
+                  Salvar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-3">
         {snapshot.roles.map((role) => {
@@ -1203,7 +1478,7 @@ export default function ClinicSettingsContent() {
 
   return (
     <div className="flex min-h-full">
-      <aside className="hidden h-screen w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-border bg-card lg:flex">
+      <aside className="hidden max-h-[calc(100vh-4rem)] w-56 flex-shrink-0 flex-col self-start overflow-y-auto border-r border-border bg-card lg:sticky lg:top-0 lg:flex">
         <div className="border-b border-border px-4 py-5">
           <h1 className="text-sm font-bold text-foreground">Configuracoes</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">{snapshot.tenant.name}</p>
@@ -1301,11 +1576,11 @@ export default function ClinicSettingsContent() {
         </SectionCard>
 
         <SectionCard id="equipe" title="Equipe" icon={Users}>
-          <SectionEquipe snapshot={snapshot} />
+          <SectionEquipe snapshot={snapshot} onSnapshotUpdated={applySnapshot} />
         </SectionCard>
 
         <SectionCard id="papeis" title="Papeis e Permissoes" icon={ShieldCheck}>
-          <SectionPapeis snapshot={snapshot} />
+          <SectionPapeis snapshot={snapshot} onSnapshotUpdated={applySnapshot} />
         </SectionCard>
 
         <SectionCard id="branding" title="Branding" icon={Palette}>

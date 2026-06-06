@@ -237,6 +237,8 @@ function normalizePrescription(
         : undefined,
     issueDate: typeof record.issueDate === 'string' ? record.issueDate : undefined,
     validity: typeof record.validity === 'string' ? record.validity : undefined,
+    linkedDocumentId:
+      typeof record.linkedDocumentId === 'string' ? record.linkedDocumentId : undefined,
     linkedDocument: typeof record.linkedDocument === 'string' ? record.linkedDocument : undefined,
     signatureStatus:
       typeof record.signatureStatus === 'string'

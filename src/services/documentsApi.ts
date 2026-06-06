@@ -19,11 +19,32 @@ interface SendForSignatureResult {
   requestId: string;
   status: string;
 }
+export interface DocumentEvidenceResult {
+  id: string;
+  documentId: string;
+  documentName: string;
+  status: string;
+  summary: Record<string, unknown>;
+  hasPackage: boolean;
+  createdAt: string;
+}
+export interface ActiveDocumentTemplate {
+  id: string;
+  name: string;
+  category: string;
+  d4signEnabled: boolean;
+  allowedVariables: string[];
+}
 
 const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 const getSupabaseClient = () => createBrowserSupabaseClient();
 const safeError = (error: unknown, fallback: string): SafeServiceError =>
   error instanceof Error ? { message: error.message || fallback } : { message: fallback };
+
+function getAllowedVariableKeys(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.keys(value as Record<string, unknown>);
+}
 
 async function getMockPatientDocuments360(patientId: string) {
   const { getPatientDocuments360 } = await import('@/services/mockApi');
@@ -106,6 +127,63 @@ export async function generatePatientDocument(
   }
 }
 
+export async function listActiveDocumentTemplates(categories?: string[]): Promise<{
+  data: ActiveDocumentTemplate[];
+  error: SafeServiceError | null;
+}> {
+  if (isMockEnabled()) {
+    return {
+      data: [
+        {
+          id: 'mock-template-prescricao',
+          name: 'Prescricao / orientacao',
+          category: 'prescricao',
+          d4signEnabled: false,
+          allowedVariables: [
+            'prescription_title',
+            'medication_name',
+            'dosage',
+            'frequency',
+            'instructions',
+            'category',
+            'issue_date',
+            'validity',
+          ],
+        },
+      ],
+      error: null,
+    };
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    let query = supabase
+      .from('document_templates')
+      .select('id,name,category,d4sign_enabled,variables')
+      .eq('status', 'active')
+      .order('name', { ascending: true });
+
+    if (categories && categories.length > 0) {
+      query = query.in('category', categories);
+    }
+
+    const { data, error } = await query;
+    if (error) return { data: [], error: { message: error.message, code: error.code } };
+    return {
+      data: (data ?? []).map((row: Record<string, unknown>) => ({
+        id: String(row.id ?? ''),
+        name: String(row.name ?? 'Template'),
+        category: String(row.category ?? 'outros'),
+        d4signEnabled: row.d4sign_enabled === true,
+        allowedVariables: getAllowedVariableKeys(row.variables),
+      })),
+      error: null,
+    };
+  } catch (error) {
+    return { data: [], error: safeError(error, 'Nao foi possivel carregar templates.') };
+  }
+}
+
 export async function sendDocumentForSignature(
   generatedDocumentId: string,
   patientId: string,
@@ -163,5 +241,54 @@ export async function getDocumentSignedUrl(
     return { data: res.data, error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Não foi possível gerar link temporário.') };
+  }
+}
+export async function getPatientDocumentEvidence(
+  generatedDocumentId: string,
+  patientId: string
+): Promise<{ data: DocumentEvidenceResult | null; error: SafeServiceError | null }> {
+  if (!generatedDocumentId.trim() || !patientId.trim()) {
+    return { data: null, error: { message: 'Documento e paciente sao obrigatorios.' } };
+  }
+  if (isMockEnabled()) {
+    return {
+      data: {
+        id: `mock-evidence-${generatedDocumentId}`,
+        documentId: generatedDocumentId,
+        documentName: 'Documento',
+        status: 'available',
+        summary: { signatureRequests: [] },
+        hasPackage: false,
+        createdAt: new Date().toISOString(),
+      },
+      error: null,
+    };
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('get_patient_document_evidence', {
+      p_generated_document_id: generatedDocumentId,
+      p_patient_id: patientId,
+    });
+    if (error) return { data: null, error: { message: error.message, code: error.code } };
+    const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+    return {
+      data: {
+        id: String(record.id ?? ''),
+        documentId: String(record.documentId ?? generatedDocumentId),
+        documentName: String(record.documentName ?? 'Documento'),
+        status: String(record.status ?? 'available'),
+        summary:
+          record.summary && typeof record.summary === 'object'
+            ? (record.summary as Record<string, unknown>)
+            : {},
+        hasPackage: record.hasPackage === true,
+        createdAt: String(record.createdAt ?? ''),
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel carregar evidencias.') };
   }
 }

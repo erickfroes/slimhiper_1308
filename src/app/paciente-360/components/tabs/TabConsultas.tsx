@@ -1,10 +1,17 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import type { AppointmentSummary } from '@/domain/types';
+import type { AppointmentSummary, AppointmentStatus, AppointmentType } from '@/domain/types';
 import StatusBadge from '@/components/StatusBadge';
 import EmptyState from '@/components/EmptyState';
-import { getPatientAppointments } from '@/services/agendaApi';
+import {
+  cancelAppointment,
+  createAppointment,
+  getNextAppointmentStatus,
+  getPatientAppointments,
+  updateAppointment,
+  updateAppointmentStatus,
+} from '@/services/agendaApi';
 import {
   AlertTriangle,
   Calendar,
@@ -30,6 +37,26 @@ const apptTypeLabel: Record<string, string> = {
   avaliacao_inicial: 'Avaliacao inicial',
   bioimpedancia: 'Bioimpedancia',
   checkup: 'Check-up',
+};
+
+const appointmentTypeOptions: Array<{ value: AppointmentType; label: string }> = [
+  { value: 'consulta_medica', label: 'Consulta medica' },
+  { value: 'retorno', label: 'Retorno' },
+  { value: 'nutricao', label: 'Nutricao' },
+  { value: 'avaliacao_inicial', label: 'Avaliacao inicial' },
+  { value: 'bioimpedancia', label: 'Bioimpedancia' },
+  { value: 'checkup', label: 'Check-up' },
+];
+
+const appointmentNextStatusLabel: Partial<Record<AppointmentStatus, string>> = {
+  agendado: 'Marcar chegada',
+  chegou: 'Iniciar triagem',
+  triagem: 'Registrar medidas',
+  medidas: 'Bioimpedancia',
+  bioimpedancia: 'Aguardar medico',
+  aguardando_medico: 'Iniciar consulta',
+  em_consulta: 'Checkout',
+  checkout: 'Concluir',
 };
 
 interface TabConsultasProps {
@@ -61,6 +88,36 @@ function formatMonth(iso: string) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '--';
   return date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+}
+
+function toDateInput(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function toTimeInput(value: Date) {
+  const hours = String(value.getHours()).padStart(2, '0');
+  const minutes = String(value.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function dateFromIso(value: string, fallback = new Date()) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date;
+}
+
+function createScheduledAt(date: string, time: string) {
+  const parsed = new Date(`${date}T${time}:00`);
+  return parsed.toISOString();
+}
+
+function nextWeekDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 7);
+  date.setHours(9, 0, 0, 0);
+  return date;
 }
 
 function isOverdueReturn(recommendedReturn: string) {
@@ -128,7 +185,21 @@ function AppointmentDateBadge({ scheduledAt }: { scheduledAt: string }) {
   );
 }
 
-function UpcomingCard({ appt }: { appt: AppointmentSummary }) {
+function UpcomingCard({
+  appt,
+  actionLoading,
+  onAdvanceStatus,
+  onReschedule,
+  onCancel,
+}: {
+  appt: AppointmentSummary;
+  actionLoading: string | null;
+  onAdvanceStatus: (appt: AppointmentSummary) => void;
+  onReschedule: (appt: AppointmentSummary) => void;
+  onCancel: (appt: AppointmentSummary) => void;
+}) {
+  const nextStatus = getNextAppointmentStatus(appt.status);
+
   return (
     <div className="card-base p-4 flex items-center gap-4">
       <AppointmentDateBadge scheduledAt={appt.scheduledAt} />
@@ -165,18 +236,49 @@ function UpcomingCard({ appt }: { appt: AppointmentSummary }) {
             <Video size={14} />
           </a>
         )}
-        <DisabledActionButton variant="icon">
+        {nextStatus && (
+          <button
+            type="button"
+            className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={actionLoading !== null}
+            onClick={() => onAdvanceStatus(appt)}
+            title={appointmentNextStatusLabel[appt.status] ?? `Mover para ${nextStatus}`}
+          >
+            <RefreshCw size={14} />
+          </button>
+        )}
+        <button
+          type="button"
+          className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={actionLoading !== null}
+          onClick={() => onReschedule(appt)}
+          title="Reagendar consulta"
+        >
           <RefreshCw size={14} />
-        </DisabledActionButton>
-        <DisabledActionButton variant="icon">
+        </button>
+        <button
+          type="button"
+          className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={actionLoading !== null}
+          onClick={() => onCancel(appt)}
+          title="Cancelar consulta"
+        >
           <XCircle size={14} />
-        </DisabledActionButton>
+        </button>
       </div>
     </div>
   );
 }
 
-function PastCard({ appt }: { appt: AppointmentSummary }) {
+function PastCard({
+  appt,
+  actionLoading,
+  onCreateReturn,
+}: {
+  appt: AppointmentSummary;
+  actionLoading: string | null;
+  onCreateReturn: (appt: AppointmentSummary) => void;
+}) {
   const isCancelled = appt.status === 'cancelado';
   const isNoShow = appt.status === 'falta';
 
@@ -223,9 +325,15 @@ function PastCard({ appt }: { appt: AppointmentSummary }) {
         <DisabledActionButton variant="icon">
           <Eye size={14} />
         </DisabledActionButton>
-        <DisabledActionButton variant="icon">
+        <button
+          type="button"
+          className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={actionLoading !== null}
+          onClick={() => onCreateReturn(appt)}
+          title="Criar retorno a partir desta consulta"
+        >
           <RotateCcw size={14} />
-        </DisabledActionButton>
+        </button>
       </div>
     </div>
   );
@@ -236,6 +344,17 @@ export default function TabConsultas({ patientId, initialAppointments }: TabCons
   const [appointments, setAppointments] = useState<AppointmentSummary[]>(initialAppointments);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState<AppointmentSummary | null>(null);
+  const [appointmentType, setAppointmentType] = useState<AppointmentType>('retorno');
+  const [appointmentDate, setAppointmentDate] = useState(() => toDateInput(nextWeekDate()));
+  const [appointmentTime, setAppointmentTime] = useState(() => toTimeInput(nextWeekDate()));
+  const [durationMinutes, setDurationMinutes] = useState('30');
+  const [location, setLocation] = useState('');
+  const [notes, setNotes] = useState('');
 
   const loadAppointments = useCallback(async () => {
     setLoading(true);
@@ -262,6 +381,110 @@ export default function TabConsultas({ patientId, initialAppointments }: TabCons
   useEffect(() => {
     void loadAppointments();
   }, [loadAppointments]);
+
+  const resetActionFeedback = () => {
+    setActionError(null);
+    setActionNotice(null);
+  };
+
+  const openAppointmentForm = (
+    appt?: AppointmentSummary | null,
+    type: AppointmentType = 'retorno'
+  ) => {
+    resetActionFeedback();
+    const sourceDate = appt ? dateFromIso(appt.scheduledAt) : nextWeekDate();
+    setEditingAppointment(appt ?? null);
+    setAppointmentType(appt?.type ?? type);
+    setAppointmentDate(toDateInput(sourceDate));
+    setAppointmentTime(toTimeInput(sourceDate));
+    setDurationMinutes(String(appt?.durationMinutes ?? 30));
+    setLocation(appt?.roomName ?? '');
+    setNotes(appt?.notes ?? '');
+    setFormOpen(true);
+  };
+
+  const openReturnForm = (appt?: AppointmentSummary | null) => {
+    const preferredDate = appt?.recommendedReturn
+      ? dateFromIso(appt.recommendedReturn, nextWeekDate())
+      : nextWeekDate();
+    resetActionFeedback();
+    setEditingAppointment(null);
+    setAppointmentType('retorno');
+    setAppointmentDate(toDateInput(preferredDate));
+    setAppointmentTime(toTimeInput(preferredDate));
+    setDurationMinutes('30');
+    setLocation(appt?.roomName ?? '');
+    setNotes(appt ? `Retorno de ${apptTypeLabel[appt.type] ?? appt.type}` : '');
+    setFormOpen(true);
+  };
+
+  const submitAppointmentForm = async () => {
+    resetActionFeedback();
+    const parsedDuration = Number(durationMinutes);
+    if (!Number.isFinite(parsedDuration) || parsedDuration <= 0) {
+      setActionError('Informe uma duracao valida para a consulta.');
+      return;
+    }
+
+    setActionLoading(editingAppointment ? `update:${editingAppointment.id}` : 'create');
+    try {
+      const input = {
+        patientId,
+        type: appointmentType,
+        scheduledAt: createScheduledAt(appointmentDate, appointmentTime),
+        durationMinutes: Math.round(parsedDuration),
+        location,
+        notes,
+      };
+      const result = editingAppointment
+        ? await updateAppointment(editingAppointment.id, input)
+        : await createAppointment(input);
+      if (result.error) {
+        setActionError(result.error.message);
+        return;
+      }
+      setActionNotice(editingAppointment ? 'Consulta reagendada.' : 'Consulta criada.');
+      setFormOpen(false);
+      setEditingAppointment(null);
+      await loadAppointments();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Falha inesperada na consulta.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAdvanceStatus = async (appt: AppointmentSummary) => {
+    resetActionFeedback();
+    const nextStatus = getNextAppointmentStatus(appt.status);
+    if (!nextStatus) return;
+    setActionLoading(`status:${appt.id}`);
+    try {
+      await updateAppointmentStatus(appt.id, nextStatus);
+      setActionNotice(`Consulta movida para ${nextStatus}.`);
+      await loadAppointments();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Nao foi possivel atualizar status.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCancel = async (appt: AppointmentSummary) => {
+    resetActionFeedback();
+    setActionLoading(`cancel:${appt.id}`);
+    try {
+      const result = await cancelAppointment(appt.id, 'Cancelamento solicitado no Patient 360.');
+      if (result.error) {
+        setActionError(result.error.message);
+        return;
+      }
+      setActionNotice('Consulta cancelada.');
+      await loadAppointments();
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -299,11 +522,128 @@ export default function TabConsultas({ patientId, initialAppointments }: TabCons
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Consultas</h3>
-        <DisabledActionButton variant="primary">
+        <button
+          type="button"
+          className="btn-primary text-xs flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={actionLoading !== null}
+          onClick={() => openAppointmentForm(null, 'consulta_medica')}
+        >
           <Plus size={13} />
           Novo agendamento
-        </DisabledActionButton>
+        </button>
       </div>
+
+      {actionNotice && (
+        <p className="text-xs text-emerald-700" role="status">
+          {actionNotice}
+        </p>
+      )}
+      {actionError && (
+        <div
+          className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+          role="alert"
+        >
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {formOpen && (
+        <div className="card-base p-4 space-y-3" role="dialog" aria-label="Agendamento">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-muted-foreground">Tipo</span>
+              <select
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                value={appointmentType}
+                disabled={actionLoading !== null}
+                onChange={(event) => setAppointmentType(event.target.value as AppointmentType)}
+              >
+                {appointmentTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-muted-foreground">Data</span>
+              <input
+                type="date"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                value={appointmentDate}
+                disabled={actionLoading !== null}
+                onChange={(event) => setAppointmentDate(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-muted-foreground">Horario</span>
+              <input
+                type="time"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                value={appointmentTime}
+                disabled={actionLoading !== null}
+                onChange={(event) => setAppointmentTime(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-muted-foreground">Duracao</span>
+              <input
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                inputMode="numeric"
+                value={durationMinutes}
+                disabled={actionLoading !== null}
+                onChange={(event) => setDurationMinutes(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-muted-foreground">Local/sala</span>
+              <input
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                value={location}
+                disabled={actionLoading !== null}
+                onChange={(event) => setLocation(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-muted-foreground">Notas</span>
+              <input
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                value={notes}
+                disabled={actionLoading !== null}
+                onChange={(event) => setNotes(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary text-xs"
+              disabled={actionLoading !== null}
+              onClick={() => void submitAppointmentForm()}
+            >
+              {actionLoading === 'create' || actionLoading?.startsWith('update:')
+                ? 'Salvando...'
+                : editingAppointment
+                  ? 'Reagendar'
+                  : 'Agendar'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              disabled={actionLoading !== null}
+              onClick={() => {
+                setFormOpen(false);
+                setEditingAppointment(null);
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {overdueReturns.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex gap-3">
@@ -317,10 +657,15 @@ export default function TabConsultas({ patientId, initialAppointments }: TabCons
                   )} nao foi agendado.`
                 : `${overdueReturns.length} retornos recomendados estao em atraso.`}
             </p>
-            <DisabledActionButton variant="link">
+            <button
+              type="button"
+              className="mt-2 text-xs font-medium text-amber-700 underline underline-offset-2 flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={actionLoading !== null}
+              onClick={() => openReturnForm(overdueReturns[0] ?? null)}
+            >
               <RotateCcw size={12} />
               Criar retorno
-            </DisabledActionButton>
+            </button>
           </div>
         </div>
       )}
@@ -336,10 +681,15 @@ export default function TabConsultas({ patientId, initialAppointments }: TabCons
             title="Sem consultas futuras"
             description="Nenhuma consulta agendada. Agende a proxima para manter o acompanhamento em dia."
             action={
-              <DisabledActionButton variant="primary">
+              <button
+                type="button"
+                className="btn-primary text-xs flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={actionLoading !== null}
+                onClick={() => openAppointmentForm(null, 'consulta_medica')}
+              >
                 <Plus size={14} />
                 Novo agendamento
-              </DisabledActionButton>
+              </button>
             }
           />
         ) : (
@@ -395,18 +745,44 @@ export default function TabConsultas({ patientId, initialAppointments }: TabCons
                   Link para atendimento
                 </a>
               )}
-              <DisabledActionButton>
+              {getNextAppointmentStatus(nextAppt.status) && (
+                <button
+                  type="button"
+                  className="btn-secondary text-xs flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={actionLoading !== null}
+                  onClick={() => void handleAdvanceStatus(nextAppt)}
+                >
+                  <RefreshCw size={13} />
+                  {appointmentNextStatusLabel[nextAppt.status] ?? 'Atualizar status'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-secondary text-xs flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={actionLoading !== null}
+                onClick={() => openAppointmentForm(nextAppt)}
+              >
                 <RefreshCw size={13} />
                 Reagendar
-              </DisabledActionButton>
-              <DisabledActionButton variant="danger">
+              </button>
+              <button
+                type="button"
+                className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={actionLoading !== null}
+                onClick={() => void handleCancel(nextAppt)}
+              >
                 <XCircle size={13} />
                 Cancelar
-              </DisabledActionButton>
-              <DisabledActionButton>
+              </button>
+              <button
+                type="button"
+                className="btn-secondary text-xs flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={actionLoading !== null}
+                onClick={() => openReturnForm(nextAppt)}
+              >
                 <RotateCcw size={13} />
                 Criar retorno
-              </DisabledActionButton>
+              </button>
             </div>
           </div>
         )}
@@ -419,7 +795,14 @@ export default function TabConsultas({ patientId, initialAppointments }: TabCons
           </p>
           <div className="space-y-2">
             {upcoming.slice(1).map((appt) => (
-              <UpcomingCard key={appt.id} appt={appt} />
+              <UpcomingCard
+                key={appt.id}
+                appt={appt}
+                actionLoading={actionLoading}
+                onAdvanceStatus={(appointment) => void handleAdvanceStatus(appointment)}
+                onReschedule={(appointment) => openAppointmentForm(appointment)}
+                onCancel={(appointment) => void handleCancel(appointment)}
+              />
             ))}
           </div>
         </section>
@@ -439,7 +822,12 @@ export default function TabConsultas({ patientId, initialAppointments }: TabCons
           <>
             <div className="space-y-2">
               {visiblePast.map((appt) => (
-                <PastCard key={appt.id} appt={appt} />
+                <PastCard
+                  key={appt.id}
+                  appt={appt}
+                  actionLoading={actionLoading}
+                  onCreateReturn={(appointment) => openReturnForm(appointment)}
+                />
               ))}
             </div>
             {past.length > 3 && (

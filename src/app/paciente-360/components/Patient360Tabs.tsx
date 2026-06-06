@@ -129,21 +129,22 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
 
   useEffect(() => {
     if (isPatient360TabId(requestedTab) && requestedTab !== activeTab) {
-      setActiveTab(requestedTab);
+      setActiveTab(canAccessTab(requestedTab, userContext) ? requestedTab : 'resumo');
     }
     if (!requestedTab && activeTab !== 'resumo') {
       setActiveTab('resumo');
     }
-  }, [activeTab, requestedTab]);
+  }, [activeTab, requestedTab, userContext]);
 
   const handleTabChange = useCallback(
     (tabId: Patient360TabId) => {
+      if (!canAccessTab(tabId, userContext)) return;
       setActiveTab(tabId);
       const params = new URLSearchParams(searchParams.toString());
       params.set('tab', tabId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [pathname, router, searchParams]
+    [pathname, router, searchParams, userContext]
   );
 
   return (
@@ -154,35 +155,41 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
         aria-label="Abas do Paciente 360"
         className="flex items-center gap-1 overflow-x-auto scrollbar-thin pb-1 mb-5 border-b border-border"
       >
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            aria-disabled={!canAccessTab(tab.id, userContext)}
-            title={
-              canAccessTab(tab.id, userContext)
-                ? undefined
-                : `Requer ${TAB_PERMISSION_RULES[tab.id]?.description ?? 'permissao'}`
-            }
-            onClick={() => handleTabChange(tab.id)}
-            className={[
-              'flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-all duration-150 border-b-2 -mb-px',
-              activeTab === tab.id
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted',
-              !canAccessTab(tab.id, userContext) ? 'opacity-60' : '',
-            ].join(' ')}
-          >
-            {tab.label}
-            {tab.id === 'chat' && unreadCount > 0 && (
-              <span className="bg-primary text-primary-foreground text-xs rounded-full px-1.5 py-0.5 leading-none font-semibold">
-                {unreadCount}
-              </span>
-            )}
-          </button>
-        ))}
+        {TABS.map((tab) => {
+          const tabAllowed = canAccessTab(tab.id, userContext);
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-disabled={!tabAllowed}
+              disabled={!tabAllowed}
+              title={
+                tabAllowed
+                  ? undefined
+                  : `Requer ${TAB_PERMISSION_RULES[tab.id]?.description ?? 'permissao'}`
+              }
+              onClick={() => handleTabChange(tab.id)}
+              className={[
+                'flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-all duration-150 border-b-2 -mb-px',
+                activeTab === tab.id
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted',
+                !tabAllowed
+                  ? 'cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted-foreground'
+                  : '',
+              ].join(' ')}
+            >
+              {tab.label}
+              {tab.id === 'chat' && unreadCount > 0 && (
+                <span className="bg-primary text-primary-foreground text-xs rounded-full px-1.5 py-0.5 leading-none font-semibold">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab content */}
@@ -212,6 +219,7 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
         )}
         {!isActiveTabForbidden && activeTab === 'prescricoes' && (
           <TabPrescricoes
+            patientId={patientId}
             prescriptions={data.prescriptions}
             canViewMedicalPrescriptions={userContext?.canViewMedicalPrescriptions ?? false}
             currentRole={userContext?.activeTenantRole ?? null}

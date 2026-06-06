@@ -41,7 +41,8 @@ const defaultActions: QuickAction[] = [
     label: 'Enviar Mensagem',
     icon: MessageSquare,
     color: 'text-sky-700',
-    bg: 'bg-sky-50 border-sky-200',
+    bg: 'bg-sky-50 hover:bg-sky-100 border-sky-200',
+    href: '/clinic/inbox?tab=conversas',
     disabledReason: 'Chat real ainda não está liberado no MVP clínico.',
   },
   {
@@ -83,7 +84,9 @@ export default function QuickActionsCard({ actions = defaultActions }: QuickActi
           const Icon = action.icon;
           const className = [
             'flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all duration-150',
-            action.disabledReason ? 'opacity-60 cursor-not-allowed' : 'active:scale-95',
+            action.disabledReason && !action.href
+              ? 'opacity-60 cursor-not-allowed'
+              : 'active:scale-95',
             action.color,
             action.bg,
           ].join(' ');

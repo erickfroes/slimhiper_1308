@@ -41,10 +41,10 @@ module.exports = {
       },
       borderRadius: {
         '2xl': 'var(--radius)',
-        xl: 'calc(var(--radius) - 4px)',
-        lg: 'calc(var(--radius) - 6px)',
-        md: 'calc(var(--radius) - 8px)',
-        sm: 'calc(var(--radius) - 10px)',
+        xl: 'var(--radius-control)',
+        lg: 'calc(var(--radius-control) - 2px)',
+        md: 'calc(var(--radius-control) - 4px)',
+        sm: '4px',
       },
       fontFamily: {
         sans: ['var(--font-plus-jakarta-sans)', 'sans-serif'],

@@ -37,7 +37,7 @@ export interface ProgramBuilderOptions {
 
 export interface ProgramMutationResult {
   id: string;
-  status?: ProgramStatus | 'ativo';
+  status?: ProgramStatus | 'ativo' | 'pausado' | 'concluido' | 'cancelado';
   published?: boolean;
   checkinsCreated?: number;
   appointmentId?: string;
@@ -731,5 +731,51 @@ export async function enrollPatientInProgram(
     };
   } catch (error) {
     return { data: null, error: serviceError(error, 'Falha ao matricular paciente.') };
+  }
+}
+
+export async function updatePatientPackageStatus(
+  enrollmentId: string,
+  status: 'ativo' | 'pausado' | 'concluido' | 'cancelado',
+  reason?: string,
+  extendWeeks = 0
+): Promise<{ data: ProgramMutationResult | null; error: SafeServiceError | null }> {
+  try {
+    if (!enrollmentId.trim()) {
+      return { data: null, error: { message: 'Pacote obrigatorio.' } };
+    }
+    if (!['ativo', 'pausado', 'concluido', 'cancelado'].includes(status)) {
+      return { data: null, error: { message: 'Status de pacote invalido.' } };
+    }
+    if (!Number.isFinite(extendWeeks) || extendWeeks < 0 || extendWeeks > 104) {
+      return { data: null, error: { message: 'Extensao do pacote invalida.' } };
+    }
+    if (isMockEnabled()) {
+      return { data: { id: enrollmentId, status }, error: null };
+    }
+
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('update_patient_package_status', {
+      p_enrollment_id: enrollmentId,
+      p_status: status,
+      p_reason: reason?.trim() || null,
+      p_extend_weeks: Math.round(extendWeeks),
+    });
+    if (error)
+      return { data: null, error: serviceError(error, 'Falha ao atualizar pacote do paciente.') };
+
+    const result = asRecord(data);
+    const nextStatus = asString(result.status, status) as NonNullable<
+      ProgramMutationResult['status']
+    >;
+    return {
+      data: {
+        id: asString(result.id, enrollmentId),
+        status: nextStatus,
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: serviceError(error, 'Falha ao atualizar pacote do paciente.') };
   }
 }

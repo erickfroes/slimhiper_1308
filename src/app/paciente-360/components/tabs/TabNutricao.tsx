@@ -38,7 +38,11 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
-import { getPatientNutritionPlan } from '@/services/nutritionApi';
+import {
+  archivePatientNutritionPlan,
+  getPatientNutritionPlan,
+  savePatientNutritionPlan,
+} from '@/services/nutritionApi';
 
 interface TabNutricaoProps {
   patientId: string;
@@ -320,6 +324,9 @@ export default function TabNutricao({ patientId, initialPlan = null }: TabNutric
   const [plan, setPlan] = useState<PatientNutritionPlanSummary | null>(initialPlan);
   const [isLoading, setIsLoading] = useState(!initialPlan);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadPlan = useCallback(async () => {
     setIsLoading(true);
@@ -380,24 +387,90 @@ export default function TabNutricao({ patientId, initialPlan = null }: TabNutric
     ? (plan.mealPhotos ?? [])
     : (plan.mealPhotos ?? []).slice(0, 3);
 
+  const handleSavePlanAction = async (action: string, duplicate = false) => {
+    setActionLoading(action);
+    setActionNotice(null);
+    setActionError(null);
+    try {
+      const result = await savePatientNutritionPlan({
+        patientId,
+        planId: duplicate ? null : plan.id,
+        planName: duplicate ? `${plan.planName} - copia` : plan.planName,
+        targetCalories: plan.targetCalories,
+        targetProteinG: plan.targetProteinG,
+        targetCarbsG: plan.targetCarbsG,
+        targetFatG: plan.targetFatG,
+        meals: plan.meals ?? [],
+        foodGroups: plan.foodGroups ?? [],
+        publish: true,
+      });
+      if (result.error || !result.data) {
+        setActionError(result.error?.message ?? 'Falha ao salvar plano alimentar.');
+        return;
+      }
+      setActionNotice(
+        duplicate ? 'Plano duplicado e publicado.' : 'Plano alimentar salvo e publicado.'
+      );
+      await loadPlan();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleArchivePlan = async () => {
+    setActionLoading('archive');
+    setActionNotice(null);
+    setActionError(null);
+    try {
+      const result = await archivePatientNutritionPlan(plan.id);
+      if (result.error) {
+        setActionError(result.error.message);
+        return;
+      }
+      setActionNotice('Plano alimentar arquivado.');
+      await loadPlan();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const proteinPct = Math.round(((plan.targetProteinG * 4) / plan.targetCalories) * 100);
   const carbsPct = Math.round(((plan.targetCarbsG * 4) / plan.targetCalories) * 100);
   const fatPct = Math.round(((plan.targetFatG * 9) / plan.targetCalories) * 100);
 
   const actions = [
-    { label: 'Criar novo plano', icon: Plus, variant: 'primary' },
-    { label: 'Editar plano ativo', icon: Pencil, variant: 'secondary' },
-    { label: 'Duplicar plano anterior', icon: Copy, variant: 'secondary' },
-    { label: 'Enviar ao paciente', icon: Send, variant: 'secondary' },
-    { label: 'Arquivar plano', icon: Archive, variant: 'ghost' },
-    { label: 'Ver registros do app', icon: Smartphone, variant: 'ghost' },
+    { key: 'create', label: 'Criar novo plano', icon: Plus, variant: 'primary' },
+    { key: 'edit', label: 'Editar plano ativo', icon: Pencil, variant: 'secondary' },
+    { key: 'duplicate', label: 'Duplicar plano anterior', icon: Copy, variant: 'secondary' },
+    { key: 'send', label: 'Enviar ao paciente', icon: Send, variant: 'secondary' },
+    { key: 'archive', label: 'Arquivar plano', icon: Archive, variant: 'ghost' },
+    { key: 'app', label: 'Ver registros do app', icon: Smartphone, variant: 'ghost' },
   ];
+
+  const handleAction = async (key: string) => {
+    if (key === 'archive') {
+      await handleArchivePlan();
+      return;
+    }
+    if (key === 'duplicate' || key === 'create') {
+      await handleSavePlanAction(key, true);
+      return;
+    }
+    if (key === 'edit' || key === 'send') {
+      await handleSavePlanAction(key);
+      return;
+    }
+    if (key === 'app') {
+      setActionNotice('Registros do app ja estao consolidados em fotos, aderencia e notas.');
+      setActionError(null);
+    }
+  };
 
   return (
     <div className="space-y-5">
       {/* ── Actions ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2">
-        {actions.map(({ label, icon: ActionIcon, variant }) => {
+        {actions.map(({ key, label, icon: ActionIcon, variant }) => {
           const base =
             'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors';
           const cls =
@@ -409,18 +482,28 @@ export default function TabNutricao({ patientId, initialPlan = null }: TabNutric
           const Icon = ActionIcon as React.ElementType;
           return (
             <button
-              key={label}
-              className={`${cls} cursor-not-allowed opacity-55`}
+              key={key}
+              className={`${cls} disabled:cursor-not-allowed disabled:opacity-60`}
               type="button"
-              disabled
-              title="Acao bloqueada ate contrato real de plano alimentar."
+              disabled={actionLoading !== null}
+              onClick={() => void handleAction(key)}
             >
               <Icon size={13} />
-              {label}
+              {actionLoading === key ? 'Processando...' : label}
             </button>
           );
         })}
       </div>
+      {actionNotice && (
+        <p className="text-xs text-emerald-700" role="status">
+          {actionNotice}
+        </p>
+      )}
+      {actionError && (
+        <p className="text-xs text-red-600" role="alert">
+          {actionError}
+        </p>
+      )}
 
       {/* ── Plano alimentar ativo ────────────────────────────────────────────── */}
       <div className="card-base p-5">

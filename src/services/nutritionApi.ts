@@ -264,3 +264,80 @@ export async function getPatientNutritionPlan(
     return { data: null, error: safeError(error, 'Nao foi possivel carregar nutricao.') };
   }
 }
+
+export type NutritionPlanMutationInput = {
+  patientId: string;
+  planId?: string | null;
+  planName: string;
+  targetCalories: number;
+  targetProteinG: number;
+  targetCarbsG: number;
+  targetFatG: number;
+  meals?: NutritionMeal[];
+  foodGroups?: NutritionFoodGroup[];
+  publish?: boolean;
+};
+
+export async function savePatientNutritionPlan(input: NutritionPlanMutationInput): Promise<{
+  data: { id: string; status: string } | null;
+  error: SafeServiceError | null;
+}> {
+  if (!input.patientId.trim()) {
+    return { data: null, error: { message: 'Paciente invalido para salvar nutricao.' } };
+  }
+  if (!input.planName.trim()) {
+    return { data: null, error: { message: 'Informe o nome do plano alimentar.' } };
+  }
+
+  try {
+    if (isMockEnabled()) {
+      return {
+        data: { id: input.planId ?? `mock-nutrition-${Date.now()}`, status: 'active' },
+        error: null,
+      };
+    }
+
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('save_patient_nutrition_plan', {
+      p_patient_id: input.patientId,
+      p_plan_id: input.planId ?? null,
+      p_publish: input.publish ?? true,
+      p_payload: {
+        planName: input.planName,
+        targetCalories: Math.max(0, Math.round(input.targetCalories)),
+        targetProteinG: Math.max(0, input.targetProteinG),
+        targetCarbsG: Math.max(0, input.targetCarbsG),
+        targetFatG: Math.max(0, input.targetFatG),
+        meals: input.meals ?? [],
+        foodGroups: input.foodGroups ?? [],
+      },
+    });
+    if (error) return { data: null, error: safeError(error, 'Nao foi possivel salvar nutricao.') };
+    return { data: data as { id: string; status: string }, error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel salvar nutricao.') };
+  }
+}
+
+export async function archivePatientNutritionPlan(planId: string): Promise<{
+  data: { id: string; status: string } | null;
+  error: SafeServiceError | null;
+}> {
+  if (!planId.trim()) {
+    return { data: null, error: { message: 'Plano invalido para arquivar.' } };
+  }
+
+  try {
+    if (isMockEnabled()) return { data: { id: planId, status: 'archived' }, error: null };
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc('archive_patient_nutrition_plan', {
+      p_plan_id: planId,
+    });
+    if (error) {
+      return { data: null, error: safeError(error, 'Nao foi possivel arquivar nutricao.') };
+    }
+    return { data: data as { id: string; status: string }, error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel arquivar nutricao.') };
+  }
+}
