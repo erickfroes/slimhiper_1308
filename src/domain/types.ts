@@ -606,12 +606,20 @@ export interface DashboardStats {
   operationalInsights?: DashboardOperationalInsights;
 }
 
+export interface DashboardDegradedSection {
+  key: string;
+  label: string;
+  canRead: boolean;
+  error: string;
+}
+
 export interface DashboardSnapshot {
   stats: DashboardStats;
   waitingQueue: WaitingQueueEntry[];
   todayAppointments: AppointmentSummary[];
   alerts: DashboardAlert[];
   patientsNeedingReview: PatientReviewItem[];
+  degradedSections?: DashboardDegradedSection[];
 }
 
 export interface WaitingQueueEntry {

@@ -15,10 +15,17 @@
   --muted-foreground: #64748b;
   --card: #ffffff;
   --card-foreground: #1e293b;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-subtle: #f8fafc;
+  --surface-strong: #e2e8f0;
   --border: #e2e8f0;
   --input: #e2e8f0;
   --ring: #0d9488;
-  --radius: 16px;
+  --focus-ring: rgba(13, 148, 136, 0.28);
+  --radius: 8px;
+  --radius-control: 8px;
+  --radius-panel: 8px;
   --font-sans: var(--font-plus-jakarta-sans), sans-serif;
 
   --status-agendado: #3b82f6;
@@ -41,6 +48,21 @@
   --warning-bg: #fffbeb;
   --info: #3b82f6;
   --info-bg: #eff6ff;
+
+  --severity-low: #2563eb;
+  --severity-low-bg: #eff6ff;
+  --severity-medium: #d97706;
+  --severity-medium-bg: #fffbeb;
+  --severity-high: #dc2626;
+  --severity-high-bg: #fef2f2;
+  --severity-critical: #7f1d1d;
+  --severity-critical-bg: #fee2e2;
+
+  --chart-1: #0d9488;
+  --chart-2: #2563eb;
+  --chart-3: #d97706;
+  --chart-4: #7c3aed;
+  --chart-5: #dc2626;
 }
 
 @layer base {
@@ -99,6 +121,29 @@
       0 4px 6px -4px rgba(0, 0, 0, 0.04);
   }
 
+  .focus-ring {
+    @apply outline-none ring-2 ring-offset-2 ring-offset-background;
+    --tw-ring-color: var(--focus-ring);
+  }
+
+  .surface-panel {
+    background: var(--surface-raised);
+    border-color: var(--border);
+    border-radius: var(--radius-panel);
+  }
+
+  .surface-subtle {
+    background: var(--surface-subtle);
+  }
+
+  .density-compact {
+    @apply text-sm;
+  }
+
+  .safe-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
   .sidebar-transition {
     transition:
       width 300ms ease,
@@ -139,37 +184,37 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all duration-150 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-semibold border border-border transition-all duration-150 hover:bg-muted active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-semibold text-secondary-foreground transition-all duration-150 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl text-muted-foreground text-sm font-medium transition-all duration-150 hover:bg-muted hover:text-foreground active:scale-95;
+    @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-all duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-danger {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-negative text-white text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95;
+    @apply inline-flex items-center gap-2 rounded-lg bg-negative px-4 py-2 text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-negative focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .input-base {
-    @apply w-full px-3 py-2 rounded-xl border border-input bg-card text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-150;
+    @apply w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-all duration-150 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60;
   }
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground transition-all duration-150 hover:text-primary cursor-pointer;
+    @apply flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
   .nav-item-active {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-primary cursor-pointer;
+    @apply flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
   .card-base {
-    @apply bg-card rounded-2xl border border-border card-shadow;
+    @apply rounded-lg border border-border bg-card card-shadow;
   }
 
   .stat-card {
-    @apply bg-card rounded-2xl border border-border card-shadow p-5;
+    @apply rounded-lg border border-border bg-card p-5 card-shadow;
   }
 }
 

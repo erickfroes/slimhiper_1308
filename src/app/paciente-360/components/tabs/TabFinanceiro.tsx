@@ -31,6 +31,7 @@ import {
   registerPatientManualPayment,
   sendPaymentReminder,
 } from '@/services/billingApi';
+import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
 
 function formatBRL(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -231,13 +232,7 @@ function normalizeBillingDocument(value: string) {
 }
 
 function asSafePaymentLink(value: string | null) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
-  } catch {
-    return null;
-  }
+  return asSafePaymentUrl(value);
 }
 
 function downloadTextFile(filename: string, content: string) {

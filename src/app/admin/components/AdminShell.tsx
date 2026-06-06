@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Activity,
@@ -12,11 +12,13 @@ import {
   Link2,
   LineChart,
   LogOut,
+  Menu,
   RefreshCw,
   Shield,
   TrendingUp,
   User,
   Webhook,
+  X,
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
 
@@ -56,17 +58,27 @@ function AdminSidebar({
   activeSection,
   collapsed,
   onToggle,
+  mobileOpen,
+  onCloseMobile,
 }: {
   activeSection: AdminShellSection;
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen: boolean;
+  onCloseMobile: () => void;
 }) {
   return (
     <aside
-      className={`flex flex-shrink-0 flex-col border-r border-border bg-card sidebar-transition ${collapsed ? 'w-16' : 'w-56'}`}
+      id="admin-sidebar"
+      className={[
+        'fixed inset-y-0 left-0 z-50 flex w-64 flex-shrink-0 flex-col border-r border-border bg-card shadow-xl sidebar-transition lg:relative lg:z-auto lg:shadow-none',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+        collapsed ? 'lg:w-16' : 'lg:w-56',
+      ].join(' ')}
+      aria-label="Navegacao administrativa"
     >
       <div
-        className={`flex items-center border-b border-border py-4 ${collapsed ? 'justify-center px-2' : 'gap-2 px-4'}`}
+        className={`flex items-center border-b border-border py-4 ${collapsed ? 'lg:justify-center lg:px-2' : 'gap-2 px-4'}`}
       >
         <AppLogo size={28} />
         {!collapsed ? (
@@ -75,6 +87,14 @@ function AdminSidebar({
             <span className="text-xs font-semibold text-primary">Admin</span>
           </div>
         ) : null}
+        <button
+          type="button"
+          onClick={onCloseMobile}
+          className="btn-ghost ml-auto h-9 w-9 justify-center p-0 lg:hidden"
+          aria-label="Fechar menu administrativo"
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3 scrollbar-thin">
         {navItems.map((item) => {
@@ -85,8 +105,9 @@ function AdminSidebar({
               key={item.key}
               href={item.href}
               title={collapsed ? item.label : undefined}
+              onClick={onCloseMobile}
               className={`group relative flex w-full items-center rounded-xl transition-all ${
-                collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5'
+                collapsed ? 'lg:justify-center lg:px-0 gap-3 px-3 py-2.5' : 'gap-3 px-3 py-2.5'
               } ${
                 active
                   ? 'bg-primary/10 text-primary'
@@ -99,10 +120,13 @@ function AdminSidebar({
                   {item.label}
                 </span>
               ) : (
-                <span className="pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded-lg bg-foreground px-2 py-1 text-xs font-medium text-background opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="text-xs font-medium lg:hidden">{item.label}</span>
+              )}
+              {collapsed ? (
+                <span className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-lg bg-foreground px-2 py-1 text-xs font-medium text-background opacity-0 transition-opacity group-hover:opacity-100 lg:block">
                   {item.label}
                 </span>
-              )}
+              ) : null}
             </Link>
           );
         })}
@@ -123,7 +147,7 @@ function AdminSidebar({
         <button
           type="button"
           onClick={onToggle}
-          className="flex w-full items-center justify-center gap-1 rounded-xl py-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
+          className="hidden w-full items-center justify-center gap-1 rounded-xl py-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground lg:flex"
           title={collapsed ? 'Expandir menu' : 'Recolher menu'}
         >
           <ChevronRight size={14} className={collapsed ? '' : 'rotate-180'} />
@@ -142,7 +166,7 @@ export default function AdminShell({
   onRefresh,
   refreshLabel = 'Atualizar',
   children,
-  mainClassName = 'flex-1 overflow-y-auto p-6 scrollbar-thin',
+  mainClassName = 'flex-1 overflow-y-auto p-4 sm:p-6 scrollbar-thin',
 }: {
   activeSection: AdminShellSection;
   title?: string;
@@ -154,16 +178,52 @@ export default function AdminShell({
   mainClassName?: string;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMobileOpen(false);
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mobileOpen]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <a
+        href="#admin-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary focus:shadow"
+      >
+        Pular para conteudo administrativo
+      </a>
+      {mobileOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-slate-950/35 lg:hidden"
+          aria-label="Fechar menu administrativo"
+          onClick={() => setMobileOpen(false)}
+        />
+      ) : null}
       <AdminSidebar
         activeSection={activeSection}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((value) => !value)}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex flex-shrink-0 items-center gap-3 border-b border-border bg-card px-6 py-3">
+        <header className="flex flex-shrink-0 items-center gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="btn-ghost h-9 w-9 justify-center p-0 lg:hidden"
+            aria-controls="admin-sidebar"
+            aria-expanded={mobileOpen}
+            aria-label="Abrir menu administrativo"
+          >
+            <Menu size={16} aria-hidden="true" />
+          </button>
           {breadcrumbs ?? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Link href="/admin" className="hover:text-primary">
@@ -188,7 +248,7 @@ export default function AdminShell({
             </button>
           ) : null}
         </header>
-        <main className={mainClassName}>
+        <main id="admin-main" className={mainClassName} tabIndex={-1}>
           {title || description ? (
             <div className="mb-6">
               {title ? <h1 className="text-xl font-bold text-foreground">{title}</h1> : null}

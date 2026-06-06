@@ -312,12 +312,14 @@ function SortableHeader({
   onSort: (key: SortKey) => void;
 }) {
   const active = currentKey === sortKey;
+  const ariaSort = active ? (currentDir === 'asc' ? 'ascending' : 'descending') : 'none';
   return (
-    <th
-      className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground select-none whitespace-nowrap"
-      onClick={() => onSort(sortKey)}
-    >
-      <span className="flex items-center gap-1">
+    <th scope="col" aria-sort={ariaSort} className="px-4 py-3 text-left whitespace-nowrap">
+      <button
+        type="button"
+        className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+        onClick={() => onSort(sortKey)}
+      >
         {label}
         <span
           className={['flex flex-col', active ? 'text-primary' : 'text-muted-foreground/40'].join(
@@ -330,7 +332,7 @@ function SortableHeader({
             className={active && currentDir === 'desc' ? 'text-primary' : ''}
           />
         </span>
-      </span>
+      </button>
     </th>
   );
 }

@@ -178,6 +178,16 @@ export default function DashboardShell({ children }: DashboardShellProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!openMenu) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpenMenu(null);
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [openMenu]);
+
   const isActive = (href: string) => {
     if (href === '/clinic/dashboard') return pathname === '/clinic/dashboard' || pathname === '/';
     return pathname.startsWith(href);
@@ -241,7 +251,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
       <aside
         className={[
           'flex flex-col bg-card border-r border-border sidebar-transition z-50 flex-shrink-0',
-          collapsed ? 'w-16' : 'w-60',
+          collapsed ? 'w-60 lg:w-16' : 'w-60',
           'fixed lg:relative h-full',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         ].join(' ')}
@@ -250,13 +260,19 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         <div
           className={[
             'flex items-center border-b border-border flex-shrink-0',
-            collapsed ? 'justify-center px-0 py-4' : 'gap-2 px-4 py-4',
+            collapsed ? 'gap-2 px-4 py-4 lg:justify-center lg:px-0' : 'gap-2 px-4 py-4',
           ].join(' ')}
         >
           <div className="flex items-center gap-2">
             <AppLogo size={32} />
-            {!collapsed && (
-              <div className="flex flex-col leading-none">
+            {(!collapsed || mobileOpen) && (
+              <div className="flex flex-col leading-none lg:hidden">
+                <span className="font-bold text-sm text-foreground tracking-tight">SlimHiper</span>
+                <span className="text-xs text-muted-foreground font-medium">Clinic OS</span>
+              </div>
+            )}
+            {!collapsed && !mobileOpen && (
+              <div className="hidden flex-col leading-none lg:flex">
                 <span className="font-bold text-sm text-foreground tracking-tight">SlimHiper</span>
                 <span className="text-xs text-muted-foreground font-medium">Clinic OS</span>
               </div>
@@ -274,23 +290,26 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 key={item.key}
                 href={item.href}
                 title={collapsed ? item.label : undefined}
+                onClick={() => setMobileOpen(false)}
                 className={[
                   'relative flex items-center rounded-xl transition-all duration-150 group',
-                  collapsed ? 'justify-center px-0 py-2.5 mx-0' : 'gap-3 px-3 py-2.5',
+                  collapsed
+                    ? 'gap-3 px-3 py-2.5 lg:mx-0 lg:justify-center lg:px-0'
+                    : 'gap-3 px-3 py-2.5',
                   active
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-primary/10 hover:text-primary',
                 ].join(' ')}
               >
                 <Icon size={18} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
-                {!collapsed && (
+                {(!collapsed || mobileOpen) && (
                   <span className={['text-sm', active ? 'font-semibold' : 'font-medium'].join(' ')}>
                     {item.label}
                   </span>
                 )}
                 {/* Tooltip for collapsed */}
                 {collapsed && (
-                  <span className="absolute left-full ml-2 px-2 py-1 bg-foreground text-background text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50">
+                  <span className="absolute left-full ml-2 hidden px-2 py-1 bg-foreground text-background text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50 lg:block">
                     {item.label}
                   </span>
                 )}
@@ -301,7 +320,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
 
         {/* Bottom: user + collapse toggle */}
         <div className="border-t border-border p-2 flex-shrink-0">
-          {!collapsed && (
+          {(!collapsed || mobileOpen) && (
             <button
               type="button"
               onClick={handleLogout}
@@ -321,8 +340,9 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             </button>
           )}
           <button
+            type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="flex items-center justify-center w-full py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150"
+            className="hidden items-center justify-center w-full py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 lg:flex"
             title={collapsed ? 'Expandir menu' : 'Recolher menu'}
           >
             {collapsed ? (
@@ -341,8 +361,14 @@ export default function DashboardShell({ children }: DashboardShellProps) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
         <header className="flex items-center gap-3 px-4 lg:px-6 py-3 bg-card border-b border-border flex-shrink-0">
-          <button className="lg:hidden btn-ghost p-2" onClick={() => setMobileOpen(true)}>
-            <LayoutDashboard size={18} />
+          <button
+            type="button"
+            className="lg:hidden btn-ghost p-2"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Abrir menu da clinica"
+            aria-expanded={mobileOpen}
+          >
+            <LayoutDashboard size={18} aria-hidden="true" />
           </button>
 
           {/* Search */}
@@ -382,11 +408,16 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 ) : null}
               </button>
               {openMenu === 'messages' && (
-                <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+                <div
+                  role="menu"
+                  className="absolute right-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-lg border border-border bg-card shadow-lg sm:w-80"
+                >
                   <div className="flex items-center justify-between border-b border-border px-4 py-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Conversas</p>
-                      <p className="text-xs text-muted-foreground">Unread count real por tenant.</p>
+                      <p className="text-xs text-muted-foreground">
+                        Conversas recentes da clinica.
+                      </p>
                     </div>
                     <Link
                       href="/clinic/inbox?tab=conversas"
@@ -473,11 +504,16 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 ) : null}
               </button>
               {openMenu === 'notifications' && (
-                <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+                <div
+                  role="menu"
+                  className="absolute right-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-lg border border-border bg-card shadow-lg sm:w-80"
+                >
                   <div className="flex items-center justify-between border-b border-border px-4 py-3">
                     <div>
                       <p className="text-sm font-semibold text-foreground">Notificacoes</p>
-                      <p className="text-xs text-muted-foreground">Somente itens autorizados.</p>
+                      <p className="text-xs text-muted-foreground">
+                        Itens autorizados para sua sessao.
+                      </p>
                     </div>
                     <Link
                       href="/clinic/inbox?tab=notificacoes"

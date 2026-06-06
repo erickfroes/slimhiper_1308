@@ -1478,7 +1478,7 @@ export default function ClinicSettingsContent() {
 
   return (
     <div className="flex min-h-full">
-      <aside className="hidden h-screen w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-border bg-card lg:flex">
+      <aside className="hidden max-h-[calc(100vh-4rem)] w-56 flex-shrink-0 flex-col self-start overflow-y-auto border-r border-border bg-card lg:sticky lg:top-0 lg:flex">
         <div className="border-b border-border px-4 py-5">
           <h1 className="text-sm font-bold text-foreground">Configuracoes</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">{snapshot.tenant.name}</p>

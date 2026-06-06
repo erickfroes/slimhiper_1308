@@ -1,4 +1,5 @@
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
 
 export interface SafeServiceError {
   message: string;
@@ -128,16 +129,6 @@ function asUuid(value: unknown): string | null {
     : null;
 }
 
-function asSafeExternalUrl(value: unknown): string | null {
-  if (typeof value !== 'string' || !value.trim()) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
@@ -207,7 +198,7 @@ function normalizeInvoice(value: unknown): PatientPortalInvoice | null {
     dueDate: asNullableString(record.dueDate),
     paidAt: asNullableString(record.paidAt),
     description: asNullableString(record.description),
-    paymentLink: asSafeExternalUrl(record.paymentLink),
+    paymentLink: asSafePaymentUrl(record.paymentLink),
   };
 }
 

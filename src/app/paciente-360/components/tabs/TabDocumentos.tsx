@@ -26,6 +26,7 @@ import {
   Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
 
 type DocFilterKey = PatientDocumentCategory | 'todos' | 'assinado' | 'pendente';
 
@@ -161,7 +162,12 @@ function RowActions({ doc, patientId, onChanged }: RowActionsProps) {
         toast.error(error?.message ?? 'Falha ao abrir link temporario auditado.');
         return;
       }
-      window.open(data.url, '_blank', 'noopener,noreferrer');
+      const safeUrl = asSafeDocumentUrl(data.url);
+      if (!safeUrl) {
+        toast.error('O link gerado nao passou na validacao de seguranca.');
+        return;
+      }
+      window.open(safeUrl, '_blank', 'noopener,noreferrer');
       toast.success(`Link temporario auditado criado (${data.expiresInSeconds}s).`);
       setOpen(false);
       return;

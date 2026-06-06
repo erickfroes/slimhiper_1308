@@ -28,6 +28,7 @@ import type {
   WaitingQueueEntry,
   AppointmentSummary,
   DashboardAlert,
+  DashboardDegradedSection,
   PatientReviewItem,
 } from '@/domain/types';
 import dynamic from 'next/dynamic';
@@ -132,6 +133,7 @@ export default function DashboardContent() {
   const [appointments, setAppointments] = useState<AppointmentSummary[]>([]);
   const [clinicAlerts, setClinicAlerts] = useState<DashboardAlert[]>([]);
   const [reviewPatients, setReviewPatients] = useState<PatientReviewItem[]>([]);
+  const [degradedSections, setDegradedSections] = useState<DashboardDegradedSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -152,6 +154,7 @@ export default function DashboardContent() {
       setAppointments(snapshot.todayAppointments);
       setClinicAlerts(snapshot.alerts);
       setReviewPatients(snapshot.patientsNeedingReview);
+      setDegradedSections(snapshot.degradedSections ?? []);
       if (isRefresh) toast.success('Dados atualizados');
     } catch {
       if (requestId !== loadRequestIdRef.current) return;
@@ -162,6 +165,7 @@ export default function DashboardContent() {
       setAppointments([]);
       setClinicAlerts([]);
       setReviewPatients([]);
+      setDegradedSections([]);
       setLoadError('Nao foi possivel validar os contratos reais do dashboard.');
       toast.error('Falha ao carregar dados do dashboard. Tente novamente.');
     } finally {
@@ -271,7 +275,40 @@ export default function DashboardContent() {
         </div>
       </div>
 
-      {!hasOperationalData && (
+      {degradedSections.length > 0 && (
+        <div className="card-base border-amber-200 bg-amber-50/70 p-4" role="status">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                <AlertTriangle size={16} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-amber-950">
+                  Dashboard carregado com leitura parcial
+                </p>
+                <p className="mt-1 text-sm text-amber-900">
+                  Algumas secoes ficaram indisponiveis nesta sessao, mas os dados autorizados foram
+                  mantidos na tela.
+                </p>
+              </div>
+            </div>
+            <ul className="grid gap-1 text-xs text-amber-900 md:min-w-72">
+              {degradedSections.slice(0, 4).map((section) => (
+                <li key={section.key} className="rounded-md bg-amber-100/70 px-2 py-1">
+                  <span className="font-semibold">{section.label}</span>: {section.error}
+                </li>
+              ))}
+              {degradedSections.length > 4 ? (
+                <li className="px-2 py-1 font-semibold">
+                  +{degradedSections.length - 4} outras secoes
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {!hasOperationalData && degradedSections.length === 0 && (
         <div className="card-base border-dashed border-border bg-muted/30 p-5">
           <div className="flex items-start gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
