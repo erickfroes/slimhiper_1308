@@ -2,8 +2,41 @@ import { imageHosts } from './image-hosts.config.mjs';
 
 const isProductionBuild = process.env.NODE_ENV === 'production';
 const rocketOrigins = ['https://static.rocket.new', 'https://appanalytics.rocket.new'];
-const supabaseOrigins = ['https://*.supabase.co', 'wss://*.supabase.co'];
 const imageOrigins = imageHosts.map(({ protocol, hostname }) => `${protocol}://${hostname}`);
+
+function toOrigin(value) {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function toRealtimeOrigin(origin) {
+  if (!origin) return null;
+  try {
+    const url = new URL(origin);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+const configuredSupabaseOrigins = [
+  toOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL),
+  toOrigin(process.env.SUPABASE_URL),
+].filter(Boolean);
+
+const supabaseOrigins = Array.from(
+  new Set([
+    'https://*.supabase.co',
+    'wss://*.supabase.co',
+    ...configuredSupabaseOrigins,
+    ...configuredSupabaseOrigins.map(toRealtimeOrigin).filter(Boolean),
+  ])
+);
 
 const securityHeaders = [
   {
@@ -28,8 +61,10 @@ const securityHeaders = [
       "frame-ancestors 'none'",
       "worker-src 'self' blob:",
       "manifest-src 'self'",
-      "upgrade-insecure-requests",
-    ].join('; '),
+      isProductionBuild ? 'upgrade-insecure-requests' : '',
+    ]
+      .filter(Boolean)
+      .join('; '),
   },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },

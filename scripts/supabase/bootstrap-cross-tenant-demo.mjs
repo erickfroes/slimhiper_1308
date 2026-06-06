@@ -4,10 +4,15 @@ import { getRequiredServiceRoleKey, requireEnv } from './_shared/env.mjs';
 
 const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
 
-const tenantSlug = process.env.SUPABASE_BOOTSTRAP_TENANT_B_SLUG ?? 'demo-clinic-b';
-const tenantName = process.env.SUPABASE_BOOTSTRAP_TENANT_B_NAME ?? 'Demo Clinic B';
-const patientId =
-  process.env.SUPABASE_BOOTSTRAP_PATIENT_B_ID ?? '9b5c6d6a-1f7e-4dbb-8eab-3d55a8a1f042';
+const envOrDefault = (value, fallback) =>
+  typeof value === 'string' && value.trim() ? value.trim() : fallback;
+
+const tenantSlug = envOrDefault(process.env.SUPABASE_BOOTSTRAP_TENANT_B_SLUG, 'demo-clinic-b');
+const tenantName = envOrDefault(process.env.SUPABASE_BOOTSTRAP_TENANT_B_NAME, 'Demo Clinic B');
+const patientId = envOrDefault(
+  process.env.SUPABASE_BOOTSTRAP_PATIENT_B_ID,
+  '9b5c6d6a-1f7e-4dbb-8eab-3d55a8a1f042'
+);
 
 let supabase;
 try {
