@@ -99,6 +99,15 @@ type DashboardInsightsRpc = {
   };
 };
 
+type DailyAdherenceRow = {
+  patientId: string;
+  adherencePercent: number;
+  reason: string;
+  severity: string;
+  lastSignalAt: string | null;
+  href: string;
+};
+
 function todayRange() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -164,6 +173,42 @@ function normalizeDashboardInsights(payload: unknown): DashboardStats['operation
       href: typeof inventory.href === 'string' ? inventory.href : '/clinic/inventory',
     },
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function normalizeDailyAdherenceRows(payload: unknown): DailyAdherenceRow[] {
+  if (!Array.isArray(payload)) return [];
+
+  return payload
+    .map((item) => {
+      const record = asRecord(item);
+      const patientId = asString(record.patientId);
+      if (!patientId) return null;
+
+      return {
+        patientId,
+        adherencePercent: Math.max(0, Math.min(100, Math.round(asNumber(record.adherencePercent)))),
+        reason: asString(record.reason, 'Adesao diaria baixa'),
+        severity: asString(record.severity, 'medium'),
+        lastSignalAt: asString(record.lastSignalAt) || null,
+        href: asString(record.href, `/clinic/patients/${patientId}?tab=timeline`),
+      } satisfies DailyAdherenceRow;
+    })
+    .filter((item): item is DailyAdherenceRow => Boolean(item));
 }
 
 function dashboardFallbackInsights(): DashboardStats['operationalInsights'] {
@@ -338,6 +383,16 @@ async function getActiveAlertRows(
   return (data ?? []) as AlertRow[];
 }
 
+async function getDailyAdherenceRows(supabase: BrowserSupabaseClient) {
+  const { data, error } = await supabase.rpc('get_clinic_daily_adherence_snapshot', {
+    p_target_date: null,
+    p_limit: 8,
+  });
+
+  if (error) throw error;
+  return normalizeDailyAdherenceRows(data);
+}
+
 const queueStatuses: AppointmentStatus[] = [
   'chegou',
   'triagem',
@@ -397,6 +452,19 @@ function mapAlertRows(rows: AlertRow[]): DashboardAlert[] {
   }));
 }
 
+function mapDailyAdherenceRows(rows: DailyAdherenceRow[]): DashboardAlert[] {
+  return rows.map((row) => ({
+    id: `daily-adherence-${row.patientId}`,
+    patientId: row.patientId,
+    severity: mapAlertSeverity(row.severity),
+    title: 'Adesao diaria baixa',
+    description: `${row.reason}. Progresso de hoje: ${row.adherencePercent}%.`,
+    createdAt: row.lastSignalAt ?? new Date().toISOString(),
+    isResolved: false,
+    category: 'adesao',
+  }));
+}
+
 function mapReviewRows(rows: AlertRow[], names: Map<string, string>): PatientReviewItem[] {
   return rows.map((row) => ({
     id: row.patient_id,
@@ -406,12 +474,33 @@ function mapReviewRows(rows: AlertRow[], names: Map<string, string>): PatientRev
   }));
 }
 
+function mapDailyReviewRows(
+  rows: DailyAdherenceRow[],
+  names: Map<string, string>
+): PatientReviewItem[] {
+  return rows.map((row) => ({
+    id: row.patientId,
+    name: names.get(row.patientId) ?? 'Paciente sem nome',
+    issue: `${row.reason} (${row.adherencePercent}%)`,
+    severity: mapAlertSeverity(row.severity),
+  }));
+}
+
+function uniqueReviewRows(rows: PatientReviewItem[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    if (seen.has(row.id)) return false;
+    seen.add(row.id);
+    return true;
+  });
+}
+
 const supabaseDashboardProvider: DashboardProvider = {
   async getDashboardSnapshot() {
     const supabase = createBrowserSupabaseClient();
     const tenantId = await resolveActiveTenantId(supabase);
     const degradedSections: DashboardDegradedSection[] = [];
-    const [todayAppointments, activeAlertRows] = await Promise.all([
+    const [todayAppointments, activeAlertRows, dailyAdherenceRows] = await Promise.all([
       readDashboardSection(
         degradedSections,
         'todayAppointments',
@@ -425,6 +514,13 @@ const supabaseDashboardProvider: DashboardProvider = {
         'Alertas clinicos',
         getActiveAlertRows(tenantId, 10, supabase),
         [] as AlertRow[]
+      ),
+      readDashboardSection(
+        degradedSections,
+        'dailyAdherence',
+        'Adesao diaria',
+        getDailyAdherenceRows(supabase),
+        [] as DailyAdherenceRow[]
       ),
     ]);
     const completedToday = todayAppointments.filter(
@@ -511,10 +607,17 @@ const supabaseDashboardProvider: DashboardProvider = {
         uniqueValues([
           ...todayAppointments.map((row) => row.patient_id),
           ...activeAlertRows.map((row) => row.patient_id),
+          ...dailyAdherenceRows.map((row) => row.patientId),
         ])
       ),
       new Map<string, string>()
     );
+    const clinicalAlerts = mapAlertRows(activeAlertRows);
+    const dailyAdherenceAlerts = mapDailyAdherenceRows(dailyAdherenceRows);
+    const reviewRows = uniqueReviewRows([
+      ...mapDailyReviewRows(dailyAdherenceRows, patientNames),
+      ...mapReviewRows(activeAlertRows, patientNames),
+    ]);
 
     return {
       stats: {
@@ -522,7 +625,7 @@ const supabaseDashboardProvider: DashboardProvider = {
         consultasConcluidas: completedToday,
         filaEspera: queueRows.length,
         programasAtivos: activeProgramsCount,
-        alertasClinicos: activeAlertsCount,
+        alertasClinicos: activeAlertsCount + dailyAdherenceRows.length,
         mensagensNaoLidas: unreadMessages,
         documentosPendentes: pendingDocumentsCount,
         inadimplentes: overdueInvoicesCount,
@@ -533,8 +636,8 @@ const supabaseDashboardProvider: DashboardProvider = {
       },
       waitingQueue: mapWaitingQueueRows(queueRows, patientNames),
       todayAppointments: mapAppointmentRows(todayAppointments, patientNames),
-      alerts: mapAlertRows(activeAlertRows),
-      patientsNeedingReview: mapReviewRows(activeAlertRows.slice(0, 6), patientNames),
+      alerts: [...dailyAdherenceAlerts, ...clinicalAlerts].slice(0, 10),
+      patientsNeedingReview: reviewRows.slice(0, 6),
       degradedSections,
     };
   },

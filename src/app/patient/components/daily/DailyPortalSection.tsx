@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   Camera,
@@ -24,10 +24,17 @@ import { cx } from '@/components/ui/utils';
 import {
   buildPatientDailySnapshot,
   createPatientDailyLocalEntry,
+  getPatientDailySnapshot,
+  recordPatientDailyCheckin,
+  recordPatientDailyMeal,
+  recordPatientDailyWater,
+  recordPatientDailyWorkout,
   type PatientDailyAction,
   type PatientDailyEntry,
   type PatientDailyEntryKind,
   type PatientDailyHabit,
+  type PatientDailyMutationResult,
+  type SafeServiceError,
 } from '@/services/patientDailyApi';
 import type { PatientPortalSnapshot } from '@/services/patientPortalApi';
 
@@ -39,6 +46,11 @@ interface DailyPortalSectionProps {
   onOpenCheckins: () => void;
   onActionMessage: (message: string) => void;
 }
+
+type DailyOperation = () => Promise<{
+  data: PatientDailyMutationResult | null;
+  error: SafeServiceError | null;
+}>;
 
 const habitIcons: Record<PatientDailyEntryKind, LucideIcon> = {
   water: Droplets,
@@ -99,6 +111,7 @@ const scaleOptions = [
   { value: 4, label: '4 bom' },
   { value: 5, label: '5 alto' },
 ];
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -106,9 +119,16 @@ function formatTime(value: string) {
   return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
+function sortTimeline(entries: PatientDailyEntry[]) {
+  return [...entries].sort(
+    (a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime()
+  );
+}
+
 function getStatusLabel(status: PatientDailyEntry['status']) {
-  if (status === 'pending') return 'Pendente de sincronizacao';
+  if (status === 'pending') return 'Sincronizando';
   if (status === 'failed') return 'Falhou';
+  if (status === 'synced') return 'Sincronizado';
   return 'Do programa';
 }
 
@@ -120,11 +140,17 @@ function getHabitStatusClass(habit: PatientDailyHabit) {
   return 'bg-muted text-muted-foreground';
 }
 
+function errorMessage(error: SafeServiceError | null, fallback: string) {
+  return error?.message || fallback;
+}
+
 function HabitRow({
   habit,
+  disabled,
   onAction,
 }: {
   habit: PatientDailyHabit;
+  disabled: boolean;
   onAction: (kind: PatientDailyEntryKind) => void;
 }) {
   const Icon = habitIcons[habit.kind];
@@ -133,7 +159,8 @@ function HabitRow({
     <button
       type="button"
       onClick={() => onAction(habit.kind)}
-      className="flex min-h-16 w-full items-center gap-3 rounded-lg px-1 py-2 text-left transition hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      disabled={disabled}
+      className="flex min-h-16 w-full items-center gap-3 rounded-lg px-1 py-2 text-left transition hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
     >
       <span
         className={cx(
@@ -171,12 +198,19 @@ export default function DailyPortalSection({
   onOpenCheckins,
   onActionMessage,
 }: DailyPortalSectionProps) {
-  const [localEntries, setLocalEntries] = useState<PatientDailyEntry[]>([]);
+  const [dailySnapshot, setDailySnapshot] = useState<ReturnType<
+    typeof buildPatientDailySnapshot
+  > | null>(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyError, setDailyError] = useState<SafeServiceError | null>(null);
+  const [pendingEntries, setPendingEntries] = useState<PatientDailyEntry[]>([]);
+  const [busyAction, setBusyAction] = useState<PatientDailyEntryKind | null>(null);
   const [activeAction, setActiveAction] = useState<PatientDailyAction | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [waterAmount, setWaterAmount] = useState(250);
   const [mealType, setMealType] = useState(mealTypes[0]);
   const [mealNotes, setMealNotes] = useState('');
+  const [mealPhotoFile, setMealPhotoFile] = useState<File | null>(null);
   const [mealPhotoName, setMealPhotoName] = useState('');
   const [workoutTitle, setWorkoutTitle] = useState('');
   const [workoutMinutes, setWorkoutMinutes] = useState(30);
@@ -185,18 +219,55 @@ export default function DailyPortalSection({
   const [checkinEnergy, setCheckinEnergy] = useState(3);
   const [checkinSymptoms, setCheckinSymptoms] = useState('');
 
-  const daily = useMemo(
-    () => buildPatientDailySnapshot(snapshot, localEntries),
-    [snapshot, localEntries]
+  const selectedPatientId = dailySnapshot?.selectedPatientId ?? snapshot.selectedPatientId;
+  const isBusy = Boolean(busyAction);
+
+  const reloadDaily = useCallback(
+    async (showLoading = false) => {
+      if (showLoading) setDailyLoading(true);
+      const result = await getPatientDailySnapshot(snapshot.selectedPatientId);
+      if (result.error || !result.data) {
+        setDailyError(result.error ?? { message: 'Contrato do diario indisponivel.' });
+        if (showLoading) setDailyLoading(false);
+        return result.error ?? { message: 'Contrato do diario indisponivel.' };
+      }
+
+      setDailySnapshot(result.data);
+      setDailyError(null);
+      if (showLoading) setDailyLoading(false);
+      return null;
+    },
+    [snapshot.selectedPatientId]
   );
+
+  useEffect(() => {
+    void reloadDaily(true);
+  }, [reloadDaily]);
+
+  const fallbackDaily = useMemo(
+    () => buildPatientDailySnapshot(snapshot, pendingEntries),
+    [snapshot, pendingEntries]
+  );
+  const daily = useMemo(() => {
+    if (!dailySnapshot) return fallbackDaily;
+    if (pendingEntries.length === 0) return dailySnapshot;
+
+    const knownIds = new Set(dailySnapshot.timeline.map((entry) => entry.id));
+    const overlayEntries = pendingEntries.filter((entry) => !knownIds.has(entry.id));
+
+    return {
+      ...dailySnapshot,
+      timeline: sortTimeline([...dailySnapshot.timeline, ...overlayEntries]),
+    };
+  }, [dailySnapshot, fallbackDaily, pendingEntries]);
   const lastWorkout = useMemo(
     () =>
-      [...localEntries]
+      [...daily.timeline]
         .reverse()
-        .find((entry) => entry.kind === 'workout' && entry.metadata?.workoutTitle),
-    [localEntries]
+        .find((entry) => entry.kind === 'workout' && entry.status !== 'failed'),
+    [daily.timeline]
   );
-  const hasActiveProgram = ['active', 'ativo'].includes(snapshot.patient.status.toLowerCase());
+  const hasActiveProgram = ['active', 'ativo'].includes(daily.programStatus.toLowerCase());
 
   useEffect(() => {
     if (typeof navigator === 'undefined') return;
@@ -224,6 +295,7 @@ export default function DailyPortalSection({
   function resetMealForm() {
     setMealType(mealTypes[0]);
     setMealNotes('');
+    setMealPhotoFile(null);
     setMealPhotoName('');
   }
 
@@ -239,37 +311,102 @@ export default function DailyPortalSection({
     setCheckinSymptoms('');
   }
 
-  function addLocalEntry(kind: PatientDailyEntryKind, input = {}) {
-    const entry = createPatientDailyLocalEntry(kind, input);
-    setLocalEntries((current) => [...current, entry]);
-    setActiveAction(null);
-    onActionMessage(
-      `${entry.title} registrado localmente. Sincronizacao real depende do contrato backend M01.`
-    );
+  async function persistEntry(
+    kind: PatientDailyEntryKind,
+    localInput: Parameters<typeof createPatientDailyLocalEntry>[1],
+    operation: DailyOperation,
+    onSuccess?: () => void
+  ) {
+    const localEntry = createPatientDailyLocalEntry(kind, localInput);
+    setPendingEntries((current) => [...current, localEntry]);
+    setBusyAction(kind);
 
-    if (kind === 'meal') resetMealForm();
-    if (kind === 'workout') resetWorkoutForm();
-    if (kind === 'checkin') resetCheckinForm();
+    try {
+      const result = await operation();
+      if (result.error || !result.data) {
+        setPendingEntries((current) =>
+          current.map((entry) =>
+            entry.id === localEntry.id ? { ...entry, status: 'failed' as const } : entry
+          )
+        );
+        onActionMessage(errorMessage(result.error, 'Nao foi possivel sincronizar o registro.'));
+        return;
+      }
+
+      const syncedEntry = result.data.entry;
+      setPendingEntries((current) =>
+        current.map((entry) => (entry.id === localEntry.id ? syncedEntry : entry))
+      );
+      setActiveAction(null);
+      onSuccess?.();
+      onActionMessage(`${syncedEntry.title} sincronizado.`);
+
+      const reloadError = await reloadDaily(false);
+      if (!reloadError) {
+        setPendingEntries((current) => current.filter((entry) => entry.id !== syncedEntry.id));
+      }
+    } finally {
+      setBusyAction(null);
+    }
   }
 
   function handleQuickAction(action: PatientDailyAction) {
+    if (isBusy) return;
     if (action === 'message') {
       onOpenChat();
       return;
     }
 
     if (action === 'water') {
-      addLocalEntry('water', { amountMl: 250 });
+      void persistEntry('water', { amountMl: 250 }, () =>
+        recordPatientDailyWater(selectedPatientId, 250)
+      );
       return;
     }
 
     setActiveAction(action);
   }
 
-  function handleUndoEntry(entryId: string) {
-    setLocalEntries((current) => current.filter((entry) => entry.id !== entryId));
-    onActionMessage('Registro local desfeito antes da sincronizacao.');
+  function handleMealPhotoChange(file?: File) {
+    if (!file) {
+      setMealPhotoFile(null);
+      setMealPhotoName('');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setMealPhotoFile(null);
+      setMealPhotoName('');
+      onActionMessage('A foto precisa ser uma imagem.');
+      return;
+    }
+    if (file.size > PHOTO_MAX_BYTES) {
+      setMealPhotoFile(null);
+      setMealPhotoName('');
+      onActionMessage('A foto precisa ter ate 5 MB.');
+      return;
+    }
+
+    setMealPhotoFile(file);
+    setMealPhotoName(file.name);
   }
+
+  function handleUndoEntry(entryId: string) {
+    setPendingEntries((current) => current.filter((entry) => entry.id !== entryId));
+    onActionMessage('Registro removido da fila local.');
+  }
+
+  function handleHabitAction(kind: PatientDailyEntryKind) {
+    if (isBusy) return;
+    setActiveAction(kind);
+  }
+
+  const syncBadgeLabel = dailyLoading
+    ? 'Atualizando'
+    : dailyError
+      ? 'Fallback local'
+      : daily.backendStatus === 'synced'
+        ? 'Sincronizado'
+        : 'Modo local';
 
   return (
     <div className="space-y-4">
@@ -357,10 +494,21 @@ export default function DailyPortalSection({
           <div>
             <p className="font-semibold">Sem internet agora</p>
             <p className="mt-1 text-muted-foreground">
-              Os registros locais podem ser desfeitos. A sincronizacao real depende do backend M01.
+              As acoes ficam visiveis na fila local e podem ser removidas antes de tentar de novo.
             </p>
           </div>
         </div>
+      ) : null}
+
+      {dailyError ? (
+        <DataState
+          kind="error"
+          title="Diario em fallback local"
+          description={dailyError.message}
+          actionLabel="Tentar sincronizar"
+          onAction={() => void reloadDaily(true)}
+          className="min-h-32 bg-background"
+        />
       ) : null}
 
       <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
@@ -369,14 +517,19 @@ export default function DailyPortalSection({
             <div>
               <h3 className="text-sm font-semibold text-foreground">Hoje</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Metas default ate o contrato de habitos trazer metas por programa.
+                Metas do programa ou do padrao da clinica, atualizadas pelo backend.
               </p>
             </div>
             <Activity className="h-5 w-5 text-primary" aria-hidden="true" />
           </div>
           <div className="mt-4 divide-y divide-border">
             {daily.habits.map((habit) => (
-              <HabitRow key={habit.kind} habit={habit} onAction={(kind) => setActiveAction(kind)} />
+              <HabitRow
+                key={habit.kind}
+                habit={habit}
+                disabled={isBusy}
+                onAction={handleHabitAction}
+              />
             ))}
           </div>
         </section>
@@ -396,8 +549,9 @@ export default function DailyPortalSection({
                 <button
                   key={action.id}
                   type="button"
+                  disabled={isBusy}
                   onClick={() => handleQuickAction(action.id)}
-                  className="min-h-24 rounded-lg border border-border bg-background p-3 text-left transition hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-h-24 rounded-lg border border-border bg-background p-3 text-left transition hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label={`${action.label}: ${action.description}`}
                 >
                   <span
@@ -431,7 +585,7 @@ export default function DailyPortalSection({
           </div>
           <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
             <CircleAlert className="h-4 w-4" aria-hidden="true" />
-            Pendente de backend
+            {syncBadgeLabel}
           </span>
         </div>
 
@@ -441,7 +595,14 @@ export default function DailyPortalSection({
           </div>
         ) : null}
 
-        {daily.timeline.length === 0 ? (
+        {dailyLoading && daily.timeline.length === 0 ? (
+          <DataState
+            kind="loading"
+            title="Carregando diario"
+            description="Buscando registros de hoje."
+            className="mt-4 bg-background"
+          />
+        ) : daily.timeline.length === 0 ? (
           <DataState
             kind="empty"
             title="Nada no diario ainda"
@@ -467,19 +628,28 @@ export default function DailyPortalSection({
                       </div>
                       <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                         <span>{formatTime(entry.occurredAt)}</span>
-                        <span className="rounded-lg bg-muted px-2 py-1 font-semibold">
+                        <span
+                          className={cx(
+                            'rounded-lg px-2 py-1 font-semibold',
+                            entry.status === 'failed'
+                              ? 'bg-red-50 text-red-600'
+                              : entry.status === 'pending'
+                                ? 'bg-warning/10 text-warning'
+                                : 'bg-muted text-muted-foreground'
+                          )}
+                        >
                           {getStatusLabel(entry.status)}
                         </span>
                       </div>
                     </div>
-                    {entry.status === 'pending' ? (
+                    {entry.status === 'pending' || entry.status === 'failed' ? (
                       <button
                         type="button"
                         onClick={() => handleUndoEntry(entry.id)}
                         className="btn-ghost mt-2 min-h-9 px-2 py-1.5 text-xs"
                       >
                         <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                        Desfazer
+                        Remover local
                       </button>
                     ) : null}
                   </div>
@@ -500,6 +670,7 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-secondary justify-center"
+              disabled={busyAction === 'water'}
               onClick={() => setActiveAction(null)}
             >
               Cancelar
@@ -507,10 +678,15 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-primary justify-center"
-              onClick={() => addLocalEntry('water', { amountMl: waterAmount })}
+              disabled={busyAction === 'water'}
+              onClick={() =>
+                void persistEntry('water', { amountMl: waterAmount }, () =>
+                  recordPatientDailyWater(selectedPatientId, waterAmount)
+                )
+              }
             >
               <Droplets className="h-4 w-4" aria-hidden="true" />
-              Salvar agua
+              {busyAction === 'water' ? 'Salvando...' : 'Salvar agua'}
             </button>
           </div>
         }
@@ -520,6 +696,7 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-secondary h-11 w-11 justify-center p-0"
+              disabled={busyAction === 'water'}
               onClick={() => setWaterAmount((current) => Math.max(50, current - 50))}
               aria-label="Diminuir agua"
             >
@@ -533,6 +710,7 @@ export default function DailyPortalSection({
                 max={3000}
                 step={50}
                 value={waterAmount}
+                disabled={busyAction === 'water'}
                 onChange={(event) => setWaterAmount(Number(event.target.value))}
                 className="input-base mt-2 text-center text-lg font-bold"
               />
@@ -540,6 +718,7 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-secondary h-11 w-11 justify-center p-0"
+              disabled={busyAction === 'water'}
               onClick={() => setWaterAmount((current) => Math.min(3000, current + 50))}
               aria-label="Aumentar agua"
             >
@@ -551,8 +730,9 @@ export default function DailyPortalSection({
               <button
                 key={amount}
                 type="button"
+                disabled={busyAction === 'water'}
                 onClick={() => setWaterAmount(amount)}
-                className="min-h-11 rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+                className="min-h-11 rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {amount} ml
               </button>
@@ -564,13 +744,14 @@ export default function DailyPortalSection({
       <Dialog
         open={activeAction === 'meal'}
         title="Registrar refeicao"
-        description="A foto e opcional neste corte; upload privado entra no backend M01."
+        description="A foto e opcional e fica no bucket privado da clinica."
         onOpenChange={(open) => setActiveAction(open ? 'meal' : null)}
         footer={
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               className="btn-secondary justify-center"
+              disabled={busyAction === 'meal'}
               onClick={() => setActiveAction(null)}
             >
               Cancelar
@@ -578,16 +759,27 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-primary justify-center"
+              disabled={busyAction === 'meal'}
               onClick={() =>
-                addLocalEntry('meal', {
-                  mealType,
-                  notes: mealNotes,
-                  photoName: mealPhotoName,
-                })
+                void persistEntry(
+                  'meal',
+                  {
+                    mealType,
+                    notes: mealNotes,
+                    photoName: mealPhotoName,
+                  },
+                  () =>
+                    recordPatientDailyMeal(selectedPatientId, {
+                      mealType,
+                      notes: mealNotes,
+                      photoFile: mealPhotoFile,
+                    }),
+                  resetMealForm
+                )
               }
             >
               <Utensils className="h-4 w-4" aria-hidden="true" />
-              Salvar refeicao
+              {busyAction === 'meal' ? 'Salvando...' : 'Salvar refeicao'}
             </button>
           </div>
         }
@@ -600,9 +792,10 @@ export default function DailyPortalSection({
                 <button
                   key={type}
                   type="button"
+                  disabled={busyAction === 'meal'}
                   onClick={() => setMealType(type)}
                   className={cx(
-                    'min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold',
+                    'min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60',
                     mealType === type
                       ? 'border-primary bg-primary text-primary-foreground'
                       : 'border-border bg-background text-foreground hover:bg-muted'
@@ -618,6 +811,7 @@ export default function DailyPortalSection({
             Observacao curta
             <textarea
               value={mealNotes}
+              disabled={busyAction === 'meal'}
               onChange={(event) => setMealNotes(event.target.value)}
               rows={3}
               maxLength={180}
@@ -639,8 +833,9 @@ export default function DailyPortalSection({
               type="file"
               accept="image/*"
               capture="environment"
+              disabled={busyAction === 'meal'}
               className="sr-only"
-              onChange={(event) => setMealPhotoName(event.target.files?.[0]?.name ?? '')}
+              onChange={(event) => handleMealPhotoChange(event.target.files?.[0])}
             />
           </label>
         </div>
@@ -656,6 +851,7 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-secondary justify-center"
+              disabled={busyAction === 'workout'}
               onClick={() => setActiveAction(null)}
             >
               Cancelar
@@ -663,16 +859,27 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-primary justify-center"
+              disabled={busyAction === 'workout'}
               onClick={() =>
-                addLocalEntry('workout', {
-                  workoutTitle,
-                  durationMinutes: workoutMinutes,
-                  intensity: workoutIntensity,
-                })
+                void persistEntry(
+                  'workout',
+                  {
+                    workoutTitle,
+                    durationMinutes: workoutMinutes,
+                    intensity: workoutIntensity,
+                  },
+                  () =>
+                    recordPatientDailyWorkout(selectedPatientId, {
+                      workoutTitle,
+                      durationMinutes: workoutMinutes,
+                      intensity: workoutIntensity,
+                    }),
+                  resetWorkoutForm
+                )
               }
             >
               <Dumbbell className="h-4 w-4" aria-hidden="true" />
-              Salvar treino
+              {busyAction === 'workout' ? 'Salvando...' : 'Salvar treino'}
             </button>
           </div>
         }
@@ -682,12 +889,23 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-secondary w-full justify-center"
+              disabled={busyAction === 'workout'}
               onClick={() =>
-                addLocalEntry('workout', {
-                  workoutTitle: String(lastWorkout.metadata?.workoutTitle ?? lastWorkout.title),
-                  durationMinutes: Number(lastWorkout.metadata?.durationMinutes ?? 30),
-                  intensity: String(lastWorkout.metadata?.intensity ?? 'Moderado'),
-                })
+                void persistEntry(
+                  'workout',
+                  {
+                    workoutTitle: String(lastWorkout.metadata?.workoutTitle ?? lastWorkout.title),
+                    durationMinutes: Number(lastWorkout.metadata?.durationMinutes ?? 30),
+                    intensity: String(lastWorkout.metadata?.intensity ?? 'Moderado'),
+                  },
+                  () =>
+                    recordPatientDailyWorkout(selectedPatientId, {
+                      workoutTitle: String(lastWorkout.metadata?.workoutTitle ?? lastWorkout.title),
+                      durationMinutes: Number(lastWorkout.metadata?.durationMinutes ?? 30),
+                      intensity: String(lastWorkout.metadata?.intensity ?? 'Moderado'),
+                    }),
+                  resetWorkoutForm
+                )
               }
             >
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
@@ -699,6 +917,7 @@ export default function DailyPortalSection({
             <input
               type="text"
               value={workoutTitle}
+              disabled={busyAction === 'workout'}
               onChange={(event) => setWorkoutTitle(event.target.value)}
               maxLength={80}
               className="input-base mt-2"
@@ -713,6 +932,7 @@ export default function DailyPortalSection({
                 min={1}
                 max={360}
                 value={workoutMinutes}
+                disabled={busyAction === 'workout'}
                 onChange={(event) => setWorkoutMinutes(Number(event.target.value))}
                 className="input-base mt-2"
               />
@@ -721,6 +941,7 @@ export default function DailyPortalSection({
               Intensidade
               <select
                 value={workoutIntensity}
+                disabled={busyAction === 'workout'}
                 onChange={(event) => setWorkoutIntensity(event.target.value)}
                 className="input-base mt-2"
               >
@@ -743,6 +964,7 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-secondary justify-center"
+              disabled={busyAction === 'checkin'}
               onClick={() => {
                 setActiveAction(null);
                 onOpenCheckins();
@@ -753,22 +975,33 @@ export default function DailyPortalSection({
             <button
               type="button"
               className="btn-primary justify-center"
+              disabled={busyAction === 'checkin'}
               onClick={() =>
-                addLocalEntry('checkin', {
-                  mood: checkinMood,
-                  energy: checkinEnergy,
-                  symptoms: checkinSymptoms,
-                })
+                void persistEntry(
+                  'checkin',
+                  {
+                    mood: checkinMood,
+                    energy: checkinEnergy,
+                    symptoms: checkinSymptoms,
+                  },
+                  () =>
+                    recordPatientDailyCheckin(selectedPatientId, {
+                      mood: checkinMood,
+                      energy: checkinEnergy,
+                      symptoms: checkinSymptoms,
+                    }),
+                  resetCheckinForm
+                )
               }
             >
               <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
-              Salvar check-in
+              {busyAction === 'checkin' ? 'Enviando...' : 'Salvar check-in'}
             </button>
           </div>
         }
       >
         <div className="space-y-4">
-          <fieldset>
+          <fieldset disabled={busyAction === 'checkin'}>
             <legend className="text-sm font-medium text-foreground">Humor</legend>
             <div className="mt-2 grid grid-cols-5 gap-1.5">
               {scaleOptions.map((option) => (
@@ -794,7 +1027,7 @@ export default function DailyPortalSection({
               ))}
             </div>
           </fieldset>
-          <fieldset>
+          <fieldset disabled={busyAction === 'checkin'}>
             <legend className="text-sm font-medium text-foreground">Energia</legend>
             <div className="mt-2 grid grid-cols-5 gap-1.5">
               {scaleOptions.map((option) => (
@@ -824,6 +1057,7 @@ export default function DailyPortalSection({
             Sintomas ou observacao
             <textarea
               value={checkinSymptoms}
+              disabled={busyAction === 'checkin'}
               onChange={(event) => setCheckinSymptoms(event.target.value)}
               rows={3}
               maxLength={180}

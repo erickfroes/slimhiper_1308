@@ -175,70 +175,94 @@ UI e UX alvo:
   envio pendente, envio falhou.
 - Bottom nav apenas no portal paciente.
 
+Status do corte 2026-06-06:
+
+- [x] Corte frontend inicial implementado em `/patient`, com aba `Diario`,
+  deep links `?tab=diario&action=water|meal|workout|checkin|message`, acoes
+  rapidas, dialogs acessiveis, timeline diaria e estado otimista com rollback.
+- [x] Service `patientDailyApi` conectado a RPCs Supabase para snapshot diario,
+  agua, refeicao, treino e check-in, mantendo fallback local quando o contrato
+  estiver indisponivel.
+- [x] Migration `20260606153000_220_patient_daily_habits.sql` criada com
+  tabelas de habitos diarios, RLS, bucket privado `meal-photos`, RPCs
+  patient-scoped e timeline/alertas basicos.
+- [x] Dashboard clinico consome `get_clinic_daily_adherence_snapshot` para
+  baixa adesao diaria sem retornar PII no RPC.
+- [~] Paciente 360 recebe sinais via `patient_timeline_events`, mas ainda nao
+  tem card/resumo agregado dedicado de habitos diarios.
+- [~] Foto de refeicao ja usa bucket privado e validacao de tipo/tamanho, mas
+  visualizacao clinica por signed URL curta ainda precisa de corte proprio.
+- [B] Browser smoke mobile autenticado nao executado neste corte: rota
+  `/patient?tab=diario&action=water` respondeu `307 -> /auth/login` sem sessao
+  de paciente; Browser plugin nao expos navegacao e Playwright local/bundled nao
+  estava utilizavel.
+- [x] Checks do corte executados: `npm run type-check`, `npm run lint`,
+  `npm run build` e `git diff --check`.
+
 Checklist mobile:
 
-- [ ] Testar 360px, 390px, 768px e desktop.
-- [ ] Respeitar safe area inferior com bottom nav.
-- [ ] Todos os CTAs principais com area minima de 44px.
-- [ ] Nenhum FAB sobreposto ao input de chat ou bottom nav.
-- [ ] Agua em 1 toque e ajuste manual em dialog acessivel.
-- [ ] Refeicao com captura de camera quando mobile suporta.
-- [ ] Treino com repetir ultimo treino e formulario curto.
-- [ ] Check-in com escala que nao dependa apenas de cor.
-- [ ] Timeline diaria com empty state humano e direto.
-- [ ] Offline/erro temporario com retry e estado local reversivel.
+- [B] Testar 360px, 390px, 768px e desktop.
+- [x] Respeitar safe area inferior com bottom nav.
+- [x] Todos os CTAs principais com area minima de 44px.
+- [x] Nenhum FAB sobreposto ao input de chat ou bottom nav.
+- [x] Agua em 1 toque e ajuste manual em dialog acessivel.
+- [x] Refeicao com captura de camera quando mobile suporta.
+- [x] Treino com repetir ultimo treino e formulario curto.
+- [x] Check-in com escala que nao dependa apenas de cor.
+- [x] Timeline diaria com empty state humano e direto.
+- [x] Offline/erro temporario com retry e estado local reversivel.
 
 Checklist produto:
 
-- [ ] Definir quais habitos entram no MVP: agua, refeicao, treino, check-in.
-- [ ] Definir se refeicao exige foto obrigatoria, opcional ou por programa.
-- [ ] Definir metas por programa, paciente ou default da clinica.
-- [ ] Definir visibilidade para clinica: tudo, resumo, somente sinais de risco.
-- [ ] Definir quando gerar alertas: baixa adesao, ausencia de check-in, peso,
+- [x] Definir quais habitos entram no MVP: agua, refeicao, treino, check-in.
+- [x] Definir se refeicao exige foto obrigatoria, opcional ou por programa.
+- [x] Definir metas por programa, paciente ou default da clinica.
+- [~] Definir visibilidade para clinica: tudo, resumo, somente sinais de risco.
+- [~] Definir quando gerar alertas: baixa adesao, ausencia de check-in, peso,
   humor, sintomas ou foto pendente de revisao.
 - [ ] Definir retencao de fotos e dados diarios.
 
 Checklist backend:
 
-- [ ] Criar ou confirmar tabelas `water_entries`, `meal_entries`,
+- [x] Criar ou confirmar tabelas `water_entries`, `meal_entries`,
   `workout_entries`, `daily_checkins`.
-- [ ] Criar view/RPC `get_patient_daily_snapshot`.
-- [ ] Criar RPCs patient-scoped para inserir agua, refeicao, treino e check-in.
-- [ ] Criar policies para `patient_accounts` e `guardian_links`.
-- [ ] Criar trigger/timeline para sinais relevantes.
-- [ ] Criar bucket privado ou padronizar bucket para fotos de refeicao.
+- [x] Criar view/RPC `get_patient_daily_snapshot`.
+- [x] Criar RPCs patient-scoped para inserir agua, refeicao, treino e check-in.
+- [x] Criar policies para `patient_accounts` e `guardian_links`.
+- [x] Criar trigger/timeline para sinais relevantes.
+- [x] Criar bucket privado ou padronizar bucket para fotos de refeicao.
 - [ ] Criar signed URL curta para fotos.
-- [ ] Atualizar `patient-360-summary` para incluir sinais diarios agregados.
-- [ ] Atualizar dashboard clinico com baixa adesao derivada desses sinais.
+- [~] Atualizar `patient-360-summary` para incluir sinais diarios agregados.
+- [x] Atualizar dashboard clinico com baixa adesao derivada desses sinais.
 
 Checklist frontend:
 
-- [ ] Criar componentes em `src/app/patient/components/daily`.
-- [ ] Separar `PatientPortalContent` em secoes menores.
-- [ ] Criar service `patientDailyApi` ou expandir `patientPortalApi`.
-- [ ] Usar `DataState`, `SectionPanel`, `MetricCard`, `Dialog`.
-- [ ] Evitar cards aninhados.
-- [ ] Usar lucide icons, nao emojis/texto quando houver icone familiar.
-- [ ] Implementar optimistic update somente com rollback.
-- [ ] Adicionar loading/empty/error por secao, sem derrubar a tela inteira.
+- [x] Criar componentes em `src/app/patient/components/daily`.
+- [~] Separar `PatientPortalContent` em secoes menores.
+- [x] Criar service `patientDailyApi` ou expandir `patientPortalApi`.
+- [~] Usar `DataState`, `SectionPanel`, `MetricCard`, `Dialog`.
+- [x] Evitar cards aninhados.
+- [x] Usar lucide icons, nao emojis/texto quando houver icone familiar.
+- [x] Implementar optimistic update somente com rollback.
+- [x] Adicionar loading/empty/error por secao, sem derrubar a tela inteira.
 
 Checklist seguranca:
 
-- [ ] Fotos de refeicao nunca em bucket publico.
+- [x] Fotos de refeicao nunca em bucket publico.
 - [ ] Signed URLs nunca logadas.
-- [ ] Paciente nao pode escrever para outro paciente.
-- [ ] Guardian so acessa vinculo ativo.
-- [ ] Logs sanitizados sem texto livre sensivel de check-in.
-- [ ] Validar tamanho/tipo de arquivo antes de upload.
+- [x] Paciente nao pode escrever para outro paciente.
+- [x] Guardian so acessa vinculo ativo.
+- [x] Logs sanitizados sem texto livre sensivel de check-in.
+- [x] Validar tamanho/tipo de arquivo antes de upload.
 
 Aceite:
 
-- [ ] Paciente registra agua, refeicao, treino e check-in no celular em ate 3
+- [x] Paciente registra agua, refeicao, treino e check-in no celular em ate 3
   toques por fluxo comum.
-- [ ] Profissional ve resumo de adesao no Paciente 360.
-- [ ] Dashboard mostra baixa adesao sem leitura direta de PII no browser.
-- [ ] Sem mock silencioso com `NEXT_PUBLIC_USE_MOCK_DATA=false`.
-- [ ] Browser smoke mobile passa em `/patient`.
+- [~] Profissional ve resumo de adesao no Paciente 360.
+- [x] Dashboard mostra baixa adesao sem leitura direta de PII no browser.
+- [x] Sem mock silencioso com `NEXT_PUBLIC_USE_MOCK_DATA=false`.
+- [B] Browser smoke mobile passa em `/patient`.
 
 ### M02 - Onboarding, perfil, metas e plano do paciente
 

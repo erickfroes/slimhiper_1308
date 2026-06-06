@@ -1,8 +1,15 @@
+import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { PatientPortalCheckin, PatientPortalSnapshot } from '@/services/patientPortalApi';
+
+export interface SafeServiceError {
+  message: string;
+  code?: string;
+  details?: string;
+}
 
 export type PatientDailyAction = 'water' | 'meal' | 'workout' | 'checkin' | 'message';
 export type PatientDailyEntryKind = Exclude<PatientDailyAction, 'message'>;
-export type PatientDailyEntryStatus = 'pending' | 'failed' | 'derived';
+export type PatientDailyEntryStatus = 'pending' | 'failed' | 'derived' | 'synced';
 export type PatientDailyHabitStatus = 'done' | 'partial' | 'pending' | 'empty' | 'not_configured';
 
 export interface PatientDailyEntry {
@@ -29,9 +36,11 @@ export interface PatientDailyWeekDay {
   isoDate: string;
   label: string;
   status: 'done' | 'partial' | 'empty' | 'today';
+  progressPercent?: number;
 }
 
 export interface PatientDailySnapshot {
+  selectedPatientId?: string;
   dateIso: string;
   dateLabel: string;
   programStatus: string;
@@ -49,7 +58,7 @@ export interface PatientDailySnapshot {
   habits: PatientDailyHabit[];
   week: PatientDailyWeekDay[];
   timeline: PatientDailyEntry[];
-  backendStatus: 'local_only';
+  backendStatus: 'local_only' | 'synced';
 }
 
 interface CreateDailyEntryInput {
@@ -65,6 +74,31 @@ interface CreateDailyEntryInput {
   symptoms?: string;
 }
 
+export interface RecordPatientDailyMealInput {
+  mealType?: string;
+  notes?: string;
+  photoFile?: File | null;
+}
+
+export interface RecordPatientDailyWorkoutInput {
+  workoutTitle?: string;
+  durationMinutes?: number;
+  intensity?: string;
+  notes?: string;
+}
+
+export interface RecordPatientDailyCheckinInput {
+  mood: number;
+  energy: number;
+  symptoms?: string;
+}
+
+export interface PatientDailyMutationResult {
+  entry: PatientDailyEntry;
+}
+
+type ServiceEnvelope<T> = Promise<{ data: T | null; error: SafeServiceError | null }>;
+
 const DAILY_ACTIONS = new Set<PatientDailyAction>([
   'water',
   'meal',
@@ -72,6 +106,19 @@ const DAILY_ACTIONS = new Set<PatientDailyAction>([
   'checkin',
   'message',
 ]);
+const ENTRY_KINDS = new Set<PatientDailyEntryKind>(['water', 'meal', 'workout', 'checkin']);
+const ENTRY_STATUSES = new Set<PatientDailyEntryStatus>(['pending', 'failed', 'derived', 'synced']);
+const HABIT_STATUSES = new Set<PatientDailyHabitStatus>([
+  'done',
+  'partial',
+  'pending',
+  'empty',
+  'not_configured',
+]);
+const WEEK_STATUSES = new Set<PatientDailyWeekDay['status']>(['done', 'partial', 'empty', 'today']);
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+const SAFE_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function startOfLocalDay(date = new Date()) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -107,6 +154,45 @@ function sanitizeText(value: unknown, maxLength: number) {
 function clamp(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? sanitizeText(value, 1000) : fallback;
+}
+
+function asNullableString(value: unknown) {
+  const text = asString(value);
+  return text || null;
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function asUuid(value?: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return SAFE_UUID_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+function safeError(error: unknown, fallback: string): SafeServiceError {
+  const record = asRecord(error);
+  return {
+    message: fallback,
+    code: asNullableString(record.code) ?? undefined,
+    details: asNullableString(record.details) ?? undefined,
+  };
 }
 
 function createLocalId(kind: PatientDailyEntryKind) {
@@ -176,8 +262,163 @@ function buildWeek(completedDates: Set<string>, today: Date, progressPercent: nu
           : isToday
             ? 'today'
             : 'empty',
+      progressPercent: done ? 100 : isToday ? progressPercent : 0,
     } satisfies PatientDailyWeekDay;
   });
+}
+
+function normalizeEntryMetadata(value: unknown) {
+  const metadata: Record<string, string | number | boolean | null> = {};
+  Object.entries(asRecord(value))
+    .slice(0, 20)
+    .forEach(([key, nestedValue]) => {
+      const safeKey = sanitizeText(key, 80);
+      if (!safeKey) return;
+
+      if (typeof nestedValue === 'string') {
+        metadata[safeKey] = sanitizeText(nestedValue, 500);
+      } else if (typeof nestedValue === 'number' && Number.isFinite(nestedValue)) {
+        metadata[safeKey] = nestedValue;
+      } else if (typeof nestedValue === 'boolean' || nestedValue === null) {
+        metadata[safeKey] = nestedValue;
+      }
+    });
+  return metadata;
+}
+
+function normalizeEntry(value: unknown): PatientDailyEntry | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const kind = asString(record.kind);
+  if (!id || !ENTRY_KINDS.has(kind as PatientDailyEntryKind)) return null;
+
+  const status = asString(record.status, 'synced');
+  return {
+    id,
+    kind: kind as PatientDailyEntryKind,
+    title: asString(record.title, 'Registro'),
+    detail: asString(record.detail, ''),
+    occurredAt: asString(record.occurredAt, new Date().toISOString()),
+    status: ENTRY_STATUSES.has(status as PatientDailyEntryStatus)
+      ? (status as PatientDailyEntryStatus)
+      : 'synced',
+    metadata: normalizeEntryMetadata(record.metadata),
+  };
+}
+
+function normalizeHabit(value: unknown): PatientDailyHabit | null {
+  const record = asRecord(value);
+  const kind = asString(record.kind);
+  if (!ENTRY_KINDS.has(kind as PatientDailyEntryKind)) return null;
+
+  const status = asString(record.status, 'empty');
+  return {
+    kind: kind as PatientDailyEntryKind,
+    label: asString(record.label, 'Meta'),
+    value: asString(record.value, '0'),
+    target: asString(record.target, ''),
+    helper: asString(record.helper, ''),
+    status: HABIT_STATUSES.has(status as PatientDailyHabitStatus)
+      ? (status as PatientDailyHabitStatus)
+      : 'empty',
+    progressPercent: Math.round(clamp(asNumber(record.progressPercent, 0), 0, 100)),
+  };
+}
+
+function normalizeWeekDay(value: unknown): PatientDailyWeekDay | null {
+  const record = asRecord(value);
+  const isoDate = asString(record.isoDate);
+  const label = asString(record.label);
+  const status = asString(record.status, 'empty');
+  if (!isoDate || !label || !WEEK_STATUSES.has(status as PatientDailyWeekDay['status'])) {
+    return null;
+  }
+
+  return {
+    isoDate,
+    label,
+    status: status as PatientDailyWeekDay['status'],
+    progressPercent: Math.round(clamp(asNumber(record.progressPercent, 0), 0, 100)),
+  };
+}
+
+function normalizeCheckin(value: unknown): PatientPortalCheckin | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+
+  return {
+    id,
+    title: asString(record.title, 'Check-in'),
+    status: asString(record.status, 'scheduled'),
+    channel: asNullableString(record.channel),
+    dueDate: asNullableString(record.dueDate),
+    questions: Array.isArray(record.questions) ? record.questions.slice(0, 50) : [],
+    responses: asRecord(record.responses),
+    completedAt: asNullableString(record.completedAt),
+  };
+}
+
+function normalizeSnapshot(value: unknown): PatientDailySnapshot | null {
+  const record = asRecord(value);
+  const dateIso = asString(record.dateIso);
+  if (!dateIso) return null;
+
+  const habits = Array.isArray(record.habits)
+    ? record.habits.map(normalizeHabit).filter((item): item is PatientDailyHabit => Boolean(item))
+    : [];
+  const week = Array.isArray(record.week)
+    ? record.week.map(normalizeWeekDay).filter((item): item is PatientDailyWeekDay => Boolean(item))
+    : [];
+  const timeline = Array.isArray(record.timeline)
+    ? record.timeline
+        .map(normalizeEntry)
+        .filter((item): item is PatientDailyEntry => Boolean(item))
+        .sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime())
+    : [];
+  const pendingProgramCheckins = Array.isArray(record.pendingProgramCheckins)
+    ? record.pendingProgramCheckins
+        .map(normalizeCheckin)
+        .filter((item): item is PatientPortalCheckin => Boolean(item))
+    : [];
+
+  return {
+    selectedPatientId: asNullableString(record.selectedPatientId) ?? undefined,
+    dateIso,
+    dateLabel: asString(record.dateLabel, dateIso),
+    programStatus: asString(record.programStatus, 'active'),
+    progressPercent: Math.round(clamp(asNumber(record.progressPercent, 0), 0, 100)),
+    streakDays: Math.max(0, Math.round(asNumber(record.streakDays, 0))),
+    waterMl: Math.max(0, Math.round(asNumber(record.waterMl, 0))),
+    waterGoalMl: Math.max(1, Math.round(asNumber(record.waterGoalMl, 2000))),
+    mealsCount: Math.max(0, Math.round(asNumber(record.mealsCount, 0))),
+    mealsGoal: Math.max(1, Math.round(asNumber(record.mealsGoal, 4))),
+    workoutsCount: Math.max(0, Math.round(asNumber(record.workoutsCount, 0))),
+    workoutsGoal: Math.max(0, Math.round(asNumber(record.workoutsGoal, 1))),
+    checkinRequired: asBoolean(record.checkinRequired, true),
+    checkinDone: asBoolean(record.checkinDone, false),
+    pendingProgramCheckins,
+    habits,
+    week,
+    timeline,
+    backendStatus: 'synced',
+  };
+}
+
+function normalizeMutationResult(value: unknown): PatientDailyMutationResult | null {
+  const entry = normalizeEntry(asRecord(value).entry);
+  return entry ? { entry } : null;
+}
+
+function getValidPhoto(file?: File | null): { file: File | null; error: SafeServiceError | null } {
+  if (!file) return { file: null, error: null };
+  if (!file.type.startsWith('image/')) {
+    return { file: null, error: { message: 'A foto precisa ser uma imagem.' } };
+  }
+  if (file.size <= 0 || file.size > PHOTO_MAX_BYTES) {
+    return { file: null, error: { message: 'A foto precisa ter ate 5 MB.' } };
+  }
+  return { file, error: null };
 }
 
 export function isPatientDailyAction(value: unknown): value is PatientDailyAction {
@@ -211,7 +452,7 @@ export function createPatientDailyLocalEntry(
       id: createLocalId(kind),
       kind,
       title: mealType ? `Refeicao - ${mealType}` : 'Refeicao',
-      detail: [notes || 'Registro rapido', photoName ? 'foto anexada localmente' : null]
+      detail: [notes || 'Registro rapido', photoName ? 'foto anexada' : null]
         .filter(Boolean)
         .join(' - '),
       occurredAt,
@@ -266,11 +507,17 @@ export function buildPatientDailySnapshot(
   );
 
   const waterMl = dayEntries
-    .filter((entry) => entry.kind === 'water')
+    .filter((entry) => entry.kind === 'water' && entry.status !== 'failed')
     .reduce((total, entry) => total + Number(entry.metadata?.amountMl ?? 0), 0);
-  const mealsCount = dayEntries.filter((entry) => entry.kind === 'meal').length;
-  const workoutsCount = dayEntries.filter((entry) => entry.kind === 'workout').length;
-  const localCheckinDone = dayEntries.some((entry) => entry.kind === 'checkin');
+  const mealsCount = dayEntries.filter(
+    (entry) => entry.kind === 'meal' && entry.status !== 'failed'
+  ).length;
+  const workoutsCount = dayEntries.filter(
+    (entry) => entry.kind === 'workout' && entry.status !== 'failed'
+  ).length;
+  const localCheckinDone = dayEntries.some(
+    (entry) => entry.kind === 'checkin' && entry.status !== 'failed'
+  );
   const checkinRequired = pendingProgramCheckins.length > 0 || portalSnapshot.checkins.length > 0;
   const checkinDone = localCheckinDone || completedProgramCheckinsToday.length > 0;
   const checkinWeight = checkinRequired ? 20 : 0;
@@ -286,7 +533,10 @@ export function buildPatientDailySnapshot(
 
   const completedDates = new Set<string>();
   dayEntries.forEach((entry) => {
-    if (entry.kind === 'checkin' || entry.kind === 'water' || entry.kind === 'meal') {
+    if (
+      entry.status !== 'failed' &&
+      (entry.kind === 'checkin' || entry.kind === 'water' || entry.kind === 'meal')
+    ) {
       completedDates.add(toIsoDate(new Date(entry.occurredAt)));
     }
   });
@@ -321,6 +571,7 @@ export function buildPatientDailySnapshot(
   ];
 
   return {
+    selectedPatientId: portalSnapshot.selectedPatientId,
     dateIso,
     dateLabel: formatDateLabel(today),
     programStatus: portalSnapshot.patient.status,
@@ -381,4 +632,183 @@ export function buildPatientDailySnapshot(
     ),
     backendStatus: 'local_only',
   };
+}
+
+export async function getPatientDailySnapshot(
+  patientId?: string,
+  targetDate?: string
+): ServiceEnvelope<PatientDailySnapshot> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('get_patient_daily_snapshot', {
+      p_patient_id: asUuid(patientId) ?? null,
+      p_target_date: targetDate ?? null,
+    });
+    if (error) {
+      return { data: null, error: safeError(error, 'Nao foi possivel carregar o diario.') };
+    }
+
+    const snapshot = normalizeSnapshot(data);
+    if (!snapshot) {
+      return {
+        data: null,
+        error: { message: 'Contrato do diario indisponivel.' },
+      };
+    }
+
+    return { data: snapshot, error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel carregar o diario.') };
+  }
+}
+
+export async function recordPatientDailyWater(
+  patientId: string | undefined,
+  amountMl: number
+): ServiceEnvelope<PatientDailyMutationResult> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('record_patient_water_entry', {
+      p_patient_id: asUuid(patientId) ?? null,
+      p_amount_ml: Math.round(clamp(Number(amountMl), 1, 5000)),
+      p_occurred_at: new Date().toISOString(),
+    });
+    if (error) {
+      return { data: null, error: safeError(error, 'Nao foi possivel registrar agua.') };
+    }
+
+    return {
+      data: normalizeMutationResult(data),
+      error: normalizeMutationResult(data) ? null : { message: 'Contrato de agua indisponivel.' },
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel registrar agua.') };
+  }
+}
+
+export async function recordPatientDailyMeal(
+  patientId: string | undefined,
+  input: RecordPatientDailyMealInput
+): ServiceEnvelope<PatientDailyMutationResult> {
+  const { file, error: photoError } = getValidPhoto(input.photoFile);
+  if (photoError) return { data: null, error: photoError };
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('record_patient_meal_entry', {
+      p_patient_id: asUuid(patientId) ?? null,
+      p_meal_type: sanitizeText(input.mealType, 40) || null,
+      p_notes: sanitizeText(input.notes, 500) || null,
+      p_photo_file_name: file?.name ?? null,
+      p_photo_mime_type: file?.type ?? null,
+      p_photo_size_bytes: file?.size ?? null,
+      p_occurred_at: new Date().toISOString(),
+    });
+    if (error) {
+      return { data: null, error: safeError(error, 'Nao foi possivel registrar refeicao.') };
+    }
+
+    const mutation = normalizeMutationResult(data);
+    if (!mutation) {
+      return { data: null, error: { message: 'Contrato de refeicao indisponivel.' } };
+    }
+
+    const uploadRecord = asRecord(asRecord(data).photoUpload);
+    const bucket = asString(uploadRecord.bucket);
+    const path = asString(uploadRecord.path);
+    if (!file || !bucket || !path) return { data: mutation, error: null };
+
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
+      cacheControl: '3600',
+      contentType: file.type,
+      upsert: false,
+    });
+
+    if (uploadError) {
+      await supabase.rpc('confirm_patient_meal_photo', {
+        p_meal_entry_id: mutation.entry.id,
+        p_upload_status: 'failed',
+      });
+      return {
+        data: null,
+        error: safeError(uploadError, 'A refeicao foi salva, mas a foto nao foi enviada.'),
+      };
+    }
+
+    const confirmResult = await supabase.rpc('confirm_patient_meal_photo', {
+      p_meal_entry_id: mutation.entry.id,
+      p_upload_status: 'uploaded',
+    });
+    if (confirmResult.error) {
+      return {
+        data: null,
+        error: safeError(confirmResult.error, 'A foto foi enviada, mas nao foi confirmada.'),
+      };
+    }
+
+    return {
+      data: normalizeMutationResult(confirmResult.data) ?? mutation,
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel registrar refeicao.') };
+  }
+}
+
+export async function recordPatientDailyWorkout(
+  patientId: string | undefined,
+  input: RecordPatientDailyWorkoutInput
+): ServiceEnvelope<PatientDailyMutationResult> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('record_patient_workout_entry', {
+      p_patient_id: asUuid(patientId) ?? null,
+      p_workout_title: sanitizeText(input.workoutTitle, 80) || 'Treino registrado',
+      p_duration_minutes:
+        input.durationMinutes == null
+          ? null
+          : Math.round(clamp(Number(input.durationMinutes), 1, 360)),
+      p_intensity: sanitizeText(input.intensity, 20) || null,
+      p_notes: sanitizeText(input.notes, 500) || null,
+      p_occurred_at: new Date().toISOString(),
+    });
+    if (error) {
+      return { data: null, error: safeError(error, 'Nao foi possivel registrar treino.') };
+    }
+
+    return {
+      data: normalizeMutationResult(data),
+      error: normalizeMutationResult(data) ? null : { message: 'Contrato de treino indisponivel.' },
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel registrar treino.') };
+  }
+}
+
+export async function recordPatientDailyCheckin(
+  patientId: string | undefined,
+  input: RecordPatientDailyCheckinInput
+): ServiceEnvelope<PatientDailyMutationResult> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('record_patient_daily_checkin', {
+      p_patient_id: asUuid(patientId) ?? null,
+      p_mood_score: Math.round(clamp(Number(input.mood), 1, 5)),
+      p_energy_score: Math.round(clamp(Number(input.energy), 1, 5)),
+      p_symptoms: sanitizeText(input.symptoms, 500) || null,
+      p_occurred_at: new Date().toISOString(),
+    });
+    if (error) {
+      return { data: null, error: safeError(error, 'Nao foi possivel enviar check-in.') };
+    }
+
+    return {
+      data: normalizeMutationResult(data),
+      error: normalizeMutationResult(data)
+        ? null
+        : { message: 'Contrato de check-in indisponivel.' },
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel enviar check-in.') };
+  }
 }
