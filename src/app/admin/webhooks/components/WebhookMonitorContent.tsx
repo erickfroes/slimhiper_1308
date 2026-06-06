@@ -11,10 +11,11 @@ import {
   RotateCcw,
   Search,
   Webhook,
-  X,
   XCircle,
 } from 'lucide-react';
 import AdminShell from '@/app/admin/components/AdminShell';
+import Dialog from '@/components/ui/Dialog';
+import DataState from '@/components/ui/DataState';
 import {
   listWebhookSummaries,
   requestWebhookReprocess,
@@ -126,25 +127,16 @@ function StatCard({
 
 function EventDrawer({ event, onClose }: { event: AdminWebhookEventSummary; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/30">
-      <div className="h-full w-full max-w-xl overflow-y-auto bg-card shadow-xl">
-        <div className="sticky top-0 flex items-center justify-between border-b border-border bg-card px-6 py-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Webhook sanitizado
-            </p>
-            <h2 className="text-lg font-semibold text-foreground">{event.eventType}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Fechar"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
+    <Dialog
+      open
+      title={event.eventType}
+      description="Webhook sanitizado"
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      placement="right"
+    >
+      <div className="-m-5">
         <div className="space-y-4 p-6">
           <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4">
             <div>
@@ -188,7 +180,7 @@ function EventDrawer({ event, onClose }: { event: AdminWebhookEventSummary; onCl
           )}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -376,28 +368,56 @@ export default function WebhookMonitorContent() {
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left">Evento</th>
-                <th className="px-4 py-3 text-left">Provider</th>
-                <th className="px-4 py-3 text-left">Tenant</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Recebido</th>
-                <th className="px-4 py-3 text-left">Processado</th>
-                <th className="px-4 py-3 text-right">Retry</th>
-                <th className="px-4 py-3 text-left">Erro</th>
-                <th className="px-4 py-3 text-right">Acoes</th>
+                <th scope="col" className="px-4 py-3 text-left">
+                  Evento
+                </th>
+                <th scope="col" className="px-4 py-3 text-left">
+                  Provider
+                </th>
+                <th scope="col" className="px-4 py-3 text-left">
+                  Tenant
+                </th>
+                <th scope="col" className="px-4 py-3 text-left">
+                  Status
+                </th>
+                <th scope="col" className="px-4 py-3 text-left">
+                  Recebido
+                </th>
+                <th scope="col" className="px-4 py-3 text-left">
+                  Processado
+                </th>
+                <th scope="col" className="px-4 py-3 text-right">
+                  Retry
+                </th>
+                <th scope="col" className="px-4 py-3 text-left">
+                  Erro
+                </th>
+                <th scope="col" className="px-4 py-3 text-right">
+                  Acoes
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
-                    Carregando webhooks...
+                  <td colSpan={9} className="px-4 py-6">
+                    <DataState
+                      kind="loading"
+                      title="Carregando webhooks"
+                      description="Buscando eventos sanitizados autorizados para a plataforma."
+                      className="min-h-40 border-0 bg-transparent"
+                    />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
-                    Nenhum evento encontrado.
+                  <td colSpan={9} className="px-4 py-6">
+                    <DataState
+                      kind="empty"
+                      title="Nenhum evento encontrado"
+                      description="Ajuste filtros ou atualize para revalidar os ultimos eventos."
+                      className="min-h-40 border-0 bg-transparent"
+                    />
                   </td>
                 </tr>
               ) : (

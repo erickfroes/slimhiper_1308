@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Phone,
   Mail,
@@ -251,9 +252,12 @@ export default function PatientHeaderCard({
           {/* Avatar */}
           <div className="flex-shrink-0">
             {profile.avatarUrl ? (
-              <img
+              <Image
                 src={profile.avatarUrl}
                 alt={`Foto de ${patientName}`}
+                width={64}
+                height={64}
+                unoptimized
                 className="w-16 h-16 rounded-2xl object-cover ring-2 ring-primary/20"
               />
             ) : (

@@ -25,6 +25,7 @@ import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import EmptyState from '@/components/EmptyState';
 import { SkeletonTableRow } from '@/components/LoadingSkeleton';
+import Dialog from '@/components/ui/Dialog';
 import {
   createPatient,
   createPatientReviewFlag,
@@ -157,26 +158,16 @@ function PatientFormModal({
   const title = mode === 'create' ? 'Novo paciente' : 'Editar paciente';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">{title}</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Dados sensiveis sao gravados em patient_pii e protegidos por RLS.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-            aria-label="Fechar"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
+    <Dialog
+      open
+      title={title}
+      description="Dados sensiveis sao gravados em patient_pii e protegidos por RLS."
+      onOpenChange={(open) => {
+        if (!open && !submitting) onClose();
+      }}
+      placement="center"
+    >
+      <div className="-m-5">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -294,7 +285,7 @@ function PatientFormModal({
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -796,7 +787,7 @@ export default function PatientListContent() {
           <table className="w-full min-w-[1100px]">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="px-4 py-3 w-10">
+                <th scope="col" className="px-4 py-3 w-10">
                   <input
                     type="checkbox"
                     checked={selectedIds.size === paginated.length && paginated.length > 0}
@@ -819,7 +810,10 @@ export default function PatientListContent() {
                   currentDir={sortDir}
                   onSort={handleSort}
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                >
                   Telefone
                 </th>
                 <SortableHeader
@@ -843,10 +837,16 @@ export default function PatientListContent() {
                   currentDir={sortDir}
                   onSort={handleSort}
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                >
                   Próx. Consulta
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                >
                   Alertas
                 </th>
                 <SortableHeader
@@ -856,7 +856,10 @@ export default function PatientListContent() {
                   currentDir={sortDir}
                   onSort={handleSort}
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                >
                   Ações
                 </th>
               </tr>

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
 import PageHeader from '@/components/PageHeader';
+import Dialog from '@/components/ui/Dialog';
 import type {
   AppointmentStatus,
   AppointmentSummary,
@@ -268,28 +269,16 @@ function AppointmentFormModal({
   onSubmit: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">
-              {mode === 'create' ? 'Nova consulta' : 'Editar consulta'}
-            </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              A consulta sera gravada no tenant ativo e validada por RLS.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-            aria-label="Fechar"
-          >
-            <XCircle size={16} />
-          </button>
-        </div>
-
+    <Dialog
+      open
+      title={mode === 'create' ? 'Nova consulta' : 'Editar consulta'}
+      description="A consulta sera gravada no tenant ativo e validada por RLS."
+      onOpenChange={(open) => {
+        if (!open && !submitting) onClose();
+      }}
+      placement="center"
+    >
+      <div className="-m-5">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -405,7 +394,7 @@ function AppointmentFormModal({
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -427,16 +416,16 @@ function CancelAppointmentModal({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-        <div className="border-b border-border px-5 py-4">
-          <h2 className="text-base font-semibold text-foreground">Cancelar consulta</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Informe o motivo operacional para registrar a alteração na fila e manter a trilha de
-            atendimento.
-          </p>
-        </div>
-
+    <Dialog
+      open
+      title="Cancelar consulta"
+      description="Informe o motivo operacional para registrar a alteracao na fila e manter a trilha de atendimento."
+      onOpenChange={(open) => {
+        if (!open && !submitting) onClose();
+      }}
+      placement="center"
+    >
+      <div className="-m-5">
         <div className="space-y-4 px-5 py-5">
           <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm">
             <p className="font-semibold text-foreground">{appointment.patientName}</p>
@@ -489,7 +478,7 @@ function CancelAppointmentModal({
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

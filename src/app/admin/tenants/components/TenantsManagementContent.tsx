@@ -290,24 +290,45 @@ export default function TenantsManagementContent() {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
                   Clinica / ID
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Owner</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Plano</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Status</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Owner
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Plano
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Status
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
                   Usuarios
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
                   Pacientes
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Storage</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">API mes</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">MRR</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Asaas</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">D4Sign</th>
-                <th className="px-4 py-3 text-right font-semibold text-muted-foreground">Acoes</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Storage
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  API mes
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  MRR
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Asaas
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  D4Sign
+                </th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-right font-semibold text-muted-foreground"
+                >
+                  Acoes
+                </th>
               </tr>
             </thead>
             <tbody>

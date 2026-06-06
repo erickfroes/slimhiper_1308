@@ -385,9 +385,15 @@ export default function ObservabilityDashboardContent() {
             <table className="w-full text-xs">
               <thead className="border-b border-border bg-muted/40 text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Severidade</th>
-                  <th className="px-4 py-3 text-left font-semibold">Criterio</th>
-                  <th className="px-4 py-3 text-left font-semibold">Ack maximo</th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">
+                    Severidade
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">
+                    Criterio
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">
+                    Ack maximo
+                  </th>
                 </tr>
               </thead>
               <tbody>

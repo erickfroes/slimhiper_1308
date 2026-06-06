@@ -12,7 +12,6 @@ import {
   Trophy,
 } from 'lucide-react';
 import type { PatientTimelineEvent, TimelineEventType } from '@/domain/types';
-import Icon from '@/components/ui/AppIcon';
 
 const defaultEventConfig = {
   icon: Stethoscope,

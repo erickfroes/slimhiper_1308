@@ -305,19 +305,6 @@ function safeError(error: unknown, fallback: string): SafeServiceError {
   };
 }
 
-function logDevelopmentDiagnostic(scope: string, error: unknown) {
-  if (process.env.NODE_ENV === 'production') return;
-
-  const record = asRecord(error);
-  const diagnostic = {
-    code: asNullableString(record.code),
-    message: sanitizeText(record.message, 160) || undefined,
-    name: asNullableString(record.name),
-    status: asNumber(record.status, 0) || undefined,
-  };
-  console.warn(`[patientPortalApi] ${scope} ${JSON.stringify(diagnostic)}`);
-}
-
 function sanitizeResponseValue(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') return sanitizeText(value, depth === 0 ? 4000 : 1000);
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -364,15 +351,11 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
       p_patient_id: asUuid(patientId) ?? null,
     });
     if (error) {
-      logDevelopmentDiagnostic('getPatientPortalSnapshot.rpc', error);
       return { data: null, error: safeError(error, 'Nao foi possivel carregar o portal.') };
     }
 
     const snapshot = normalizeSnapshot(data);
     if (!snapshot) {
-      logDevelopmentDiagnostic('getPatientPortalSnapshot.contract', {
-        code: 'invalid_contract',
-      });
       return {
         data: null,
         error: { message: 'Contrato invalido do portal do paciente.', code: 'invalid_contract' },
@@ -381,7 +364,6 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
 
     return { data: snapshot, error: null };
   } catch (error) {
-    logDevelopmentDiagnostic('getPatientPortalSnapshot.catch', error);
     return { data: null, error: safeError(error, 'Nao foi possivel carregar o portal.') };
   }
 }

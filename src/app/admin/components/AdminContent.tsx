@@ -148,13 +148,27 @@ function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Clinica</th>
-              <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Owner</th>
-              <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Status</th>
-              <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Usuarios</th>
-              <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Pacientes</th>
-              <th className="px-4 py-3 text-left font-semibold text-muted-foreground">MRR</th>
-              <th className="px-4 py-3 text-right font-semibold text-muted-foreground">Detalhe</th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                Clinica
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                Owner
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                Status
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                Usuarios
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                Pacientes
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                MRR
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-semibold text-muted-foreground">
+                Detalhe
+              </th>
             </tr>
           </thead>
           <tbody>

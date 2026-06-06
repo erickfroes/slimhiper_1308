@@ -34,6 +34,7 @@ import {
   type ClinicProgramsSummary,
 } from '@/services/programsApi';
 import { getPatientListPage } from '@/services/patientsApi';
+import Dialog from '@/components/ui/Dialog';
 
 const colorMap: Record<string, { accent: string; badge: string; dot: string; icon: string }> = {
   teal: {
@@ -637,27 +638,16 @@ export default function ProgramsContent() {
       )}
 
       {enrollmentProgram && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-xl border border-border bg-card shadow-xl">
-            <div className="border-b border-border px-5 py-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-base font-semibold text-foreground">Matricular paciente</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Enrollment real no programa {enrollmentProgram.name}, com reflexos operacionais
-                    gerados pela RPC do tenant ativo.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEnrollmentProgram(null)}
-                  className="rounded-lg px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-
+        <Dialog
+          open
+          title="Matricular paciente"
+          description={`Enrollment real no programa ${enrollmentProgram.name}, com reflexos operacionais gerados pela RPC do tenant ativo.`}
+          onOpenChange={(open) => {
+            if (!open && !enrollmentSubmitting) setEnrollmentProgram(null);
+          }}
+          placement="center"
+        >
+          <div className="-m-5">
             <div className="space-y-4 px-5 py-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
                 <label className="space-y-1">
@@ -750,7 +740,7 @@ export default function ProgramsContent() {
               </button>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

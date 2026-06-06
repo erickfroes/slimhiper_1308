@@ -1,6 +1,5 @@
 import React from 'react';
 import { FileCheck, FileClock, FileX, FileSearch, File } from 'lucide-react';
-import Icon from '@/components/ui/AppIcon';
 
 type DocStatus = 'pendente_assinatura' | 'assinado' | 'vencido' | 'cancelado' | 'em_analise';
 

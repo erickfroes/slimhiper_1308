@@ -2,7 +2,6 @@ import React from 'react';
 import Link from 'next/link';
 import { AlertTriangle, AlertCircle, Info, CheckCircle, X } from 'lucide-react';
 import type { PatientAlert } from '@/domain/types';
-import Icon from '@/components/ui/AppIcon';
 
 const severityConfig = {
   critico: {
