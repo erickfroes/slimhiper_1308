@@ -19,6 +19,8 @@ type MealEntryRow = {
   photo_storage_bucket: string | null;
   photo_storage_path: string | null;
   photo_upload_status: string | null;
+  photo_retention_expires_at: string | null;
+  photo_retention_status: string | null;
 };
 
 const baseCorsHeaders = {
@@ -170,7 +172,7 @@ Deno.serve(async (req) => {
     const { data: mealEntry, error: mealError } = await supabase
       .from('meal_entries')
       .select(
-        'id, tenant_id, patient_id, photo_storage_bucket, photo_storage_path, photo_upload_status'
+        'id, tenant_id, patient_id, photo_storage_bucket, photo_storage_path, photo_upload_status, photo_retention_expires_at, photo_retention_status'
       )
       .eq('id', mealEntryId)
       .eq('patient_id', patientId)
@@ -204,11 +206,25 @@ Deno.serve(async (req) => {
 
     const bucket = safeString(entry.photo_storage_bucket);
     const path = safeString(entry.photo_storage_path);
+    const retentionStatus = safeString(entry.photo_retention_status);
+    const retentionExpiresAt = safeString(entry.photo_retention_expires_at);
 
     if (bucket !== 'meal-photos' || entry.photo_upload_status !== 'uploaded') {
       return jsonResponse(req, 409, {
         ok: false,
         error: { code: 'photo_not_available' },
+        meta: { timestamp },
+      });
+    }
+
+    if (
+      retentionStatus === 'delete_due' ||
+      retentionStatus === 'deleted' ||
+      (retentionExpiresAt && Date.parse(retentionExpiresAt) <= Date.now())
+    ) {
+      return jsonResponse(req, 410, {
+        ok: false,
+        error: { code: 'photo_retention_expired' },
         meta: { timestamp },
       });
     }

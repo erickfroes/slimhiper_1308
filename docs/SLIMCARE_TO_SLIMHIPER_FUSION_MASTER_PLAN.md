@@ -193,6 +193,11 @@ Status do corte 2026-06-06:
 - [x] Foto de refeicao usa bucket privado, validacao de tipo/tamanho e
   visualizacao clinica por signed URL curta via Edge Function
   `meal-photo-signed-url`, sem expor caminho de storage no RPC agregado.
+- [x] Retencao M01 definida em migration de governanca: dados diarios por 6
+  anos, fotos de refeicao por 180 dias e helpers service-role em dry-run para
+  expirar dados/marcar fotos para remocao.
+- [x] Alertas operacionais M01 podem ser emitidos por helper service-role para
+  baixa adesao, check-in ausente e foto de refeicao pendente de revisao.
 - [B] Browser smoke mobile autenticado nao executado neste corte: rotas
   `/clinic/patients/patient-001?tab=nutricao` e
   `/patient?tab=diario&action=water` redirecionaram para `/auth/login` sem
@@ -220,9 +225,9 @@ Checklist produto:
 - [x] Definir metas por programa, paciente ou default da clinica.
 - [x] Definir visibilidade para clinica: resumo agregado para `patients.read`,
   metadados de fotos somente com `nutrition.read` e signed URL sob demanda.
-- [~] Definir quando gerar alertas: baixa adesao, ausencia de check-in, peso,
-  humor, sintomas ou foto pendente de revisao.
-- [ ] Definir retencao de fotos e dados diarios.
+- [x] Definir quando gerar alertas no M01: baixa adesao, ausencia de check-in,
+  humor/energia/sintomas de risco e foto pendente de revisao.
+- [x] Definir retencao de fotos e dados diarios.
 
 Checklist backend:
 
@@ -236,6 +241,8 @@ Checklist backend:
 - [x] Criar signed URL curta para fotos.
 - [x] Atualizar `patient-360-summary` para incluir sinais diarios agregados.
 - [x] Atualizar dashboard clinico com baixa adesao derivada desses sinais.
+- [x] Criar governanca de retencao e emissao dry-run/execute de alertas
+  operacionais diarios.
 
 Checklist frontend:
 
@@ -252,6 +259,8 @@ Checklist seguranca:
 
 - [x] Fotos de refeicao nunca em bucket publico.
 - [x] Signed URLs nunca logadas.
+- [x] Signed URLs bloqueadas para fotos vencidas ou marcadas para remocao por
+  retencao.
 - [x] Paciente nao pode escrever para outro paciente.
 - [x] Guardian so acessa vinculo ativo.
 - [x] Logs sanitizados sem texto livre sensivel de check-in.
