@@ -60,6 +60,26 @@ function safeString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function safeErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    if (typeof record.message === 'string') return record.message;
+    if (record.message && typeof record.message === 'object') {
+      return safeErrorMessage(record.message);
+    }
+    const summary = [
+      typeof record.name === 'string' ? record.name : '',
+      typeof record.code === 'string' ? record.code : '',
+      typeof record.status === 'number' ? `status_${record.status}` : '',
+    ]
+      .filter(Boolean)
+      .join(':');
+    if (summary) return summary;
+  }
+  return String(error);
+}
+
 function sanitizeSigners(value: unknown): Array<Required<SignerInput>> {
   if (!Array.isArray(value)) return [];
 
@@ -397,7 +417,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: existingSignatureRequest, error: existingSignatureRequestError } = await supabase
+    const { data: existingSignatureRequest, error: existingSignatureRequestError } = await admin
       .from('signature_requests')
       .select('id, status')
       .eq('tenant_id', tenantId)
@@ -491,7 +511,7 @@ Deno.serve(async (req) => {
     );
 
     if (!uploadResponse.ok) {
-      await markDocumentFailed(supabase, documentRecord);
+      await markDocumentFailed(admin, documentRecord);
       await uploadResponse.text();
       return providerErrorResponse(timestamp, 'upload', uploadResponse.status);
     }
@@ -499,7 +519,7 @@ Deno.serve(async (req) => {
     const uploadData = (await uploadResponse.json().catch(() => ({}))) as Record<string, unknown>;
     const providerDocumentId = safeString(uploadData.uuid ?? uploadData.uuidDoc ?? uploadData.id);
     if (!providerDocumentId) {
-      await markDocumentFailed(supabase, documentRecord);
+      await markDocumentFailed(admin, documentRecord);
       return jsonResponse(502, {
         ok: false,
         error: { code: 'provider_contract_error', message: 'D4Sign did not return document id.' },
@@ -536,7 +556,7 @@ Deno.serve(async (req) => {
     );
 
     if (!signerResponse.ok) {
-      await markDocumentFailed(supabase, documentRecord);
+      await markDocumentFailed(admin, documentRecord);
       await signerResponse.text();
       return providerErrorResponse(timestamp, 'create_signers', signerResponse.status);
     }
@@ -559,12 +579,12 @@ Deno.serve(async (req) => {
     );
 
     if (!sendResponse.ok) {
-      await markDocumentFailed(supabase, documentRecord);
+      await markDocumentFailed(admin, documentRecord);
       await sendResponse.text();
       return providerErrorResponse(timestamp, 'send_to_signer', sendResponse.status);
     }
 
-    const { data: signatureRequest, error: signatureRequestError } = await supabase
+    const { data: signatureRequest, error: signatureRequestError } = await admin
       .from('signature_requests')
       .insert({
         tenant_id: tenantId,
@@ -590,12 +610,10 @@ Deno.serve(async (req) => {
       status: 'pending',
     }));
 
-    const { error: signerInsertError } = await supabase
-      .from('signature_signers')
-      .insert(signerRows);
+    const { error: signerInsertError } = await admin.from('signature_signers').insert(signerRows);
     if (signerInsertError) throw signerInsertError;
 
-    const { error: updateDocumentError } = await supabase
+    const { error: updateDocumentError } = await admin
       .from('generated_documents')
       .update({ status: 'sent_for_signature' })
       .eq('id', documentRecord.id)
@@ -604,7 +622,7 @@ Deno.serve(async (req) => {
 
     if (updateDocumentError) throw updateDocumentError;
 
-    const { error: timelineError } = await supabase.from('patient_timeline_events').insert({
+    const { error: timelineError } = await admin.from('patient_timeline_events').insert({
       tenant_id: tenantId,
       patient_id: patientId,
       event_type: 'documento_assinado',
@@ -638,7 +656,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('[d4sign-send-document] unexpected_error', {
-      message: error instanceof Error ? error.message : String(error),
+      message: safeErrorMessage(error),
     });
 
     return jsonResponse(500, {

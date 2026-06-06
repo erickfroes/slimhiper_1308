@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Activity,
   Building2,
@@ -21,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
+import { createClient } from '@/lib/supabase/client';
 
 export type AdminShellSection =
   | 'overview'
@@ -60,12 +62,16 @@ function AdminSidebar({
   onToggle,
   mobileOpen,
   onCloseMobile,
+  onLogout,
+  loggingOut,
 }: {
   activeSection: AdminShellSection;
   collapsed: boolean;
   onToggle: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  onLogout: () => void;
+  loggingOut: boolean;
 }) {
   return (
     <aside
@@ -133,16 +139,26 @@ function AdminSidebar({
       </nav>
       <div className="border-t border-border p-2">
         {!collapsed ? (
-          <div className="mb-1 flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 hover:bg-muted">
+          <button
+            type="button"
+            onClick={onLogout}
+            disabled={loggingOut}
+            className="mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label={
+              loggingOut ? 'Saindo do admin pela barra lateral' : 'Sair do admin pela barra lateral'
+            }
+          >
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
               <User size={12} className="text-primary" />
             </div>
             <div className="flex min-w-0 flex-col leading-none">
               <span className="truncate text-xs font-semibold text-foreground">Platform Admin</span>
-              <span className="text-xs text-muted-foreground">Operacoes</span>
+              <span className="text-xs text-muted-foreground">
+                {loggingOut ? 'Saindo...' : 'Operacoes'}
+              </span>
             </div>
-            <LogOut size={12} className="ml-auto text-muted-foreground" />
-          </div>
+            <LogOut size={12} className="ml-auto text-muted-foreground" aria-hidden="true" />
+          </button>
         ) : null}
         <button
           type="button"
@@ -177,8 +193,18 @@ export default function AdminShell({
   children: React.ReactNode;
   mainClassName?: string;
 }) {
+  const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    const supabase = createClient();
+    await supabase?.auth?.signOut();
+    router.push('/auth/login');
+    router.refresh();
+  }
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -211,6 +237,8 @@ export default function AdminShell({
         onToggle={() => setSidebarCollapsed((value) => !value)}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
+        onLogout={() => void handleLogout()}
+        loggingOut={loggingOut}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex flex-shrink-0 items-center gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
@@ -237,16 +265,28 @@ export default function AdminShell({
               ) : null}
             </div>
           )}
-          {onRefresh ? (
+          <div className="ml-auto flex items-center gap-2">
+            {onRefresh ? (
+              <button
+                type="button"
+                onClick={onRefresh}
+                className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+              >
+                <RefreshCw size={12} aria-hidden="true" />
+                {refreshLabel}
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={onRefresh}
-              className="ml-auto flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+              onClick={() => void handleLogout()}
+              disabled={loggingOut}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={loggingOut ? 'Saindo do admin' : 'Sair do admin'}
             >
-              <RefreshCw size={12} />
-              {refreshLabel}
+              <LogOut size={12} aria-hidden="true" />
+              {loggingOut ? 'Saindo...' : 'Sair'}
             </button>
-          ) : null}
+          </div>
         </header>
         <main id="admin-main" className={mainClassName} tabIndex={-1}>
           {title || description ? (
