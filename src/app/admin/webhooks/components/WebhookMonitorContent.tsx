@@ -15,7 +15,11 @@ import {
   XCircle,
 } from 'lucide-react';
 import AdminShell from '@/app/admin/components/AdminShell';
-import { listWebhookSummaries, type AdminWebhookEventSummary } from '@/services/adminApi';
+import {
+  listWebhookSummaries,
+  requestWebhookReprocess,
+  type AdminWebhookEventSummary,
+} from '@/services/adminApi';
 
 type WebhookStatus = AdminWebhookEventSummary['status'];
 type WebhookProvider = AdminWebhookEventSummary['provider'];
@@ -196,6 +200,9 @@ export default function WebhookMonitorContent() {
   const [events, setEvents] = useState<AdminWebhookEventSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [reprocessingEventId, setReprocessingEventId] = useState<string | null>(null);
   const loadSequenceRef = useRef(0);
 
   const loadEvents = useCallback(() => {
@@ -217,6 +224,27 @@ export default function WebhookMonitorContent() {
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
+
+  const handleReprocess = async (event: AdminWebhookEventSummary) => {
+    setActionNotice(null);
+    setActionError(null);
+    setReprocessingEventId(event.id);
+    try {
+      const { data, error } = await requestWebhookReprocess({
+        provider: event.provider,
+        eventId: event.id,
+        reason: 'Reprocesso solicitado pela plataforma em homologacao local.',
+      });
+      if (error) {
+        setActionError(error.message);
+        return;
+      }
+      setActionNotice(`Job de reprocesso ${data?.status ?? 'queued'} registrado.`);
+      loadEvents();
+    } finally {
+      setReprocessingEventId(null);
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -312,6 +340,17 @@ export default function WebhookMonitorContent() {
         <StatCard icon={Clock} label="Pendentes" value={pending} tone="amber" />
         <StatCard icon={XCircle} label="Falhas" value={failed} tone="red" />
       </div>
+
+      {actionNotice && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          {actionNotice}
+        </div>
+      )}
+      {actionError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
 
       {loadError && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -412,12 +451,15 @@ export default function WebhookMonitorContent() {
                         <Eye size={13} />
                         Ver
                       </button>
-                      <span
-                        className="ml-2 inline-flex rounded-lg border border-border bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground"
-                        title="Este contrato ainda nao expoe reprocessamento; quando existir, deve ser server-side e auditado."
+                      <button
+                        type="button"
+                        className="ml-2 inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={reprocessingEventId !== null}
+                        onClick={() => void handleReprocess(event)}
                       >
-                        Reprocesso indisponivel
-                      </span>
+                        <RotateCcw size={13} />
+                        {reprocessingEventId === event.id ? 'Solicitando...' : 'Reprocessar'}
+                      </button>
                     </td>
                   </tr>
                 ))

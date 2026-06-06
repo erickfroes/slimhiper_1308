@@ -567,3 +567,102 @@ export async function saveClinicUnit(input: SaveClinicUnitInput) {
     };
   }
 }
+
+export async function updateClinicMemberRole(membershipId: string, roleCode: string) {
+  if (!membershipId.trim()) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'Membro invalido para alterar papel.' } as SafeServiceError,
+    };
+  }
+  if (!roleCode.trim()) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'Papel obrigatorio.' } as SafeServiceError,
+    };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('update_clinic_member_role', {
+      p_membership_id: membershipId,
+      p_role_code: roleCode,
+    });
+
+    if (error) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: asServiceError(error, 'Nao foi possivel alterar papel do membro.'),
+      };
+    }
+
+    return getClinicSettings();
+  } catch (error) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: asServiceError(error, 'Nao foi possivel alterar papel do membro.'),
+    };
+  }
+}
+
+export async function inviteClinicMember(input: {
+  email: string;
+  fullName?: string;
+  roleCode: string;
+  unitId?: string | null;
+  reason: string;
+}) {
+  const email = input.email.trim().toLowerCase();
+  const fullName = input.fullName?.trim() ?? '';
+  const roleCode = input.roleCode.trim();
+  const unitId = input.unitId?.trim() || null;
+  const reason = input.reason.trim();
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'E-mail invalido.' } as SafeServiceError,
+    };
+  }
+  if (!roleCode) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'Papel obrigatorio.' } as SafeServiceError,
+    };
+  }
+  if (reason.length < 16) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: {
+        message: 'Informe um motivo auditavel com pelo menos 16 caracteres.',
+      } as SafeServiceError,
+    };
+  }
+
+  try {
+    const response = await fetch('/api/clinic/invitations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, fullName, roleCode, unitId, reason }),
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: {
+          message: payload?.error?.message ?? 'Nao foi possivel convidar membro.',
+        } as SafeServiceError,
+      };
+    }
+
+    return getClinicSettings();
+  } catch (error) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: asServiceError(error, 'Nao foi possivel convidar membro.'),
+    };
+  }
+}

@@ -5,6 +5,7 @@ import type { PatientDocument360Item, PatientDocumentCategory } from '@/domain/t
 import EmptyState from '@/components/EmptyState';
 import {
   getDocumentSignedUrl,
+  getPatientDocumentEvidence,
   getPatientDocuments,
   sendDocumentForSignature,
 } from '@/services/documentsApi';
@@ -180,7 +181,33 @@ function RowActions({ doc, patientId, onChanged }: RowActionsProps) {
       return;
     }
 
-    toast.info('Acesso via link temporario auditado.');
+    if (
+      action.key === 'details' ||
+      action.key === 'evidence' ||
+      action.key === 'evidence-package'
+    ) {
+      setLoadingAction(action.key);
+      const { data, error } = await getPatientDocumentEvidence(doc.id, patientId);
+      setLoadingAction(null);
+      if (error || !data) {
+        toast.error(error?.message ?? 'Falha ao carregar evidencias do documento.');
+        return;
+      }
+      if (action.key === 'evidence-package' && !data.hasPackage) {
+        toast.info('Resumo de evidencia disponivel; pacote de arquivo ainda nao foi armazenado.');
+      } else {
+        const signatureRequests = Array.isArray(data.summary.signatureRequests)
+          ? data.summary.signatureRequests.length
+          : 0;
+        toast.success(
+          `Evidencia ${data.status}: ${signatureRequests} solicitacao(oes) de assinatura.`
+        );
+      }
+      setOpen(false);
+      return;
+    }
+
+    toast.info('Acao de documento nao disponivel para este registro.');
     setOpen(false);
   };
 

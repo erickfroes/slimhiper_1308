@@ -212,6 +212,7 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
         )}
         {!isActiveTabForbidden && activeTab === 'prescricoes' && (
           <TabPrescricoes
+            patientId={patientId}
             prescriptions={data.prescriptions}
             canViewMedicalPrescriptions={userContext?.canViewMedicalPrescriptions ?? false}
             currentRole={userContext?.activeTenantRole ?? null}

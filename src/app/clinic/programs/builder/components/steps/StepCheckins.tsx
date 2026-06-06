@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { CheckSquare, Plus } from 'lucide-react';
 import type { ProgramBuilderCheckinTemplate, ProgramBuilderDraft } from '@/domain/types';
 
@@ -26,7 +26,16 @@ const frequencyOptions = [
 ];
 
 export default function StepCheckins({ draft, templates, onChange }: Props) {
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customLabel, setCustomLabel] = useState('');
+  const [customQuestion, setCustomQuestion] = useState('');
   const selectedTemplateIds = draft.checkinTemplates.map((t) => t.id);
+  const visibleTemplates = [
+    ...templates,
+    ...draft.checkinTemplates.filter(
+      (template) => !templates.some((item) => item.id === template.id)
+    ),
+  ];
 
   const toggleTemplate = (id: string) => {
     const template = templates.find((t) => t.id === id);
@@ -37,6 +46,23 @@ export default function StepCheckins({ draft, templates, onChange }: Props) {
         ? draft.checkinTemplates.filter((t) => t.id !== id)
         : [...draft.checkinTemplates, template],
     });
+  };
+
+  const createCustomTemplate = () => {
+    const label = customLabel.trim();
+    const question = customQuestion.trim();
+    if (!label || !question) return;
+    const template: ProgramBuilderCheckinTemplate = {
+      id: `custom-${Date.now()}`,
+      label,
+      frequency: draft.checkInFrequency || 'Semanal via app',
+      channel: 'app',
+      questions: [question],
+    };
+    onChange({ checkinTemplates: [...draft.checkinTemplates, template] });
+    setCustomLabel('');
+    setCustomQuestion('');
+    setCustomOpen(false);
   };
 
   return (
@@ -81,7 +107,7 @@ export default function StepCheckins({ draft, templates, onChange }: Props) {
           </span>
         </div>
 
-        {templates.map((template) => {
+        {visibleTemplates.map((template) => {
           const selected = selectedTemplateIds.includes(template.id);
           return (
             <div
@@ -130,7 +156,7 @@ export default function StepCheckins({ draft, templates, onChange }: Props) {
           );
         })}
 
-        {templates.length === 0 && (
+        {visibleTemplates.length === 0 && (
           <div className="card-base p-4 text-xs text-muted-foreground">
             Nenhum template salvo ainda. Ao salvar o programa com check-ins, o backend cria um
             template padrao seguro para o enrollment.
@@ -139,13 +165,49 @@ export default function StepCheckins({ draft, templates, onChange }: Props) {
 
         <button
           type="button"
-          disabled
-          title="Criacao inline bloqueada ate existir editor auditado de perguntas."
-          className="flex items-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-dashed border-border text-sm font-medium text-muted-foreground transition-all cursor-not-allowed opacity-55"
+          onClick={() => setCustomOpen((value) => !value)}
+          className="flex items-center gap-2 w-full px-4 py-3 rounded-xl border-2 border-dashed border-border text-sm font-medium text-muted-foreground transition-all hover:border-primary/40 hover:text-foreground"
         >
           <Plus size={16} />
           Criar template personalizado
         </button>
+        {customOpen && (
+          <div className="card-base p-4 space-y-3">
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Nome do template</span>
+              <input
+                className="input-base w-full text-sm"
+                value={customLabel}
+                onChange={(event) => setCustomLabel(event.target.value)}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Pergunta principal</span>
+              <input
+                className="input-base w-full text-sm"
+                value={customQuestion}
+                onChange={(event) => setCustomQuestion(event.target.value)}
+              />
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn-primary text-xs"
+                disabled={!customLabel.trim() || !customQuestion.trim()}
+                onClick={createCustomTemplate}
+              >
+                Adicionar template
+              </button>
+              <button
+                type="button"
+                className="btn-secondary text-xs"
+                onClick={() => setCustomOpen(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

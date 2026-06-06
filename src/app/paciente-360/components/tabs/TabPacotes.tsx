@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type {
   PatientPackageSummary,
   PatientPackageHistoryItem,
@@ -32,6 +32,7 @@ import {
   Activity,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
+import { updatePatientPackageStatus } from '@/services/programsApi';
 
 interface TabPacotesProps {
   pkg?: PatientPackageSummary | null;
@@ -109,6 +110,66 @@ const CHECKIN_STATUS: Record<
 
 export default function TabPacotes({ pkg }: TabPacotesProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [visibleStatus, setVisibleStatus] = useState(pkg?.status ?? 'aguardando');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVisibleStatus(pkg?.status ?? 'aguardando');
+  }, [pkg?.status]);
+
+  const handlePackageStatus = async (
+    status: 'ativo' | 'pausado' | 'concluido' | 'cancelado',
+    reason: string,
+    extendWeeks = 0
+  ) => {
+    if (!pkg) return;
+    setActionLoading(status);
+    setActionNotice(null);
+    setActionError(null);
+    try {
+      const result = await updatePatientPackageStatus(pkg.id, status, reason, extendWeeks);
+      if (result.error) {
+        setActionError(result.error.message);
+        return;
+      }
+      setVisibleStatus(status);
+      setActionNotice('Pacote atualizado com auditoria operacional.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAction = async (key: string) => {
+    if (!pkg) return;
+    if (key === 'vender') {
+      window.location.assign(`/clinic/programas?patientId=${pkg.patientId}`);
+      return;
+    }
+    if (key === 'editar') {
+      await handlePackageStatus(
+        visibleStatus === 'pausado' ? 'ativo' : 'pausado',
+        'Ajuste operacional de acesso do pacote.'
+      );
+      return;
+    }
+    if (key === 'contrato') {
+      window.location.assign(`/clinic/patients/${pkg.patientId}?tab=documentos`);
+      return;
+    }
+    if (key === 'financeiro') {
+      window.location.assign(`/clinic/patients/${pkg.patientId}?tab=financeiro`);
+      return;
+    }
+    if (key === 'renovar') {
+      await handlePackageStatus('ativo', 'Renovacao operacional do pacote.', pkg.totalWeeks || 4);
+      return;
+    }
+    if (key === 'cancelar') {
+      await handlePackageStatus('cancelado', 'Cancelamento operacional do pacote.');
+    }
+  };
 
   if (!pkg) {
     return (
@@ -207,7 +268,7 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
           <Package size={16} className="text-teal-600" />
           <p className="text-sm font-semibold text-foreground">Pacotes do Paciente</p>
         </div>
-        <StatusBadge status={pkg.status} />
+        <StatusBadge status={visibleStatus} />
       </div>
 
       {/* ── Active Package Card ── */}
@@ -444,24 +505,42 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
           </span>
           . Renove antes do vencimento para manter o acesso do paciente.
         </p>
+        {actionNotice && (
+          <p className="mb-3 text-xs text-emerald-700" role="status">
+            {actionNotice}
+          </p>
+        )}
+        {actionError && (
+          <p className="mb-3 text-xs text-red-600" role="alert">
+            {actionError}
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled
-            title="Acao bloqueada ate contrato real de renovacao de pacote."
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold transition-colors cursor-not-allowed opacity-55"
+            disabled={actionLoading !== null}
+            onClick={() =>
+              void handlePackageStatus(
+                'ativo',
+                'Renovacao operacional do pacote.',
+                pkg.totalWeeks || 4
+              )
+            }
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw size={13} />
-            Renovar pacote
+            {actionLoading === 'ativo' ? 'Renovando...' : 'Renovar pacote'}
           </button>
           <button
             type="button"
-            disabled
-            title="Acao bloqueada ate contrato real de cancelamento de pacote."
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-300 text-red-600 text-xs font-semibold transition-colors cursor-not-allowed opacity-55"
+            disabled={actionLoading !== null}
+            onClick={() =>
+              void handlePackageStatus('cancelado', 'Cancelamento operacional do pacote.')
+            }
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-300 text-red-600 text-xs font-semibold transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <XCircle size={13} />
-            Cancelar pacote
+            {actionLoading === 'cancelado' ? 'Cancelando...' : 'Cancelar pacote'}
           </button>
         </div>
       </div>
@@ -484,12 +563,12 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
               <button
                 key={action.key}
                 type="button"
-                disabled
-                title="Acao bloqueada ate contrato real de pacotes."
-                className={`${baseClass} ${variantClass} cursor-not-allowed opacity-55`}
+                disabled={actionLoading !== null}
+                onClick={() => void handleAction(action.key)}
+                className={`${baseClass} ${variantClass} disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 {action.icon}
-                {action.label}
+                {actionLoading === action.key ? 'Processando...' : action.label}
               </button>
             );
           })}

@@ -22,9 +22,14 @@ import {
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
 import {
+  createBillingNegotiation,
+  createPatientFinancialContract,
   createPatientInvoice,
+  createPatientReceipt,
   createPatientSubscription,
   getPatientFinancialSummary,
+  registerPatientManualPayment,
+  sendPaymentReminder,
 } from '@/services/billingApi';
 
 function formatBRL(value: number) {
@@ -33,6 +38,7 @@ function formatBRL(value: number) {
 
 function formatDate(dateStr: string) {
   const [y, m, d] = dateStr.split('-');
+  if (!y || !m || !d) return dateStr || '-';
   return `${d}/${m}/${y}`;
 }
 
@@ -234,26 +240,14 @@ function asSafePaymentLink(value: string | null) {
   }
 }
 
-function DisabledActionButton({
-  icon,
-  label,
-  title,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  title: string;
-}) {
-  return (
-    <button
-      type="button"
-      className="btn-secondary text-xs flex items-center gap-1.5 opacity-60 cursor-not-allowed"
-      disabled
-      title={title}
-    >
-      {icon}
-      {label}
-    </button>
-  );
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -273,12 +267,17 @@ export default function TabFinanceiro({
   const [creationNotice, setCreationNotice] = useState<string | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [creatingSubscription, setCreatingSubscription] = useState(false);
+  const [localActionLoading, setLocalActionLoading] = useState<string | null>(null);
   const [invoiceModal, setInvoiceModal] = useState(false);
   const [subModal, setSubModal] = useState(false);
+  const [paymentModal, setPaymentModal] = useState(false);
   const [amount, setAmount] = useState('400');
   const [description, setDescription] = useState('Cobrança avulsa');
   const [dueDate, setDueDate] = useState(new Date().toISOString().slice(0, 10));
   const [billingDocument, setBillingDocument] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<
+    'pix' | 'cartao_credito' | 'cartao_debito' | 'boleto' | 'dinheiro' | 'transferencia'
+  >('pix');
   const [invoiceActionKey, setInvoiceActionKey] = useState(() =>
     createBillingActionKey('invoice', patientId)
   );
@@ -287,6 +286,7 @@ export default function TabFinanceiro({
   );
   const canWriteFinancial = permissions.includes('financial.write');
   const creatingCharge = creatingInvoice || creatingSubscription;
+  const isLocalActionLoading = localActionLoading !== null;
 
   const resetCreationFeedback = () => {
     setCreationError(null);
@@ -316,6 +316,7 @@ export default function TabFinanceiro({
     resetCreationFeedback();
     setInvoiceActionKey(createBillingActionKey('invoice', patientId));
     setSubModal(false);
+    setPaymentModal(false);
     setInvoiceModal(true);
   };
 
@@ -323,7 +324,15 @@ export default function TabFinanceiro({
     resetCreationFeedback();
     setSubscriptionActionKey(createBillingActionKey('subscription', patientId));
     setInvoiceModal(false);
+    setPaymentModal(false);
     setSubModal(true);
+  };
+
+  const handleOpenPaymentModal = () => {
+    resetCreationFeedback();
+    setInvoiceModal(false);
+    setSubModal(false);
+    setPaymentModal(true);
   };
 
   const handleCreateInvoice = async () => {
@@ -442,6 +451,147 @@ export default function TabFinanceiro({
     }
   }, [patientId, canViewFinancial]);
 
+  const refreshAfterLocalAction = async (message: string) => {
+    setCreationNotice(message);
+    await loadFinancial();
+  };
+
+  const handleSendReminder = async () => {
+    resetCreationFeedback();
+    if (!patientId) {
+      setCreationError('Paciente nao identificado para enviar lembrete.');
+      return;
+    }
+    const pendingInvoice = liveFinancial?.invoices.find((invoice) => invoice.status !== 'pago');
+    setLocalActionLoading('reminder');
+    try {
+      const result = await sendPaymentReminder(patientId, pendingInvoice?.id);
+      if (result.error) {
+        setCreationError(result.error.message);
+        return;
+      }
+      await refreshAfterLocalAction('Lembrete financeiro registrado para acompanhamento.');
+    } finally {
+      setLocalActionLoading(null);
+    }
+  };
+
+  const handleCreateReceipt = async () => {
+    resetCreationFeedback();
+    if (!patientId) {
+      setCreationError('Paciente nao identificado para gerar recibo.');
+      return;
+    }
+    const receiptAmount =
+      liveFinancial?.lastPaymentAmount ?? liveFinancial?.nextDueAmount ?? getValidatedAmount() ?? 0;
+    if (receiptAmount <= 0) return;
+    setLocalActionLoading('receipt');
+    try {
+      const result = await createPatientReceipt(
+        patientId,
+        receiptAmount,
+        description.trim() || 'Recibo financeiro'
+      );
+      if (result.error) {
+        setCreationError(result.error.message);
+        return;
+      }
+      await refreshAfterLocalAction('Recibo local registrado no financeiro do paciente.');
+    } finally {
+      setLocalActionLoading(null);
+    }
+  };
+
+  const handleCreateFinancialContract = async () => {
+    resetCreationFeedback();
+    if (!patientId) {
+      setCreationError('Paciente nao identificado para gerar contrato.');
+      return;
+    }
+    const contractAmount =
+      liveFinancial?.totalContractValue ||
+      liveFinancial?.nextDueAmount ||
+      getValidatedAmount() ||
+      0;
+    if (contractAmount <= 0) return;
+    setLocalActionLoading('contract');
+    try {
+      const result = await createPatientFinancialContract(
+        patientId,
+        contractAmount,
+        description.trim() || 'Contrato financeiro do paciente'
+      );
+      if (result.error) {
+        setCreationError(result.error.message);
+        return;
+      }
+      await refreshAfterLocalAction('Contrato financeiro local registrado.');
+    } finally {
+      setLocalActionLoading(null);
+    }
+  };
+
+  const handleCreateNegotiation = async () => {
+    resetCreationFeedback();
+    if (!patientId) {
+      setCreationError('Paciente nao identificado para renegociar.');
+      return;
+    }
+    const originalAmount =
+      liveFinancial?.totalOverdue ||
+      liveFinancial?.totalPending ||
+      liveFinancial?.nextDueAmount ||
+      getValidatedAmount() ||
+      0;
+    if (originalAmount <= 0) return;
+    setLocalActionLoading('negotiation');
+    try {
+      const result = await createBillingNegotiation(
+        patientId,
+        originalAmount,
+        originalAmount,
+        1,
+        'Renegociacao iniciada pela equipe.'
+      );
+      if (result.error) {
+        setCreationError(result.error.message);
+        return;
+      }
+      await refreshAfterLocalAction('Renegociacao local registrada para acompanhamento.');
+    } finally {
+      setLocalActionLoading(null);
+    }
+  };
+
+  const handleRegisterManualPayment = async () => {
+    resetCreationFeedback();
+    if (!patientId) {
+      setCreationError('Paciente nao identificado para registrar pagamento.');
+      return;
+    }
+    const parsedAmount = getValidatedAmount();
+    if (parsedAmount === null) return;
+    const pendingInvoice = liveFinancial?.invoices.find((invoice) => invoice.status !== 'pago');
+    setLocalActionLoading('payment');
+    try {
+      const result = await registerPatientManualPayment(
+        patientId,
+        parsedAmount,
+        description.trim() || 'Pagamento manual',
+        paymentMethod,
+        pendingInvoice?.id
+      );
+      if (result.error) {
+        setCreationError(result.error.message);
+        return;
+      }
+      setPaymentModal(false);
+      await refreshAfterLocalAction('Pagamento manual registrado com recibo local.');
+    } finally {
+      setLocalActionLoading(null);
+    }
+  };
+
   useEffect(() => {
     void loadFinancial();
   }, [loadFinancial]);
@@ -487,6 +637,21 @@ export default function TabFinanceiro({
   const futureParcelasAmount = liveFinancial.futureParcelasAmount ?? 0;
   const overdueParcelasCount = liveFinancial.overdueParcelasCount ?? 0;
   const safePaymentLink = asSafePaymentLink(paymentLink);
+  const receiptById = new Map(receipts.map((receipt) => [receipt.id, receipt]));
+  const downloadReceipt = (receipt: (typeof receipts)[number]) => {
+    downloadTextFile(
+      `${receipt.receiptNumber || receipt.id}.txt`,
+      [
+        'Recibo SlimHiper',
+        `Numero: ${receipt.receiptNumber}`,
+        `Descricao: ${receipt.description}`,
+        `Valor: ${formatBRL(receipt.amount)}`,
+        `Pagamento: ${formatDate(receipt.paymentDate)}`,
+        `Emissao: ${formatDate(receipt.issuedAt)}`,
+        `Emitido por: ${receipt.issuedBy}`,
+      ].join('\n')
+    );
+  };
 
   return (
     <div className="space-y-5">
@@ -551,15 +716,19 @@ export default function TabFinanceiro({
           Ações
         </p>
         <div className="flex flex-wrap gap-2">
-          <DisabledActionButton
-            icon={<Plus size={13} />}
-            label="Registrar pagamento"
-            title="Registro manual de pagamento fica pos-MVP no ambiente local seguro."
-          />
           <button
             type="button"
             className="btn-secondary text-xs flex items-center gap-1.5"
-            disabled={!canWriteFinancial || creatingCharge}
+            disabled={!canWriteFinancial || creatingCharge || isLocalActionLoading}
+            onClick={handleOpenPaymentModal}
+          >
+            <Plus size={13} />
+            Registrar pagamento
+          </button>
+          <button
+            type="button"
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            disabled={!canWriteFinancial || creatingCharge || isLocalActionLoading}
             onClick={handleOpenInvoiceModal}
           >
             <CreditCard size={13} />
@@ -568,32 +737,48 @@ export default function TabFinanceiro({
           <button
             type="button"
             className="btn-secondary text-xs flex items-center gap-1.5"
-            disabled={!canWriteFinancial || creatingCharge}
+            disabled={!canWriteFinancial || creatingCharge || isLocalActionLoading}
             onClick={handleOpenSubscriptionModal}
           >
             <RefreshCw size={13} />
             Criar assinatura
           </button>
-          <DisabledActionButton
-            icon={<Bell size={13} />}
-            label="Enviar lembrete"
-            title="Envio de lembrete fica bloqueado ate existir servico de notificacao autorizado."
-          />
-          <DisabledActionButton
-            icon={<Receipt size={13} />}
-            label="Gerar recibo"
-            title="Geracao de recibo fica bloqueada ate existir contrato local de recibos."
-          />
-          <DisabledActionButton
-            icon={<FileSignature size={13} />}
-            label="Ver contrato"
-            title="Contrato financeiro fica bloqueado ate existir signed URL permissionada para esta aba."
-          />
-          <DisabledActionButton
-            icon={<RefreshCw size={13} />}
-            label="Renegociar"
-            title="Renegociacao fica pos-MVP ate existir servico real e auditavel."
-          />
+          <button
+            type="button"
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            disabled={!canWriteFinancial || creatingCharge || isLocalActionLoading}
+            onClick={() => void handleSendReminder()}
+          >
+            <Bell size={13} />
+            {localActionLoading === 'reminder' ? 'Registrando...' : 'Enviar lembrete'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            disabled={!canWriteFinancial || creatingCharge || isLocalActionLoading}
+            onClick={() => void handleCreateReceipt()}
+          >
+            <Receipt size={13} />
+            {localActionLoading === 'receipt' ? 'Gerando...' : 'Gerar recibo'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            disabled={!canWriteFinancial || creatingCharge || isLocalActionLoading}
+            onClick={() => void handleCreateFinancialContract()}
+          >
+            <FileSignature size={13} />
+            {localActionLoading === 'contract' ? 'Gerando...' : 'Gerar contrato'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            disabled={!canWriteFinancial || creatingCharge || isLocalActionLoading}
+            onClick={() => void handleCreateNegotiation()}
+          >
+            <RefreshCw size={13} />
+            {localActionLoading === 'negotiation' ? 'Registrando...' : 'Renegociar'}
+          </button>
         </div>
       </div>
       {!canWriteFinancial && (
@@ -627,6 +812,79 @@ export default function TabFinanceiro({
         <p className="text-xs text-amber-700" role="status">
           Link de pagamento retornado em formato nao permitido e bloqueado por seguranca.
         </p>
+      )}
+      {paymentModal && (
+        <div
+          className="card-base p-3 text-sm space-y-3"
+          role="dialog"
+          aria-label="Registrar pagamento"
+          aria-busy={localActionLoading === 'payment'}
+        >
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Descricao</span>
+            <input
+              className="border rounded px-2 py-1 w-full"
+              value={description}
+              disabled={localActionLoading === 'payment'}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Valor pago</span>
+            <input
+              className="border rounded px-2 py-1 w-full"
+              inputMode="decimal"
+              value={amount}
+              disabled={localActionLoading === 'payment'}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Metodo</span>
+            <select
+              className="border rounded px-2 py-1 w-full"
+              value={paymentMethod}
+              disabled={localActionLoading === 'payment'}
+              onChange={(e) =>
+                setPaymentMethod(
+                  e.target.value as
+                    | 'pix'
+                    | 'cartao_credito'
+                    | 'cartao_debito'
+                    | 'boleto'
+                    | 'dinheiro'
+                    | 'transferencia'
+                )
+              }
+            >
+              {Object.entries(METHOD_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Registro local auditado: cria pagamento e recibo vinculados ao paciente sem chamar
+            provider externo.
+          </p>
+          <button
+            type="button"
+            className="btn-primary text-xs"
+            disabled={localActionLoading === 'payment'}
+            onClick={() => void handleRegisterManualPayment()}
+          >
+            {localActionLoading === 'payment' ? 'Registrando...' : 'Confirmar pagamento'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            disabled={localActionLoading === 'payment'}
+            onClick={() => setPaymentModal(false)}
+          >
+            Cancelar
+          </button>
+        </div>
       )}
       {invoiceModal && (
         <div
@@ -802,9 +1060,12 @@ export default function TabFinanceiro({
                       {p.receiptId ? (
                         <button
                           type="button"
-                          className="text-xs text-muted-foreground flex items-center gap-1 opacity-70 cursor-not-allowed"
-                          disabled
-                          title="Visualizacao de recibo fica bloqueada ate existir signed URL permissionada."
+                          className="text-xs text-primary flex items-center gap-1 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!receiptById.has(p.receiptId)}
+                          onClick={() => {
+                            const receipt = receiptById.get(p.receiptId!);
+                            if (receipt) downloadReceipt(receipt);
+                          }}
                         >
                           <Eye size={12} /> Ver
                         </button>
@@ -910,9 +1171,8 @@ export default function TabFinanceiro({
                   </span>
                   <button
                     type="button"
-                    className="text-xs text-muted-foreground flex items-center gap-1 opacity-70 cursor-not-allowed"
-                    disabled
-                    title="Download de recibo fica bloqueado ate existir signed URL permissionada."
+                    className="text-xs text-primary flex items-center gap-1 hover:underline"
+                    onClick={() => downloadReceipt(r)}
                   >
                     <Download size={12} /> Baixar
                   </button>

@@ -688,3 +688,31 @@ export async function updatePatient(
     return { data: null, error: asServiceError(error, 'Falha ao atualizar paciente.') };
   }
 }
+
+export async function createPatientReviewFlag(
+  patientId: string,
+  reason = 'Revisao solicitada pela equipe'
+): Promise<{ data: { id: string; status: string } | null; error: SafeServiceError | null }> {
+  if (!patientId.trim()) {
+    return { data: null, error: { message: 'Paciente invalido para revisao.' } };
+  }
+  const normalizedReason = reason.trim().slice(0, 500);
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('create_patient_review_flag', {
+      p_patient_id: patientId,
+      p_reason: normalizedReason || 'Revisao solicitada pela equipe',
+    });
+    if (error) throw error;
+    const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+    return {
+      data: {
+        id: typeof record.id === 'string' ? record.id : '',
+        status: typeof record.status === 'string' ? record.status : 'active',
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao marcar revisao do paciente.') };
+  }
+}

@@ -804,3 +804,50 @@ export async function revokePlatformBreakGlass(input: { requestId: string; reaso
     return { error: asServiceError(error, 'Falha ao revogar break-glass.') };
   }
 }
+
+export async function requestWebhookReprocess(input: {
+  provider: AdminWebhookEventSummary['provider'] | 'asaas' | 'd4sign';
+  eventId: string;
+  reason: string;
+}) {
+  const eventId = input.eventId.trim();
+  const reason = normalizeText(input.reason, 500);
+  const provider = input.provider.toLowerCase() === 'asaas' ? 'asaas' : 'd4sign';
+
+  if (!isUuid(eventId)) {
+    return {
+      data: null,
+      error: { message: 'Evento de webhook invalido.' } satisfies SafeServiceError,
+    };
+  }
+  if (reason.length < 12) {
+    return {
+      data: null,
+      error: {
+        message: 'Informe um motivo auditavel com pelo menos 12 caracteres.',
+      } satisfies SafeServiceError,
+    };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('request_webhook_reprocess', {
+      p_provider: provider,
+      p_event_id: eventId,
+      p_reason: reason,
+    });
+
+    if (error)
+      return { data: null, error: asServiceError(error, 'Falha ao solicitar reprocesso.') };
+    const record = asRecord(data);
+    return {
+      data: {
+        id: asString(record.id),
+        status: asString(record.status, 'queued'),
+      },
+      error: null as SafeServiceError | null,
+    };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao solicitar reprocesso.') };
+  }
+}

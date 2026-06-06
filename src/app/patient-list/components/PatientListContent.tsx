@@ -27,6 +27,7 @@ import EmptyState from '@/components/EmptyState';
 import { SkeletonTableRow } from '@/components/LoadingSkeleton';
 import {
   createPatient,
+  createPatientReviewFlag,
   getPatientFormSnapshot,
   getPatientListPage,
   updatePatient,
@@ -364,6 +365,7 @@ export default function PatientListContent() {
   const [patientFormError, setPatientFormError] = useState<string | null>(null);
   const [patientFormLoading, setPatientFormLoading] = useState(false);
   const [patientFormSubmitting, setPatientFormSubmitting] = useState(false);
+  const [reviewActionPatientId, setReviewActionPatientId] = useState<string | null>(null);
   const loadRequestIdRef = useRef(0);
 
   const hasDerivedFilters = Boolean(filterProgram || filterFinancial || filterAdherence);
@@ -539,6 +541,34 @@ export default function PatientListContent() {
 
     toast.success(patientFormMode === 'edit' ? 'Paciente atualizado.' : 'Paciente cadastrado.');
     closePatientForm();
+    await loadPatients();
+  };
+
+  const handleMarkReview = async (patientId: string) => {
+    setReviewActionPatientId(patientId);
+    const result = await createPatientReviewFlag(patientId);
+    setReviewActionPatientId(null);
+    if (result.error) {
+      toast.error(result.error.message);
+      return;
+    }
+    toast.success('Paciente marcado para revisao.');
+    await loadPatients();
+  };
+
+  const handleBulkReview = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setReviewActionPatientId('bulk');
+    const results = await Promise.all(ids.map((id) => createPatientReviewFlag(id)));
+    setReviewActionPatientId(null);
+    const failed = results.filter((result) => result.error);
+    if (failed.length > 0) {
+      toast.error(`${failed.length} revisao(oes) nao foram marcadas.`);
+    } else {
+      toast.success(`${ids.length} paciente(s) marcado(s) para revisao.`);
+    }
+    setSelectedIds(new Set());
     await loadPatients();
   };
 
@@ -718,9 +748,26 @@ export default function PatientListContent() {
           <div className="flex items-center gap-2 ml-auto">
             <button
               type="button"
+              onClick={() => router.push('/clinic/inbox?tab=conversas')}
+              className="btn-secondary text-xs gap-1.5 active:scale-95"
+            >
+              <MessageSquare size={13} />
+              Enviar mensagem
+            </button>
+            <button
+              type="button"
+              disabled={reviewActionPatientId !== null}
+              onClick={() => void handleBulkReview()}
+              className="btn-secondary text-xs gap-1.5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Flag size={13} />
+              {reviewActionPatientId === 'bulk' ? 'Marcando...' : 'Marcar para revisao'}
+            </button>
+            <button
+              type="button"
               disabled
               title="Envio real de mensagens entra no módulo de chat/notificações."
-              className="btn-secondary text-xs gap-1.5"
+              className="hidden"
             >
               <MessageSquare size={13} />
               Enviar mensagem
@@ -729,7 +776,7 @@ export default function PatientListContent() {
               type="button"
               disabled
               title="Marcação real de revisão depende de escrita segura em patientsApi."
-              className="btn-secondary text-xs gap-1.5"
+              className="hidden"
             >
               <Flag size={13} />
               Marcar para revisão
@@ -978,10 +1025,32 @@ export default function PatientListContent() {
                         >
                           <Pencil size={14} />
                         </button>
+                        <Link
+                          href={`/clinic/inbox?tab=conversas&patientId=${patient.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                          aria-label={`Abrir chat de ${patient.name}`}
+                          title="Abrir chat"
+                        >
+                          <MessageSquare size={14} />
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={reviewActionPatientId !== null}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleMarkReview(patient.id);
+                          }}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                          aria-label={`Marcar ${patient.name} para revisao`}
+                          title="Marcar para revisao"
+                        >
+                          <Flag size={14} />
+                        </button>
                         <button
                           type="button"
                           disabled
-                          className="p-1.5 rounded-lg text-muted-foreground opacity-50 cursor-not-allowed transition-colors"
+                          className="hidden"
                           aria-label={`Chat de ${patient.name} indisponivel`}
                           title="Chat real ainda não está liberado no MVP clínico."
                         >
@@ -990,7 +1059,7 @@ export default function PatientListContent() {
                         <button
                           type="button"
                           disabled
-                          className="p-1.5 rounded-lg text-muted-foreground opacity-50 cursor-not-allowed transition-colors"
+                          className="hidden"
                           aria-label={`Revisao de ${patient.name} indisponivel`}
                           title="Revisão real depende de escrita segura em patientsApi."
                         >

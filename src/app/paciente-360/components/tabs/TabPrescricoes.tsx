@@ -1,7 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { PatientPrescriptionSummary } from '@/domain/types';
+import {
+  cancelPatientPrescription,
+  duplicatePatientPrescription,
+  linkPatientPrescriptionDocument,
+  savePatientPrescription,
+} from '@/services/prescriptionsApi';
+import {
+  generatePatientDocument,
+  listActiveDocumentTemplates,
+  sendDocumentForSignature,
+  type ActiveDocumentTemplate,
+} from '@/services/documentsApi';
 import {
   Plus,
   FileText,
@@ -22,6 +34,7 @@ import {
 } from 'lucide-react';
 
 interface TabPrescricoesProps {
+  patientId: string;
   prescriptions: PatientPrescriptionSummary[];
   canViewMedicalPrescriptions: boolean;
   currentRole: string | null;
@@ -78,6 +91,24 @@ const CATEGORIES: CategoryConfig[] = [
     borderColor: 'border-amber-200',
   },
 ];
+
+function buildPrescriptionDocumentVariables(
+  presc: PatientPrescriptionSummary,
+  template: ActiveDocumentTemplate
+) {
+  const candidates: Record<string, string> = {
+    prescription_title: presc.medicationName,
+    medication_name: presc.medicationName,
+    dosage: presc.dosage,
+    frequency: presc.frequency,
+    instructions: presc.notes ?? '',
+    category: presc.category ?? 'prescricao_medica',
+    issue_date: presc.issueDate ?? presc.startDate ?? '',
+    validity: presc.validity ?? presc.endDate ?? '',
+  };
+  const allowed = new Set(template.allowedVariables);
+  return Object.fromEntries(Object.entries(candidates).filter(([key]) => allowed.has(key)));
+}
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
@@ -142,12 +173,30 @@ function SignatureBadge({ sig }: { sig?: string }) {
 function PrescriptionCard({
   presc,
   catConfig,
+  loadingAction,
+  templates,
+  selectedTemplateId,
+  onTemplateChange,
+  onGenerateDocument,
+  onSendSignature,
+  onDuplicate,
+  onCancel,
 }: {
   presc: PatientPrescriptionSummary;
   catConfig: CategoryConfig;
+  loadingAction: string | null;
+  templates: ActiveDocumentTemplate[];
+  selectedTemplateId: string;
+  onTemplateChange: (prescriptionId: string, templateId: string) => void;
+  onGenerateDocument: (prescription: PatientPrescriptionSummary) => void;
+  onSendSignature: (prescription: PatientPrescriptionSummary) => void;
+  onDuplicate: (prescription: PatientPrescriptionSummary) => void;
+  onCancel: (prescription: PatientPrescriptionSummary) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const Icon = catConfig.icon;
+  const canSendSignature =
+    Boolean(presc.linkedDocumentId) && presc.category !== 'prescricao_medica';
 
   return (
     <div className="card-base overflow-hidden">
@@ -218,41 +267,69 @@ function PrescriptionCard({
           )}
           {/* Per-card actions */}
           <div className="flex flex-wrap gap-2 border-t border-border pt-2">
+            <select
+              className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs"
+              value={selectedTemplateId}
+              disabled={loadingAction !== null || templates.length === 0}
+              onChange={(event) => onTemplateChange(presc.id, event.target.value)}
+              aria-label="Template do documento"
+            >
+              <option value="">Template</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
-              disabled
-              title="Acao bloqueada ate contrato real de documentos de prescricao."
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border transition-colors cursor-not-allowed opacity-55"
+              disabled={
+                loadingAction !== null || !selectedTemplateId || presc.status === 'cancelado'
+              }
+              title={
+                templates.length === 0
+                  ? 'Cadastre um template ativo em documentos.'
+                  : 'Gerar documento a partir da prescricao.'
+              }
+              onClick={() => onGenerateDocument(presc)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FileText size={12} />
-              Gerar documento
+              {loadingAction === `document:${presc.id}` ? 'Gerando...' : 'Gerar documento'}
             </button>
             <button
               type="button"
-              disabled
-              title="Acao bloqueada ate contrato real de assinatura de prescricao."
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border transition-colors cursor-not-allowed opacity-55"
+              disabled={loadingAction !== null || !canSendSignature || presc.status === 'cancelado'}
+              title={
+                presc.category === 'prescricao_medica'
+                  ? 'D4Sign nao e usado para prescricao medica.'
+                  : presc.linkedDocumentId
+                    ? 'Enviar documento vinculado para assinatura.'
+                    : 'Gere e vincule um documento antes de enviar.'
+              }
+              onClick={() => onSendSignature(presc)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Send size={12} />
-              Enviar para assinatura
+              {loadingAction === `signature:${presc.id}` ? 'Enviando...' : 'Enviar para assinatura'}
             </button>
             <button
               type="button"
-              disabled
-              title="Acao bloqueada ate contrato real de duplicacao de prescricao."
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border transition-colors cursor-not-allowed opacity-55"
+              disabled={loadingAction !== null}
+              onClick={() => onDuplicate(presc)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy size={12} />
-              Duplicar
+              {loadingAction === `duplicate:${presc.id}` ? 'Duplicando...' : 'Duplicar'}
             </button>
             <button
               type="button"
-              disabled
-              title="Acao bloqueada ate contrato real de cancelamento de prescricao."
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 transition-colors cursor-not-allowed opacity-55"
+              disabled={loadingAction !== null || presc.status === 'cancelado'}
+              onClick={() => onCancel(presc)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <XCircle size={12} />
-              Cancelar
+              {loadingAction === `cancel:${presc.id}` ? 'Cancelando...' : 'Cancelar'}
             </button>
           </div>
         </div>
@@ -267,10 +344,26 @@ function CategorySection({
   config,
   items,
   isRestricted,
+  loadingAction,
+  templates,
+  selectedTemplateByPrescription,
+  onTemplateChange,
+  onGenerateDocument,
+  onSendSignature,
+  onDuplicate,
+  onCancel,
 }: {
   config: CategoryConfig;
   items: PatientPrescriptionSummary[];
   isRestricted: boolean;
+  loadingAction: string | null;
+  templates: ActiveDocumentTemplate[];
+  selectedTemplateByPrescription: Record<string, string>;
+  onTemplateChange: (prescriptionId: string, templateId: string) => void;
+  onGenerateDocument: (prescription: PatientPrescriptionSummary) => void;
+  onSendSignature: (prescription: PatientPrescriptionSummary) => void;
+  onDuplicate: (prescription: PatientPrescriptionSummary) => void;
+  onCancel: (prescription: PatientPrescriptionSummary) => void;
 }) {
   const Icon = config.icon;
 
@@ -313,7 +406,19 @@ function CategorySection({
       ) : (
         <div className="space-y-2">
           {items.map((presc) => (
-            <PrescriptionCard key={presc.id} presc={presc} catConfig={config} />
+            <PrescriptionCard
+              key={presc.id}
+              presc={presc}
+              catConfig={config}
+              loadingAction={loadingAction}
+              templates={templates}
+              selectedTemplateId={selectedTemplateByPrescription[presc.id] ?? ''}
+              onTemplateChange={onTemplateChange}
+              onGenerateDocument={onGenerateDocument}
+              onSendSignature={onSendSignature}
+              onDuplicate={onDuplicate}
+              onCancel={onCancel}
+            />
           ))}
         </div>
       )}
@@ -324,16 +429,235 @@ function CategorySection({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function TabPrescricoes({
+  patientId,
   prescriptions,
   canViewMedicalPrescriptions,
   currentRole,
 }: TabPrescricoesProps) {
+  const [items, setItems] = useState(prescriptions);
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [newCategory, setNewCategory] = useState<PrescCategory | null>(null);
+  const [newMedication, setNewMedication] = useState('');
+  const [newDosage, setNewDosage] = useState('');
+  const [newFrequency, setNewFrequency] = useState('');
+  const [newInstructions, setNewInstructions] = useState('');
+  const [documentTemplates, setDocumentTemplates] = useState<ActiveDocumentTemplate[]>([]);
+  const [selectedTemplateByPrescription, setSelectedTemplateByPrescription] = useState<
+    Record<string, string>
+  >({});
   const normalizedRole = currentRole?.trim().toLowerCase() ?? null;
   const isNutritionist = normalizedRole === 'nutritionist';
   const canViewMedical = canViewMedicalPrescriptions;
 
+  useEffect(() => {
+    setItems(prescriptions);
+  }, [prescriptions]);
+
+  useEffect(() => {
+    let active = true;
+    void listActiveDocumentTemplates().then((result) => {
+      if (!active) return;
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+      setDocumentTemplates(result.data);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const resetFeedback = () => {
+    setNotice(null);
+    setError(null);
+  };
+
+  const openCreateForm = (category: PrescCategory) => {
+    resetFeedback();
+    setNewCategory(category);
+    setNewMedication('');
+    setNewDosage('');
+    setNewFrequency('');
+    setNewInstructions('');
+  };
+
+  const handleSaveNew = async () => {
+    if (!newCategory) return;
+    resetFeedback();
+    setLoadingAction('create');
+    try {
+      const result = await savePatientPrescription({
+        patientId,
+        category: newCategory,
+        medicationName: newMedication.trim(),
+        dosage: newDosage.trim(),
+        frequency: newFrequency.trim(),
+        instructions: newInstructions.trim(),
+        finalize: true,
+      });
+      if (result.error || !result.data) {
+        setError(result.error?.message ?? 'Falha ao salvar prescricao.');
+        return;
+      }
+      const now = new Date().toISOString().slice(0, 10);
+      setItems((current) => [
+        {
+          id: result.data!.id,
+          patientId,
+          category: newCategory,
+          medicationName:
+            newMedication.trim() ||
+            (newCategory === 'prescricao_medica' ? 'Prescricao' : 'Orientacao'),
+          dosage: newDosage.trim() || '-',
+          frequency: newFrequency.trim() || '-',
+          startDate: now,
+          prescribedBy: 'Equipe',
+          isActive: true,
+          notes: newInstructions.trim() || undefined,
+          status: 'ativo',
+          issueDate: now,
+          signatureStatus: 'nao_requerido',
+          version: '1',
+        },
+        ...current,
+      ]);
+      setNotice('Registro salvo com auditoria clinica.');
+      setNewCategory(null);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleDuplicate = async (prescription: PatientPrescriptionSummary) => {
+    resetFeedback();
+    setLoadingAction(`duplicate:${prescription.id}`);
+    try {
+      const result = await duplicatePatientPrescription(prescription.id);
+      if (result.error || !result.data) {
+        setError(result.error?.message ?? 'Falha ao duplicar prescricao.');
+        return;
+      }
+      setItems((current) => [
+        {
+          ...prescription,
+          id: result.data!.id,
+          status: 'rascunho',
+          isActive: false,
+          version: 'rascunho',
+        },
+        ...current,
+      ]);
+      setNotice('Registro duplicado como rascunho.');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleCancel = async (prescription: PatientPrescriptionSummary) => {
+    resetFeedback();
+    setLoadingAction(`cancel:${prescription.id}`);
+    try {
+      const result = await cancelPatientPrescription(
+        prescription.id,
+        'Cancelamento solicitado pela equipe.'
+      );
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+      setItems((current) =>
+        current.map((item) =>
+          item.id === prescription.id ? { ...item, status: 'cancelado', isActive: false } : item
+        )
+      );
+      setNotice('Registro cancelado com auditoria clinica.');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleGenerateDocument = async (prescription: PatientPrescriptionSummary) => {
+    resetFeedback();
+    const templateId = selectedTemplateByPrescription[prescription.id];
+    const template = documentTemplates.find((item) => item.id === templateId);
+    if (!template) {
+      setError('Selecione um template ativo para gerar o documento.');
+      return;
+    }
+
+    setLoadingAction(`document:${prescription.id}`);
+    try {
+      const generated = await generatePatientDocument(
+        patientId,
+        template.id,
+        buildPrescriptionDocumentVariables(prescription, template)
+      );
+      if (generated.error || !generated.data?.generatedDocumentId) {
+        setError(generated.error?.message ?? 'Falha ao gerar documento.');
+        return;
+      }
+      const linked = await linkPatientPrescriptionDocument(
+        prescription.id,
+        generated.data.generatedDocumentId
+      );
+      if (linked.error || !linked.data) {
+        setError(linked.error?.message ?? 'Documento gerado, mas nao foi vinculado.');
+        return;
+      }
+      setItems((current) =>
+        current.map((item) =>
+          item.id === prescription.id
+            ? {
+                ...item,
+                linkedDocumentId: linked.data!.documentId,
+                linkedDocument: linked.data!.documentName || linked.data!.documentId,
+                signatureStatus: 'nao_requerido',
+              }
+            : item
+        )
+      );
+      setNotice('Documento gerado e vinculado a prescricao.');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleSendSignature = async (prescription: PatientPrescriptionSummary) => {
+    resetFeedback();
+    if (!prescription.linkedDocumentId) {
+      setError('Gere e vincule um documento antes de enviar para assinatura.');
+      return;
+    }
+    if (prescription.category === 'prescricao_medica') {
+      setError('D4Sign nao e usado para prescricao medica.');
+      return;
+    }
+
+    setLoadingAction(`signature:${prescription.id}`);
+    try {
+      const result = await sendDocumentForSignature(prescription.linkedDocumentId, patientId);
+      if (result.error || !result.data) {
+        setError(result.error?.message ?? 'Falha ao enviar para assinatura.');
+        return;
+      }
+      setItems((current) =>
+        current.map((item) =>
+          item.id === prescription.id
+            ? { ...item, signatureStatus: 'pendente', status: 'pendente_assinatura' }
+            : item
+        )
+      );
+      setNotice('Documento enviado para assinatura.');
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   const byCategory = (cat: PrescCategory) =>
-    prescriptions.filter((p) => (p.category ?? 'prescricao_medica') === cat);
+    items.filter((p) => (p.category ?? 'prescricao_medica') === cat);
 
   return (
     <div className="space-y-6">
@@ -342,16 +666,16 @@ export default function TabPrescricoes({
         <p className="text-sm font-semibold text-foreground">
           Prescrições &amp; Orientações
           <span className="ml-2 text-xs font-normal text-muted-foreground">
-            ({prescriptions.length} registros)
+            ({items.length} registros)
           </span>
         </p>
         <div className="flex flex-wrap gap-2">
           {!isNutritionist && (
             <button
               type="button"
-              disabled
-              title="Acao bloqueada ate contrato real de criacao de prescricao."
-              className="btn-primary text-xs flex items-center gap-1.5 cursor-not-allowed opacity-55"
+              disabled={loadingAction !== null}
+              onClick={() => openCreateForm('prescricao_medica')}
+              className="btn-primary text-xs flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus size={13} />
               Nova prescrição
@@ -359,15 +683,86 @@ export default function TabPrescricoes({
           )}
           <button
             type="button"
-            disabled
-            title="Acao bloqueada ate contrato real de orientacao."
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-background transition-colors cursor-not-allowed opacity-55"
+            disabled={loadingAction !== null}
+            onClick={() => openCreateForm('orientacoes_gerais')}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-border bg-background transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FileSignature size={13} />
             Nova orientação
           </button>
         </div>
       </div>
+
+      {notice && (
+        <p className="text-xs text-emerald-700" role="status">
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p className="text-xs text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+      {newCategory && (
+        <div className="card-base p-4 space-y-3" role="dialog" aria-label="Nova prescricao">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-muted-foreground">Prescricao/orientacao</span>
+              <input
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                value={newMedication}
+                disabled={loadingAction === 'create'}
+                onChange={(event) => setNewMedication(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-muted-foreground">Dose</span>
+              <input
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                value={newDosage}
+                disabled={loadingAction === 'create'}
+                onChange={(event) => setNewDosage(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-muted-foreground">Frequencia</span>
+              <input
+                className="w-full rounded-lg border border-border bg-background px-3 py-2"
+                value={newFrequency}
+                disabled={loadingAction === 'create'}
+                onChange={(event) => setNewFrequency(event.target.value)}
+              />
+            </label>
+          </div>
+          <label className="space-y-1 text-xs block">
+            <span className="font-medium text-muted-foreground">Instrucoes</span>
+            <textarea
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 min-h-20"
+              value={newInstructions}
+              disabled={loadingAction === 'create'}
+              onChange={(event) => setNewInstructions(event.target.value)}
+            />
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="btn-primary text-xs"
+              disabled={loadingAction === 'create'}
+              onClick={() => void handleSaveNew()}
+            >
+              {loadingAction === 'create' ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              disabled={loadingAction === 'create'}
+              onClick={() => setNewCategory(null)}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Category sections */}
       {CATEGORIES.map((cat) => (
@@ -380,6 +775,19 @@ export default function TabPrescricoes({
               : byCategory(cat.key)
           }
           isRestricted={cat.key === 'prescricao_medica' && (!canViewMedical || isNutritionist)}
+          loadingAction={loadingAction}
+          templates={documentTemplates}
+          selectedTemplateByPrescription={selectedTemplateByPrescription}
+          onTemplateChange={(prescriptionId, templateId) =>
+            setSelectedTemplateByPrescription((current) => ({
+              ...current,
+              [prescriptionId]: templateId,
+            }))
+          }
+          onGenerateDocument={(prescription) => void handleGenerateDocument(prescription)}
+          onSendSignature={(prescription) => void handleSendSignature(prescription)}
+          onDuplicate={(prescription) => void handleDuplicate(prescription)}
+          onCancel={(prescription) => void handleCancel(prescription)}
         />
       ))}
     </div>
