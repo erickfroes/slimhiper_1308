@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  Activity,
   Bell,
   CalendarDays,
   CheckCircle2,
@@ -22,6 +23,7 @@ import { createClient } from '@/lib/supabase/client';
 import MetricCard from '@/components/ui/MetricCard';
 import Tabs from '@/components/ui/Tabs';
 import { getDocumentSignedUrl } from '@/services/documentsApi';
+import DailyPortalSection from './daily/DailyPortalSection';
 import {
   getPatientPortalSnapshot,
   markPatientPortalNotificationRead,
@@ -29,17 +31,30 @@ import {
   submitPatientPortalCheckin,
   type PatientPortalSnapshot,
 } from '@/services/patientPortalApi';
+import { isPatientDailyAction, type PatientDailyAction } from '@/services/patientDailyApi';
 
-type PortalTab = 'resumo' | 'documentos' | 'financeiro' | 'chat' | 'notificacoes' | 'checkins';
+type PortalTab =
+  | 'resumo'
+  | 'diario'
+  | 'documentos'
+  | 'financeiro'
+  | 'chat'
+  | 'notificacoes'
+  | 'checkins';
 
 const tabs: Array<{ id: PortalTab; label: string; shortLabel: string; icon: LucideIcon }> = [
   { id: 'resumo', label: 'Resumo', shortLabel: 'Inicio', icon: Home },
+  { id: 'diario', label: 'Diario', shortLabel: 'Hoje', icon: Activity },
   { id: 'documentos', label: 'Documentos', shortLabel: 'Docs', icon: FileText },
   { id: 'financeiro', label: 'Financeiro', shortLabel: 'Pagar', icon: CreditCard },
   { id: 'chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
   { id: 'notificacoes', label: 'Notificacoes', shortLabel: 'Avisos', icon: Bell },
   { id: 'checkins', label: 'Check-ins', shortLabel: 'Check', icon: ClipboardCheck },
 ];
+
+function isPortalTab(value: string | null): value is PortalTab {
+  return typeof value === 'string' && tabs.some((tab) => tab.id === value);
+}
 
 function formatCurrency(cents: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
@@ -66,9 +81,11 @@ function isCheckinAnswered(questions: string[], answers?: Record<string, string>
 
 export default function PatientPortalContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [snapshot, setSnapshot] = useState<PatientPortalSnapshot | null>(null);
   const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>();
   const [activeTab, setActiveTab] = useState<PortalTab>('resumo');
+  const [dailyInitialAction, setDailyInitialAction] = useState<PatientDailyAction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -103,6 +120,17 @@ export default function PatientPortalContent() {
     void loadPortal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const action = searchParams.get('action');
+
+    if (isPortalTab(tab)) setActiveTab(tab);
+    if (isPatientDailyAction(action)) {
+      setActiveTab('diario');
+      setDailyInitialAction(action);
+    }
+  }, [searchParams]);
 
   const unreadNotifications = useMemo(
     () =>
@@ -484,269 +512,284 @@ export default function PatientPortalContent() {
           className="hidden sm:flex"
         />
 
-        <section className="rounded-lg border border-border bg-card p-5 shadow-sm sm:p-6">
-          {activeTab === 'resumo' ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <h2 className="text-lg font-bold text-foreground">Resumo do paciente</h2>
-                <dl className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between gap-4 rounded-xl bg-muted/50 p-3">
-                    <dt className="text-muted-foreground">Nome completo</dt>
-                    <dd className="font-medium text-foreground">
-                      {snapshot.patient.fullName ?? snapshot.patient.preferredName}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 rounded-xl bg-muted/50 p-3">
-                    <dt className="text-muted-foreground">E-mail</dt>
-                    <dd className="font-medium text-foreground">
-                      {snapshot.patient.email ?? 'Nao informado'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 rounded-xl bg-muted/50 p-3">
-                    <dt className="text-muted-foreground">Status</dt>
-                    <dd className="font-medium text-foreground">{snapshot.patient.status}</dd>
-                  </div>
-                </dl>
-              </div>
-              <div className="rounded-2xl border border-dashed border-border p-4">
-                <h3 className="font-semibold text-foreground">Escopo seguro</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Este portal mostra somente dados do vinculo ativo selecionado. Responsaveis com
-                  mais de um vinculo podem alternar pacientes pelo seletor acima.
-                </p>
-              </div>
-            </div>
-          ) : null}
-
-          {activeTab === 'documentos' ? (
-            <div className="space-y-3">
-              <h2 className="text-lg font-bold text-foreground">Documentos liberados</h2>
-              {snapshot.documents.length === 0 ? (
-                <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                  Nenhum documento liberado para o portal.
-                </p>
-              ) : (
-                snapshot.documents.map((document) => (
-                  <article
-                    key={document.id}
-                    className="flex flex-col gap-3 rounded-2xl border border-border p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <h3 className="font-semibold text-foreground">{document.name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {document.category} · {document.status} · {formatDate(document.generatedAt)}
-                      </p>
+        {activeTab === 'diario' ? (
+          <DailyPortalSection
+            snapshot={snapshot}
+            initialAction={dailyInitialAction}
+            onInitialActionConsumed={() => setDailyInitialAction(null)}
+            onOpenChat={() => setActiveTab('chat')}
+            onOpenCheckins={() => setActiveTab('checkins')}
+            onActionMessage={setActionMessage}
+          />
+        ) : (
+          <section className="rounded-lg border border-border bg-card p-5 shadow-sm sm:p-6">
+            {activeTab === 'resumo' ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <h2 className="text-lg font-bold text-foreground">Resumo do paciente</h2>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    <div className="flex justify-between gap-4 rounded-xl bg-muted/50 p-3">
+                      <dt className="text-muted-foreground">Nome completo</dt>
+                      <dd className="font-medium text-foreground">
+                        {snapshot.patient.fullName ?? snapshot.patient.preferredName}
+                      </dd>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleOpenDocument(document.id)}
-                      disabled={busyKey === document.id}
-                      className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-                    >
-                      Abrir link temporario
-                    </button>
-                  </article>
-                ))
-              )}
-            </div>
-          ) : null}
-
-          {activeTab === 'financeiro' ? (
-            <div className="space-y-3">
-              <h2 className="text-lg font-bold text-foreground">Financeiro proprio</h2>
-              {snapshot.invoices.length === 0 ? (
-                <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                  Nenhuma cobranca encontrada para este vinculo.
-                </p>
-              ) : (
-                snapshot.invoices.map((invoice) => (
-                  <article key={invoice.id} className="rounded-2xl border border-border p-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h3 className="font-semibold text-foreground">
-                          {invoice.description ?? 'Cobranca'}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Vencimento {formatDate(invoice.dueDate)} · {invoice.status}
-                        </p>
-                      </div>
-                      <strong className="text-lg text-foreground">
-                        {formatCurrency(invoice.amountCents)}
-                      </strong>
+                    <div className="flex justify-between gap-4 rounded-xl bg-muted/50 p-3">
+                      <dt className="text-muted-foreground">E-mail</dt>
+                      <dd className="font-medium text-foreground">
+                        {snapshot.patient.email ?? 'Nao informado'}
+                      </dd>
                     </div>
-                    {invoice.paymentLink ? (
-                      <a
-                        className="mt-3 inline-flex rounded-xl border border-border px-4 py-2 text-sm font-semibold text-foreground"
-                        href={invoice.paymentLink}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Abrir link de pagamento
-                      </a>
-                    ) : null}
-                  </article>
-                ))
-              )}
-            </div>
-          ) : null}
+                    <div className="flex justify-between gap-4 rounded-xl bg-muted/50 p-3">
+                      <dt className="text-muted-foreground">Status</dt>
+                      <dd className="font-medium text-foreground">{snapshot.patient.status}</dd>
+                    </div>
+                  </dl>
+                </div>
+                <div className="rounded-2xl border border-dashed border-border p-4">
+                  <h3 className="font-semibold text-foreground">Escopo seguro</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Este portal mostra somente dados do vinculo ativo selecionado. Responsaveis com
+                    mais de um vinculo podem alternar pacientes pelo seletor acima.
+                  </p>
+                </div>
+              </div>
+            ) : null}
 
-          {activeTab === 'chat' ? (
-            <div className="space-y-4">
-              <h2 className="text-lg font-bold text-foreground">Chat com a equipe</h2>
-              <div className="max-h-96 space-y-3 overflow-y-auto rounded-2xl bg-muted/40 p-4">
-                {snapshot.chat.messages.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Nenhuma mensagem ainda. Envie uma duvida para iniciar o atendimento.
+            {activeTab === 'documentos' ? (
+              <div className="space-y-3">
+                <h2 className="text-lg font-bold text-foreground">Documentos liberados</h2>
+                {snapshot.documents.length === 0 ? (
+                  <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
+                    Nenhum documento liberado para o portal.
                   </p>
                 ) : (
-                  snapshot.chat.messages.map((chatMessage) => (
-                    <div
-                      key={chatMessage.id}
-                      className={`rounded-2xl p-3 ${chatMessage.isOwn ? 'ml-auto bg-primary text-primary-foreground' : 'mr-auto bg-card text-foreground'} max-w-[85%]`}
+                  snapshot.documents.map((document) => (
+                    <article
+                      key={document.id}
+                      className="flex flex-col gap-3 rounded-2xl border border-border p-4 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <p className="text-xs font-semibold opacity-80">{chatMessage.senderLabel}</p>
-                      <p className="mt-1 text-sm">{chatMessage.body}</p>
-                    </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground">{document.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {document.category} · {document.status} ·{' '}
+                          {formatDate(document.generatedAt)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenDocument(document.id)}
+                        disabled={busyKey === document.id}
+                        className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                      >
+                        Abrir link temporario
+                      </button>
+                    </article>
                   ))
                 )}
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <textarea
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                  rows={2}
-                  maxLength={2000}
-                  className="min-h-20 flex-1 rounded-2xl border border-border bg-background px-3 py-2 text-sm"
-                  placeholder="Escreva sua mensagem..."
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleSendMessage()}
-                  disabled={busyKey === 'chat' || !message.trim()}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-                >
-                  <Send className="h-4 w-4" aria-hidden="true" />
-                  Enviar
-                </button>
-              </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {activeTab === 'notificacoes' ? (
-            <div className="space-y-3">
-              <h2 className="text-lg font-bold text-foreground">Notificacoes</h2>
-              {snapshot.notifications.length === 0 ? (
-                <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                  Nenhuma notificacao no momento.
-                </p>
-              ) : (
-                snapshot.notifications.map((notification) => (
-                  <article key={notification.id} className="rounded-2xl border border-border p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <h3 className="font-semibold text-foreground">{notification.title}</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {notification.body ?? notification.category ?? 'Atualizacao do portal'}
-                        </p>
-                      </div>
-                      {notification.status === 'unread' ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleReadNotification(notification.id)}
-                          disabled={busyKey === notification.id}
-                          className="rounded-xl border border-border px-3 py-2 text-sm font-semibold text-foreground disabled:opacity-60"
-                        >
-                          Marcar lida
-                        </button>
-                      ) : null}
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
-          ) : null}
-
-          {activeTab === 'checkins' ? (
-            <div className="space-y-3">
-              <h2 className="text-lg font-bold text-foreground">Check-ins do programa</h2>
-              {snapshot.checkins.length === 0 ? (
-                <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                  Nenhum check-in atribuido.
-                </p>
-              ) : (
-                snapshot.checkins.map((checkin) => {
-                  const questions = getCheckinQuestions(checkin.questions);
-                  const answers = checkinAnswers[checkin.id] ?? {};
-                  const canSubmit = isCheckinAnswered(questions, answers);
-                  const isClosed = checkin.status === 'completed' || checkin.status === 'canceled';
-
-                  return (
-                    <article
-                      key={checkin.id}
-                      className="space-y-4 rounded-2xl border border-border p-4"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {activeTab === 'financeiro' ? (
+              <div className="space-y-3">
+                <h2 className="text-lg font-bold text-foreground">Financeiro proprio</h2>
+                {snapshot.invoices.length === 0 ? (
+                  <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
+                    Nenhuma cobranca encontrada para este vinculo.
+                  </p>
+                ) : (
+                  snapshot.invoices.map((invoice) => (
+                    <article key={invoice.id} className="rounded-2xl border border-border p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <h3 className="font-semibold text-foreground">{checkin.title}</h3>
+                          <h3 className="font-semibold text-foreground">
+                            {invoice.description ?? 'Cobranca'}
+                          </h3>
                           <p className="text-sm text-muted-foreground">
-                            Prazo {formatDate(checkin.dueDate)} · {checkin.status}
+                            Vencimento {formatDate(invoice.dueDate)} · {invoice.status}
                           </p>
                         </div>
-                        {!isClosed ? (
+                        <strong className="text-lg text-foreground">
+                          {formatCurrency(invoice.amountCents)}
+                        </strong>
+                      </div>
+                      {invoice.paymentLink ? (
+                        <a
+                          className="mt-3 inline-flex rounded-xl border border-border px-4 py-2 text-sm font-semibold text-foreground"
+                          href={invoice.paymentLink}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Abrir link de pagamento
+                        </a>
+                      ) : null}
+                    </article>
+                  ))
+                )}
+              </div>
+            ) : null}
+
+            {activeTab === 'chat' ? (
+              <div className="space-y-4">
+                <h2 className="text-lg font-bold text-foreground">Chat com a equipe</h2>
+                <div className="max-h-96 space-y-3 overflow-y-auto rounded-2xl bg-muted/40 p-4">
+                  {snapshot.chat.messages.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Nenhuma mensagem ainda. Envie uma duvida para iniciar o atendimento.
+                    </p>
+                  ) : (
+                    snapshot.chat.messages.map((chatMessage) => (
+                      <div
+                        key={chatMessage.id}
+                        className={`rounded-2xl p-3 ${chatMessage.isOwn ? 'ml-auto bg-primary text-primary-foreground' : 'mr-auto bg-card text-foreground'} max-w-[85%]`}
+                      >
+                        <p className="text-xs font-semibold opacity-80">
+                          {chatMessage.senderLabel}
+                        </p>
+                        <p className="mt-1 text-sm">{chatMessage.body}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <textarea
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    rows={2}
+                    maxLength={2000}
+                    className="min-h-20 flex-1 rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+                    placeholder="Escreva sua mensagem..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSendMessage()}
+                    disabled={busyKey === 'chat' || !message.trim()}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                  >
+                    <Send className="h-4 w-4" aria-hidden="true" />
+                    Enviar
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {activeTab === 'notificacoes' ? (
+              <div className="space-y-3">
+                <h2 className="text-lg font-bold text-foreground">Notificacoes</h2>
+                {snapshot.notifications.length === 0 ? (
+                  <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
+                    Nenhuma notificacao no momento.
+                  </p>
+                ) : (
+                  snapshot.notifications.map((notification) => (
+                    <article key={notification.id} className="rounded-2xl border border-border p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <h3 className="font-semibold text-foreground">{notification.title}</h3>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {notification.body ?? notification.category ?? 'Atualizacao do portal'}
+                          </p>
+                        </div>
+                        {notification.status === 'unread' ? (
                           <button
                             type="button"
-                            onClick={() => void handleCompleteCheckin(checkin.id)}
-                            disabled={busyKey === checkin.id || !canSubmit}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                            onClick={() => void handleReadNotification(notification.id)}
+                            disabled={busyKey === notification.id}
+                            className="rounded-xl border border-border px-3 py-2 text-sm font-semibold text-foreground disabled:opacity-60"
                           >
-                            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                            Enviar check-in
+                            Marcar lida
                           </button>
                         ) : null}
                       </div>
-
-                      {questions.length > 0 ? (
-                        <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
-                          {questions.map((question, index) => (
-                            <label
-                              key={`${checkin.id}-${index}`}
-                              className="block text-sm font-medium text-foreground"
-                            >
-                              {question}
-                              <textarea
-                                value={answers[String(index)] ?? ''}
-                                onChange={(event) =>
-                                  setCheckinAnswers((current) => ({
-                                    ...current,
-                                    [checkin.id]: {
-                                      ...(current[checkin.id] ?? {}),
-                                      [String(index)]: event.target.value,
-                                    },
-                                  }))
-                                }
-                                disabled={isClosed || busyKey === checkin.id}
-                                maxLength={4000}
-                                rows={2}
-                                className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm disabled:opacity-60"
-                                placeholder="Responda de forma objetiva para a equipe acompanhar seu progresso."
-                              />
-                            </label>
-                          ))}
-                        </div>
-                      ) : null}
                     </article>
-                  );
-                })
-              )}
-            </div>
-          ) : null}
-        </section>
+                  ))
+                )}
+              </div>
+            ) : null}
+
+            {activeTab === 'checkins' ? (
+              <div className="space-y-3">
+                <h2 className="text-lg font-bold text-foreground">Check-ins do programa</h2>
+                {snapshot.checkins.length === 0 ? (
+                  <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
+                    Nenhum check-in atribuido.
+                  </p>
+                ) : (
+                  snapshot.checkins.map((checkin) => {
+                    const questions = getCheckinQuestions(checkin.questions);
+                    const answers = checkinAnswers[checkin.id] ?? {};
+                    const canSubmit = isCheckinAnswered(questions, answers);
+                    const isClosed =
+                      checkin.status === 'completed' || checkin.status === 'canceled';
+
+                    return (
+                      <article
+                        key={checkin.id}
+                        className="space-y-4 rounded-2xl border border-border p-4"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <h3 className="font-semibold text-foreground">{checkin.title}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Prazo {formatDate(checkin.dueDate)} · {checkin.status}
+                            </p>
+                          </div>
+                          {!isClosed ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleCompleteCheckin(checkin.id)}
+                              disabled={busyKey === checkin.id || !canSubmit}
+                              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                            >
+                              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                              Enviar check-in
+                            </button>
+                          ) : null}
+                        </div>
+
+                        {questions.length > 0 ? (
+                          <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
+                            {questions.map((question, index) => (
+                              <label
+                                key={`${checkin.id}-${index}`}
+                                className="block text-sm font-medium text-foreground"
+                              >
+                                {question}
+                                <textarea
+                                  value={answers[String(index)] ?? ''}
+                                  onChange={(event) =>
+                                    setCheckinAnswers((current) => ({
+                                      ...current,
+                                      [checkin.id]: {
+                                        ...(current[checkin.id] ?? {}),
+                                        [String(index)]: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                  disabled={isClosed || busyKey === checkin.id}
+                                  maxLength={4000}
+                                  rows={2}
+                                  className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm disabled:opacity-60"
+                                  placeholder="Responda de forma objetiva para a equipe acompanhar seu progresso."
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </section>
+        )}
       </div>
       <nav
         className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 px-2 pt-2 shadow-lg backdrop-blur safe-bottom sm:hidden"
         aria-label="Navegacao do portal"
       >
-        <div className="mx-auto grid max-w-lg grid-cols-6 gap-1">
+        <div className="mx-auto grid max-w-xl grid-cols-7 gap-1">
           {tabs.map((tab) => {
             const TabIcon = tab.icon;
             const active = activeTab === tab.id;
