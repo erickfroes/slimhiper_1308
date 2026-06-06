@@ -186,6 +186,8 @@ Status do corte 2026-06-06:
 - [x] Migration `20260606153000_220_patient_daily_habits.sql` criada com
   tabelas de habitos diarios, RLS, bucket privado `meal-photos`, RPCs
   patient-scoped e timeline/alertas basicos.
+- [x] Migrations M01 `20260606153000`, `20260606170000` e `20260606183000`
+  aplicadas no Supabase local apos reparo do historico local divergente.
 - [x] Dashboard clinico consome `get_clinic_daily_adherence_snapshot` para
   baixa adesao diaria sem retornar PII no RPC.
 - [x] Paciente 360 recebe sinais via `patient_timeline_events` e resumo
@@ -201,9 +203,15 @@ Status do corte 2026-06-06:
 - [B] Browser smoke mobile autenticado nao executado neste corte: rotas
   `/clinic/patients/patient-001?tab=nutricao` e
   `/patient?tab=diario&action=water` redirecionaram para `/auth/login` sem
-  sessao clinica/paciente; smoke sem sessao nao capturou erros de console.
+  sessao clinica/paciente; smoke sem sessao foi revalidado em
+  `/patient?tab=diario&action=water` sem erros de console.
 - [x] Checks do corte executados: `npm run type-check`, `npm run lint`,
-  `npm run build`, `git diff --check` e smoke local sem sessao.
+  `npm run build`, `git diff --check` e smoke local sem sessao apos
+  modularizacao do portal.
+- [x] Portal paciente modularizado: `PatientPortalContent` concentra estado,
+  navegacao e handlers, enquanto as abas de resumo, documentos, financeiro,
+  chat, notificacoes e check-ins ficam em secoes dedicadas com estados vazios
+  reutilizando componentes compartilhados.
 
 Checklist mobile:
 
@@ -247,9 +255,9 @@ Checklist backend:
 Checklist frontend:
 
 - [x] Criar componentes em `src/app/patient/components/daily`.
-- [~] Separar `PatientPortalContent` em secoes menores.
+- [x] Separar `PatientPortalContent` em secoes menores.
 - [x] Criar service `patientDailyApi` ou expandir `patientPortalApi`.
-- [~] Usar `DataState`, `SectionPanel`, `MetricCard`, `Dialog`.
+- [x] Usar `DataState`, `SectionPanel`, `MetricCard`, `Dialog`.
 - [x] Evitar cards aninhados.
 - [x] Usar lucide icons, nao emojis/texto quando houver icone familiar.
 - [x] Implementar optimistic update somente com rollback.

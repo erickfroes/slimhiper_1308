@@ -6,7 +6,6 @@ import {
   Activity,
   Bell,
   CalendarDays,
-  CheckCircle2,
   ChevronRight,
   ClipboardCheck,
   CreditCard,
@@ -15,15 +14,26 @@ import {
   LogOut,
   MessageSquare,
   RefreshCw,
-  Send,
   type LucideIcon,
 } from 'lucide-react';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
 import { createClient } from '@/lib/supabase/client';
+import DataState from '@/components/ui/DataState';
 import MetricCard from '@/components/ui/MetricCard';
+import SectionPanel from '@/components/ui/SectionPanel';
 import Tabs from '@/components/ui/Tabs';
 import { getDocumentSignedUrl } from '@/services/documentsApi';
 import DailyPortalSection from './daily/DailyPortalSection';
+import {
+  PortalChatSection,
+  PortalCheckinsSection,
+  PortalDocumentsSection,
+  PortalFinanceSection,
+  PortalNotificationsSection,
+  PortalSummarySection,
+  getCheckinQuestions,
+  isCheckinAnswered,
+} from './PatientPortalSections';
 import {
   getPatientPortalSnapshot,
   markPatientPortalNotificationRead,
@@ -65,18 +75,6 @@ function formatDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Sem data';
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(date);
-}
-
-function getCheckinQuestions(questions: unknown[]) {
-  return questions
-    .map((question) => (typeof question === 'string' ? question.trim() : ''))
-    .filter(Boolean)
-    .slice(0, 20);
-}
-
-function isCheckinAnswered(questions: string[], answers?: Record<string, string>) {
-  if (questions.length === 0) return true;
-  return questions.every((_, index) => answers?.[String(index)]?.trim());
 }
 
 export default function PatientPortalContent() {
@@ -310,17 +308,25 @@ export default function PatientPortalContent() {
     }
   }
 
+  function handleCheckinAnswerChange(checkinId: string, index: number, value: string) {
+    setCheckinAnswers((current) => ({
+      ...current,
+      [checkinId]: {
+        ...(current[checkinId] ?? {}),
+        [String(index)]: value,
+      },
+    }));
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-background px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl space-y-4">
-          <div className="h-28 animate-pulse rounded-3xl bg-muted" />
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="h-32 animate-pulse rounded-2xl bg-muted" />
-            <div className="h-32 animate-pulse rounded-2xl bg-muted" />
-            <div className="h-32 animate-pulse rounded-2xl bg-muted" />
-          </div>
-          <div className="h-80 animate-pulse rounded-3xl bg-muted" />
+          <DataState
+            kind="loading"
+            title="Carregando portal"
+            description="Buscando seus dados, check-ins, documentos e diario do dia."
+          />
         </div>
       </main>
     );
@@ -329,20 +335,14 @@ export default function PatientPortalContent() {
   if (error || !snapshot) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-6">
-        <section className="max-w-lg rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
-          <h1 className="text-xl font-bold text-foreground">Portal indisponivel</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {error ?? 'Nao encontramos um vinculo ativo para este acesso.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => loadPortal()}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            Tentar novamente
-          </button>
-        </section>
+        <DataState
+          kind="error"
+          title="Portal indisponivel"
+          description={error ?? 'Nao encontramos um vinculo ativo para este acesso.'}
+          actionLabel="Tentar novamente"
+          onAction={() => void loadPortal()}
+          className="w-full max-w-lg"
+        />
       </main>
     );
   }
@@ -522,267 +522,47 @@ export default function PatientPortalContent() {
             onActionMessage={setActionMessage}
           />
         ) : (
-          <section className="rounded-lg border border-border bg-card p-5 shadow-sm sm:p-6">
-            {activeTab === 'resumo' ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <h2 className="text-lg font-bold text-foreground">Resumo do paciente</h2>
-                  <dl className="mt-4 space-y-3 text-sm">
-                    <div className="flex justify-between gap-4 rounded-xl bg-muted/50 p-3">
-                      <dt className="text-muted-foreground">Nome completo</dt>
-                      <dd className="font-medium text-foreground">
-                        {snapshot.patient.fullName ?? snapshot.patient.preferredName}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-4 rounded-xl bg-muted/50 p-3">
-                      <dt className="text-muted-foreground">E-mail</dt>
-                      <dd className="font-medium text-foreground">
-                        {snapshot.patient.email ?? 'Nao informado'}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-4 rounded-xl bg-muted/50 p-3">
-                      <dt className="text-muted-foreground">Status</dt>
-                      <dd className="font-medium text-foreground">{snapshot.patient.status}</dd>
-                    </div>
-                  </dl>
-                </div>
-                <div className="rounded-2xl border border-dashed border-border p-4">
-                  <h3 className="font-semibold text-foreground">Escopo seguro</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Este portal mostra somente dados do vinculo ativo selecionado. Responsaveis com
-                    mais de um vinculo podem alternar pacientes pelo seletor acima.
-                  </p>
-                </div>
-              </div>
-            ) : null}
+          <SectionPanel contentClassName="p-5 sm:p-6">
+            {activeTab === 'resumo' ? <PortalSummarySection snapshot={snapshot} /> : null}
 
             {activeTab === 'documentos' ? (
-              <div className="space-y-3">
-                <h2 className="text-lg font-bold text-foreground">Documentos liberados</h2>
-                {snapshot.documents.length === 0 ? (
-                  <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                    Nenhum documento liberado para o portal.
-                  </p>
-                ) : (
-                  snapshot.documents.map((document) => (
-                    <article
-                      key={document.id}
-                      className="flex flex-col gap-3 rounded-2xl border border-border p-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div>
-                        <h3 className="font-semibold text-foreground">{document.name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {document.category} · {document.status} ·{' '}
-                          {formatDate(document.generatedAt)}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleOpenDocument(document.id)}
-                        disabled={busyKey === document.id}
-                        className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-                      >
-                        Abrir link temporario
-                      </button>
-                    </article>
-                  ))
-                )}
-              </div>
+              <PortalDocumentsSection
+                snapshot={snapshot}
+                busyKey={busyKey}
+                onOpenDocument={(documentId) => void handleOpenDocument(documentId)}
+              />
             ) : null}
 
-            {activeTab === 'financeiro' ? (
-              <div className="space-y-3">
-                <h2 className="text-lg font-bold text-foreground">Financeiro proprio</h2>
-                {snapshot.invoices.length === 0 ? (
-                  <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                    Nenhuma cobranca encontrada para este vinculo.
-                  </p>
-                ) : (
-                  snapshot.invoices.map((invoice) => (
-                    <article key={invoice.id} className="rounded-2xl border border-border p-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <h3 className="font-semibold text-foreground">
-                            {invoice.description ?? 'Cobranca'}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            Vencimento {formatDate(invoice.dueDate)} · {invoice.status}
-                          </p>
-                        </div>
-                        <strong className="text-lg text-foreground">
-                          {formatCurrency(invoice.amountCents)}
-                        </strong>
-                      </div>
-                      {invoice.paymentLink ? (
-                        <a
-                          className="mt-3 inline-flex rounded-xl border border-border px-4 py-2 text-sm font-semibold text-foreground"
-                          href={invoice.paymentLink}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Abrir link de pagamento
-                        </a>
-                      ) : null}
-                    </article>
-                  ))
-                )}
-              </div>
-            ) : null}
+            {activeTab === 'financeiro' ? <PortalFinanceSection snapshot={snapshot} /> : null}
 
             {activeTab === 'chat' ? (
-              <div className="space-y-4">
-                <h2 className="text-lg font-bold text-foreground">Chat com a equipe</h2>
-                <div className="max-h-96 space-y-3 overflow-y-auto rounded-2xl bg-muted/40 p-4">
-                  {snapshot.chat.messages.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Nenhuma mensagem ainda. Envie uma duvida para iniciar o atendimento.
-                    </p>
-                  ) : (
-                    snapshot.chat.messages.map((chatMessage) => (
-                      <div
-                        key={chatMessage.id}
-                        className={`rounded-2xl p-3 ${chatMessage.isOwn ? 'ml-auto bg-primary text-primary-foreground' : 'mr-auto bg-card text-foreground'} max-w-[85%]`}
-                      >
-                        <p className="text-xs font-semibold opacity-80">
-                          {chatMessage.senderLabel}
-                        </p>
-                        <p className="mt-1 text-sm">{chatMessage.body}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <textarea
-                    value={message}
-                    onChange={(event) => setMessage(event.target.value)}
-                    rows={2}
-                    maxLength={2000}
-                    className="min-h-20 flex-1 rounded-2xl border border-border bg-background px-3 py-2 text-sm"
-                    placeholder="Escreva sua mensagem..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleSendMessage()}
-                    disabled={busyKey === 'chat' || !message.trim()}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-                  >
-                    <Send className="h-4 w-4" aria-hidden="true" />
-                    Enviar
-                  </button>
-                </div>
-              </div>
+              <PortalChatSection
+                snapshot={snapshot}
+                busyKey={busyKey}
+                message={message}
+                onMessageChange={setMessage}
+                onSendMessage={() => void handleSendMessage()}
+              />
             ) : null}
 
             {activeTab === 'notificacoes' ? (
-              <div className="space-y-3">
-                <h2 className="text-lg font-bold text-foreground">Notificacoes</h2>
-                {snapshot.notifications.length === 0 ? (
-                  <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                    Nenhuma notificacao no momento.
-                  </p>
-                ) : (
-                  snapshot.notifications.map((notification) => (
-                    <article key={notification.id} className="rounded-2xl border border-border p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <h3 className="font-semibold text-foreground">{notification.title}</h3>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {notification.body ?? notification.category ?? 'Atualizacao do portal'}
-                          </p>
-                        </div>
-                        {notification.status === 'unread' ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleReadNotification(notification.id)}
-                            disabled={busyKey === notification.id}
-                            className="rounded-xl border border-border px-3 py-2 text-sm font-semibold text-foreground disabled:opacity-60"
-                          >
-                            Marcar lida
-                          </button>
-                        ) : null}
-                      </div>
-                    </article>
-                  ))
-                )}
-              </div>
+              <PortalNotificationsSection
+                snapshot={snapshot}
+                busyKey={busyKey}
+                onReadNotification={(notificationId) => void handleReadNotification(notificationId)}
+              />
             ) : null}
 
             {activeTab === 'checkins' ? (
-              <div className="space-y-3">
-                <h2 className="text-lg font-bold text-foreground">Check-ins do programa</h2>
-                {snapshot.checkins.length === 0 ? (
-                  <p className="rounded-2xl bg-muted/50 p-4 text-sm text-muted-foreground">
-                    Nenhum check-in atribuido.
-                  </p>
-                ) : (
-                  snapshot.checkins.map((checkin) => {
-                    const questions = getCheckinQuestions(checkin.questions);
-                    const answers = checkinAnswers[checkin.id] ?? {};
-                    const canSubmit = isCheckinAnswered(questions, answers);
-                    const isClosed =
-                      checkin.status === 'completed' || checkin.status === 'canceled';
-
-                    return (
-                      <article
-                        key={checkin.id}
-                        className="space-y-4 rounded-2xl border border-border p-4"
-                      >
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <h3 className="font-semibold text-foreground">{checkin.title}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Prazo {formatDate(checkin.dueDate)} · {checkin.status}
-                            </p>
-                          </div>
-                          {!isClosed ? (
-                            <button
-                              type="button"
-                              onClick={() => void handleCompleteCheckin(checkin.id)}
-                              disabled={busyKey === checkin.id || !canSubmit}
-                              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-                            >
-                              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                              Enviar check-in
-                            </button>
-                          ) : null}
-                        </div>
-
-                        {questions.length > 0 ? (
-                          <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
-                            {questions.map((question, index) => (
-                              <label
-                                key={`${checkin.id}-${index}`}
-                                className="block text-sm font-medium text-foreground"
-                              >
-                                {question}
-                                <textarea
-                                  value={answers[String(index)] ?? ''}
-                                  onChange={(event) =>
-                                    setCheckinAnswers((current) => ({
-                                      ...current,
-                                      [checkin.id]: {
-                                        ...(current[checkin.id] ?? {}),
-                                        [String(index)]: event.target.value,
-                                      },
-                                    }))
-                                  }
-                                  disabled={isClosed || busyKey === checkin.id}
-                                  maxLength={4000}
-                                  rows={2}
-                                  className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm disabled:opacity-60"
-                                  placeholder="Responda de forma objetiva para a equipe acompanhar seu progresso."
-                                />
-                              </label>
-                            ))}
-                          </div>
-                        ) : null}
-                      </article>
-                    );
-                  })
-                )}
-              </div>
+              <PortalCheckinsSection
+                snapshot={snapshot}
+                busyKey={busyKey}
+                checkinAnswers={checkinAnswers}
+                onAnswerChange={handleCheckinAnswerChange}
+                onCompleteCheckin={(checkinId) => void handleCompleteCheckin(checkinId)}
+              />
             ) : null}
-          </section>
+          </SectionPanel>
         )}
       </div>
       <nav
