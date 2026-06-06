@@ -26,6 +26,7 @@ import {
   LogOut,
   User,
   MessageSquare,
+  UsersRound,
 } from 'lucide-react';
 import {
   getCommunicationsSummary,
@@ -48,6 +49,12 @@ const clinicNavItems: NavItem[] = [
   { key: 'nav-crm', label: 'CRM', href: '/clinic/crm', icon: TrendingUp },
   { key: 'nav-inventory', label: 'Estoque', href: '/clinic/inventory', icon: PackageSearch },
   { key: 'nav-programas', label: 'Programas', href: '/clinic/programs', icon: BookOpen },
+  {
+    key: 'nav-comunidade',
+    label: 'Comunidade',
+    href: '/clinic/community',
+    icon: UsersRound,
+  },
   {
     key: 'nav-documentos',
     label: 'Documentos',
