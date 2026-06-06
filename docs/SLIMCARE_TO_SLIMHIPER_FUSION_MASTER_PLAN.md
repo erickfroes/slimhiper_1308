@@ -311,35 +311,35 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Onboarding em etapas curtas com progresso.
-- [ ] Salvar por etapa para evitar perda.
-- [ ] Inputs grandes, labels visiveis e validacao inline.
-- [ ] Tela de perfil com secoes colapsaveis no celular.
-- [ ] Plano do paciente com "o que fazer hoje" antes de historico.
-- [ ] Medicacoes/lembretes com horarios editaveis em UI simples.
-- [ ] Documentos e financeiro como cards acionaveis.
+- [x] Onboarding em etapas curtas com progresso.
+- [x] Salvar por etapa para evitar perda.
+- [x] Inputs grandes, labels visiveis e validacao inline.
+- [x] Tela de perfil com secoes colapsaveis no celular.
+- [x] Plano do paciente com "o que fazer hoje" antes de historico.
+- [x] Medicacoes/lembretes com horarios editaveis em UI simples.
+- [x] Documentos e financeiro como cards acionaveis.
 
 Checklist backend:
 
-- [ ] RPC `complete_patient_onboarding`.
-- [ ] Tabela ou campos para metas: agua, refeicao, treino, sono, programa.
-- [ ] Controle de quais campos sao editaveis pelo paciente.
-- [ ] Auditoria para alteracao de dados pessoais sensiveis.
-- [ ] Lembretes de medicacao: tabelas `medication_reminders` ou equivalente.
+- [x] RPC `complete_patient_onboarding`.
+- [x] Tabela ou campos para metas: agua, refeicao, treino, sono, programa.
+- [x] Controle de quais campos sao editaveis pelo paciente.
+- [x] Auditoria para alteracao de dados pessoais sensiveis.
+- [x] Lembretes de medicacao: tabelas `medication_reminders` ou equivalente.
 - [ ] Cron/job para lembretes, se notificação ativa entrar no escopo.
 
 Checklist seguranca:
 
-- [ ] Paciente nao altera campos clinicos restritos.
-- [ ] Dados pessoais atualizados pelo paciente entram em fila de revisao quando
+- [x] Paciente nao altera campos clinicos restritos.
+- [x] Dados pessoais atualizados pelo paciente entram em fila de revisao quando
   necessario.
-- [ ] Lembretes nao expõem medicamento em notificacao externa sem consentimento.
+- [x] Lembretes nao expõem medicamento em notificacao externa sem consentimento.
 
 Aceite:
 
-- [ ] Paciente novo conclui onboarding e cai no cockpit diario.
-- [ ] Perfil mostra apenas dados permitidos.
-- [ ] Plano do paciente e lembretes aparecem sem expor dados indevidos.
+- [x] Paciente novo conclui onboarding e cai no cockpit diario.
+- [x] Perfil mostra apenas dados permitidos.
+- [x] Plano do paciente e lembretes aparecem sem expor dados indevidos.
 
 ### M03 - Comunidade moderada por programa
 

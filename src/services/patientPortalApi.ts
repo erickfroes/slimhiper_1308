@@ -93,6 +93,121 @@ export interface PatientPortalSnapshot {
   checkins: PatientPortalCheckin[];
 }
 
+export type PatientOnboardingStep = 'profile' | 'goals' | 'routine' | 'reminders' | 'consent';
+
+export interface PatientJourneyOnboarding {
+  status: 'not_started' | 'in_progress' | 'completed' | string;
+  currentStep: PatientOnboardingStep | string;
+  completedSteps: string[];
+  progressPercent: number;
+  completedAt?: string | null;
+  pendingReviewCount: number;
+}
+
+export interface PatientJourneyProfile {
+  preferredName: string;
+  fullName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  birthDate?: string | null;
+  status: string;
+  editableFields: Record<string, string>;
+  pendingReviews: Array<{
+    id: string;
+    status: string;
+    createdAt?: string | null;
+    fields: string[];
+  }>;
+}
+
+export interface PatientJourneyProgram {
+  id?: string | null;
+  programId?: string | null;
+  name?: string | null;
+  programType?: string | null;
+  objective?: string | null;
+  status: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  currentWeek: number;
+  totalWeeks: number;
+  services: Array<{ label: string; quantity: number; unit: string }>;
+  phases: Array<{ name: string; durationWeeks: number; description?: string | null }>;
+}
+
+export interface PatientJourneyGoals {
+  source: string;
+  waterGoalMl: number;
+  mealsGoal: number;
+  workoutsGoal: number;
+  sleepGoalHours: number;
+  programGoal?: string | null;
+  checkinRequired: boolean;
+  editableFields: Record<string, boolean>;
+}
+
+export interface PatientJourneyPlanItem {
+  id: string;
+  kind: 'checkin' | 'medication' | 'daily' | string;
+  title: string;
+  detail?: string | null;
+  status: string;
+  dueDate?: string | null;
+  actionTab?: string | null;
+}
+
+export interface PatientMedicationReminder {
+  id: string;
+  title: string;
+  medicationLabel?: string | null;
+  dosage?: string | null;
+  instructions?: string | null;
+  scheduleTimes: string[];
+  timezone: string;
+  status: 'active' | 'paused' | 'archived' | string;
+  patientEditable: boolean;
+  externalNotificationConsent: boolean;
+  notificationCopyMode: 'generic' | 'details' | string;
+  startDate?: string | null;
+  endDate?: string | null;
+  source: string;
+}
+
+export interface PatientJourneyHistoryItem {
+  id: string;
+  kind: string;
+  title: string;
+  detail?: string | null;
+  occurredAt?: string | null;
+}
+
+export interface PatientJourneySnapshot {
+  selectedPatientId: string;
+  onboarding: PatientJourneyOnboarding;
+  profile: PatientJourneyProfile;
+  program: PatientJourneyProgram;
+  goals: PatientJourneyGoals;
+  planToday: PatientJourneyPlanItem[];
+  medicationReminders: PatientMedicationReminder[];
+  history: PatientJourneyHistoryItem[];
+}
+
+export interface PatientOnboardingResult {
+  patientId: string;
+  status: string;
+  currentStep?: string | null;
+  completedSteps: string[];
+  completedAt?: string | null;
+}
+
+const ONBOARDING_STEPS = new Set<PatientOnboardingStep>([
+  'profile',
+  'goals',
+  'routine',
+  'reminders',
+  'consent',
+]);
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -135,6 +250,12 @@ function asBoolean(value: unknown, fallback = false): boolean {
 
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function asBoundedNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numberValue)) return fallback;
+  return Math.min(max, Math.max(min, numberValue));
 }
 
 function normalizeLinkedPatient(value: unknown): PatientPortalLinkedPatient | null {
@@ -297,6 +418,220 @@ function normalizeSnapshot(value: unknown): PatientPortalSnapshot | null {
   };
 }
 
+function normalizeStringArray(value: unknown, maxItems = 30): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => sanitizeText(String(item ?? ''), 120))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function normalizeStringRecord(value: unknown): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  Object.entries(asRecord(value))
+    .slice(0, 20)
+    .forEach(([key, nestedValue]) => {
+      const safeKey = sanitizeText(key, 80);
+      const safeValue = sanitizeText(String(nestedValue ?? ''), 80);
+      if (safeKey && safeValue) normalized[safeKey] = safeValue;
+    });
+  return normalized;
+}
+
+function normalizeBooleanRecord(value: unknown): Record<string, boolean> {
+  const normalized: Record<string, boolean> = {};
+  Object.entries(asRecord(value))
+    .slice(0, 20)
+    .forEach(([key, nestedValue]) => {
+      const safeKey = sanitizeText(key, 80);
+      if (safeKey) normalized[safeKey] = nestedValue === true || nestedValue === 'true';
+    });
+  return normalized;
+}
+
+function normalizePendingReview(
+  value: unknown
+): PatientJourneyProfile['pendingReviews'][number] | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+  return {
+    id,
+    status: asString(record.status, 'pending'),
+    createdAt: asNullableString(record.createdAt),
+    fields: normalizeStringArray(record.fields, 12),
+  };
+}
+
+function normalizeJourneyProfile(value: unknown): PatientJourneyProfile {
+  const record = asRecord(value);
+  return {
+    preferredName: asString(record.preferredName, 'Paciente'),
+    fullName: asNullableString(record.fullName),
+    email: asNullableString(record.email),
+    phone: asNullableString(record.phone),
+    birthDate: asNullableString(record.birthDate),
+    status: asString(record.status, 'active'),
+    editableFields: normalizeStringRecord(record.editableFields),
+    pendingReviews: Array.isArray(record.pendingReviews)
+      ? record.pendingReviews
+          .map(normalizePendingReview)
+          .filter((item): item is PatientJourneyProfile['pendingReviews'][number] => Boolean(item))
+      : [],
+  };
+}
+
+function normalizeProgramService(value: unknown): PatientJourneyProgram['services'][number] | null {
+  const record = asRecord(value);
+  const label = asString(record.label);
+  if (!label) return null;
+  return {
+    label,
+    quantity: asBoundedNumber(record.quantity, 0, 0, 999),
+    unit: asString(record.unit),
+  };
+}
+
+function normalizeProgramPhase(value: unknown): PatientJourneyProgram['phases'][number] | null {
+  const record = asRecord(value);
+  const name = asString(record.name);
+  if (!name) return null;
+  return {
+    name,
+    durationWeeks: Math.round(asBoundedNumber(record.durationWeeks, 0, 0, 520)),
+    description: asNullableString(record.description),
+  };
+}
+
+function normalizeJourneyProgram(value: unknown): PatientJourneyProgram {
+  const record = asRecord(value);
+  return {
+    id: asNullableString(record.id),
+    programId: asNullableString(record.programId),
+    name: asNullableString(record.name),
+    programType: asNullableString(record.programType),
+    objective: asNullableString(record.objective),
+    status: asString(record.status, 'not_enrolled'),
+    startDate: asNullableString(record.startDate),
+    endDate: asNullableString(record.endDate),
+    currentWeek: Math.round(asBoundedNumber(record.currentWeek, 0, 0, 520)),
+    totalWeeks: Math.round(asBoundedNumber(record.totalWeeks, 0, 0, 520)),
+    services: Array.isArray(record.services)
+      ? record.services
+          .map(normalizeProgramService)
+          .filter((item): item is PatientJourneyProgram['services'][number] => Boolean(item))
+      : [],
+    phases: Array.isArray(record.phases)
+      ? record.phases
+          .map(normalizeProgramPhase)
+          .filter((item): item is PatientJourneyProgram['phases'][number] => Boolean(item))
+      : [],
+  };
+}
+
+function normalizeJourneyGoals(value: unknown): PatientJourneyGoals {
+  const record = asRecord(value);
+  return {
+    source: asString(record.source, 'fallback'),
+    waterGoalMl: Math.round(asBoundedNumber(record.waterGoalMl, 2000, 250, 10000)),
+    mealsGoal: Math.round(asBoundedNumber(record.mealsGoal, 4, 1, 12)),
+    workoutsGoal: Math.round(asBoundedNumber(record.workoutsGoal, 1, 0, 4)),
+    sleepGoalHours: asBoundedNumber(record.sleepGoalHours, 8, 0, 24),
+    programGoal: asNullableString(record.programGoal),
+    checkinRequired: asBoolean(record.checkinRequired, true),
+    editableFields: normalizeBooleanRecord(record.editableFields),
+  };
+}
+
+function normalizePlanItem(value: unknown): PatientJourneyPlanItem | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+  return {
+    id,
+    kind: asString(record.kind, 'daily'),
+    title: asString(record.title, 'Acao do plano'),
+    detail: asNullableString(record.detail),
+    status: asString(record.status, 'open'),
+    dueDate: asNullableString(record.dueDate),
+    actionTab: asNullableString(record.actionTab),
+  };
+}
+
+function normalizeMedicationReminder(value: unknown): PatientMedicationReminder | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+  return {
+    id,
+    title: asString(record.title, 'Lembrete do tratamento'),
+    medicationLabel: asNullableString(record.medicationLabel),
+    dosage: asNullableString(record.dosage),
+    instructions: asNullableString(record.instructions),
+    scheduleTimes: normalizeStringArray(record.scheduleTimes, 12),
+    timezone: asString(record.timezone, 'America/Sao_Paulo'),
+    status: asString(record.status, 'active'),
+    patientEditable: asBoolean(record.patientEditable, true),
+    externalNotificationConsent: asBoolean(record.externalNotificationConsent),
+    notificationCopyMode: asString(record.notificationCopyMode, 'generic'),
+    startDate: asNullableString(record.startDate),
+    endDate: asNullableString(record.endDate),
+    source: asString(record.source, 'patient_portal'),
+  };
+}
+
+function normalizeHistoryItem(value: unknown): PatientJourneyHistoryItem | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+  return {
+    id,
+    kind: asString(record.kind, 'event'),
+    title: asString(record.title, 'Evento'),
+    detail: asNullableString(record.detail),
+    occurredAt: asNullableString(record.occurredAt),
+  };
+}
+
+function normalizeJourneySnapshot(value: unknown): PatientJourneySnapshot | null {
+  const record = asRecord(value);
+  const selectedPatientId = asString(record.selectedPatientId);
+  if (!selectedPatientId) return null;
+
+  const onboardingRecord = asRecord(record.onboarding);
+  return {
+    selectedPatientId,
+    onboarding: {
+      status: asString(onboardingRecord.status, 'not_started'),
+      currentStep: asString(onboardingRecord.currentStep, 'profile'),
+      completedSteps: normalizeStringArray(onboardingRecord.completedSteps, 10),
+      progressPercent: Math.round(asBoundedNumber(onboardingRecord.progressPercent, 0, 0, 100)),
+      completedAt: asNullableString(onboardingRecord.completedAt),
+      pendingReviewCount: Math.round(
+        asBoundedNumber(onboardingRecord.pendingReviewCount, 0, 0, 99)
+      ),
+    },
+    profile: normalizeJourneyProfile(record.profile),
+    program: normalizeJourneyProgram(record.program),
+    goals: normalizeJourneyGoals(record.goals),
+    planToday: Array.isArray(record.planToday)
+      ? record.planToday
+          .map(normalizePlanItem)
+          .filter((item): item is PatientJourneyPlanItem => Boolean(item))
+      : [],
+    medicationReminders: Array.isArray(record.medicationReminders)
+      ? record.medicationReminders
+          .map(normalizeMedicationReminder)
+          .filter((item): item is PatientMedicationReminder => Boolean(item))
+      : [],
+    history: Array.isArray(record.history)
+      ? record.history
+          .map(normalizeHistoryItem)
+          .filter((item): item is PatientJourneyHistoryItem => Boolean(item))
+      : [],
+  };
+}
+
 function safeError(error: unknown, fallback: string): SafeServiceError {
   const record = asRecord(error);
   return {
@@ -341,6 +676,23 @@ function normalizeCheckinResponses(responses: Record<string, unknown>): Record<s
   return normalized;
 }
 
+function normalizeJourneyPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  return asRecord(sanitizeResponseValue(payload));
+}
+
+function normalizeOnboardingResult(value: unknown): PatientOnboardingResult | null {
+  const record = asRecord(value);
+  const patientId = asString(record.patientId);
+  if (!patientId) return null;
+  return {
+    patientId,
+    status: asString(record.status, 'in_progress'),
+    currentStep: asNullableString(record.currentStep),
+    completedSteps: normalizeStringArray(record.completedSteps, 10),
+    completedAt: asNullableString(record.completedAt),
+  };
+}
+
 export async function getPatientPortalSnapshot(patientId?: string): Promise<{
   data: PatientPortalSnapshot | null;
   error: SafeServiceError | null;
@@ -365,6 +717,68 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
     return { data: snapshot, error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Nao foi possivel carregar o portal.') };
+  }
+}
+
+export async function getPatientJourneySnapshot(patientId?: string): Promise<{
+  data: PatientJourneySnapshot | null;
+  error: SafeServiceError | null;
+}> {
+  try {
+    const supabase = await createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('get_patient_journey_snapshot', {
+      p_patient_id: asUuid(patientId) ?? null,
+    });
+    if (error) {
+      return { data: null, error: safeError(error, 'Nao foi possivel carregar a jornada.') };
+    }
+
+    const journey = normalizeJourneySnapshot(data);
+    if (!journey) {
+      return {
+        data: null,
+        error: { message: 'Contrato invalido da jornada do paciente.', code: 'invalid_contract' },
+      };
+    }
+
+    return { data: journey, error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel carregar a jornada.') };
+  }
+}
+
+export async function completePatientOnboarding(
+  patientId: string | undefined,
+  step: PatientOnboardingStep,
+  payload: Record<string, unknown>,
+  finish = false
+): Promise<{ data: PatientOnboardingResult | null; error: SafeServiceError | null }> {
+  if (!ONBOARDING_STEPS.has(step)) {
+    return {
+      data: null,
+      error: { message: 'Etapa de onboarding invalida.', code: 'invalid_input' },
+    };
+  }
+
+  try {
+    const supabase = await createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('complete_patient_onboarding', {
+      p_patient_id: asUuid(patientId) ?? null,
+      p_step: step,
+      p_payload: normalizeJourneyPayload(payload),
+      p_finish: finish,
+    });
+    if (error) {
+      return { data: null, error: safeError(error, 'Nao foi possivel salvar a etapa.') };
+    }
+
+    const result = normalizeOnboardingResult(data);
+    return {
+      data: result,
+      error: result ? null : { message: 'Contrato de onboarding indisponivel.' },
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel salvar a etapa.') };
   }
 }
 

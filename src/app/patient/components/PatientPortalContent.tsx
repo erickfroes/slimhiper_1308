@@ -14,6 +14,7 @@ import {
   LogOut,
   MessageSquare,
   RefreshCw,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
@@ -24,6 +25,7 @@ import SectionPanel from '@/components/ui/SectionPanel';
 import Tabs from '@/components/ui/Tabs';
 import { getDocumentSignedUrl } from '@/services/documentsApi';
 import DailyPortalSection from './daily/DailyPortalSection';
+import PatientJourneySection from './PatientJourneySection';
 import {
   PortalChatSection,
   PortalCheckinsSection,
@@ -35,17 +37,23 @@ import {
   isCheckinAnswered,
 } from './PatientPortalSections';
 import {
+  completePatientOnboarding,
+  getPatientJourneySnapshot,
   getPatientPortalSnapshot,
   markPatientPortalNotificationRead,
   sendPatientPortalMessage,
   submitPatientPortalCheckin,
+  type PatientJourneySnapshot,
+  type PatientOnboardingStep,
   type PatientPortalSnapshot,
+  type SafeServiceError,
 } from '@/services/patientPortalApi';
 import { isPatientDailyAction, type PatientDailyAction } from '@/services/patientDailyApi';
 
 type PortalTab =
   | 'resumo'
   | 'diario'
+  | 'jornada'
   | 'documentos'
   | 'financeiro'
   | 'chat'
@@ -55,6 +63,7 @@ type PortalTab =
 const tabs: Array<{ id: PortalTab; label: string; shortLabel: string; icon: LucideIcon }> = [
   { id: 'resumo', label: 'Resumo', shortLabel: 'Inicio', icon: Home },
   { id: 'diario', label: 'Diario', shortLabel: 'Hoje', icon: Activity },
+  { id: 'jornada', label: 'Minha jornada', shortLabel: 'Jornada', icon: UserRound },
   { id: 'documentos', label: 'Documentos', shortLabel: 'Docs', icon: FileText },
   { id: 'financeiro', label: 'Financeiro', shortLabel: 'Pagar', icon: CreditCard },
   { id: 'chat', label: 'Chat', shortLabel: 'Chat', icon: MessageSquare },
@@ -81,16 +90,45 @@ export default function PatientPortalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [snapshot, setSnapshot] = useState<PatientPortalSnapshot | null>(null);
+  const [journey, setJourney] = useState<PatientJourneySnapshot | null>(null);
   const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>();
   const [activeTab, setActiveTab] = useState<PortalTab>('resumo');
   const [dailyInitialAction, setDailyInitialAction] = useState<PatientDailyAction | null>(null);
   const [loading, setLoading] = useState(true);
+  const [journeyLoading, setJourneyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [journeyError, setJourneyError] = useState<SafeServiceError | null>(null);
   const [message, setMessage] = useState('');
   const [checkinAnswers, setCheckinAnswers] = useState<Record<string, Record<string, string>>>({});
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  async function loadJourney(patientId = selectedPatientId) {
+    if (!patientId) {
+      setJourney(null);
+      setJourneyLoading(false);
+      return;
+    }
+
+    setJourneyLoading(true);
+    setJourneyError(null);
+    const result = await getPatientJourneySnapshot(patientId);
+    if (result.error || !result.data) {
+      setJourney(null);
+      setJourneyError(result.error ?? { message: 'Nao foi possivel carregar a jornada.' });
+    } else {
+      setJourney(result.data);
+      if (
+        result.data.onboarding.status !== 'completed' &&
+        !searchParams.get('tab') &&
+        !searchParams.get('action')
+      ) {
+        setActiveTab('jornada');
+      }
+    }
+    setJourneyLoading(false);
+  }
 
   async function loadPortal(patientId = selectedPatientId) {
     setLoading(true);
@@ -98,10 +136,12 @@ export default function PatientPortalContent() {
     const result = await getPatientPortalSnapshot(patientId);
     if (result.error || !result.data) {
       setSnapshot(null);
+      setJourney(null);
       setError(result.error?.message ?? 'Nao foi possivel carregar o portal.');
     } else {
       setSnapshot(result.data);
       setSelectedPatientId(result.data.selectedPatientId);
+      await loadJourney(result.data.selectedPatientId);
     }
     setLoading(false);
   }
@@ -159,6 +199,20 @@ export default function PatientPortalContent() {
       (notification) => notification.status === 'unread'
     );
 
+    if (journey && journey.onboarding.status !== 'completed') {
+      return {
+        progress: journey.onboarding.progressPercent,
+        pendingCheckins,
+        openInvoices,
+        nextAction: {
+          tab: 'jornada' as PortalTab,
+          title: 'Concluir onboarding',
+          detail: `${journey.onboarding.progressPercent}% preenchido`,
+          icon: UserRound,
+        },
+      };
+    }
+
     if (pendingCheckins[0]) {
       return {
         progress,
@@ -212,7 +266,7 @@ export default function PatientPortalContent() {
         icon: MessageSquare,
       },
     };
-  }, [snapshot]);
+  }, [journey, snapshot]);
 
   async function handlePatientChange(patientId: string) {
     setSelectedPatientId(patientId);
@@ -308,6 +362,36 @@ export default function PatientPortalContent() {
     }
   }
 
+  async function handleSaveOnboardingStep(
+    step: PatientOnboardingStep,
+    payload: Record<string, unknown>,
+    finish = false
+  ) {
+    if (!snapshot || busyKey?.startsWith('onboarding-')) return false;
+
+    setBusyKey(`onboarding-${step}`);
+    setActionMessage(null);
+    try {
+      const result = await completePatientOnboarding(
+        snapshot.selectedPatientId,
+        step,
+        payload,
+        finish
+      );
+      if (result.error) {
+        setActionMessage(result.error.message);
+        return false;
+      }
+
+      setActionMessage(finish ? 'Onboarding concluido. Diario aberto.' : 'Etapa salva.');
+      await loadJourney(snapshot.selectedPatientId);
+      if (finish) setActiveTab('diario');
+      return true;
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   function handleCheckinAnswerChange(checkinId: string, index: number, value: string) {
     setCheckinAnswers((current) => ({
       ...current,
@@ -357,11 +441,19 @@ export default function PatientPortalContent() {
         <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px]">
           {unreadNotifications}
         </span>
+      ) : tab.id === 'jornada' &&
+        journey &&
+        (journey.onboarding.status !== 'completed' || journey.onboarding.pendingReviewCount > 0) ? (
+        <span className="rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-[10px]">
+          {journey.onboarding.status !== 'completed'
+            ? `${journey.onboarding.progressPercent}%`
+            : journey.onboarding.pendingReviewCount}
+        </span>
       ) : undefined,
   }));
 
   return (
-    <main className="min-h-screen bg-background px-4 py-4 pb-24 sm:px-6 sm:py-6 lg:px-8">
+    <main className="min-h-screen bg-background px-4 py-4 pb-32 sm:px-6 sm:py-6 lg:px-8">
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -525,6 +617,19 @@ export default function PatientPortalContent() {
           <SectionPanel contentClassName="p-5 sm:p-6">
             {activeTab === 'resumo' ? <PortalSummarySection snapshot={snapshot} /> : null}
 
+            {activeTab === 'jornada' ? (
+              <PatientJourneySection
+                snapshot={snapshot}
+                journey={journey}
+                loading={journeyLoading}
+                error={journeyError}
+                busy={busyKey?.startsWith('onboarding-') ?? false}
+                onReload={() => void loadJourney(snapshot.selectedPatientId)}
+                onSaveStep={handleSaveOnboardingStep}
+                onOpenTab={(tab) => setActiveTab(tab)}
+              />
+            ) : null}
+
             {activeTab === 'documentos' ? (
               <PortalDocumentsSection
                 snapshot={snapshot}
@@ -569,7 +674,7 @@ export default function PatientPortalContent() {
         className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 px-2 pt-2 shadow-lg backdrop-blur safe-bottom sm:hidden"
         aria-label="Navegacao do portal"
       >
-        <div className="mx-auto grid max-w-xl grid-cols-7 gap-1">
+        <div className="mx-auto grid max-w-xl grid-cols-4 gap-1">
           {tabs.map((tab) => {
             const TabIcon = tab.icon;
             const active = activeTab === tab.id;
