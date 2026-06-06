@@ -98,8 +98,10 @@ export default function Dialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         className={cx(
-          'relative flex max-h-[calc(100vh-2rem)] w-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl',
-          placement === 'right' ? 'ml-auto max-w-xl self-stretch' : 'm-auto max-w-lg'
+          'relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl',
+          placement === 'right'
+            ? 'ml-auto w-[calc(100vw-2rem)] max-w-xl self-stretch sm:w-full'
+            : 'm-auto w-[calc(100vw-2rem)] max-w-lg sm:w-full'
         )}
       >
         <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">

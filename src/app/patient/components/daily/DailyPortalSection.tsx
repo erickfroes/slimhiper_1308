@@ -512,7 +512,7 @@ export default function DailyPortalSection({
       ) : null}
 
       <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <section className="min-w-0 rounded-lg border border-border bg-card p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Hoje</h3>
@@ -534,7 +534,7 @@ export default function DailyPortalSection({
           </div>
         </section>
 
-        <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <section className="min-w-0 rounded-lg border border-border bg-card p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Acoes rapidas</h3>

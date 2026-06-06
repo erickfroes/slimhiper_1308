@@ -200,13 +200,11 @@ Status do corte 2026-06-06:
   expirar dados/marcar fotos para remocao.
 - [x] Alertas operacionais M01 podem ser emitidos por helper service-role para
   baixa adesao, check-in ausente e foto de refeicao pendente de revisao.
-- [B] Browser smoke mobile autenticado nao executado neste corte: rotas
-  `/clinic/patients/patient-001?tab=nutricao` e
-  `/patient?tab=diario&action=water` redirecionaram para `/auth/login` sem
-  sessao clinica/paciente; smoke sem sessao foi revalidado em
-  `/patient?tab=diario&action=water` sem erros de console.
+- [x] Browser smoke mobile autenticado executado com paciente local de smoke em
+  `/patient?tab=diario&action=water`, cobrindo 360px, 390px, 768px e desktop,
+  sem redirect para login, sem erros de console/rede e sem overflow horizontal.
 - [x] Checks do corte executados: `npm run type-check`, `npm run lint`,
-  `npm run build`, `git diff --check` e smoke local sem sessao apos
+  `npm run build`, `git diff --check` e smoke local autenticado apos
   modularizacao do portal.
 - [x] Portal paciente modularizado: `PatientPortalContent` concentra estado,
   navegacao e handlers, enquanto as abas de resumo, documentos, financeiro,
@@ -215,7 +213,7 @@ Status do corte 2026-06-06:
 
 Checklist mobile:
 
-- [B] Testar 360px, 390px, 768px e desktop.
+- [x] Testar 360px, 390px, 768px e desktop.
 - [x] Respeitar safe area inferior com bottom nav.
 - [x] Todos os CTAs principais com area minima de 44px.
 - [x] Nenhum FAB sobreposto ao input de chat ou bottom nav.
@@ -281,7 +279,7 @@ Aceite:
 - [x] Profissional ve resumo de adesao no Paciente 360.
 - [x] Dashboard mostra baixa adesao sem leitura direta de PII no browser.
 - [x] Sem mock silencioso com `NEXT_PUBLIC_USE_MOCK_DATA=false`.
-- [B] Browser smoke mobile autenticado passa em `/patient`.
+- [x] Browser smoke mobile autenticado passa em `/patient`.
 
 ### M02 - Onboarding, perfil, metas e plano do paciente
 
