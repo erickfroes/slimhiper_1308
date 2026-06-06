@@ -1025,85 +1025,136 @@ export default function TabFinanceiro({
             Nenhum pagamento registrado.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Descrição
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Valor
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Data
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Forma
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Registrado por
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Recibo
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentHistory.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                  >
-                    <td className="py-2.5 text-foreground">{p.description}</td>
-                    <td className="py-2.5 font-semibold text-green-700 tabular-nums">
+          <>
+            <div className="space-y-3 sm:hidden">
+              {paymentHistory.map((p) => (
+                <article key={p.id} className="rounded-xl border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {p.description}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{formatDate(p.paidAt)}</p>
+                    </div>
+                    <span className="text-sm font-bold tabular-nums text-green-700">
                       {formatBRL(p.amount)}
-                    </td>
-                    <td className="py-2.5 text-muted-foreground">{formatDate(p.paidAt)}</td>
-                    <td className="py-2.5 text-muted-foreground">
-                      {METHOD_LABELS[p.method] ?? p.method}
-                    </td>
-                    <td className="py-2.5 text-muted-foreground">{p.registeredBy}</td>
-                    <td className="py-2.5">
-                      {p.receiptId ? (
-                        <button
-                          type="button"
-                          className="text-xs text-primary flex items-center gap-1 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!receiptById.has(p.receiptId)}
-                          onClick={() => {
-                            const receipt = receiptById.get(p.receiptId!);
-                            if (receipt) downloadReceipt(receipt);
-                          }}
-                        >
-                          <Eye size={12} /> Ver
-                        </button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg bg-muted/40 p-2">
+                      <span className="text-muted-foreground">Metodo</span>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {METHOD_LABELS[p.method] ?? p.method}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-muted/40 p-2">
+                      <span className="text-muted-foreground">Registrado por</span>
+                      <p className="mt-1 truncate font-semibold text-foreground">
+                        {p.registeredBy}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    {p.receiptId ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!receiptById.has(p.receiptId)}
+                        onClick={() => {
+                          const receipt = receiptById.get(p.receiptId!);
+                          if (receipt) downloadReceipt(receipt);
+                        }}
+                      >
+                        <Eye size={12} /> Ver recibo
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Sem recibo</span>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Descrição
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Valor
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Data
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Forma
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Registrado por
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Recibo
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {paymentHistory.map((p) => (
+                    <tr
+                      key={p.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                    >
+                      <td className="py-2.5 text-foreground">{p.description}</td>
+                      <td className="py-2.5 font-semibold text-green-700 tabular-nums">
+                        {formatBRL(p.amount)}
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">{formatDate(p.paidAt)}</td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {METHOD_LABELS[p.method] ?? p.method}
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">{p.registeredBy}</td>
+                      <td className="py-2.5">
+                        {p.receiptId ? (
+                          <button
+                            type="button"
+                            className="text-xs text-primary flex items-center gap-1 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={!receiptById.has(p.receiptId)}
+                            onClick={() => {
+                              const receipt = receiptById.get(p.receiptId!);
+                              if (receipt) downloadReceipt(receipt);
+                            }}
+                          >
+                            <Eye size={12} /> Ver
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </Section>
 
@@ -1117,73 +1168,112 @@ export default function TabFinanceiro({
         {charges.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">Nenhuma cobrança gerada.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Descrição
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Valor
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Vencimento
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Tipo
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Status
-                  </th>
-                  <th
-                    scope="col"
-                    className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                  >
-                    Enviada em
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {charges.map((c) => (
-                  <tr
-                    key={c.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                  >
-                    <td className="py-2.5 text-foreground">{c.description}</td>
-                    <td className="py-2.5 font-semibold tabular-nums text-foreground">
+          <>
+            <div className="space-y-3 sm:hidden">
+              {charges.map((c) => (
+                <article key={c.id} className="rounded-xl border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {c.description}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Vence em {formatDate(c.dueDate)}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold tabular-nums text-foreground">
                       {formatBRL(c.amount)}
-                    </td>
-                    <td className="py-2.5 text-muted-foreground">{formatDate(c.dueDate)}</td>
-                    <td className="py-2.5 text-muted-foreground">
-                      {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
-                    </td>
-                    <td className="py-2.5">
-                      <StatusPill status={c.status} />
-                    </td>
-                    <td className="py-2.5 text-muted-foreground">
-                      {c.sentAt ? formatDate(c.sentAt) : '—'}
-                    </td>
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg bg-muted/40 p-2">
+                      <span className="text-muted-foreground">Tipo</span>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-muted/40 p-2">
+                      <span className="text-muted-foreground">Enviada em</span>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {c.sentAt ? formatDate(c.sentAt) : 'Nao enviada'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <StatusPill status={c.status} />
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Descrição
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Valor
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Vencimento
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Tipo
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Status
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Enviada em
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {charges.map((c) => (
+                    <tr
+                      key={c.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                    >
+                      <td className="py-2.5 text-foreground">{c.description}</td>
+                      <td className="py-2.5 font-semibold tabular-nums text-foreground">
+                        {formatBRL(c.amount)}
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">{formatDate(c.dueDate)}</td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
+                      </td>
+                      <td className="py-2.5">
+                        <StatusPill status={c.status} />
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {c.sentAt ? formatDate(c.sentAt) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </Section>
 
