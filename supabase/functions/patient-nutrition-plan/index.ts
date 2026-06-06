@@ -138,6 +138,20 @@ function mapTeamNote(row: Record<string, unknown>) {
   };
 }
 
+function mapDailyMealPhoto(value: unknown) {
+  const row = asRecord(value);
+  return {
+    id: String(row.id ?? ''),
+    mealName: asString(row.mealName ?? row.meal_name, 'Refeicao'),
+    submittedAt: asIsoDate(row.submittedAt ?? row.submitted_at, new Date(0).toISOString()),
+    note: asString(row.note) || undefined,
+    photoUploadStatus: asString(row.photoUploadStatus ?? row.photo_upload_status, 'uploaded'),
+    hasPhoto: asBoolean(row.hasPhoto ?? row.has_photo, true),
+    reviewedAt: asString(row.reviewedAt ?? row.reviewed_at) || undefined,
+    reviewNote: asString(row.reviewNote ?? row.review_note) || undefined,
+  };
+}
+
 function emptyPlan(patientId: string, patientCreatedAt: string, updatedAt: string) {
   return {
     id: `nutrition-${patientId}`,
@@ -155,6 +169,7 @@ function emptyPlan(patientId: string, patientCreatedAt: string, updatedAt: strin
     foodGroups: [],
     planHistory: [],
     mealAdherence: [],
+    mealPhotos: [],
     teamNotes: [],
   };
 }
@@ -164,10 +179,14 @@ function mapActivePlan(params: {
   patientId: string;
   history: Record<string, unknown>[];
   notes: Record<string, unknown>[];
+  mealPhotoRows?: unknown[];
 }) {
-  const { row, patientId, history, notes } = params;
+  const { row, patientId, history, notes, mealPhotoRows } = params;
   const metadata = asRecord(row.metadata);
   const mealAdherence = asArray(row.meal_adherence).map(mapAdherence);
+  const mealPhotos = asArray(mealPhotoRows)
+    .map(mapDailyMealPhoto)
+    .filter((photo) => photo.id);
   const adherencePercent =
     typeof metadata.adherencePercent === 'number' || typeof metadata.adherence_percent === 'number'
       ? Math.max(
@@ -201,7 +220,7 @@ function mapActivePlan(params: {
     foodGroups: asArray(row.food_groups).map(mapFoodGroup),
     planHistory: history.map(mapHistoryPlan),
     mealAdherence,
-    mealPhotos: [],
+    mealPhotos,
     teamNotes: notes.map(mapTeamNote).filter((note) => note.content),
   };
 }
@@ -317,38 +336,47 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: activePlan, error: activePlanError } = await supabase
-      .from('nutrition_plans')
-      .select(
-        'id,tenant_id,patient_id,status,name,target_calories,target_protein_g,target_carbs_g,target_fat_g,meals,food_groups,meal_adherence,metadata,created_at,updated_at,archived_at'
-      )
-      .eq('tenant_id', tenantId)
-      .eq('patient_id', patientId)
-      .eq('status', 'active')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const [activePlanResult, historyResult, dailySummaryResult] = await Promise.all([
+      supabase
+        .from('nutrition_plans')
+        .select(
+          'id,tenant_id,patient_id,status,name,target_calories,target_protein_g,target_carbs_g,target_fat_g,meals,food_groups,meal_adherence,metadata,created_at,updated_at,archived_at'
+        )
+        .eq('tenant_id', tenantId)
+        .eq('patient_id', patientId)
+        .eq('status', 'active')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('nutrition_plans')
+        .select('id,status,name,target_calories,metadata,created_at,updated_at,archived_at')
+        .eq('tenant_id', tenantId)
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false })
+        .limit(6),
+      supabase.rpc('get_clinic_patient_daily_summary', {
+        p_patient_id: patientId,
+        p_target_date: null,
+      }),
+    ]);
 
-    if (activePlanError) throw activePlanError;
+    if (activePlanResult.error || historyResult.error || dailySummaryResult.error) {
+      throw activePlanResult.error ?? historyResult.error ?? dailySummaryResult.error;
+    }
 
-    const { data: historyRows, error: historyError } = await supabase
-      .from('nutrition_plans')
-      .select('id,status,name,target_calories,metadata,created_at,updated_at,archived_at')
-      .eq('tenant_id', tenantId)
-      .eq('patient_id', patientId)
-      .order('created_at', { ascending: false })
-      .limit(6);
-
-    if (historyError) throw historyError;
+    const activePlan = activePlanResult.data ?? null;
+    const historyRows = historyResult.data ?? [];
+    const dailySummary = asRecord(dailySummaryResult.data);
+    const mealPhotoRows = asArray(dailySummary.mealPhotos);
 
     if (!activePlan) {
       return jsonResponse(200, {
         ok: true,
         data: {
           ...emptyPlan(patientId, String(patient.created_at), String(patient.updated_at)),
-          planHistory: (historyRows ?? []).map((row) =>
-            mapHistoryPlan(row as Record<string, unknown>)
-          ),
+          planHistory: historyRows.map((row) => mapHistoryPlan(row as Record<string, unknown>)),
+          mealPhotos: mealPhotoRows.map(mapDailyMealPhoto).filter((photo) => photo.id),
         },
         meta: { tenantId, timestamp },
       });
@@ -370,8 +398,9 @@ Deno.serve(async (req) => {
       data: mapActivePlan({
         row: activePlan as Record<string, unknown>,
         patientId,
-        history: (historyRows ?? []) as Record<string, unknown>[],
+        history: historyRows as Record<string, unknown>[],
         notes: (noteRows ?? []) as Record<string, unknown>[],
+        mealPhotoRows,
       }),
       meta: { tenantId, timestamp },
     });

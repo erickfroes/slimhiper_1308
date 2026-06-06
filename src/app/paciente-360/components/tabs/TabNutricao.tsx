@@ -41,6 +41,7 @@ import EmptyState from '@/components/EmptyState';
 import {
   archivePatientNutritionPlan,
   getPatientNutritionPlan,
+  getMealPhotoSignedUrl,
   savePatientNutritionPlan,
 } from '@/services/nutritionApi';
 
@@ -252,16 +253,63 @@ function PlanHistoryRow({ entry }: { entry: NutritionPlanHistory }) {
 }
 
 // ─── Meal photo card ──────────────────────────────────────────────────────────
-function MealPhotoCard({ photo }: { photo: MealPhoto }) {
+function MealPhotoCard({ photo, patientId }: { photo: MealPhoto; patientId: string }) {
+  const [signedUrl, setSignedUrl] = useState(photo.photoUrl ?? '');
+  const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const canLoadPhoto =
+    photo.hasPhoto !== false &&
+    photo.photoUploadStatus !== 'failed' &&
+    photo.photoUploadStatus !== 'pending_upload';
+
+  const handleLoadPhoto = async () => {
+    if (signedUrl || isLoadingUrl || !canLoadPhoto) return;
+    setIsLoadingUrl(true);
+    setUrlError(null);
+
+    try {
+      const result = await getMealPhotoSignedUrl(patientId, photo.id);
+      if (result.error || !result.data) {
+        setUrlError(result.error?.message ?? 'Nao foi possivel abrir a foto.');
+        return;
+      }
+      setSignedUrl(result.data.url);
+    } finally {
+      setIsLoadingUrl(false);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-border overflow-hidden bg-card">
-      <div className="relative h-32 bg-muted">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.photoUrl}
-          alt={`Foto de ${photo.mealName} enviada pelo paciente`}
-          className="w-full h-full object-cover"
-        />
+      <div className="relative flex h-32 items-center justify-center bg-muted">
+        {signedUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={signedUrl}
+            alt={`Foto de ${photo.mealName} enviada pelo paciente`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-2 px-4 text-center">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-card text-muted-foreground">
+              {canLoadPhoto ? <Lock size={15} /> : <XCircle size={15} />}
+            </div>
+            <button
+              type="button"
+              disabled={!canLoadPhoto || isLoadingUrl}
+              onClick={() => void handleLoadPhoto()}
+              className="min-h-9 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {canLoadPhoto
+                ? isLoadingUrl
+                  ? 'Abrindo...'
+                  : 'Ver foto'
+                : photo.photoUploadStatus === 'pending_upload'
+                  ? 'Upload pendente'
+                  : 'Foto indisponivel'}
+            </button>
+          </div>
+        )}
         <span className="absolute top-2 left-2 text-xs bg-black/60 text-white px-2 py-0.5 rounded-full">
           {photo.mealName}
         </span>
@@ -276,6 +324,9 @@ function MealPhotoCard({ photo }: { photo: MealPhoto }) {
           })}
         </p>
         {photo.note && <p className="text-xs text-foreground mb-1">{photo.note}</p>}
+        {urlError && (
+          <p className="mb-1 rounded-lg bg-red-50 px-2 py-1 text-xs text-red-600">{urlError}</p>
+        )}
         {photo.reviewedBy && (
           <div className="mt-2 pt-2 border-t border-border">
             <p className="text-xs text-muted-foreground font-medium">{photo.reviewedBy}</p>
@@ -684,7 +735,7 @@ export default function TabNutricao({ patientId, initialPlan = null }: TabNutric
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {visiblePhotos.map((photo) => (
-              <MealPhotoCard key={photo.id} photo={photo} />
+              <MealPhotoCard key={photo.id} photo={photo} patientId={patientId} />
             ))}
           </div>
           {plan.mealPhotos.length > 3 && (

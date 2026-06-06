@@ -188,16 +188,17 @@ Status do corte 2026-06-06:
   patient-scoped e timeline/alertas basicos.
 - [x] Dashboard clinico consome `get_clinic_daily_adherence_snapshot` para
   baixa adesao diaria sem retornar PII no RPC.
-- [~] Paciente 360 recebe sinais via `patient_timeline_events`, mas ainda nao
-  tem card/resumo agregado dedicado de habitos diarios.
-- [~] Foto de refeicao ja usa bucket privado e validacao de tipo/tamanho, mas
-  visualizacao clinica por signed URL curta ainda precisa de corte proprio.
-- [B] Browser smoke mobile autenticado nao executado neste corte: rota
-  `/patient?tab=diario&action=water` respondeu `307 -> /auth/login` sem sessao
-  de paciente; Browser plugin nao expos navegacao e Playwright local/bundled nao
-  estava utilizavel.
+- [x] Paciente 360 recebe sinais via `patient_timeline_events` e resumo
+  agregado dedicado de habitos diarios em `patient-360-summary`.
+- [x] Foto de refeicao usa bucket privado, validacao de tipo/tamanho e
+  visualizacao clinica por signed URL curta via Edge Function
+  `meal-photo-signed-url`, sem expor caminho de storage no RPC agregado.
+- [B] Browser smoke mobile autenticado nao executado neste corte: rotas
+  `/clinic/patients/patient-001?tab=nutricao` e
+  `/patient?tab=diario&action=water` redirecionaram para `/auth/login` sem
+  sessao clinica/paciente; smoke sem sessao nao capturou erros de console.
 - [x] Checks do corte executados: `npm run type-check`, `npm run lint`,
-  `npm run build` e `git diff --check`.
+  `npm run build`, `git diff --check` e smoke local sem sessao.
 
 Checklist mobile:
 
@@ -217,7 +218,8 @@ Checklist produto:
 - [x] Definir quais habitos entram no MVP: agua, refeicao, treino, check-in.
 - [x] Definir se refeicao exige foto obrigatoria, opcional ou por programa.
 - [x] Definir metas por programa, paciente ou default da clinica.
-- [~] Definir visibilidade para clinica: tudo, resumo, somente sinais de risco.
+- [x] Definir visibilidade para clinica: resumo agregado para `patients.read`,
+  metadados de fotos somente com `nutrition.read` e signed URL sob demanda.
 - [~] Definir quando gerar alertas: baixa adesao, ausencia de check-in, peso,
   humor, sintomas ou foto pendente de revisao.
 - [ ] Definir retencao de fotos e dados diarios.
@@ -231,8 +233,8 @@ Checklist backend:
 - [x] Criar policies para `patient_accounts` e `guardian_links`.
 - [x] Criar trigger/timeline para sinais relevantes.
 - [x] Criar bucket privado ou padronizar bucket para fotos de refeicao.
-- [ ] Criar signed URL curta para fotos.
-- [~] Atualizar `patient-360-summary` para incluir sinais diarios agregados.
+- [x] Criar signed URL curta para fotos.
+- [x] Atualizar `patient-360-summary` para incluir sinais diarios agregados.
 - [x] Atualizar dashboard clinico com baixa adesao derivada desses sinais.
 
 Checklist frontend:
@@ -249,7 +251,7 @@ Checklist frontend:
 Checklist seguranca:
 
 - [x] Fotos de refeicao nunca em bucket publico.
-- [ ] Signed URLs nunca logadas.
+- [x] Signed URLs nunca logadas.
 - [x] Paciente nao pode escrever para outro paciente.
 - [x] Guardian so acessa vinculo ativo.
 - [x] Logs sanitizados sem texto livre sensivel de check-in.
@@ -259,10 +261,10 @@ Aceite:
 
 - [x] Paciente registra agua, refeicao, treino e check-in no celular em ate 3
   toques por fluxo comum.
-- [~] Profissional ve resumo de adesao no Paciente 360.
+- [x] Profissional ve resumo de adesao no Paciente 360.
 - [x] Dashboard mostra baixa adesao sem leitura direta de PII no browser.
 - [x] Sem mock silencioso com `NEXT_PUBLIC_USE_MOCK_DATA=false`.
-- [B] Browser smoke mobile passa em `/patient`.
+- [B] Browser smoke mobile autenticado passa em `/patient`.
 
 ### M02 - Onboarding, perfil, metas e plano do paciente
 

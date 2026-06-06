@@ -142,16 +142,19 @@ function normalizeAdherence(value: unknown): MealAdherenceEntry | null {
 function normalizePhoto(value: unknown): MealPhoto | null {
   const record = asRecord(value);
   const id = asString(record.id);
-  const photoUrl = asString(record.photoUrl);
-  if (!id || !photoUrl) return null;
+  if (!id) return null;
   return {
     id,
     mealName: asString(record.mealName),
-    photoUrl,
+    photoUrl: asString(record.photoUrl) || undefined,
     submittedAt: asString(record.submittedAt),
     note: typeof record.note === 'string' ? record.note : undefined,
     reviewedBy: typeof record.reviewedBy === 'string' ? record.reviewedBy : undefined,
+    reviewedAt: typeof record.reviewedAt === 'string' ? record.reviewedAt : undefined,
     reviewNote: typeof record.reviewNote === 'string' ? record.reviewNote : undefined,
+    photoUploadStatus:
+      typeof record.photoUploadStatus === 'string' ? record.photoUploadStatus : undefined,
+    hasPhoto: typeof record.hasPhoto === 'boolean' ? record.hasPhoto : undefined,
   };
 }
 
@@ -262,6 +265,59 @@ export async function getPatientNutritionPlan(
     return { data: plan, error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Nao foi possivel carregar nutricao.') };
+  }
+}
+
+export async function getMealPhotoSignedUrl(
+  patientId: string,
+  mealEntryId: string
+): Promise<{
+  data: { url: string; expiresInSeconds: number } | null;
+  error: SafeServiceError | null;
+}> {
+  if (!patientId.trim() || !mealEntryId.trim()) {
+    return { data: null, error: { message: 'Foto invalida para visualizacao.' } };
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('meal-photo-signed-url', {
+      body: {
+        patient_id: patientId,
+        meal_entry_id: mealEntryId,
+      },
+    });
+
+    if (error) {
+      return {
+        data: null,
+        error: {
+          message: 'Falha ao gerar URL segura da foto.',
+          code: error.name,
+          details: error.message,
+        },
+      };
+    }
+
+    const unwrapped = unwrapEdgeResponse<unknown>(data);
+    if (unwrapped.error) return { data: null, error: unwrapped.error };
+
+    const record = asRecord(unwrapped.data);
+    const url = asString(record.url);
+    const expiresInSeconds = asNumber(record.expiresInSeconds, 300);
+    if (!url) {
+      return {
+        data: null,
+        error: {
+          message: 'Contrato invalido da URL segura retornada pela Edge Function.',
+          code: 'invalid_meal_photo_url_contract',
+        },
+      };
+    }
+
+    return { data: { url, expiresInSeconds }, error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel abrir a foto.') };
   }
 }
 

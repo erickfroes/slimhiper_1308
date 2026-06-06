@@ -445,11 +445,14 @@ export interface MealAdherenceEntry {
 export interface MealPhoto {
   id: string;
   mealName: string;
-  photoUrl: string;
+  photoUrl?: string;
   submittedAt: string;
   note?: string;
   reviewedBy?: string;
+  reviewedAt?: string;
   reviewNote?: string;
+  photoUploadStatus?: 'none' | 'pending_upload' | 'uploaded' | 'failed' | string;
+  hasPhoto?: boolean;
 }
 
 export interface NutritionTeamNote {
@@ -459,6 +462,23 @@ export interface NutritionTeamNote {
   content: string;
   createdAt: string;
   isInternal: boolean;
+}
+
+export interface PatientDailyAdherenceSummary {
+  dateIso: string;
+  progressPercent: number;
+  status: 'done' | 'partial' | 'low' | 'empty' | string;
+  lastSignalAt?: string;
+  waterMl: number;
+  waterGoalMl: number;
+  mealsCount: number;
+  mealsGoal: number;
+  workoutsCount: number;
+  workoutsGoal: number;
+  checkinRequired: boolean;
+  checkinDone: boolean;
+  pendingCheckinsCount: number;
+  mealPhotos: MealPhoto[];
 }
 
 export interface PatientChatSummary {
@@ -568,6 +588,7 @@ export interface Patient360Summary {
   recentTimeline: PatientTimelineEvent[];
   documents: PatientDocumentSummary[];
   prescriptions: PatientPrescriptionSummary[];
+  dailyAdherence?: PatientDailyAdherenceSummary | null;
   nutritionPlan: PatientNutritionPlanSummary;
   chat: PatientChatSummary;
   mainUnit?: string;

@@ -384,6 +384,52 @@ function mapNutritionTeamNote(row: Record<string, unknown>) {
   };
 }
 
+function mapDailyMealPhoto(value: unknown) {
+  const row = asRecord(value);
+  return {
+    id: String(row.id ?? ''),
+    mealName: asString(row.mealName ?? row.meal_name, 'Refeicao'),
+    submittedAt: asString(row.submittedAt ?? row.submitted_at, new Date(0).toISOString()),
+    note: asString(row.note) || undefined,
+    photoUploadStatus: asString(row.photoUploadStatus ?? row.photo_upload_status, 'uploaded'),
+    hasPhoto: asBoolean(row.hasPhoto ?? row.has_photo, true),
+    reviewedAt: asString(row.reviewedAt ?? row.reviewed_at) || undefined,
+    reviewNote: asString(row.reviewNote ?? row.review_note) || undefined,
+  };
+}
+
+function mapDailyAdherenceSummary(value: unknown) {
+  const row = asRecord(value);
+  const progressPercent = Math.max(0, Math.min(100, asNumber(row.progressPercent)));
+  const mealPhotos = asArray(row.mealPhotos)
+    .map(mapDailyMealPhoto)
+    .filter((photo) => photo.id);
+
+  if (!asString(row.dateIso ?? row.date_iso) && progressPercent === 0 && mealPhotos.length === 0) {
+    return null;
+  }
+
+  return {
+    dateIso: asString(row.dateIso ?? row.date_iso, new Date().toISOString().slice(0, 10)),
+    progressPercent,
+    status: asString(row.status, 'empty'),
+    lastSignalAt: asString(row.lastSignalAt ?? row.last_signal_at) || undefined,
+    waterMl: Math.max(0, asNumber(row.waterMl ?? row.water_ml)),
+    waterGoalMl: Math.max(1, asNumber(row.waterGoalMl ?? row.water_goal_ml, 2000)),
+    mealsCount: Math.max(0, asNumber(row.mealsCount ?? row.meals_count)),
+    mealsGoal: Math.max(1, asNumber(row.mealsGoal ?? row.meals_goal, 4)),
+    workoutsCount: Math.max(0, asNumber(row.workoutsCount ?? row.workouts_count)),
+    workoutsGoal: Math.max(0, asNumber(row.workoutsGoal ?? row.workouts_goal, 1)),
+    checkinRequired: asBoolean(row.checkinRequired ?? row.checkin_required, true),
+    checkinDone: asBoolean(row.checkinDone ?? row.checkin_done, false),
+    pendingCheckinsCount: Math.max(
+      0,
+      asNumber(row.pendingCheckinsCount ?? row.pending_checkins_count)
+    ),
+    mealPhotos,
+  };
+}
+
 function mapNutritionPlan(params: {
   row: Record<string, unknown> | null;
   patientId: string;
@@ -391,8 +437,13 @@ function mapNutritionPlan(params: {
   lastUpdate: string;
   historyRows: Record<string, unknown>[];
   noteRows: Record<string, unknown>[];
+  mealPhotoRows?: unknown[];
 }) {
-  const { row, patientId, patientCreatedAt, lastUpdate, historyRows, noteRows } = params;
+  const { row, patientId, patientCreatedAt, lastUpdate, historyRows, noteRows, mealPhotoRows } =
+    params;
+  const mealPhotos = asArray(mealPhotoRows)
+    .map(mapDailyMealPhoto)
+    .filter((photo) => photo.id);
 
   if (!row) {
     return {
@@ -411,7 +462,7 @@ function mapNutritionPlan(params: {
       foodGroups: [],
       planHistory: historyRows.map(mapNutritionPlanHistory),
       mealAdherence: [],
-      mealPhotos: [],
+      mealPhotos,
       teamNotes: [],
     };
   }
@@ -451,7 +502,7 @@ function mapNutritionPlan(params: {
     foodGroups: asArray(row.food_groups).map(mapNutritionFoodGroup),
     planHistory: historyRows.map(mapNutritionPlanHistory),
     mealAdherence,
-    mealPhotos: [],
+    mealPhotos,
     teamNotes: noteRows.map(mapNutritionTeamNote).filter((note) => note.content),
   };
 }
@@ -670,6 +721,7 @@ async function buildAndReturnSummary({
     packageEnrollmentRes,
     chatThreadRes,
     latestChatMessageRes,
+    dailySummaryRes,
     nutritionPlanRes,
   ] = await Promise.all([
     supabase
@@ -767,6 +819,10 @@ async function buildAndReturnSummary({
           .order('created_at', { ascending: false })
           .limit(1)
       : Promise.resolve({ data: null, error: null }),
+    supabase.rpc('get_clinic_patient_daily_summary', {
+      p_patient_id: patientId,
+      p_target_date: null,
+    }),
     tenantPermissions.has('nutrition.read')
       ? supabase
           .from('nutrition_plans')
@@ -793,6 +849,7 @@ async function buildAndReturnSummary({
     packageEnrollmentRes.error,
     chatThreadRes.error,
     latestChatMessageRes.error,
+    dailySummaryRes.error,
     nutritionPlanRes.error,
   ].filter(Boolean);
   if (queryErrors.length) throw queryErrors[0];
@@ -927,6 +984,7 @@ async function buildAndReturnSummary({
       nutritionPlanRow?.updated_at,
       ...(nutritionHistoryRows ?? []).map((plan) => plan.updated_at),
       ...(nutritionNoteRows ?? []).map((note) => note.created_at),
+      asRecord(dailySummaryRes.data).lastSignalAt,
       chatThreadRes.data?.updated_at,
       ...(Array.isArray(latestChatMessageRes.data)
         ? latestChatMessageRes.data.map((message) => message.created_at)
@@ -1066,6 +1124,7 @@ async function buildAndReturnSummary({
         lastUpdate,
         historyRows: nutritionHistoryRows,
         noteRows: nutritionNoteRows,
+        mealPhotoRows: asArray(asRecord(dailySummaryRes.data).mealPhotos),
       })
     : mapNutritionPlan({
         row: null,
@@ -1074,7 +1133,9 @@ async function buildAndReturnSummary({
         lastUpdate,
         historyRows: [],
         noteRows: [],
+        mealPhotoRows: [],
       });
+  const dailyAdherence = mapDailyAdherenceSummary(dailySummaryRes.data);
 
   const data = {
     profile: {
@@ -1157,6 +1218,7 @@ async function buildAndReturnSummary({
           ...mapPrescriptionSummary(prescription as Record<string, unknown>, patientId),
         }))
       : [],
+    dailyAdherence,
     nutritionPlan,
     chat: {
       id: chatThreadRes.data?.id ?? `chat-${patientId}`,

@@ -317,17 +317,47 @@ function normalizeMealAdherence(item: unknown): MealAdherenceEntry | null {
 function normalizeMealPhoto(item: unknown): MealPhoto | null {
   const record = asRecord(item);
   const id = asString(record?.id);
-  const photoUrl = asString(record?.photoUrl);
-  if (!record || !id || !photoUrl) return null;
+  if (!record || !id) return null;
 
   return {
     id,
     mealName: asString(record.mealName),
-    photoUrl,
+    photoUrl: typeof record.photoUrl === 'string' ? record.photoUrl : undefined,
     submittedAt: asString(record.submittedAt),
     note: typeof record.note === 'string' ? record.note : undefined,
     reviewedBy: typeof record.reviewedBy === 'string' ? record.reviewedBy : undefined,
+    reviewedAt: typeof record.reviewedAt === 'string' ? record.reviewedAt : undefined,
     reviewNote: typeof record.reviewNote === 'string' ? record.reviewNote : undefined,
+    photoUploadStatus:
+      typeof record.photoUploadStatus === 'string' ? record.photoUploadStatus : undefined,
+    hasPhoto: typeof record.hasPhoto === 'boolean' ? record.hasPhoto : undefined,
+  };
+}
+
+function normalizeDailyAdherence(item: unknown): Patient360Summary['dailyAdherence'] | null {
+  const record = asRecord(item);
+  const dateIso = asString(record?.dateIso);
+  if (!record || !dateIso) return null;
+
+  return {
+    dateIso,
+    progressPercent: Math.max(0, Math.min(100, asNumber(record.progressPercent))),
+    status: asString(record.status, 'empty'),
+    lastSignalAt: typeof record.lastSignalAt === 'string' ? record.lastSignalAt : undefined,
+    waterMl: Math.max(0, asNumber(record.waterMl)),
+    waterGoalMl: Math.max(1, asNumber(record.waterGoalMl, 2000)),
+    mealsCount: Math.max(0, asNumber(record.mealsCount)),
+    mealsGoal: Math.max(1, asNumber(record.mealsGoal, 4)),
+    workoutsCount: Math.max(0, asNumber(record.workoutsCount)),
+    workoutsGoal: Math.max(0, asNumber(record.workoutsGoal, 1)),
+    checkinRequired: asBoolean(record.checkinRequired, true),
+    checkinDone: asBoolean(record.checkinDone),
+    pendingCheckinsCount: Math.max(0, asNumber(record.pendingCheckinsCount)),
+    mealPhotos: Array.isArray(record.mealPhotos)
+      ? record.mealPhotos
+          .map(normalizeMealPhoto)
+          .filter((photo): photo is MealPhoto => Boolean(photo))
+      : [],
   };
 }
 
@@ -479,6 +509,7 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       ? (raw.documents as Patient360Summary['documents'])
       : [],
     prescriptions,
+    dailyAdherence: normalizeDailyAdherence(raw?.dailyAdherence),
     nutritionPlan: {
       id: asString(asRecord(raw?.nutritionPlan)?.id),
       patientId: asString(asRecord(raw?.nutritionPlan)?.patientId, patientId),

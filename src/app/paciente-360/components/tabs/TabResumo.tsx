@@ -20,6 +20,9 @@ import {
   ClipboardList,
   CreditCard,
   ShieldOff,
+  Droplets,
+  Utensils,
+  Dumbbell,
 } from 'lucide-react';
 import type { Patient360Summary } from '@/domain/types';
 import AlertPanel from '@/components/AlertPanel';
@@ -188,6 +191,7 @@ export default function TabResumo({
     activePackage,
     documents,
     chat,
+    dailyAdherence,
   } = data;
 
   const pendingTasks = tasks.filter((t) => !t.isCompleted);
@@ -263,6 +267,28 @@ export default function TabResumo({
 
   const nextAppointments = upcomingAppointments.filter((a) => a.status === 'agendado');
   const recentAppointments = upcomingAppointments.filter((a) => a.status === 'concluido');
+  const dailyStatusColor =
+    !dailyAdherence || dailyAdherence.progressPercent < 40
+      ? 'text-red-600'
+      : dailyAdherence.progressPercent < 60
+        ? 'text-amber-600'
+        : dailyAdherence.progressPercent < 80
+          ? 'text-primary'
+          : 'text-positive';
+  const dailyStatusBg =
+    !dailyAdherence || dailyAdherence.progressPercent < 40
+      ? 'bg-red-50'
+      : dailyAdherence.progressPercent < 60
+        ? 'bg-amber-50'
+        : dailyAdherence.progressPercent < 80
+          ? 'bg-primary/10'
+          : 'bg-emerald-50';
+  const dailySignalLabel = dailyAdherence?.lastSignalAt
+    ? new Date(dailyAdherence.lastSignalAt).toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'Sem sinais hoje';
 
   return (
     <div className="space-y-5">
@@ -440,6 +466,78 @@ export default function TabResumo({
       </div>
 
       {/* ── Two-column summary layout ── */}
+      <div className="card-base p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <SectionHeader
+              icon={Activity}
+              label="Diario do paciente hoje"
+              iconBg={dailyStatusBg}
+              iconColor={dailyStatusColor}
+              badge={
+                dailyAdherence ? (
+                  <span
+                    className={[
+                      'rounded-full px-2 py-0.5 text-xs font-semibold',
+                      dailyStatusBg,
+                      dailyStatusColor,
+                    ].join(' ')}
+                  >
+                    {dailyAdherence.progressPercent}%
+                  </span>
+                ) : undefined
+              }
+            />
+            <p className="text-sm text-muted-foreground">
+              Ultimo sinal: {dailySignalLabel}. Fotos disponiveis:{' '}
+              {dailyAdherence?.mealPhotos.length ?? 0}.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
+            <div className="rounded-xl bg-muted/50 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <Droplets size={13} />
+                Agua
+              </div>
+              <p className="mt-1 text-sm font-bold text-foreground tabular-nums">
+                {dailyAdherence?.waterMl ?? 0}/{dailyAdherence?.waterGoalMl ?? 2000} ml
+              </p>
+            </div>
+            <div className="rounded-xl bg-muted/50 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <Utensils size={13} />
+                Refeicoes
+              </div>
+              <p className="mt-1 text-sm font-bold text-foreground tabular-nums">
+                {dailyAdherence?.mealsCount ?? 0}/{dailyAdherence?.mealsGoal ?? 4}
+              </p>
+            </div>
+            <div className="rounded-xl bg-muted/50 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <Dumbbell size={13} />
+                Treino
+              </div>
+              <p className="mt-1 text-sm font-bold text-foreground tabular-nums">
+                {dailyAdherence?.workoutsCount ?? 0}/{dailyAdherence?.workoutsGoal ?? 1}
+              </p>
+            </div>
+            <div className="rounded-xl bg-muted/50 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                <ClipboardList size={13} />
+                Check-in
+              </div>
+              <p className="mt-1 text-sm font-bold text-foreground">
+                {dailyAdherence?.checkinDone
+                  ? 'feito'
+                  : dailyAdherence?.checkinRequired
+                    ? 'pendente'
+                    : 'sem agenda'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5 items-start">
         {/* ══ MAIN COLUMN ══ */}
         <div className="space-y-5">
