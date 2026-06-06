@@ -26,6 +26,7 @@ import {
   type ClinicDocumentsWorkspace,
 } from '@/services/clinicDocumentsApi';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
+import DataState from '@/components/ui/DataState';
 
 function statusBadge(status: string) {
   const normalized = status.toLowerCase();
@@ -423,7 +424,7 @@ export default function ClinicDocumentsContent() {
                     'Atualizado',
                     'Acoes',
                   ].map((header) => (
-                    <th key={header} className="px-4 py-3 text-left font-medium">
+                    <th key={header} scope="col" className="px-4 py-3 text-left font-medium">
                       {header}
                     </th>
                   ))}
@@ -432,11 +433,13 @@ export default function ClinicDocumentsContent() {
               <tbody>
                 {data.documents.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-10 text-center text-sm text-muted-foreground"
-                    >
-                      Nenhum documento gerado para o tenant ativo.
+                    <td colSpan={9} className="px-4 py-6">
+                      <DataState
+                        kind="empty"
+                        title="Nenhum documento gerado"
+                        description="Gere um documento para o tenant ativo usando o painel lateral."
+                        className="min-h-40 border-0 bg-transparent"
+                      />
                     </td>
                   </tr>
                 ) : (

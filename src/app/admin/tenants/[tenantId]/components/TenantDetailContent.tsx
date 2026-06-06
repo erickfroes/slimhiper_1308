@@ -431,6 +431,7 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
                 (header) => (
                   <th
                     key={header}
+                    scope="col"
                     className="px-3 py-2 text-left font-medium text-muted-foreground"
                   >
                     {header}
@@ -639,6 +640,7 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
                   (header) => (
                     <th
                       key={header}
+                      scope="col"
                       className="px-3 py-2 text-left font-medium text-muted-foreground"
                     >
                       {header}

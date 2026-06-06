@@ -286,28 +286,141 @@ export default function TenantsManagementContent() {
       </div>
 
       <div className="card-base overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="divide-y divide-border lg:hidden">
+          {filtered.length === 0 ? (
+            <div className="px-4 py-12 text-center text-muted-foreground">
+              <Building2 size={32} className="mx-auto mb-2 opacity-30" />
+              <p className="font-medium">Nenhum tenant encontrado</p>
+              <p className="mt-1 text-xs">Tente ajustar os filtros de busca</p>
+            </div>
+          ) : (
+            filtered.map((tenant) => (
+              <article key={tenant.id} className="space-y-4 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/admin/tenants/${tenant.id}`}
+                      className="block truncate text-sm font-semibold text-foreground"
+                    >
+                      {tenant.clinicName}
+                    </Link>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">{tenant.owner}</p>
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                      {tenant.id}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5">
+                    <TenantStatusBadge status={tenant.status} />
+                    <PlanBadge plan={tenant.plan} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-xl border border-border bg-muted/30 p-3">
+                    <span className="text-muted-foreground">Usuarios</span>
+                    <p className="mt-1 font-semibold text-foreground">
+                      {tenant.users}/{tenant.usersLimit}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-muted/30 p-3">
+                    <span className="text-muted-foreground">Pacientes</span>
+                    <p className="mt-1 font-semibold text-foreground">{tenant.patients}</p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-muted/30 p-3">
+                    <span className="text-muted-foreground">MRR</span>
+                    <p className="mt-1 font-semibold tabular-nums text-foreground">
+                      {currency(tenant.mrr)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-muted/30 p-3">
+                    <span className="text-muted-foreground">API mes</span>
+                    <p className="mt-1 font-semibold text-foreground">
+                      {formatK(tenant.apiCallsThisMonth)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-2 text-xs">
+                  <div className="rounded-xl border border-border bg-card p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Storage</span>
+                      <span className="font-semibold text-foreground">
+                        {tenant.storageUsedGb}/{tenant.storageCapacityGb} GB
+                      </span>
+                    </div>
+                    <UsageBar used={tenant.storageUsedGb} limit={tenant.storageCapacityGb} />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
+                    <span className="text-muted-foreground">Integracoes</span>
+                    <span className="flex items-center gap-2">
+                      <IntegrationStatusDot
+                        status={tenant.asaasSubaccountStatus}
+                        label={tenant.asaasSubaccountStatus}
+                      />
+                      <IntegrationStatusDot
+                        status={tenant.d4signStatus}
+                        label={tenant.d4signStatus}
+                      />
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Link
+                    href={`/admin/tenants/${tenant.id}`}
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10"
+                  >
+                    Abrir tenant
+                  </Link>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
                   Clinica / ID
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Owner</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Plano</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Status</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Owner
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Plano
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Status
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
                   Usuarios
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
                   Pacientes
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Storage</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">API mes</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">MRR</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Asaas</th>
-                <th className="px-4 py-3 text-left font-semibold text-muted-foreground">D4Sign</th>
-                <th className="px-4 py-3 text-right font-semibold text-muted-foreground">Acoes</th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Storage
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  API mes
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  MRR
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  Asaas
+                </th>
+                <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
+                  D4Sign
+                </th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-right font-semibold text-muted-foreground"
+                >
+                  Acoes
+                </th>
               </tr>
             </thead>
             <tbody>

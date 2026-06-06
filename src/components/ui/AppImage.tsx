@@ -2,8 +2,25 @@
 
 import React, { useState, useCallback, useMemo, memo } from 'react';
 import Image from 'next/image';
+import type { ImageProps } from 'next/image';
 
-interface AppImageProps {
+interface AppImageProps extends Omit<
+  ImageProps,
+  | 'src'
+  | 'alt'
+  | 'width'
+  | 'height'
+  | 'fill'
+  | 'priority'
+  | 'quality'
+  | 'placeholder'
+  | 'blurDataURL'
+  | 'loading'
+  | 'unoptimized'
+  | 'onClick'
+  | 'onError'
+  | 'onLoad'
+> {
   src: string;
   alt: string;
   width?: number;
@@ -19,7 +36,6 @@ interface AppImageProps {
   fallbackSrc?: string;
   loading?: 'lazy' | 'eager';
   unoptimized?: boolean;
-  [key: string]: any;
 }
 
 const AppImage = memo(function AppImage({
@@ -70,50 +86,24 @@ const AppImage = memo(function AppImage({
     return classes.filter(Boolean).join(' ');
   }, [className, isLoading, onClick]);
 
-  const imageProps = useMemo(() => {
-    const baseProps: any = {
-      src: imageSrc,
-      alt,
-      className: imageClassName,
-      quality,
-      placeholder,
-      unoptimized: resolvedUnoptimized,
-      onError: handleError,
-      onLoad: handleLoad,
-      onClick,
-    };
-
-    if (priority) {
-      baseProps.priority = true;
-    } else {
-      baseProps.loading = loading;
-    }
-
-    if (blurDataURL && placeholder === 'blur') {
-      baseProps.blurDataURL = blurDataURL;
-    }
-
-    return baseProps;
-  }, [
-    imageSrc,
-    alt,
-    imageClassName,
-    quality,
-    placeholder,
-    blurDataURL,
-    resolvedUnoptimized,
-    priority,
-    loading,
-    handleError,
-    handleLoad,
-    onClick,
-  ]);
+  const priorityProps = priority ? { priority: true as const } : { loading };
+  const blurProps = blurDataURL && placeholder === 'blur' ? { blurDataURL } : {};
 
   if (fill) {
     return (
       <div className="relative" style={{ width: '100%', height: '100%' }}>
         <Image
-          {...imageProps}
+          src={imageSrc}
+          alt={alt}
+          className={imageClassName}
+          quality={quality}
+          placeholder={placeholder}
+          unoptimized={resolvedUnoptimized}
+          onError={handleError}
+          onLoad={handleLoad}
+          onClick={onClick}
+          {...priorityProps}
+          {...blurProps}
           fill
           sizes={sizes || '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw'}
           style={{ objectFit: 'cover' }}
@@ -124,7 +114,23 @@ const AppImage = memo(function AppImage({
   }
 
   return (
-    <Image {...imageProps} width={width || 400} height={height || 300} sizes={sizes} {...props} />
+    <Image
+      src={imageSrc}
+      alt={alt}
+      className={imageClassName}
+      quality={quality}
+      placeholder={placeholder}
+      unoptimized={resolvedUnoptimized}
+      onError={handleError}
+      onLoad={handleLoad}
+      onClick={onClick}
+      {...priorityProps}
+      {...blurProps}
+      width={width || 400}
+      height={height || 300}
+      sizes={sizes}
+      {...props}
+    />
   );
 });
 

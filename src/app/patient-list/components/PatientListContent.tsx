@@ -25,6 +25,7 @@ import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
 import EmptyState from '@/components/EmptyState';
 import { SkeletonTableRow } from '@/components/LoadingSkeleton';
+import Dialog from '@/components/ui/Dialog';
 import {
   createPatient,
   createPatientReviewFlag,
@@ -157,26 +158,16 @@ function PatientFormModal({
   const title = mode === 'create' ? 'Novo paciente' : 'Editar paciente';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">{title}</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Dados sensiveis sao gravados em patient_pii e protegidos por RLS.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-            aria-label="Fechar"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
+    <Dialog
+      open
+      title={title}
+      description="Dados sensiveis sao gravados em patient_pii e protegidos por RLS."
+      onOpenChange={(open) => {
+        if (!open && !submitting) onClose();
+      }}
+      placement="center"
+    >
+      <div className="-m-5">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -294,7 +285,7 @@ function PatientFormModal({
           </div>
         </form>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -792,11 +783,162 @@ export default function PatientListContent() {
 
       {/* Table */}
       <div className="card-base overflow-hidden">
-        <div className="overflow-x-auto scrollbar-thin">
+        <div className="divide-y divide-border md:hidden">
+          {loading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <div key={`mobile-skel-${index}`} className="space-y-3 p-4">
+                <div className="h-4 w-2/3 rounded bg-muted animate-pulse" />
+                <div className="h-3 w-1/2 rounded bg-muted animate-pulse" />
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="h-12 rounded-xl bg-muted animate-pulse" />
+                  <div className="h-12 rounded-xl bg-muted animate-pulse" />
+                </div>
+              </div>
+            ))
+          ) : paginated.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="Nenhum paciente encontrado"
+              description="Tente ajustar os filtros ou o termo de busca para encontrar pacientes."
+              action={
+                <button onClick={clearFilters} className="btn-secondary text-sm">
+                  Limpar filtros
+                </button>
+              }
+            />
+          ) : (
+            paginated.map((patient) => (
+              <article key={patient.id} className="space-y-4 p-4">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(patient.id)}
+                    onChange={() => toggleSelect(patient.id)}
+                    className="mt-1 rounded border-input accent-primary"
+                    aria-label={`Selecionar ${patient.name}`}
+                  />
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">
+                    {patient.name
+                      .split(' ')
+                      .map((namePart) => namePart[0])
+                      .slice(0, 2)
+                      .join('')}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/clinic/patients/${patient.id}`}
+                          className="block truncate text-sm font-semibold text-foreground"
+                        >
+                          {patient.name}
+                        </Link>
+                        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                          <Phone size={11} />
+                          {patient.phone}
+                        </p>
+                      </div>
+                      <StatusBadge status={patient.status} size="xs" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-xl border border-border bg-muted/30 p-3">
+                    <span className="text-muted-foreground">Programa</span>
+                    <p className="mt-1 font-semibold text-foreground">
+                      {programTypeLabel[patient.programType]}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-muted/30 p-3">
+                    <span className="text-muted-foreground">Semana</span>
+                    <p className="mt-1 font-semibold text-foreground">
+                      {patient.currentWeek}/{patient.totalWeeks}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border bg-muted/30 p-3">
+                    <span className="text-muted-foreground">Adesao</span>
+                    <div className="mt-2">
+                      <AdherenceBar
+                        value={patient.weeklyAdherence}
+                        level={patient.adherenceLevel}
+                      />
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border bg-muted/30 p-3">
+                    <span className="text-muted-foreground">Financeiro</span>
+                    <div className="mt-2">
+                      <StatusBadge status={patient.financialStatus} size="xs" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-border bg-card p-3 text-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Proxima consulta</span>
+                    <span className="text-right font-medium text-foreground">
+                      {patient.nextAppointment ?? 'Sem agendamento'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Alertas</span>
+                    {patient.alertCount > 0 ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 font-semibold text-red-700">
+                        <AlertTriangle size={11} />
+                        {patient.alertCount}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                        <CheckCircle size={12} />
+                        OK
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-1">
+                  <Link
+                    href={`/clinic/patients/${patient.id}`}
+                    className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
+                    aria-label={`Abrir Paciente 360 de ${patient.name}`}
+                  >
+                    <Eye size={15} />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => void openEditPatient(patient.id)}
+                    className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
+                    aria-label={`Editar paciente ${patient.name}`}
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <Link
+                    href={`/clinic/inbox?tab=conversas&patientId=${patient.id}`}
+                    className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
+                    aria-label={`Abrir chat de ${patient.name}`}
+                  >
+                    <MessageSquare size={15} />
+                  </Link>
+                  <button
+                    type="button"
+                    disabled={reviewActionPatientId !== null}
+                    onClick={() => void handleMarkReview(patient.id)}
+                    className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label={`Marcar ${patient.name} para revisao`}
+                  >
+                    <Flag size={15} />
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto scrollbar-thin md:block">
           <table className="w-full min-w-[1100px]">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="px-4 py-3 w-10">
+                <th scope="col" className="px-4 py-3 w-10">
                   <input
                     type="checkbox"
                     checked={selectedIds.size === paginated.length && paginated.length > 0}
@@ -819,7 +961,10 @@ export default function PatientListContent() {
                   currentDir={sortDir}
                   onSort={handleSort}
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                >
                   Telefone
                 </th>
                 <SortableHeader
@@ -843,10 +988,16 @@ export default function PatientListContent() {
                   currentDir={sortDir}
                   onSort={handleSort}
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                >
                   Próx. Consulta
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                >
                   Alertas
                 </th>
                 <SortableHeader
@@ -856,7 +1007,10 @@ export default function PatientListContent() {
                   currentDir={sortDir}
                   onSort={handleSort}
                 />
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
+                >
                   Ações
                 </th>
               </tr>

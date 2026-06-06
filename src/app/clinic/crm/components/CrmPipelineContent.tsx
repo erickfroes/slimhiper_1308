@@ -20,10 +20,10 @@ import {
   Search,
   ShieldCheck,
   UserCheck,
-  X,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
 import PageHeader from '@/components/PageHeader';
+import Dialog from '@/components/ui/Dialog';
 import {
   convertCrmLeadToPatient,
   createCrmLead,
@@ -167,130 +167,122 @@ function CreateLeadModal({
   onSubmit: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-        className="w-full max-w-2xl rounded-2xl border border-border bg-card shadow-xl"
-      >
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">
-              {mode === 'edit' ? 'Editar lead' : 'Novo lead'}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              PII comercial com consentimento e retencao LGPD.
-            </p>
+    <Dialog
+      open
+      title={mode === 'edit' ? 'Editar lead' : 'Novo lead'}
+      description="PII comercial com consentimento e retencao LGPD."
+      onOpenChange={(open) => {
+        if (!open && !submitting) onClose();
+      }}
+      placement="center"
+    >
+      <div className="-m-5">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+          className="w-full"
+        >
+          <div className="grid grid-cols-1 gap-4 px-5 py-5 md:grid-cols-2">
+            <label className="text-xs font-semibold text-foreground">
+              Nome completo
+              <input
+                className="input-base mt-1 text-sm"
+                value={form.fullName}
+                onChange={(event) => onChange({ fullName: event.target.value })}
+                required
+              />
+            </label>
+            <label className="text-xs font-semibold text-foreground">
+              Telefone
+              <input
+                className="input-base mt-1 text-sm"
+                value={form.phone}
+                onChange={(event) => onChange({ phone: event.target.value })}
+              />
+            </label>
+            <label className="text-xs font-semibold text-foreground">
+              Email
+              <input
+                type="email"
+                className="input-base mt-1 text-sm"
+                value={form.email}
+                onChange={(event) => onChange({ email: event.target.value })}
+              />
+            </label>
+            <label className="text-xs font-semibold text-foreground">
+              Origem
+              <input
+                className="input-base mt-1 text-sm"
+                value={form.source}
+                onChange={(event) => onChange({ source: event.target.value })}
+                placeholder="Instagram, indicação..."
+              />
+            </label>
+            <label className="text-xs font-semibold text-foreground">
+              Campanha
+              <input
+                className="input-base mt-1 text-sm"
+                value={form.campaign}
+                onChange={(event) => onChange({ campaign: event.target.value })}
+              />
+            </label>
+            <label className="text-xs font-semibold text-foreground">
+              Proximo contato
+              <input
+                type="datetime-local"
+                className="input-base mt-1 text-sm"
+                value={form.nextFollowUpAt}
+                onChange={(event) => onChange({ nextFollowUpAt: event.target.value })}
+              />
+            </label>
+            <label className="md:col-span-2 text-xs font-semibold text-foreground">
+              Finalidade/base do contato
+              <input
+                className="input-base mt-1 text-sm"
+                value={form.consentPurpose}
+                onChange={(event) => onChange({ consentPurpose: event.target.value })}
+              />
+            </label>
+            <label className="md:col-span-2 flex items-start gap-2 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={form.contactConsent}
+                onChange={(event) => onChange({ contactConsent: event.target.checked })}
+                className="mt-0.5"
+              />
+              Confirmo que ha consentimento/base legal para contato comercial e que dados sensiveis
+              nao serao inseridos em notas livres.
+            </label>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 hover:bg-muted"
-            aria-label="Fechar"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="grid grid-cols-1 gap-4 px-5 py-5 md:grid-cols-2">
-          <label className="text-xs font-semibold text-foreground">
-            Nome completo
-            <input
-              className="input-base mt-1 text-sm"
-              value={form.fullName}
-              onChange={(event) => onChange({ fullName: event.target.value })}
-              required
-            />
-          </label>
-          <label className="text-xs font-semibold text-foreground">
-            Telefone
-            <input
-              className="input-base mt-1 text-sm"
-              value={form.phone}
-              onChange={(event) => onChange({ phone: event.target.value })}
-            />
-          </label>
-          <label className="text-xs font-semibold text-foreground">
-            Email
-            <input
-              type="email"
-              className="input-base mt-1 text-sm"
-              value={form.email}
-              onChange={(event) => onChange({ email: event.target.value })}
-            />
-          </label>
-          <label className="text-xs font-semibold text-foreground">
-            Origem
-            <input
-              className="input-base mt-1 text-sm"
-              value={form.source}
-              onChange={(event) => onChange({ source: event.target.value })}
-              placeholder="Instagram, indicação..."
-            />
-          </label>
-          <label className="text-xs font-semibold text-foreground">
-            Campanha
-            <input
-              className="input-base mt-1 text-sm"
-              value={form.campaign}
-              onChange={(event) => onChange({ campaign: event.target.value })}
-            />
-          </label>
-          <label className="text-xs font-semibold text-foreground">
-            Proximo contato
-            <input
-              type="datetime-local"
-              className="input-base mt-1 text-sm"
-              value={form.nextFollowUpAt}
-              onChange={(event) => onChange({ nextFollowUpAt: event.target.value })}
-            />
-          </label>
-          <label className="md:col-span-2 text-xs font-semibold text-foreground">
-            Finalidade/base do contato
-            <input
-              className="input-base mt-1 text-sm"
-              value={form.consentPurpose}
-              onChange={(event) => onChange({ consentPurpose: event.target.value })}
-            />
-          </label>
-          <label className="md:col-span-2 flex items-start gap-2 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={form.contactConsent}
-              onChange={(event) => onChange({ contactConsent: event.target.checked })}
-              className="mt-0.5"
-            />
-            Confirmo que ha consentimento/base legal para contato comercial e que dados sensiveis
-            nao serao inseridos em notas livres.
-          </label>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted disabled:opacity-60"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-          >
-            {submitting ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : mode === 'edit' ? (
-              <Pencil size={16} />
-            ) : (
-              <Plus size={16} />
-            )}{' '}
-            {mode === 'edit' ? 'Salvar lead' : 'Criar lead'}
-          </button>
-        </div>
-      </form>
-    </div>
+          <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+            >
+              {submitting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : mode === 'edit' ? (
+                <Pencil size={16} />
+              ) : (
+                <Plus size={16} />
+              )}{' '}
+              {mode === 'edit' ? 'Salvar lead' : 'Criar lead'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Dialog>
   );
 }
 
@@ -327,214 +319,211 @@ function LeadDetailPanel({
   if (!detail && !loading) return null;
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-40 w-full overflow-y-auto border-l border-border bg-card shadow-2xl md:w-[460px]">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-4 backdrop-blur">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Detalhe do lead</h2>
-          <p className="text-xs text-muted-foreground">
-            Timeline comercial, tarefas e conversao auditada.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-lg p-1.5 hover:bg-muted"
-          aria-label="Fechar detalhe"
-        >
-          <X size={16} />
-        </button>
-      </div>
-
-      {loading || !detail ? (
-        <div className="flex min-h-80 items-center justify-center text-sm text-muted-foreground">
-          <Loader2 className="mr-2 animate-spin" size={16} /> Carregando lead...
-        </div>
-      ) : (
-        <div className="space-y-5 p-5">
-          <section className="rounded-2xl border border-border p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-semibold text-foreground">{detail.lead.fullName}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{contactLabel(detail.lead)}</p>
+    <Dialog
+      open={Boolean(detail || loading)}
+      title="Detalhe do lead"
+      description="Timeline comercial, tarefas e conversao auditada."
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      placement="right"
+    >
+      <div className="-m-5">
+        {loading || !detail ? (
+          <div className="flex min-h-80 items-center justify-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 animate-spin" size={16} /> Carregando lead...
+          </div>
+        ) : (
+          <div className="space-y-5 p-5">
+            <section className="rounded-2xl border border-border p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-foreground">{detail.lead.fullName}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{contactLabel(detail.lead)}</p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                    {detail.lead.stageLabel || detail.lead.status}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onEdit}
+                    disabled={actionLoading || detail.lead.status === 'converted'}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+                  >
+                    <Pencil size={13} /> Editar
+                  </button>
+                </div>
               </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                  {detail.lead.stageLabel || detail.lead.status}
-                </span>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-lg bg-muted/50 p-2">
+                  <span className="text-muted-foreground">Origem</span>
+                  <p className="font-semibold">{detail.lead.source || 'N/A'}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2">
+                  <span className="text-muted-foreground">Campanha</span>
+                  <p className="font-semibold">{detail.lead.campaign || 'N/A'}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2">
+                  <span className="text-muted-foreground">SLA</span>
+                  <p className="font-semibold">{formatDateTime(detail.lead.nextFollowUpAt)}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2">
+                  <span className="text-muted-foreground">Consentimento</span>
+                  <p className="font-semibold">
+                    {detail.lead.contactConsent ? 'Ativo' : 'Pendente'}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <select
+                  disabled={actionLoading || detail.lead.status === 'converted'}
+                  value={detail.lead.stageId ?? ''}
+                  onChange={(event) => onMove(event.target.value)}
+                  className="input-base text-sm"
+                >
+                  {stages.map((stage) => (
+                    <option key={stage.id} value={stage.id}>
+                      {stage.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
-                  onClick={onEdit}
                   disabled={actionLoading || detail.lead.status === 'converted'}
-                  className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+                  onClick={() => onConvert(false)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  <Pencil size={13} /> Editar
+                  <UserCheck size={15} /> Converter
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading || detail.lead.status === 'converted'}
+                  onClick={() => onConvert(true)}
+                  className="col-span-2 inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  <CalendarPlus size={15} /> Converter e criar consulta inicial
                 </button>
               </div>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-lg bg-muted/50 p-2">
-                <span className="text-muted-foreground">Origem</span>
-                <p className="font-semibold">{detail.lead.source || 'N/A'}</p>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-2">
-                <span className="text-muted-foreground">Campanha</span>
-                <p className="font-semibold">{detail.lead.campaign || 'N/A'}</p>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-2">
-                <span className="text-muted-foreground">SLA</span>
-                <p className="font-semibold">{formatDateTime(detail.lead.nextFollowUpAt)}</p>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-2">
-                <span className="text-muted-foreground">Consentimento</span>
-                <p className="font-semibold">{detail.lead.contactConsent ? 'Ativo' : 'Pendente'}</p>
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <select
-                disabled={actionLoading || detail.lead.status === 'converted'}
-                value={detail.lead.stageId ?? ''}
-                onChange={(event) => onMove(event.target.value)}
-                className="input-base text-sm"
-              >
-                {stages.map((stage) => (
-                  <option key={stage.id} value={stage.id}>
-                    {stage.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={actionLoading || detail.lead.status === 'converted'}
-                onClick={() => onConvert(false)}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                <UserCheck size={15} /> Converter
-              </button>
-              <button
-                type="button"
-                disabled={actionLoading || detail.lead.status === 'converted'}
-                onClick={() => onConvert(true)}
-                className="col-span-2 inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
-              >
-                <CalendarPlus size={15} /> Converter e criar consulta inicial
-              </button>
-            </div>
-          </section>
+            </section>
 
-          <section className="rounded-2xl border border-border p-4">
-            <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <ShieldCheck size={15} /> Consentimentos
-            </h4>
-            <div className="mt-3 space-y-2">
-              {detail.consents.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Sem registros granulares; conversao exige consentimento ativo no lead.
-                </p>
-              ) : (
-                detail.consents.map((consent) => (
-                  <div key={consent.id} className="rounded-lg bg-muted/40 p-2 text-xs">
-                    <p className="font-semibold">
-                      {consent.channel} · {consent.status}
+            <section className="rounded-2xl border border-border p-4">
+              <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <ShieldCheck size={15} /> Consentimentos
+              </h4>
+              <div className="mt-3 space-y-2">
+                {detail.consents.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Sem registros granulares; conversao exige consentimento ativo no lead.
+                  </p>
+                ) : (
+                  detail.consents.map((consent) => (
+                    <div key={consent.id} className="rounded-lg bg-muted/40 p-2 text-xs">
+                      <p className="font-semibold">
+                        {consent.channel} · {consent.status}
+                      </p>
+                      <p className="text-muted-foreground">{consent.purpose}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-border p-4">
+              <h4 className="text-sm font-semibold text-foreground">Nova nota segura</h4>
+              <input
+                className="input-base mt-3 text-sm"
+                value={noteTitle}
+                onChange={(event) => setNoteTitle(event.target.value)}
+              />
+              <textarea
+                className="input-base mt-2 min-h-20 text-sm"
+                value={noteDescription}
+                onChange={(event) => setNoteDescription(event.target.value)}
+                placeholder="Evite dados clinicos/sensiveis em nota comercial."
+              />
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => onAddNote(noteTitle, noteDescription)}
+                className="mt-2 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50"
+              >
+                <MessageSquarePlus size={15} /> Registrar nota
+              </button>
+            </section>
+
+            <section className="rounded-2xl border border-border p-4">
+              <h4 className="text-sm font-semibold text-foreground">Tarefas</h4>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_150px]">
+                <input
+                  className="input-base text-sm"
+                  value={taskTitle}
+                  onChange={(event) => setTaskTitle(event.target.value)}
+                />
+                <input
+                  type="datetime-local"
+                  className="input-base text-sm"
+                  value={taskDueAt}
+                  onChange={(event) => setTaskDueAt(event.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => onAddTask(taskTitle, taskDueAt)}
+                className="mt-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50"
+              >
+                Criar tarefa
+              </button>
+              <div className="mt-3 space-y-2">
+                {detail.tasks.map((task) => (
+                  <div key={task.id} className="rounded-lg bg-muted/40 p-2 text-xs">
+                    <p className="font-semibold">{task.title}</p>
+                    <p
+                      className={
+                        task.status === 'overdue' ? 'text-red-700' : 'text-muted-foreground'
+                      }
+                    >
+                      {task.status} · {formatDateTime(task.dueAt)}
                     </p>
-                    <p className="text-muted-foreground">{consent.purpose}</p>
                   </div>
-                ))
-              )}
-            </div>
-          </section>
+                ))}
+                {detail.tasks.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhuma tarefa comercial.</p>
+                ) : null}
+              </div>
+            </section>
 
-          <section className="rounded-2xl border border-border p-4">
-            <h4 className="text-sm font-semibold text-foreground">Nova nota segura</h4>
-            <input
-              className="input-base mt-3 text-sm"
-              value={noteTitle}
-              onChange={(event) => setNoteTitle(event.target.value)}
-            />
-            <textarea
-              className="input-base mt-2 min-h-20 text-sm"
-              value={noteDescription}
-              onChange={(event) => setNoteDescription(event.target.value)}
-              placeholder="Evite dados clinicos/sensiveis em nota comercial."
-            />
-            <button
-              type="button"
-              disabled={actionLoading}
-              onClick={() => onAddNote(noteTitle, noteDescription)}
-              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50"
-            >
-              <MessageSquarePlus size={15} /> Registrar nota
-            </button>
-          </section>
-
-          <section className="rounded-2xl border border-border p-4">
-            <h4 className="text-sm font-semibold text-foreground">Tarefas</h4>
-            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_150px]">
-              <input
-                className="input-base text-sm"
-                value={taskTitle}
-                onChange={(event) => setTaskTitle(event.target.value)}
-              />
-              <input
-                type="datetime-local"
-                className="input-base text-sm"
-                value={taskDueAt}
-                onChange={(event) => setTaskDueAt(event.target.value)}
-              />
-            </div>
-            <button
-              type="button"
-              disabled={actionLoading}
-              onClick={() => onAddTask(taskTitle, taskDueAt)}
-              className="mt-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50"
-            >
-              Criar tarefa
-            </button>
-            <div className="mt-3 space-y-2">
-              {detail.tasks.map((task) => (
-                <div key={task.id} className="rounded-lg bg-muted/40 p-2 text-xs">
-                  <p className="font-semibold">{task.title}</p>
-                  <p
-                    className={task.status === 'overdue' ? 'text-red-700' : 'text-muted-foreground'}
-                  >
-                    {task.status} · {formatDateTime(task.dueAt)}
-                  </p>
-                </div>
-              ))}
-              {detail.tasks.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhuma tarefa comercial.</p>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-border p-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-foreground">Timeline comercial</h4>
-              <button
-                type="button"
-                onClick={onRefresh}
-                className="rounded-lg p-1.5 hover:bg-muted"
-                aria-label="Atualizar timeline"
-              >
-                <RefreshCw size={14} />
-              </button>
-            </div>
-            <div className="mt-3 space-y-3">
-              {detail.activities.map((activity) => (
-                <div key={activity.id} className="border-l-2 border-primary/30 pl-3 text-xs">
-                  <p className="font-semibold text-foreground">{activity.title}</p>
-                  <p className="text-muted-foreground">
-                    {formatDateTime(activity.occurredAt)} · {activity.activityType}
-                  </p>
-                  {activity.description ? (
-                    <p className="mt-1 text-muted-foreground">{activity.description}</p>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
-    </aside>
+            <section className="rounded-2xl border border-border p-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-foreground">Timeline comercial</h4>
+                <button
+                  type="button"
+                  onClick={onRefresh}
+                  className="rounded-lg p-1.5 hover:bg-muted"
+                  aria-label="Atualizar timeline"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+              <div className="mt-3 space-y-3">
+                {detail.activities.map((activity) => (
+                  <div key={activity.id} className="border-l-2 border-primary/30 pl-3 text-xs">
+                    <p className="font-semibold text-foreground">{activity.title}</p>
+                    <p className="text-muted-foreground">
+                      {formatDateTime(activity.occurredAt)} · {activity.activityType}
+                    </p>
+                    {activity.description ? (
+                      <p className="mt-1 text-muted-foreground">{activity.description}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+      </div>
+    </Dialog>
   );
 }
 

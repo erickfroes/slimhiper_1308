@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Bell,
   CalendarDays,
@@ -10,12 +11,14 @@ import {
   CreditCard,
   FileText,
   Home,
+  LogOut,
   MessageSquare,
   RefreshCw,
   Send,
   type LucideIcon,
 } from 'lucide-react';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
+import { createClient } from '@/lib/supabase/client';
 import MetricCard from '@/components/ui/MetricCard';
 import Tabs from '@/components/ui/Tabs';
 import { getDocumentSignedUrl } from '@/services/documentsApi';
@@ -62,6 +65,7 @@ function isCheckinAnswered(questions: string[], answers?: Record<string, string>
 }
 
 export default function PatientPortalContent() {
+  const router = useRouter();
   const [snapshot, setSnapshot] = useState<PatientPortalSnapshot | null>(null);
   const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>();
   const [activeTab, setActiveTab] = useState<PortalTab>('resumo');
@@ -71,6 +75,7 @@ export default function PatientPortalContent() {
   const [checkinAnswers, setCheckinAnswers] = useState<Record<string, Record<string, string>>>({});
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   async function loadPortal(patientId = selectedPatientId) {
     setLoading(true);
@@ -84,6 +89,14 @@ export default function PatientPortalContent() {
       setSelectedPatientId(result.data.selectedPatientId);
     }
     setLoading(false);
+  }
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    const supabase = createClient();
+    await supabase?.auth?.signOut();
+    router.push('/auth/login');
+    router.refresh();
   }
 
   useEffect(() => {
@@ -367,6 +380,15 @@ export default function PatientPortalContent() {
               >
                 <RefreshCw className="h-4 w-4" aria-hidden="true" />
                 Atualizar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                disabled={loggingOut}
+                className="btn-secondary justify-center disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                {loggingOut ? 'Saindo...' : 'Sair'}
               </button>
             </div>
           </div>

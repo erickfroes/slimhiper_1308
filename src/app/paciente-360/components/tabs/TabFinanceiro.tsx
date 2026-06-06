@@ -21,6 +21,7 @@ import {
   Download,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
+import Dialog from '@/components/ui/Dialog';
 import {
   createBillingNegotiation,
   createPatientFinancialContract,
@@ -809,196 +810,208 @@ export default function TabFinanceiro({
         </p>
       )}
       {paymentModal && (
-        <div
-          className="card-base p-3 text-sm space-y-3"
-          role="dialog"
-          aria-label="Registrar pagamento"
-          aria-busy={localActionLoading === 'payment'}
+        <Dialog
+          open
+          title="Registrar pagamento"
+          description="Registro local auditado sem chamar provider externo."
+          onOpenChange={(open) => {
+            if (!open && localActionLoading !== 'payment') setPaymentModal(false);
+          }}
         >
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Descricao</span>
-            <input
-              className="border rounded px-2 py-1 w-full"
-              value={description}
+          <div className="space-y-3 text-sm" aria-busy={localActionLoading === 'payment'}>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Descricao</span>
+              <input
+                className="border rounded px-2 py-1 w-full"
+                value={description}
+                disabled={localActionLoading === 'payment'}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Valor pago</span>
+              <input
+                className="border rounded px-2 py-1 w-full"
+                inputMode="decimal"
+                value={amount}
+                disabled={localActionLoading === 'payment'}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Metodo</span>
+              <select
+                className="border rounded px-2 py-1 w-full"
+                value={paymentMethod}
+                disabled={localActionLoading === 'payment'}
+                onChange={(e) =>
+                  setPaymentMethod(
+                    e.target.value as
+                      | 'pix'
+                      | 'cartao_credito'
+                      | 'cartao_debito'
+                      | 'boleto'
+                      | 'dinheiro'
+                      | 'transferencia'
+                  )
+                }
+              >
+                {Object.entries(METHOD_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Registro local auditado: cria pagamento e recibo vinculados ao paciente sem chamar
+              provider externo.
+            </p>
+            <button
+              type="button"
+              className="btn-primary text-xs"
               disabled={localActionLoading === 'payment'}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Valor pago</span>
-            <input
-              className="border rounded px-2 py-1 w-full"
-              inputMode="decimal"
-              value={amount}
-              disabled={localActionLoading === 'payment'}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Metodo</span>
-            <select
-              className="border rounded px-2 py-1 w-full"
-              value={paymentMethod}
-              disabled={localActionLoading === 'payment'}
-              onChange={(e) =>
-                setPaymentMethod(
-                  e.target.value as
-                    | 'pix'
-                    | 'cartao_credito'
-                    | 'cartao_debito'
-                    | 'boleto'
-                    | 'dinheiro'
-                    | 'transferencia'
-                )
-              }
+              onClick={() => void handleRegisterManualPayment()}
             >
-              {Object.entries(METHOD_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Registro local auditado: cria pagamento e recibo vinculados ao paciente sem chamar
-            provider externo.
-          </p>
-          <button
-            type="button"
-            className="btn-primary text-xs"
-            disabled={localActionLoading === 'payment'}
-            onClick={() => void handleRegisterManualPayment()}
-          >
-            {localActionLoading === 'payment' ? 'Registrando...' : 'Confirmar pagamento'}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary text-xs"
-            disabled={localActionLoading === 'payment'}
-            onClick={() => setPaymentModal(false)}
-          >
-            Cancelar
-          </button>
-        </div>
+              {localActionLoading === 'payment' ? 'Registrando...' : 'Confirmar pagamento'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              disabled={localActionLoading === 'payment'}
+              onClick={() => setPaymentModal(false)}
+            >
+              Cancelar
+            </button>
+          </div>
+        </Dialog>
       )}
       {invoiceModal && (
-        <div
-          className="card-base p-3 text-sm space-y-3"
-          role="dialog"
-          aria-label="Gerar cobranca"
-          aria-busy={creatingInvoice}
+        <Dialog
+          open
+          title="Gerar cobranca"
+          description="Cria cobranca com contratos locais e provider atras da Edge Function."
+          onOpenChange={(open) => {
+            if (!open && !creatingInvoice) setInvoiceModal(false);
+          }}
         >
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Descricao</span>
-            <input
-              className="border rounded px-2 py-1 w-full"
-              value={description}
+          <div className="space-y-3 text-sm" aria-busy={creatingInvoice}>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Descricao</span>
+              <input
+                className="border rounded px-2 py-1 w-full"
+                value={description}
+                disabled={creatingInvoice}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Valor</span>
+              <input
+                className="border rounded px-2 py-1 w-full"
+                inputMode="decimal"
+                value={amount}
+                disabled={creatingInvoice}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Vencimento</span>
+              <input
+                type="date"
+                className="border rounded px-2 py-1 w-full"
+                value={dueDate}
+                disabled={creatingInvoice}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">
+                CPF/CNPJ para novo customer Asaas
+              </span>
+              <input
+                className="border rounded px-2 py-1 w-full"
+                inputMode="numeric"
+                value={billingDocument}
+                disabled={creatingInvoice}
+                onChange={(e) => setBillingDocument(e.target.value)}
+                placeholder="Somente numeros"
+              />
+            </label>
+            <button
+              type="button"
+              className="btn-primary text-xs"
               disabled={creatingInvoice}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Valor</span>
-            <input
-              className="border rounded px-2 py-1 w-full"
-              inputMode="decimal"
-              value={amount}
+              onClick={handleCreateInvoice}
+            >
+              {creatingInvoice ? 'Gerando...' : 'Confirmar cobranca'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary text-xs"
               disabled={creatingInvoice}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Vencimento</span>
-            <input
-              type="date"
-              className="border rounded px-2 py-1 w-full"
-              value={dueDate}
-              disabled={creatingInvoice}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">
-              CPF/CNPJ para novo customer Asaas
-            </span>
-            <input
-              className="border rounded px-2 py-1 w-full"
-              inputMode="numeric"
-              value={billingDocument}
-              disabled={creatingInvoice}
-              onChange={(e) => setBillingDocument(e.target.value)}
-              placeholder="Somente numeros"
-            />
-          </label>
-          <button
-            type="button"
-            className="btn-primary text-xs"
-            disabled={creatingInvoice}
-            onClick={handleCreateInvoice}
-          >
-            {creatingInvoice ? 'Gerando...' : 'Confirmar cobranca'}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary text-xs"
-            disabled={creatingInvoice}
-            onClick={() => setInvoiceModal(false)}
-          >
-            Cancelar
-          </button>
-        </div>
+              onClick={() => setInvoiceModal(false)}
+            >
+              Cancelar
+            </button>
+          </div>
+        </Dialog>
       )}
       {subModal && (
-        <div
-          className="card-base p-3 text-sm space-y-3"
-          role="dialog"
-          aria-label="Criar assinatura"
-          aria-busy={creatingSubscription}
+        <Dialog
+          open
+          title="Criar assinatura"
+          description="Contrato local seguro com idempotencia por tentativa."
+          onOpenChange={(open) => {
+            if (!open && !creatingSubscription) setSubModal(false);
+          }}
         >
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">Valor mensal</span>
-            <input
-              className="border rounded px-2 py-1 w-full"
-              inputMode="decimal"
-              value={amount}
+          <div className="space-y-3 text-sm" aria-busy={creatingSubscription}>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Valor mensal</span>
+              <input
+                className="border rounded px-2 py-1 w-full"
+                inputMode="decimal"
+                value={amount}
+                disabled={creatingSubscription}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Contrato local seguro: pacote padrao, ciclo mensal e chave de idempotencia por
+              tentativa; provider Asaas permanece atras da Edge Function.
+            </p>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">
+                CPF/CNPJ para novo customer Asaas
+              </span>
+              <input
+                className="border rounded px-2 py-1 w-full"
+                inputMode="numeric"
+                value={billingDocument}
+                disabled={creatingSubscription}
+                onChange={(e) => setBillingDocument(e.target.value)}
+                placeholder="Somente numeros"
+              />
+            </label>
+            <button
+              type="button"
+              className="btn-primary text-xs"
               disabled={creatingSubscription}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Contrato local seguro: pacote padrao, ciclo mensal e chave de idempotencia por
-            tentativa; provider Asaas permanece atras da Edge Function.
-          </p>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">
-              CPF/CNPJ para novo customer Asaas
-            </span>
-            <input
-              className="border rounded px-2 py-1 w-full"
-              inputMode="numeric"
-              value={billingDocument}
+              onClick={handleCreateSubscription}
+            >
+              {creatingSubscription ? 'Criando...' : 'Confirmar assinatura'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary text-xs"
               disabled={creatingSubscription}
-              onChange={(e) => setBillingDocument(e.target.value)}
-              placeholder="Somente numeros"
-            />
-          </label>
-          <button
-            type="button"
-            className="btn-primary text-xs"
-            disabled={creatingSubscription}
-            onClick={handleCreateSubscription}
-          >
-            {creatingSubscription ? 'Criando...' : 'Confirmar assinatura'}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary text-xs"
-            disabled={creatingSubscription}
-            onClick={() => setSubModal(false)}
-          >
-            Cancelar
-          </button>
-        </div>
+              onClick={() => setSubModal(false)}
+            >
+              Cancelar
+            </button>
+          </div>
+        </Dialog>
       )}
 
       {/* ── Histórico de pagamentos ── */}
@@ -1012,67 +1025,136 @@ export default function TabFinanceiro({
             Nenhum pagamento registrado.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Descrição
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Valor
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Data
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Forma
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Registrado por
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Recibo
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentHistory.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                  >
-                    <td className="py-2.5 text-foreground">{p.description}</td>
-                    <td className="py-2.5 font-semibold text-green-700 tabular-nums">
+          <>
+            <div className="space-y-3 sm:hidden">
+              {paymentHistory.map((p) => (
+                <article key={p.id} className="rounded-xl border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {p.description}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{formatDate(p.paidAt)}</p>
+                    </div>
+                    <span className="text-sm font-bold tabular-nums text-green-700">
                       {formatBRL(p.amount)}
-                    </td>
-                    <td className="py-2.5 text-muted-foreground">{formatDate(p.paidAt)}</td>
-                    <td className="py-2.5 text-muted-foreground">
-                      {METHOD_LABELS[p.method] ?? p.method}
-                    </td>
-                    <td className="py-2.5 text-muted-foreground">{p.registeredBy}</td>
-                    <td className="py-2.5">
-                      {p.receiptId ? (
-                        <button
-                          type="button"
-                          className="text-xs text-primary flex items-center gap-1 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!receiptById.has(p.receiptId)}
-                          onClick={() => {
-                            const receipt = receiptById.get(p.receiptId!);
-                            if (receipt) downloadReceipt(receipt);
-                          }}
-                        >
-                          <Eye size={12} /> Ver
-                        </button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg bg-muted/40 p-2">
+                      <span className="text-muted-foreground">Metodo</span>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {METHOD_LABELS[p.method] ?? p.method}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-muted/40 p-2">
+                      <span className="text-muted-foreground">Registrado por</span>
+                      <p className="mt-1 truncate font-semibold text-foreground">
+                        {p.registeredBy}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    {p.receiptId ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!receiptById.has(p.receiptId)}
+                        onClick={() => {
+                          const receipt = receiptById.get(p.receiptId!);
+                          if (receipt) downloadReceipt(receipt);
+                        }}
+                      >
+                        <Eye size={12} /> Ver recibo
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Sem recibo</span>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Descrição
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Valor
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Data
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Forma
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Registrado por
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Recibo
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {paymentHistory.map((p) => (
+                    <tr
+                      key={p.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                    >
+                      <td className="py-2.5 text-foreground">{p.description}</td>
+                      <td className="py-2.5 font-semibold text-green-700 tabular-nums">
+                        {formatBRL(p.amount)}
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">{formatDate(p.paidAt)}</td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {METHOD_LABELS[p.method] ?? p.method}
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">{p.registeredBy}</td>
+                      <td className="py-2.5">
+                        {p.receiptId ? (
+                          <button
+                            type="button"
+                            className="text-xs text-primary flex items-center gap-1 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={!receiptById.has(p.receiptId)}
+                            onClick={() => {
+                              const receipt = receiptById.get(p.receiptId!);
+                              if (receipt) downloadReceipt(receipt);
+                            }}
+                          >
+                            <Eye size={12} /> Ver
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </Section>
 
@@ -1086,55 +1168,112 @@ export default function TabFinanceiro({
         {charges.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">Nenhuma cobrança gerada.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Descrição
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Valor
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Vencimento
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Tipo
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Status
-                  </th>
-                  <th className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Enviada em
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {charges.map((c) => (
-                  <tr
-                    key={c.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                  >
-                    <td className="py-2.5 text-foreground">{c.description}</td>
-                    <td className="py-2.5 font-semibold tabular-nums text-foreground">
+          <>
+            <div className="space-y-3 sm:hidden">
+              {charges.map((c) => (
+                <article key={c.id} className="rounded-xl border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {c.description}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Vence em {formatDate(c.dueDate)}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold tabular-nums text-foreground">
                       {formatBRL(c.amount)}
-                    </td>
-                    <td className="py-2.5 text-muted-foreground">{formatDate(c.dueDate)}</td>
-                    <td className="py-2.5 text-muted-foreground">
-                      {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
-                    </td>
-                    <td className="py-2.5">
-                      <StatusPill status={c.status} />
-                    </td>
-                    <td className="py-2.5 text-muted-foreground">
-                      {c.sentAt ? formatDate(c.sentAt) : '—'}
-                    </td>
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg bg-muted/40 p-2">
+                      <span className="text-muted-foreground">Tipo</span>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-muted/40 p-2">
+                      <span className="text-muted-foreground">Enviada em</span>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {c.sentAt ? formatDate(c.sentAt) : 'Nao enviada'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <StatusPill status={c.status} />
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Descrição
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Valor
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Vencimento
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Tipo
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Status
+                    </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Enviada em
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {charges.map((c) => (
+                    <tr
+                      key={c.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                    >
+                      <td className="py-2.5 text-foreground">{c.description}</td>
+                      <td className="py-2.5 font-semibold tabular-nums text-foreground">
+                        {formatBRL(c.amount)}
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">{formatDate(c.dueDate)}</td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
+                      </td>
+                      <td className="py-2.5">
+                        <StatusPill status={c.status} />
+                      </td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {c.sentAt ? formatDate(c.sentAt) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </Section>
 
