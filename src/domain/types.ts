@@ -505,11 +505,26 @@ export interface PatientChatMessage {
   text: string;
   time: string;
   read: boolean;
+  deliveryStatus?: 'sending' | 'sent' | 'failed';
+  isAutomated?: boolean;
+  attachments?: PatientChatAttachment[];
 }
 
 export interface PatientChatShortcut {
   id: string;
+  title?: string;
   text: string;
+  category?: string;
+}
+
+export interface PatientChatAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: 'pending' | 'uploaded' | 'failed' | 'deleted';
+  kind: 'image' | 'file';
+  signedUrl?: string;
 }
 
 export interface PatientChatThread {
@@ -528,11 +543,17 @@ export interface PatientChatServiceHours {
   days: string;
   start: string;
   end: string;
+  timezone?: string;
+  isAvailable?: boolean;
+  unavailableMessage?: string;
 }
 
 export interface PatientChatSla {
   label: string;
   note: string;
+  status?: 'ok' | 'warning' | 'breached';
+  dueAt?: string;
+  minutesRemaining?: number;
 }
 
 // ─── Document 360 types ───────────────────────────────────────────────────────

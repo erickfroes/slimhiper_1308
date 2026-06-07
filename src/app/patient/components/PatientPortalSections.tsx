@@ -1,8 +1,16 @@
 'use client';
 
-import { CheckCircle2, Send } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle2, FileText, Image as ImageIcon } from 'lucide-react';
+import {
+  ChatAvailabilityStatus,
+  ChatImageViewer,
+  ChatInput,
+} from '@/components/chat/ChatPrimitives';
 import DataState from '@/components/ui/DataState';
 import type { PatientPortalSnapshot } from '@/services/patientPortalApi';
+import { getChatAttachmentSignedUrl } from '@/services/chatApi';
+import type { PatientChatAttachment } from '@/domain/types';
 
 type BusyKey = string | null;
 type CheckinAnswers = Record<string, Record<string, string>>;
@@ -163,7 +171,10 @@ export function PortalFinanceSection({ snapshot }: SnapshotProps) {
 interface PortalChatSectionProps extends SnapshotProps {
   busyKey: BusyKey;
   message: string;
+  selectedFile: File | null;
   onMessageChange: (value: string) => void;
+  onFileSelect: (file: File | null) => void;
+  onClearFile: () => void;
   onSendMessage: () => void;
 }
 
@@ -171,51 +182,132 @@ export function PortalChatSection({
   snapshot,
   busyKey,
   message,
+  selectedFile,
   onMessageChange,
+  onFileSelect,
+  onClearFile,
   onSendMessage,
 }: PortalChatSectionProps) {
+  const [viewer, setViewer] = useState<{
+    attachment: PatientChatAttachment;
+    url?: string | null;
+    loading: boolean;
+    error?: string | null;
+  } | null>(null);
+
+  async function openAttachment(attachment: PatientChatAttachment) {
+    if (attachment.status !== 'uploaded') return;
+
+    setViewer({ attachment, loading: true });
+    const result = await getChatAttachmentSignedUrl(attachment.id);
+    if (result.error || !result.data?.url) {
+      setViewer({
+        attachment,
+        loading: false,
+        error: result.error?.message ?? 'Nao foi possivel abrir o anexo.',
+      });
+      return;
+    }
+
+    if (attachment.kind === 'image') {
+      setViewer({ attachment, url: result.data.url, loading: false });
+      return;
+    }
+
+    window.open(result.data.url, '_blank', 'noopener,noreferrer');
+    setViewer(null);
+  }
+
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-bold text-foreground">Chat com a equipe</h2>
-      <div className="max-h-96 space-y-3 overflow-y-auto rounded-2xl bg-muted/40 p-4">
+    <div className="flex min-h-[calc(100dvh-12rem)] flex-col">
+      <div className="flex flex-col gap-2 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-foreground">Chat com a equipe</h2>
+          <p className="text-sm text-muted-foreground">
+            {snapshot.chat.status === 'closed' ? 'Conversa fechada' : 'Conversa aberta'}
+          </p>
+        </div>
+        <ChatAvailabilityStatus serviceHours={snapshot.chat.serviceHours} />
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-muted/30 p-3 sm:p-4">
         {snapshot.chat.messages.length === 0 ? (
           <DataState
             kind="empty"
             title="Nenhuma mensagem ainda"
             description="Envie uma duvida para iniciar o atendimento com a equipe."
-            className="min-h-40 bg-background"
+            className="min-h-64 bg-background"
           />
         ) : (
           snapshot.chat.messages.map((chatMessage) => (
             <div
               key={chatMessage.id}
-              className={`rounded-2xl p-3 ${chatMessage.isOwn ? 'ml-auto bg-primary text-primary-foreground' : 'mr-auto bg-card text-foreground'} max-w-[85%]`}
+              className={`rounded-lg p-3 ${chatMessage.isOwn ? 'ml-auto bg-primary text-primary-foreground' : 'mr-auto bg-card text-foreground'} max-w-[85%]`}
             >
-              <p className="text-xs font-semibold opacity-80">{chatMessage.senderLabel}</p>
-              <p className="mt-1 text-sm">{chatMessage.body}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold opacity-80">{chatMessage.senderLabel}</p>
+                {chatMessage.isAutomated ? (
+                  <span className="rounded-full bg-background/20 px-2 py-0.5 text-[10px] font-semibold">
+                    automatica
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 whitespace-pre-wrap text-sm">{chatMessage.body}</p>
+              {chatMessage.attachments.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {chatMessage.attachments.map((attachment) => (
+                    <button
+                      key={attachment.id}
+                      type="button"
+                      onClick={() => void openAttachment(attachment)}
+                      disabled={attachment.status !== 'uploaded'}
+                      className="inline-flex max-w-full items-center gap-2 rounded-md border border-border/60 bg-background/90 px-2.5 py-1.5 text-xs font-semibold text-foreground disabled:opacity-60"
+                    >
+                      {attachment.kind === 'image' ? (
+                        <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                      <span className="truncate">{attachment.fileName}</span>
+                      {attachment.status === 'failed' ? <span>falhou</span> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))
         )}
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <textarea
+
+      <div className="sticky bottom-0 border-t border-border bg-card/95 p-3 safe-bottom">
+        {snapshot.chat.serviceHours?.isAvailable === false &&
+        snapshot.chat.serviceHours.unavailableMessage ? (
+          <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+            {snapshot.chat.serviceHours.unavailableMessage}
+          </p>
+        ) : null}
+        <ChatInput
           value={message}
-          onChange={(event) => onMessageChange(event.target.value)}
-          rows={2}
-          maxLength={2000}
-          className="min-h-20 flex-1 rounded-2xl border border-border bg-background px-3 py-2 text-sm"
+          onChange={onMessageChange}
+          selectedFile={selectedFile}
+          onFileSelect={onFileSelect}
+          onClearFile={onClearFile}
+          onSend={onSendMessage}
+          busy={busyKey === 'chat'}
           placeholder="Escreva sua mensagem..."
         />
-        <button
-          type="button"
-          onClick={onSendMessage}
-          disabled={busyKey === 'chat' || !message.trim()}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-        >
-          <Send className="h-4 w-4" aria-hidden="true" />
-          Enviar
-        </button>
       </div>
+
+      {viewer ? (
+        <ChatImageViewer
+          attachment={viewer.attachment}
+          url={viewer.url}
+          loading={viewer.loading}
+          error={viewer.error}
+          onClose={() => setViewer(null)}
+          onRetry={() => void openAttachment(viewer.attachment)}
+        />
+      ) : null}
     </div>
   );
 }

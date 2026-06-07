@@ -103,6 +103,7 @@ export default function PatientPortalContent() {
   const [error, setError] = useState<string | null>(null);
   const [journeyError, setJourneyError] = useState<SafeServiceError | null>(null);
   const [message, setMessage] = useState('');
+  const [chatAttachment, setChatAttachment] = useState<File | null>(null);
   const [checkinAnswers, setCheckinAnswers] = useState<Record<string, Record<string, string>>>({});
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -278,17 +279,22 @@ export default function PatientPortalContent() {
   }
 
   async function handleSendMessage() {
-    if (!snapshot || !message.trim() || busyKey === 'chat') return;
+    if (!snapshot || busyKey === 'chat' || (!message.trim() && !chatAttachment)) return;
     setBusyKey('chat');
     setActionMessage(null);
     try {
-      const result = await sendPatientPortalMessage(snapshot.selectedPatientId, message);
-      if (result.error) {
-        setActionMessage(result.error.message);
-      } else {
+      const result = await sendPatientPortalMessage(
+        snapshot.selectedPatientId,
+        message,
+        chatAttachment
+      );
+      if (result.data) {
         setMessage('');
-        setActionMessage('Mensagem enviada para a equipe.');
+        setChatAttachment(null);
+        setActionMessage(result.error?.message ?? 'Mensagem enviada para a equipe.');
         await loadPortal(snapshot.selectedPatientId);
+      } else if (result.error) {
+        setActionMessage(result.error.message);
       }
     } finally {
       setBusyKey(null);
@@ -653,7 +659,10 @@ export default function PatientPortalContent() {
                 snapshot={snapshot}
                 busyKey={busyKey}
                 message={message}
+                selectedFile={chatAttachment}
                 onMessageChange={setMessage}
+                onFileSelect={setChatAttachment}
+                onClearFile={() => setChatAttachment(null)}
                 onSendMessage={() => void handleSendMessage()}
               />
             ) : null}
