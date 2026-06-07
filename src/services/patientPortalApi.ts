@@ -1,5 +1,7 @@
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
+import type { PatientChatAttachment } from '@/domain/types';
+import { uploadChatAttachmentForMessage, validateChatAttachmentFile } from '@/services/chatApi';
 
 export interface SafeServiceError {
   message: string;
@@ -53,6 +55,9 @@ export interface PatientPortalMessage {
   isOwn: boolean;
   body: string;
   createdAt?: string | null;
+  deliveryStatus?: 'sending' | 'sent' | 'failed';
+  isAutomated?: boolean;
+  attachments: PatientChatAttachment[];
 }
 
 export interface PatientPortalChat {
@@ -60,6 +65,14 @@ export interface PatientPortalChat {
   status: string;
   lastMessageAt?: string | null;
   messages: PatientPortalMessage[];
+  serviceHours?: {
+    days: string;
+    start: string;
+    end: string;
+    timezone?: string;
+    isAvailable?: boolean;
+    unavailableMessage?: string;
+  };
 }
 
 export interface PatientPortalNotification {
@@ -323,16 +336,46 @@ function normalizeInvoice(value: unknown): PatientPortalInvoice | null {
   };
 }
 
+function normalizeChatAttachment(value: unknown): PatientChatAttachment | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const mimeType = asString(
+    record.mimeType,
+    asString(record.mime_type, 'application/octet-stream')
+  );
+  const status = asString(record.status, 'uploaded');
+  if (!id) return null;
+
+  return {
+    id,
+    fileName: asString(record.fileName, asString(record.file_name, 'Anexo')),
+    mimeType,
+    sizeBytes: Math.max(0, asNumber(record.sizeBytes, asNumber(record.size_bytes))),
+    status:
+      status === 'pending' || status === 'failed' || status === 'deleted' ? status : 'uploaded',
+    kind: mimeType.startsWith('image/') ? 'image' : 'file',
+  };
+}
+
 function normalizeMessage(value: unknown): PatientPortalMessage | null {
   const record = asRecord(value);
   const id = asString(record.id);
   if (!id) return null;
+  const deliveryStatus = asString(record.deliveryStatus);
   return {
     id,
     senderLabel: asString(record.senderLabel, 'Mensagem'),
     isOwn: asBoolean(record.isOwn),
     body: asString(record.body),
     createdAt: asNullableString(record.createdAt),
+    deliveryStatus:
+      deliveryStatus === 'sending' || deliveryStatus === 'failed' ? deliveryStatus : 'sent',
+    isAutomated: asBoolean(record.isAutomated),
+    attachments: Array.isArray(record.attachments)
+      ? record.attachments
+          .map(normalizeChatAttachment)
+          .filter((item): item is PatientChatAttachment => Boolean(item))
+      : [],
   };
 }
 
@@ -347,6 +390,23 @@ function normalizeNotification(value: unknown): PatientPortalNotification | null
     category: asNullableString(record.category),
     status: asString(record.status, 'unread'),
     createdAt: asNullableString(record.createdAt),
+  };
+}
+
+function normalizePortalServiceHours(value: unknown): PatientPortalChat['serviceHours'] {
+  const record = asRecord(value);
+  const days = asString(record.days);
+  const start = asString(record.start);
+  const end = asString(record.end);
+  if (!days && !start && !end) return undefined;
+
+  return {
+    days,
+    start,
+    end,
+    timezone: asNullableString(record.timezone) ?? undefined,
+    isAvailable: typeof record.isAvailable === 'boolean' ? record.isAvailable : undefined,
+    unavailableMessage: asNullableString(record.unavailableMessage) ?? undefined,
   };
 }
 
@@ -404,6 +464,7 @@ function normalizeSnapshot(value: unknown): PatientPortalSnapshot | null {
       status: asString(chatRecord.status, 'open'),
       lastMessageAt: asNullableString(chatRecord.lastMessageAt),
       messages,
+      serviceHours: normalizePortalServiceHours(chatRecord.serviceHours),
     },
     notifications: Array.isArray(record.notifications)
       ? record.notifications
@@ -415,6 +476,106 @@ function normalizeSnapshot(value: unknown): PatientPortalSnapshot | null {
           .map(normalizeCheckin)
           .filter((item): item is PatientPortalCheckin => Boolean(item))
       : [],
+  };
+}
+
+type PortalSupabaseClient = Awaited<ReturnType<typeof createBrowserSupabaseClient>>;
+
+function weekdayLabel(day: number) {
+  return ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'][day] ?? 'Dia';
+}
+
+function normalizePortalHoursRows(
+  rows: Record<string, unknown>[]
+): PatientPortalChat['serviceHours'] {
+  if (rows.length === 0) return undefined;
+
+  const days = rows.map((row) => weekdayLabel(asNumber(row.weekday))).join(', ');
+  const start =
+    rows
+      .map((row) => asString(row.opens_at))
+      .filter(Boolean)
+      .sort()[0] ?? '';
+  const end =
+    rows
+      .map((row) => asString(row.closes_at))
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? '';
+  const now = new Date();
+  const currentWeekday = now.getDay();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const today = rows.find((row) => asNumber(row.weekday, -1) === currentWeekday);
+  const [openHour = 0, openMinute = 0] = asString(today?.opens_at, '00:00').split(':').map(Number);
+  const [closeHour = 23, closeMinute = 59] = asString(today?.closes_at, '23:59')
+    .split(':')
+    .map(Number);
+  const openMinutes = openHour * 60 + openMinute;
+  const closeMinutes = closeHour * 60 + closeMinute;
+
+  return {
+    days,
+    start,
+    end,
+    timezone: asString(rows[0]?.timezone, 'America/Sao_Paulo'),
+    isAvailable: Boolean(today) && currentMinutes >= openMinutes && currentMinutes <= closeMinutes,
+    unavailableMessage: asString(today?.auto_reply) || asString(rows[0]?.auto_reply) || undefined,
+  };
+}
+
+async function hydratePatientPortalChat(
+  supabase: PortalSupabaseClient,
+  snapshot: PatientPortalSnapshot
+): Promise<PatientPortalSnapshot> {
+  const messageIds = snapshot.chat.messages.map((message) => message.id).filter(Boolean);
+
+  const [attachmentsResult, hoursResult] = await Promise.all([
+    messageIds.length
+      ? supabase
+          .from('chat_attachments')
+          .select('id,message_id,file_name,mime_type,size_bytes,status')
+          .eq('tenant_id', snapshot.patient.tenantId)
+          .eq('patient_id', snapshot.selectedPatientId)
+          .in('message_id', messageIds)
+          .neq('status', 'deleted')
+          .is('archived_at', null)
+      : Promise.resolve({ data: [], error: null }),
+    supabase
+      .from('chat_service_hours')
+      .select('weekday,opens_at,closes_at,is_enabled,timezone,auto_reply')
+      .eq('tenant_id', snapshot.patient.tenantId)
+      .eq('is_enabled', true)
+      .order('weekday', { ascending: true }),
+  ]);
+
+  const attachmentsByMessage = new Map<string, PatientChatAttachment[]>();
+  if (!attachmentsResult.error && Array.isArray(attachmentsResult.data)) {
+    attachmentsResult.data.forEach((value) => {
+      const record = asRecord(value);
+      const messageId = asString(record.message_id);
+      const attachment = normalizeChatAttachment(record);
+      if (!messageId || !attachment) return;
+      const current = attachmentsByMessage.get(messageId) ?? [];
+      current.push(attachment);
+      attachmentsByMessage.set(messageId, current);
+    });
+  }
+
+  const serviceHours =
+    !hoursResult.error && Array.isArray(hoursResult.data)
+      ? normalizePortalHoursRows(hoursResult.data.map(asRecord))
+      : snapshot.chat.serviceHours;
+
+  return {
+    ...snapshot,
+    chat: {
+      ...snapshot.chat,
+      serviceHours,
+      messages: snapshot.chat.messages.map((message) => ({
+        ...message,
+        attachments: attachmentsByMessage.get(message.id) ?? message.attachments,
+      })),
+    },
   };
 }
 
@@ -714,7 +875,7 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
       };
     }
 
-    return { data: snapshot, error: null };
+    return { data: await hydratePatientPortalChat(supabase, snapshot), error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Nao foi possivel carregar o portal.') };
   }
@@ -784,14 +945,18 @@ export async function completePatientOnboarding(
 
 export async function sendPatientPortalMessage(
   patientId: string,
-  body: string
+  body: string,
+  attachment?: File | null
 ): Promise<{
-  data: { id: string; threadId: string } | null;
+  data: { id: string; threadId: string; attachment?: PatientChatAttachment | null } | null;
   error: SafeServiceError | null;
 }> {
   const safePatientId = asUuid(patientId);
   const safeBody = sanitizeText(body, 2000);
-  if (!safePatientId || !safeBody) {
+  const attachmentError = validateChatAttachmentFile(attachment);
+  if (attachmentError) return { data: null, error: attachmentError };
+
+  if (!safePatientId || (!safeBody && !attachment)) {
     return {
       data: null,
       error: { message: 'Informe uma mensagem valida para enviar ao time.', code: 'invalid_input' },
@@ -800,15 +965,27 @@ export async function sendPatientPortalMessage(
 
   try {
     const supabase = await createBrowserSupabaseClient();
+    const bodyToSend =
+      safeBody || (attachment?.type.startsWith('image/') ? 'Imagem enviada.' : 'Anexo enviado.');
     const { data, error } = await supabase.rpc('send_patient_portal_message', {
       p_patient_id: safePatientId,
-      p_body: safeBody,
+      p_body: bodyToSend,
     });
     if (error) return { data: null, error: safeError(error, 'Nao foi possivel enviar mensagem.') };
 
     const record = asRecord(data);
+    const messageId = asString(record.id);
+    const threadId = asString(record.threadId);
+    if (attachment && messageId && threadId) {
+      const uploadResult = await uploadChatAttachmentForMessage(threadId, messageId, attachment);
+      return {
+        data: { id: messageId, threadId, attachment: uploadResult.data },
+        error: uploadResult.error,
+      };
+    }
+
     return {
-      data: { id: asString(record.id), threadId: asString(record.threadId) },
+      data: { id: messageId, threadId },
       error: null,
     };
   } catch (error) {

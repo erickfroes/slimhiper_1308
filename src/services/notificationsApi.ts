@@ -64,6 +64,9 @@ export interface InboxConversation {
   assignedTo?: string | null;
   assignedToName?: string | null;
   sla: string;
+  slaStatus?: 'ok' | 'warning' | 'breached';
+  slaDueAt?: string | null;
+  serviceAvailable?: boolean | null;
   category: string;
   href: string;
 }
@@ -221,6 +224,14 @@ function normalizeConversation(value: unknown): InboxConversation | null {
     assignedTo: asString(record.assignedTo) || null,
     assignedToName: asString(record.assignedToName) || null,
     sla: asString(record.sla, 'SLA padrao'),
+    slaStatus:
+      asString(record.slaStatus) === 'warning' || asString(record.slaStatus) === 'breached'
+        ? (asString(record.slaStatus) as 'warning' | 'breached')
+        : asString(record.slaStatus) === 'ok'
+          ? 'ok'
+          : undefined,
+    slaDueAt: asString(record.slaDueAt) || null,
+    serviceAvailable: typeof record.serviceAvailable === 'boolean' ? record.serviceAvailable : null,
     category: asString(record.category, 'chat'),
     href: asString(record.href, `/clinic/patients/${patientId}?tab=chat`),
   };
@@ -348,6 +359,9 @@ export async function listClinicInbox(filters: ClinicInboxFilters = {}): Promise
             assignedTo: null,
             assignedToName: null,
             sla: 'Responder ate hoje',
+            slaStatus: 'ok',
+            slaDueAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+            serviceAvailable: true,
             category: 'chat',
             href: message.patientHref,
           })),

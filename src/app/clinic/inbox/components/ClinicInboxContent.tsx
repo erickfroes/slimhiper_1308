@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   Archive,
   Bell,
-  Send,
   Check,
   Filter,
   Inbox,
@@ -29,8 +28,19 @@ import {
   type InboxConversation,
   type InboxTab,
 } from '@/services/notificationsApi';
-import { getPatientChat, sendPatientChatMessage } from '@/services/chatApi';
-import type { PatientChatSummary } from '@/domain/types';
+import {
+  getChatAttachmentSignedUrl,
+  getPatientChat,
+  sendPatientChatMessage,
+} from '@/services/chatApi';
+import type { PatientChatAttachment, PatientChatSummary } from '@/domain/types';
+import {
+  ChatAvailabilityStatus,
+  ChatImageViewer,
+  ChatInput,
+  ChatQuickReplies,
+  RoomListItem,
+} from '@/components/chat/ChatPrimitives';
 
 const tabs: Array<{ key: InboxTab; label: string; icon: React.ElementType }> = [
   { key: 'conversas', label: 'Conversas', icon: MessageSquare },
@@ -86,8 +96,15 @@ export default function ClinicInboxContent() {
   const [threadLoading, setThreadLoading] = useState(false);
   const [thread, setThread] = useState<PatientChatSummary | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [replyAttachment, setReplyAttachment] = useState<File | null>(null);
   const [sendInFlight, setSendInFlight] = useState(false);
   const [lastClientMessageId, setLastClientMessageId] = useState('');
+  const [viewer, setViewer] = useState<{
+    attachment: PatientChatAttachment;
+    url?: string | null;
+    loading: boolean;
+    error?: string | null;
+  } | null>(null);
 
   const conversations = useMemo(() => payload?.conversations ?? [], [payload]);
   const notifications = useMemo(() => payload?.notifications ?? [], [payload]);
@@ -136,6 +153,8 @@ export default function ClinicInboxContent() {
     let cancelled = false;
     setThreadLoading(true);
     setActionError(null);
+    setReplyText('');
+    setReplyAttachment(null);
     void getPatientChat(selectedConversation.patientId).then((result) => {
       if (cancelled) return;
       if (result.error) {
@@ -170,7 +189,7 @@ export default function ClinicInboxContent() {
 
   async function handleSendReply() {
     const message = replyText.trim();
-    if (!selectedConversation || !message || sendInFlight) return;
+    if (!selectedConversation || (!message && !replyAttachment) || sendInFlight) return;
 
     setSendInFlight(true);
     setActionError(null);
@@ -181,18 +200,47 @@ export default function ClinicInboxContent() {
       selectedConversation.patientId,
       selectedConversation.threadId,
       message,
-      clientMessageId
+      clientMessageId,
+      { attachment: replyAttachment }
     );
 
-    if (result.error) {
-      setActionError('Nao foi possivel enviar a mensagem. Tente novamente sem duplicar o envio.');
-    } else {
+    if (result.data) {
       setReplyText('');
+      setReplyAttachment(null);
       setLastClientMessageId('');
       setThread(result.data);
       await loadInbox();
     }
+
+    if (result.error) {
+      setActionError(result.error.message);
+    } else {
+      setActionError(null);
+    }
     setSendInFlight(false);
+  }
+
+  async function openAttachment(attachment: PatientChatAttachment) {
+    if (attachment.status !== 'uploaded') return;
+
+    setViewer({ attachment, loading: true });
+    const result = await getChatAttachmentSignedUrl(attachment.id);
+    if (result.error || !result.data?.url) {
+      setViewer({
+        attachment,
+        loading: false,
+        error: result.error?.message ?? 'Nao foi possivel abrir o anexo.',
+      });
+      return;
+    }
+
+    if (attachment.kind === 'image') {
+      setViewer({ attachment, url: result.data.url, loading: false });
+      return;
+    }
+
+    window.open(result.data.url, '_blank', 'noopener,noreferrer');
+    setViewer(null);
   }
 
   return (
@@ -519,6 +567,27 @@ export default function ClinicInboxContent() {
                 Abrir Paciente 360
               </Link>
             </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <ChatAvailabilityStatus serviceHours={thread?.serviceHours} compact />
+              {selectedConversation.slaDueAt ? (
+                <span className="rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+                  SLA ate {formatDateTime(selectedConversation.slaDueAt)}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-3 overflow-hidden rounded-lg border border-border lg:hidden">
+              <RoomListItem
+                conversation={selectedConversation}
+                selected
+                actionBusy={actionId === selectedConversation.id}
+                onOpen={() => setSelectedThreadId(selectedConversation.threadId)}
+                onAssign={() =>
+                  void runAction(selectedConversation.id, () =>
+                    assignThreadToMe(selectedConversation.threadId)
+                  )
+                }
+              />
+            </div>
           </div>
 
           {threadLoading ? (
@@ -547,6 +616,28 @@ export default function ClinicInboxContent() {
                       } max-w-[85%]`}
                     >
                       <p>{message.text}</p>
+                      {message.isAutomated ? (
+                        <span className="mt-2 inline-flex rounded-full bg-background/20 px-2 py-0.5 text-[10px] font-semibold">
+                          automatica
+                        </span>
+                      ) : null}
+                      {message.attachments?.length ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {message.attachments.map((attachment) => (
+                            <button
+                              key={attachment.id}
+                              type="button"
+                              onClick={() => void openAttachment(attachment)}
+                              disabled={attachment.status !== 'uploaded'}
+                              className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border/60 bg-background/90 px-2 py-1 text-xs font-semibold text-foreground disabled:opacity-60"
+                            >
+                              {attachment.kind === 'image' ? 'Imagem' : 'Arquivo'}
+                              <span className="truncate">{attachment.fileName}</span>
+                              {attachment.status === 'failed' ? <span>falhou</span> : null}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                       <p className="mt-1 text-[11px] opacity-70">
                         {message.from === 'staff' ? 'Equipe' : 'Paciente'} ·{' '}
                         {formatDateTime(message.time)}
@@ -557,7 +648,31 @@ export default function ClinicInboxContent() {
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-muted-foreground">Responder paciente</p>
+                  <span className="text-xs text-muted-foreground">Ctrl/Cmd + Enter envia</span>
+                </div>
+                <ChatQuickReplies
+                  shortcuts={thread?.shortcuts ?? []}
+                  disabled={sendInFlight || selectedConversation.status === 'archived'}
+                  onSelect={setReplyText}
+                />
+                <ChatInput
+                  value={replyText}
+                  onChange={setReplyText}
+                  onSend={() => void handleSendReply()}
+                  busy={sendInFlight}
+                  disabled={selectedConversation.status === 'archived'}
+                  selectedFile={replyAttachment}
+                  onFileSelect={setReplyAttachment}
+                  onClearFile={() => setReplyAttachment(null)}
+                  placeholder="Digite uma resposta operacional."
+                  sendLabel="Responder"
+                />
+              </div>
+
+              <div className="hidden">
                 <label
                   htmlFor="inbox-reply"
                   className="text-xs font-semibold text-muted-foreground"
@@ -588,7 +703,7 @@ export default function ClinicInboxContent() {
                     }
                     className="btn-primary gap-2 disabled:opacity-60"
                   >
-                    <Send size={14} /> {sendInFlight ? 'Enviando...' : 'Enviar resposta'}
+                    {sendInFlight ? 'Enviando...' : 'Enviar resposta'}
                   </button>
                 </div>
               </div>
@@ -596,6 +711,16 @@ export default function ClinicInboxContent() {
           )}
         </section>
       )}
+      {viewer ? (
+        <ChatImageViewer
+          attachment={viewer.attachment}
+          url={viewer.url}
+          loading={viewer.loading}
+          error={viewer.error}
+          onClose={() => setViewer(null)}
+          onRetry={() => void openAttachment(viewer.attachment)}
+        />
+      ) : null}
     </div>
   );
 }
