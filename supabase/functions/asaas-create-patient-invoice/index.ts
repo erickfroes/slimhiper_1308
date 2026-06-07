@@ -77,6 +77,47 @@ function normalizeInvoiceStatus(value: unknown) {
   return 'pending';
 }
 
+async function getOrCreateBillingExternalReference(
+  admin: ReturnType<typeof createClient>,
+  tenantId: string,
+  patientId: string
+) {
+  const existing = await admin
+    .from('billing_external_references')
+    .select('reference')
+    .eq('tenant_id', tenantId)
+    .eq('patient_id', patientId)
+    .maybeSingle();
+
+  if (existing.error) throw existing.error;
+  if (existing.data?.reference) return String(existing.data.reference);
+
+  const reference = `shr_${crypto.randomUUID().replaceAll('-', '')}`;
+  const inserted = await admin
+    .from('billing_external_references')
+    .insert({
+      tenant_id: tenantId,
+      patient_id: patientId,
+      reference,
+      metadata: { source: 'asaas-create-patient-invoice' },
+    })
+    .select('reference')
+    .single();
+
+  if (!inserted.error && inserted.data?.reference) return String(inserted.data.reference);
+
+  const retry = await admin
+    .from('billing_external_references')
+    .select('reference')
+    .eq('tenant_id', tenantId)
+    .eq('patient_id', patientId)
+    .maybeSingle();
+
+  if (retry.error) throw retry.error;
+  if (retry.data?.reference) return String(retry.data.reference);
+  throw inserted.error ?? new Error('billing_external_reference_failed');
+}
+
 async function resolvePatientTenant(params: {
   supabase: ReturnType<typeof createClient>;
   userId: string;
@@ -251,6 +292,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    const externalReference = await getOrCreateBillingExternalReference(admin, tenantId, patientId);
+
     const providerResponse = await fetch(`${asaasBase}/payments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', access_token: asaasKey },
@@ -260,7 +303,7 @@ Deno.serve(async (req) => {
         value: amountCents / 100,
         dueDate,
         description,
-        externalReference: patientId,
+        externalReference,
       }),
     });
 
@@ -306,6 +349,7 @@ Deno.serve(async (req) => {
         metadata: {
           provider: 'asaas',
           invoice_number: providerData.invoiceNumber ?? null,
+          external_reference: externalReference,
           idempotency_key: idempotencyKey || null,
         },
       })

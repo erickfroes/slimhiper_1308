@@ -404,6 +404,12 @@ verify_jwt = true
 [functions.asaas-create-patient-subscription]
 verify_jwt = true
 
+[functions.asaas-refund-payment]
+verify_jwt = true
+
+[functions.asaas-sync-payment]
+verify_jwt = true
+
 [functions.webhook-asaas]
 verify_jwt = false
 

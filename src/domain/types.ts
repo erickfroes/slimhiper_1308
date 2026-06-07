@@ -149,6 +149,9 @@ export interface PatientFinancialSummary {
   charges?: PatientCharge[];
   receipts?: PatientReceipt[];
   negotiations?: PatientNegotiation[];
+  paymentReceipts?: PatientPaymentReceipt[];
+  subscriptions?: PatientBillingSubscription[];
+  refunds?: PatientBillingRefund[];
 }
 
 export interface InvoiceSummary {
@@ -202,6 +205,50 @@ export interface PatientNegotiation {
   createdAt: string;
   createdBy: string;
   notes?: string;
+}
+
+export interface PatientPaymentReceipt {
+  id: string;
+  invoiceId?: string | null;
+  paymentId?: string | null;
+  amountCents: number;
+  status:
+    | 'pending_upload'
+    | 'pending_review'
+    | 'approved'
+    | 'rejected'
+    | 'failed'
+    | 'deleted'
+    | string;
+  submittedAt?: string | null;
+  uploadedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
+  rejectionReason?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+}
+
+export interface PatientBillingSubscription {
+  id: string;
+  status: string;
+  cycle: string;
+  amountCents: number;
+  nextDueDate?: string | null;
+  description?: string | null;
+  createdAt?: string | null;
+}
+
+export interface PatientBillingRefund {
+  id: string;
+  invoiceId?: string | null;
+  paymentId?: string | null;
+  status: 'requested' | 'processing' | 'succeeded' | 'failed' | 'cancelled' | string;
+  amountCents: number;
+  reason: string;
+  requestedAt?: string | null;
+  processedAt?: string | null;
 }
 
 export type AppointmentStatus =

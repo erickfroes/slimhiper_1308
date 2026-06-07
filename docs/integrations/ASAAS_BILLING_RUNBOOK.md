@@ -11,14 +11,19 @@ Relevant files include:
 - `supabase/functions/asaas-create-patient-customer`
 - `supabase/functions/asaas-create-patient-invoice`
 - `supabase/functions/asaas-create-patient-subscription`
+- `supabase/functions/asaas-refund-payment`
+- `supabase/functions/asaas-sync-payment`
 - `supabase/functions/webhook-asaas`
 - `src/services/billingApi.ts`
+- `src/app/patient/components/PatientPortalSections.tsx`
+- `src/app/paciente-360/components/tabs/TabFinanceiro.tsx`
 - `src/app/clinic/financeiro`
 - `src/app/admin/billing`
 - `src/app/admin/webhooks`
 - `supabase/migrations/20260530125000_050_billing_asaas.sql`
 - `supabase/migrations/20260530126000_060_contract_views_rpcs.sql`
 - `supabase/migrations/20260531090000_070_billing_webhook_security_hardening.sql`
+- `supabase/migrations/20260607110000_340_finance_m13_receipts_refunds_reconciliation.sql`
 - `scripts/supabase/bootstrap-billing-demo.mjs`
 - `scripts/supabase/test-billing-contract.mjs`
 - `scripts/supabase/test-billing-fixtures.mjs`
@@ -122,6 +127,8 @@ is explicitly authorized through `ALLOW_ASAAS_PROVIDER_CONTRACT_NON_SANDBOX=true
 - `asaas-create-patient-customer`
 - `asaas-create-patient-invoice`
 - `asaas-create-patient-subscription`
+- `asaas-refund-payment`
+- `asaas-sync-payment`
 - `webhook-asaas`
 
 Webhook endpoint:
@@ -207,6 +214,53 @@ Current local-safe contract:
   invoice, and subscription all returned 200 through Edge Functions without
   exposing provider IDs to the browser contract.
 
+## M13 Receipts, Refunds, And Sync
+
+Migration `20260607110000_340_finance_m13_receipts_refunds_reconciliation.sql`
+adds the M13 finance layer:
+
+- Private storage bucket `payment-receipts`.
+- `payment_receipts` metadata with status, reviewer, invoice/payment links, and
+  sanitized notes.
+- `billing_refunds`, `billing_sync_jobs`, `billing_reconciliation_runs`, and
+  pseudonymous `billing_external_references` for Asaas `externalReference`.
+- RPCs `prepare_payment_receipt_upload`,
+  `complete_payment_receipt_upload`, `review_payment_receipt`,
+  `get_payment_receipt_download`, `get_patient_finance_m13`,
+  `get_clinic_finance_m13_dashboard`, and `run_billing_reconciliation`.
+
+Patient portal flow:
+
+- Patient sees open invoices and safe payment links.
+- Patient uploads a PDF/image proof to `payment-receipts` through the prepare
+  RPC, browser storage upload, then complete RPC.
+- Patient sees proof status, including rejection reason when present.
+
+Clinic flow:
+
+- `/clinic/financeiro` shows pending proof queue, recurrence summary, recent
+  refunds, sync jobs, and the last reconciliation run.
+- Finance users open proof files through short signed URLs from
+  `get_payment_receipt_download`.
+- `review_payment_receipt` requires `financial.write`; approval creates/links a
+  local payment and receipt, updates the invoice as paid, writes timeline and
+  audit rows, and notifies the patient. Rejection requires a reason and also
+  writes timeline, audit, and notification rows.
+
+Refund and sync:
+
+- `asaas-refund-payment` requires a user JWT, active tenant membership,
+  `financial.write`, a local payment or invoice id, amount, and a reason. The
+  function resolves provider payment ids server-side and returns only local
+  refund id/status/amount.
+- `asaas-sync-payment` requires the same auth boundary, resolves the local
+  invoice to its provider payment id server-side, fetches current Asaas payment
+  status, updates local invoice/payment rows, writes a minimized event, and
+  records the sync job result.
+- Provider validation for refund/sync must run only in sandbox or an explicitly
+  authorized target. Do not call these Edge Functions with production Asaas
+  credentials as part of routine local verification.
+
 ## Reconciliation Contract
 
 `get_clinic_finance_reconciliation()` returns a safe clinic dashboard contract
@@ -277,8 +331,12 @@ node scripts/supabase/test-billing-reconciliation-local-smoke.mjs
   client payload.
 - Webhook tenant resolution is expected to derive tenant/patient from the
   existing invoice/customer records, not trust `externalReference` alone.
+- Asaas `externalReference` for patient billing should use
+  `billing_external_references.external_reference`, not clinical patient UUIDs.
 - `financial.write` is required for customer, invoice, and subscription
   creation.
+- `financial.write` plus an explicit reason is required for refund requests and
+  payment proof approval/rejection.
 - Direct authenticated writes to provider-owned billing tables are revoked by
   `20260531090000_070_billing_webhook_security_hardening.sql`; provider
   mutations should go through Edge Functions or reviewed RPCs.

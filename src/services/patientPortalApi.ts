@@ -1,6 +1,7 @@
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
-import type { PatientChatAttachment } from '@/domain/types';
+import type { PatientChatAttachment, PatientPaymentReceipt } from '@/domain/types';
+import { getPatientFinanceM13 } from '@/services/billingApi';
 import { uploadChatAttachmentForMessage, validateChatAttachmentFile } from '@/services/chatApi';
 
 export interface SafeServiceError {
@@ -101,6 +102,7 @@ export interface PatientPortalSnapshot {
   patient: PatientPortalPatientSummary;
   documents: PatientPortalDocument[];
   invoices: PatientPortalInvoice[];
+  paymentReceipts: PatientPaymentReceipt[];
   chat: PatientPortalChat;
   notifications: PatientPortalNotification[];
   checkins: PatientPortalCheckin[];
@@ -459,6 +461,7 @@ function normalizeSnapshot(value: unknown): PatientPortalSnapshot | null {
           .map(normalizeInvoice)
           .filter((item): item is PatientPortalInvoice => Boolean(item))
       : [],
+    paymentReceipts: [],
     chat: {
       threadId: asNullableString(chatRecord.threadId),
       status: asString(chatRecord.status, 'open'),
@@ -875,7 +878,18 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
       };
     }
 
-    return { data: await hydratePatientPortalChat(supabase, snapshot), error: null };
+    const [chatSnapshot, financeResult] = await Promise.all([
+      hydratePatientPortalChat(supabase, snapshot),
+      getPatientFinanceM13(snapshot.selectedPatientId),
+    ]);
+
+    return {
+      data: {
+        ...chatSnapshot,
+        paymentReceipts: financeResult.data?.paymentReceipts ?? [],
+      },
+      error: null,
+    };
   } catch (error) {
     return { data: null, error: safeError(error, 'Nao foi possivel carregar o portal.') };
   }

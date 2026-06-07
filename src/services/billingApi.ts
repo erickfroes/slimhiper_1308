@@ -1,4 +1,9 @@
-import type { PatientFinancialSummary } from '@/domain/types';
+import type {
+  PatientBillingRefund,
+  PatientBillingSubscription,
+  PatientFinancialSummary,
+  PatientPaymentReceipt,
+} from '@/domain/types';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
 
@@ -98,6 +103,75 @@ export interface ClinicFinanceReconciliation {
   recentEvents: ClinicFinanceEvent[];
 }
 
+export interface ClinicFinanceM13ReceiptQueueItem extends PatientPaymentReceipt {
+  patientId: string;
+  patientName: string;
+  invoiceId: string | null;
+}
+
+export interface ClinicFinanceM13SubscriptionItem extends PatientBillingSubscription {
+  patientId: string;
+  patientName: string;
+}
+
+export interface ClinicFinanceM13RefundItem extends PatientBillingRefund {
+  patientId: string;
+  patientName: string;
+  errorCode: string | null;
+}
+
+export interface ClinicFinanceM13SyncJob {
+  id: string;
+  invoiceId: string;
+  status: string;
+  source: string;
+  reason: string;
+  requestedAt: string | null;
+  processedAt: string | null;
+  errorCode: string | null;
+}
+
+export interface ClinicFinanceM13Dashboard {
+  receiptQueue: ClinicFinanceM13ReceiptQueueItem[];
+  recurrence: {
+    active: number;
+    paused: number;
+    cancelled: number;
+    upcoming: ClinicFinanceM13SubscriptionItem[];
+  };
+  refunds: ClinicFinanceM13RefundItem[];
+  syncJobs: ClinicFinanceM13SyncJob[];
+  lastRun?: {
+    id: string;
+    source: string;
+    status: string;
+    checkedInvoiceCount: number;
+    queuedSyncCount: number;
+    pendingReceiptCount: number;
+    divergenceCount: number;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+  } | null;
+  generatedAt?: string | null;
+}
+
+interface PatientFinanceM13Payload {
+  paymentReceipts: PatientPaymentReceipt[];
+  subscriptions: PatientBillingSubscription[];
+  refunds: PatientBillingRefund[];
+}
+
+export const PAYMENT_RECEIPT_ACCEPTED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+] as const;
+
+export const PAYMENT_RECEIPT_MAX_BYTES = 10 * 1024 * 1024;
+
 function isMockEnabled() {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 }
@@ -163,6 +237,10 @@ function asString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
 }
 
+function asNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
 function asNumber(value: unknown, fallback = 0) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim()) {
@@ -177,8 +255,89 @@ function normalizeIdempotencyKey(value: string | undefined) {
   return normalized && normalized.length <= 120 ? normalized : undefined;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function normalizePaymentReceipt(value: unknown): PatientPaymentReceipt | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+  return {
+    id,
+    invoiceId: asNullableString(record.invoiceId),
+    paymentId: asNullableString(record.paymentId),
+    amountCents: Math.max(0, asNumber(record.amountCents)),
+    status: asString(record.status, 'pending_review'),
+    submittedAt: asNullableString(record.submittedAt),
+    uploadedAt: asNullableString(record.uploadedAt),
+    reviewedAt: asNullableString(record.reviewedAt),
+    reviewNote: asNullableString(record.reviewNote),
+    rejectionReason: asNullableString(record.rejectionReason),
+    fileName: asNullableString(record.fileName),
+    mimeType: asNullableString(record.mimeType),
+    sizeBytes: asNumber(record.sizeBytes) || null,
+  };
+}
+
+function normalizeSubscription(value: unknown): PatientBillingSubscription | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+  return {
+    id,
+    status: asString(record.status, 'active'),
+    cycle: asString(record.cycle, 'monthly'),
+    amountCents: Math.max(0, asNumber(record.amountCents)),
+    nextDueDate: asNullableString(record.nextDueDate),
+    description: asNullableString(record.description),
+    createdAt: asNullableString(record.createdAt),
+  };
+}
+
+function normalizeRefund(value: unknown): PatientBillingRefund | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+  return {
+    id,
+    invoiceId: asNullableString(record.invoiceId),
+    paymentId: asNullableString(record.paymentId),
+    status: asString(record.status, 'requested'),
+    amountCents: Math.max(0, asNumber(record.amountCents)),
+    reason: asString(record.reason, 'Estorno financeiro'),
+    requestedAt: asNullableString(record.requestedAt),
+    processedAt: asNullableString(record.processedAt),
+  };
+}
+
+function normalizePatientFinanceM13(value: unknown): PatientFinanceM13Payload {
+  const record = asRecord(value);
+  return {
+    paymentReceipts: Array.isArray(record.paymentReceipts)
+      ? record.paymentReceipts
+          .map(normalizePaymentReceipt)
+          .filter((item): item is PatientPaymentReceipt => Boolean(item))
+      : [],
+    subscriptions: Array.isArray(record.subscriptions)
+      ? record.subscriptions
+          .map(normalizeSubscription)
+          .filter((item): item is PatientBillingSubscription => Boolean(item))
+      : [],
+    refunds: Array.isArray(record.refunds)
+      ? record.refunds
+          .map(normalizeRefund)
+          .filter((item): item is PatientBillingRefund => Boolean(item))
+      : [],
+  };
+}
+
 function isIgnorableLocalFinancialReadError(error: { code?: string } | null) {
-  return Boolean(error && (error.code === '42P01' || error.code === '42703'));
+  return Boolean(
+    error && (error.code === '42P01' || error.code === '42703' || error.code === '42883')
+  );
 }
 
 async function hydrateLocalFinancialRecords(
@@ -202,7 +361,7 @@ async function hydrateLocalFinancialRecords(
         }));
 
   const supabase = createBrowserSupabaseClient();
-  const [receiptsRes, negotiationsRes] = await Promise.all([
+  const [receiptsRes, negotiationsRes, m13Res] = await Promise.all([
     supabase
       .from('patient_receipts')
       .select('id, description, amount_cents, issued_at, payment_date, receipt_number, payment_id')
@@ -215,6 +374,9 @@ async function hydrateLocalFinancialRecords(
       )
       .eq('patient_id', patientId)
       .order('created_at', { ascending: false }),
+    supabase.rpc('get_patient_finance_m13', {
+      p_patient_id: patientId,
+    }),
   ]);
 
   const receipts =
@@ -258,6 +420,10 @@ async function hydrateLocalFinancialRecords(
     ...payment,
     receiptId: payment.receiptId ?? receiptIdByPaymentId.get(payment.id),
   }));
+  const m13 =
+    m13Res.error && !isIgnorableLocalFinancialReadError(m13Res.error)
+      ? { paymentReceipts: [], subscriptions: [], refunds: [] }
+      : normalizePatientFinanceM13(m13Res.data);
 
   return {
     ...summary,
@@ -265,6 +431,9 @@ async function hydrateLocalFinancialRecords(
     paymentHistory: enrichedPaymentHistory,
     receipts: hydratedReceipts,
     negotiations: negotiations ?? summary.negotiations ?? [],
+    paymentReceipts: m13.paymentReceipts,
+    subscriptions: m13.subscriptions,
+    refunds: m13.refunds,
   };
 }
 
@@ -298,6 +467,217 @@ export async function getPatientFinancialSummary(patientId: string) {
     data: hydrated,
     error: null as SafeServiceError | null,
   };
+}
+
+export async function getPatientFinanceM13(patientId: string): Promise<{
+  data: PatientFinanceM13Payload | null;
+  error: SafeServiceError | null;
+}> {
+  if (!patientId.trim()) {
+    return { data: null, error: { message: 'Paciente invalido para carregar financeiro.' } };
+  }
+  if (isMockEnabled()) {
+    return {
+      data: { paymentReceipts: [], subscriptions: [], refunds: [] },
+      error: null,
+    };
+  }
+
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc('get_patient_finance_m13', {
+    p_patient_id: patientId,
+  });
+  if (error) return { data: null, error: { message: error.message, code: error.code } };
+  return { data: normalizePatientFinanceM13(data), error: null };
+}
+
+function normalizePreparedPaymentReceipt(value: unknown): {
+  id: string;
+  bucket: string;
+  path: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: string;
+} | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const bucket = asString(record.bucket, 'payment-receipts');
+  const path = asString(record.path);
+  if (!id || bucket !== 'payment-receipts' || !path) return null;
+  return {
+    id,
+    bucket,
+    path,
+    fileName: asString(record.fileName, 'comprovante.pdf'),
+    mimeType: asString(record.mimeType, 'application/pdf'),
+    sizeBytes: Math.max(0, asNumber(record.sizeBytes)),
+    status: asString(record.status, 'pending_upload'),
+  };
+}
+
+function inferPaymentReceiptMimeType(file: File) {
+  if ((PAYMENT_RECEIPT_ACCEPTED_MIME_TYPES as readonly string[]).includes(file.type)) {
+    return file.type;
+  }
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (extension === 'pdf') return 'application/pdf';
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+  if (extension === 'png') return 'image/png';
+  if (extension === 'webp') return 'image/webp';
+  if (extension === 'heic') return 'image/heic';
+  if (extension === 'heif') return 'image/heif';
+  return file.type || 'application/octet-stream';
+}
+
+export function validatePaymentReceiptFile(file: File | null | undefined): SafeServiceError | null {
+  if (!file) return { message: 'Selecione um comprovante para enviar.', code: 'missing_file' };
+  if (file.size <= 0 || file.size > PAYMENT_RECEIPT_MAX_BYTES) {
+    return { message: 'O comprovante precisa ter ate 10 MB.', code: 'invalid_receipt_size' };
+  }
+  const mimeType = inferPaymentReceiptMimeType(file);
+  if (!(PAYMENT_RECEIPT_ACCEPTED_MIME_TYPES as readonly string[]).includes(mimeType)) {
+    return {
+      message: 'Use PDF ou imagem JPG, PNG, WebP, HEIC ou HEIF.',
+      code: 'invalid_receipt_type',
+    };
+  }
+  return null;
+}
+
+export async function uploadPatientPaymentReceipt(input: {
+  patientId: string;
+  invoiceId?: string | null;
+  amountCents: number;
+  file: File;
+  note?: string;
+}): Promise<{ data: PatientPaymentReceipt | null; error: SafeServiceError | null }> {
+  const fileError = validatePaymentReceiptFile(input.file);
+  if (fileError) return { data: null, error: fileError };
+  if (!input.patientId.trim() || !Number.isFinite(input.amountCents) || input.amountCents <= 0) {
+    return { data: null, error: { message: 'Dados invalidos para enviar comprovante.' } };
+  }
+  if (isMockEnabled()) {
+    return {
+      data: {
+        id: `mock-payment-receipt-${Date.now()}`,
+        invoiceId: input.invoiceId ?? null,
+        amountCents: input.amountCents,
+        status: 'pending_review',
+        submittedAt: new Date().toISOString(),
+        uploadedAt: new Date().toISOString(),
+        fileName: input.file.name,
+        mimeType: inferPaymentReceiptMimeType(input.file),
+        sizeBytes: input.file.size,
+      },
+      error: null,
+    };
+  }
+
+  const supabase = createBrowserSupabaseClient();
+  const mimeType = inferPaymentReceiptMimeType(input.file);
+  const { data: preparedPayload, error: prepareError } = await supabase.rpc(
+    'prepare_payment_receipt_upload',
+    {
+      p_patient_id: input.patientId,
+      p_invoice_id: input.invoiceId ?? null,
+      p_amount_cents: Math.round(input.amountCents),
+      p_file_name: input.file.name,
+      p_mime_type: mimeType,
+      p_size_bytes: input.file.size,
+      p_note: input.note ?? null,
+    }
+  );
+
+  if (prepareError) {
+    return {
+      data: null,
+      error: { message: 'Nao foi possivel preparar o comprovante.', code: prepareError.code },
+    };
+  }
+  const prepared = normalizePreparedPaymentReceipt(preparedPayload);
+  if (!prepared) return { data: null, error: { message: 'Contrato invalido do comprovante.' } };
+
+  const { error: uploadError } = await supabase.storage
+    .from(prepared.bucket)
+    .upload(prepared.path, input.file, { contentType: prepared.mimeType, upsert: false });
+
+  if (uploadError) {
+    await supabase.rpc('complete_payment_receipt_upload', {
+      p_receipt_id: prepared.id,
+      p_status: 'failed',
+    });
+    return { data: null, error: { message: 'Comprovante criado, mas upload falhou.' } };
+  }
+
+  const { data: completed, error: completeError } = await supabase.rpc(
+    'complete_payment_receipt_upload',
+    {
+      p_receipt_id: prepared.id,
+      p_status: 'pending_review',
+    }
+  );
+  if (completeError) {
+    return {
+      data: null,
+      error: {
+        message: 'Upload enviado, mas status nao foi atualizado.',
+        code: completeError.code,
+      },
+    };
+  }
+
+  return {
+    data:
+      normalizePaymentReceipt({
+        ...asRecord(completed),
+        id: prepared.id,
+        invoiceId: input.invoiceId ?? null,
+        amountCents: input.amountCents,
+        status: 'pending_review',
+        submittedAt: new Date().toISOString(),
+        uploadedAt: new Date().toISOString(),
+        fileName: prepared.fileName,
+        mimeType: prepared.mimeType,
+        sizeBytes: prepared.sizeBytes,
+      }) ?? null,
+    error: null,
+  };
+}
+
+export async function getPaymentReceiptSignedUrl(
+  receiptId: string,
+  expiresInSeconds = 300
+): Promise<{
+  data: { url: string; expiresInSeconds: number } | null;
+  error: SafeServiceError | null;
+}> {
+  if (!receiptId.trim()) return { data: null, error: { message: 'Comprovante invalido.' } };
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc('get_payment_receipt_download', {
+    p_receipt_id: receiptId,
+    p_expires_in: expiresInSeconds,
+  });
+  if (error) {
+    return {
+      data: null,
+      error: { message: 'Nao foi possivel abrir o comprovante.', code: error.code },
+    };
+  }
+
+  const record = asRecord(data);
+  const bucket = asString(record.bucket, 'payment-receipts');
+  const path = asString(record.path);
+  const expiresIn = Math.max(60, Math.min(600, asNumber(record.expiresInSeconds, 300)));
+  if (bucket !== 'payment-receipts' || !path) {
+    return { data: null, error: { message: 'Contrato privado do comprovante invalido.' } };
+  }
+
+  const signed = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
+  if (signed.error || !signed.data?.signedUrl) {
+    return { data: null, error: { message: 'Nao foi possivel gerar link temporario.' } };
+  }
+  return { data: { url: signed.data.signedUrl, expiresInSeconds: expiresIn }, error: null };
 }
 
 async function createLocalFinancialAction(
@@ -665,6 +1045,226 @@ export async function getClinicFinanceReconciliation() {
     };
   return {
     data: data as ClinicFinanceReconciliation,
+    error: null as SafeServiceError | null,
+  };
+}
+
+function normalizeClinicM13Dashboard(value: unknown): ClinicFinanceM13Dashboard {
+  const record = asRecord(value);
+  const recurrenceRecord = asRecord(record.recurrence);
+  const lastRunRecord = asRecord(record.lastRun);
+  return {
+    receiptQueue: Array.isArray(record.receiptQueue)
+      ? record.receiptQueue
+          .map((item) => {
+            const receipt = normalizePaymentReceipt(item);
+            const source = asRecord(item);
+            if (!receipt) return null;
+            return {
+              ...receipt,
+              patientId: asString(source.patientId),
+              patientName: asString(source.patientName, 'Paciente'),
+              invoiceId: asNullableString(source.invoiceId),
+            };
+          })
+          .filter((item): item is ClinicFinanceM13ReceiptQueueItem => Boolean(item))
+      : [],
+    recurrence: {
+      active: asNumber(recurrenceRecord.active),
+      paused: asNumber(recurrenceRecord.paused),
+      cancelled: asNumber(recurrenceRecord.cancelled),
+      upcoming: Array.isArray(recurrenceRecord.upcoming)
+        ? recurrenceRecord.upcoming
+            .map((item) => {
+              const subscription = normalizeSubscription(item);
+              const source = asRecord(item);
+              if (!subscription) return null;
+              return {
+                ...subscription,
+                patientId: asString(source.patientId),
+                patientName: asString(source.patientName, 'Paciente'),
+              };
+            })
+            .filter((item): item is ClinicFinanceM13SubscriptionItem => Boolean(item))
+        : [],
+    },
+    refunds: Array.isArray(record.refunds)
+      ? record.refunds
+          .map((item) => {
+            const refund = normalizeRefund(item);
+            const source = asRecord(item);
+            if (!refund) return null;
+            return {
+              ...refund,
+              patientId: asString(source.patientId),
+              patientName: asString(source.patientName, 'Paciente'),
+              errorCode: asNullableString(source.errorCode),
+            };
+          })
+          .filter((item): item is ClinicFinanceM13RefundItem => Boolean(item))
+      : [],
+    syncJobs: Array.isArray(record.syncJobs)
+      ? record.syncJobs
+          .map((item) => {
+            const source = asRecord(item);
+            const id = asString(source.id);
+            const invoiceId = asString(source.invoiceId);
+            if (!id || !invoiceId) return null;
+            return {
+              id,
+              invoiceId,
+              status: asString(source.status, 'queued'),
+              source: asString(source.source, 'manual'),
+              reason: asString(source.reason, 'sync'),
+              requestedAt: asNullableString(source.requestedAt),
+              processedAt: asNullableString(source.processedAt),
+              errorCode: asNullableString(source.errorCode),
+            };
+          })
+          .filter((item): item is ClinicFinanceM13SyncJob => Boolean(item))
+      : [],
+    lastRun: lastRunRecord.id
+      ? {
+          id: asString(lastRunRecord.id),
+          source: asString(lastRunRecord.source, 'cron'),
+          status: asString(lastRunRecord.status, 'completed'),
+          checkedInvoiceCount: asNumber(lastRunRecord.checkedInvoiceCount),
+          queuedSyncCount: asNumber(lastRunRecord.queuedSyncCount),
+          pendingReceiptCount: asNumber(lastRunRecord.pendingReceiptCount),
+          divergenceCount: asNumber(lastRunRecord.divergenceCount),
+          startedAt: asNullableString(lastRunRecord.startedAt),
+          finishedAt: asNullableString(lastRunRecord.finishedAt),
+        }
+      : null,
+    generatedAt: asNullableString(record.generatedAt),
+  };
+}
+
+export async function getClinicFinanceM13Dashboard() {
+  if (isMockEnabled()) {
+    return {
+      data: {
+        receiptQueue: [],
+        recurrence: { active: 12, paused: 1, cancelled: 2, upcoming: [] },
+        refunds: [],
+        syncJobs: [],
+        lastRun: null,
+        generatedAt: new Date().toISOString(),
+      } as ClinicFinanceM13Dashboard,
+      error: null as SafeServiceError | null,
+    };
+  }
+
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc('get_clinic_finance_m13_dashboard');
+  if (error)
+    return {
+      data: null as ClinicFinanceM13Dashboard | null,
+      error: { message: error.message, code: error.code },
+    };
+  return {
+    data: normalizeClinicM13Dashboard(data),
+    error: null as SafeServiceError | null,
+  };
+}
+
+export async function reviewPaymentReceipt(
+  receiptId: string,
+  decision: 'approve' | 'reject',
+  reason?: string
+) {
+  if (!receiptId.trim()) return { data: null, error: { message: 'Comprovante invalido.' } };
+  if (decision === 'reject' && !reason?.trim()) {
+    return { data: null, error: { message: 'Informe o motivo da rejeicao.' } };
+  }
+  if (isMockEnabled()) {
+    return {
+      data: { id: receiptId, status: decision === 'approve' ? 'approved' : 'rejected' },
+      error: null as SafeServiceError | null,
+    };
+  }
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc('review_payment_receipt', {
+    p_receipt_id: receiptId,
+    p_decision: decision,
+    p_reason: reason?.trim() || null,
+  });
+  if (error) return { data: null, error: { message: error.message, code: error.code } };
+  const record = asRecord(data);
+  return {
+    data: { id: asString(record.id, receiptId), status: asString(record.status) },
+    error: null as SafeServiceError | null,
+  };
+}
+
+export async function refundPatientPayment(input: {
+  paymentId?: string | null;
+  invoiceId?: string | null;
+  amountCents: number;
+  reason: string;
+  idempotencyKey?: string;
+}) {
+  if (!input.paymentId?.trim() && !input.invoiceId?.trim()) {
+    return { data: null, error: { message: 'Pagamento ou cobranca obrigatoria para estorno.' } };
+  }
+  if (!Number.isFinite(input.amountCents) || input.amountCents <= 0) {
+    return { data: null, error: { message: 'Valor invalido para estorno.' } };
+  }
+  if (input.reason.trim().length < 10) {
+    return {
+      data: null,
+      error: { message: 'Informe um motivo de estorno com pelo menos 10 caracteres.' },
+    };
+  }
+  if (isMockEnabled()) {
+    return {
+      data: {
+        id: `mock-refund-${Date.now()}`,
+        status: 'succeeded',
+        amountCents: input.amountCents,
+      },
+      error: null as SafeServiceError | null,
+    };
+  }
+  const res = await invoke<unknown>('asaas-refund-payment', {
+    payment_id: input.paymentId ?? null,
+    invoice_id: input.invoiceId ?? null,
+    amount_cents: Math.round(input.amountCents),
+    reason: input.reason.trim(),
+    idempotency_key: normalizeIdempotencyKey(input.idempotencyKey) ?? undefined,
+  });
+  if (res.error) return { data: null, error: res.error };
+  const record = asRecord(res.data);
+  return {
+    data: {
+      id: asString(record.id),
+      status: asString(record.status),
+      amountCents: asNumber(record.amount_cents, input.amountCents),
+    },
+    error: null as SafeServiceError | null,
+  };
+}
+
+export async function syncAsaasPayment(invoiceId: string, reason = 'manual_sync') {
+  if (!invoiceId.trim()) return { data: null, error: { message: 'Cobranca invalida para sync.' } };
+  if (isMockEnabled()) {
+    return {
+      data: { id: invoiceId, status: 'paid', syncedAt: new Date().toISOString() },
+      error: null as SafeServiceError | null,
+    };
+  }
+  const res = await invoke<unknown>('asaas-sync-payment', {
+    invoice_id: invoiceId,
+    reason,
+  });
+  if (res.error) return { data: null, error: res.error };
+  const record = asRecord(res.data);
+  return {
+    data: {
+      id: asString(record.id, invoiceId),
+      status: asString(record.status),
+      syncedAt: asNullableString(record.synced_at),
+    },
     error: null as SafeServiceError | null,
   };
 }

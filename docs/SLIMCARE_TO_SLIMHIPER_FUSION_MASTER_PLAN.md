@@ -1105,38 +1105,51 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Portal paciente: pendencias, pagar, enviar comprovante, status.
-- [ ] Clinica: fila de comprovantes pendentes.
-- [ ] Clinica: inadimplencia, recorrencia, divergencia, webhook pendente.
-- [ ] Acao de refund com confirmacao e motivo.
-- [ ] Valores destacados e datas legiveis.
-- [ ] Permissao financeira bloqueia valores para perfis sem acesso.
+- [x] Portal paciente: pendencias, pagar, enviar comprovante, status.
+- [x] Clinica: fila de comprovantes pendentes.
+- [x] Clinica: inadimplencia, recorrencia, divergencia, webhook pendente.
+- [x] Acao de refund com confirmacao e motivo.
+- [x] Valores destacados e datas legiveis.
+- [x] Permissao financeira bloqueia valores para perfis sem acesso.
 
 Checklist backend:
 
-- [ ] Tabela `payment_receipts` ou reaproveitar storage+metadata existente.
-- [ ] Bucket privado para comprovantes.
-- [ ] RPC para aprovar/rejeitar comprovante.
-- [ ] Edge `asaas-refund-payment`.
-- [ ] Edge/RPC para sync status sob demanda.
-- [ ] Cron para conciliacao de cobranças pendentes.
-- [ ] Eventos financeiros auditados.
-- [ ] Notificacao apos status de comprovante.
+- [x] Tabela `payment_receipts` ou reaproveitar storage+metadata existente.
+- [x] Bucket privado para comprovantes.
+- [x] RPC para aprovar/rejeitar comprovante.
+- [x] Edge `asaas-refund-payment`.
+- [x] Edge/RPC para sync status sob demanda.
+- [~] Cron para conciliacao de cobranças pendentes.
+  `run_billing_reconciliation` foi criado com modo dry-run/execute; agendamento
+  recorrente em infraestrutura/cron deve ser habilitado no ambiente alvo.
+- [x] Eventos financeiros auditados.
+- [x] Notificacao apos status de comprovante.
 
 Checklist seguranca:
 
-- [ ] Comprovante pode conter dados bancarios: privado.
-- [ ] Financeiro exige `financial.read/write`.
-- [ ] Refund exige permissao elevada e motivo.
-- [ ] Payload Asaas minimizado.
-- [ ] Webhook com token/HMAC/idempotencia.
+- [x] Comprovante pode conter dados bancarios: privado.
+- [x] Financeiro exige `financial.read/write`.
+- [x] Refund exige permissao elevada e motivo.
+- [x] Payload Asaas minimizado.
+- [x] Webhook com token/HMAC/idempotencia.
 
 Aceite:
 
-- [ ] Paciente envia comprovante no celular.
-- [ ] Financeiro aprova/rejeita com motivo.
-- [ ] Refund sandbox/homologacao validado quando autorizado.
-- [ ] Reconciliacao nao duplica eventos.
+- [x] Paciente envia comprovante no celular.
+- [x] Financeiro aprova/rejeita com motivo.
+- [~] Refund sandbox/homologacao validado quando autorizado.
+  Contrato e Edge Function foram implementados; validacao contra provider deve
+  rodar somente em sandbox/homologacao explicitamente autorizados.
+- [x] Reconciliacao nao duplica eventos.
+
+Implementacao SlimHiper 2026-06-07:
+
+- Migration `20260607110000_340_finance_m13_receipts_refunds_reconciliation.sql`.
+- Edge Functions `asaas-refund-payment` e `asaas-sync-payment`.
+- Services/UI em `billingApi`, portal do paciente, `/clinic/financeiro` e
+  `TabFinanceiro` do Paciente 360.
+- Asaas `externalReference` de patient billing passa a usar referencia
+  financeira pseudonima em `billing_external_references`.
 
 ### M14 - Settings, equipe, permissoes e compliance operacional
 
@@ -1355,13 +1368,13 @@ Aceite:
 | `getPatientCommercialData`                     | View/RPC               | Dados comerciais para UI                          |
 | `syncPackageEnrollment`                        | Trigger                | Matricula/pacote                                  |
 | `createAsaasCharge`                            | Edge                   | Ja ha invoice/subscription; avaliar charge avulsa |
-| `refundAsaasCharge`                            | Edge                   | Falta refund                                      |
-| `syncAsaasReference`                           | Edge/Cron              | Falta sync ativo                                  |
-| `syncAsaasChargeStatus`                        | Edge/Cron              | Completar conciliacao                             |
+| `refundAsaasCharge`                            | Edge                   | `asaas-refund-payment` implementada               |
+| `syncAsaasReference`                           | Edge/Cron              | `asaas-sync-payment` + RPC de reconciliacao       |
+| `syncAsaasChargeStatus`                        | Edge/Cron              | Sync sob demanda e reconciliation run local       |
 | `asaasWebhook`                                 | Edge                   | Existe `webhook-asaas`                            |
 | `asaasStatusMapper`                            | Helper/RPC             | Consolidar mapper                                 |
 | `mapAsaasStatus`                               | Helper/RPC             | Consolidar mapper                                 |
-| `notifyReceiptStatusChange`                    | Trigger/notification   | Falta comprovante                                 |
+| `notifyReceiptStatusChange`                    | Trigger/notification   | Notificacao no approve/reject de comprovante      |
 | `checkPaymentGatewayConfig`                    | Edge admin-only        | Health provider                                   |
 | `generateDocumentPDF`                          | Edge                   | Existe `generate-document`                        |
 | `generatePrescriptionPDF`                      | Edge                   | Falta prescricao regulatoria completa             |
@@ -1430,7 +1443,7 @@ uma unica branch/epic com cortes internos seguros.
 ### Corte E - Documentos, financeiro e comercial
 
 - [ ] Wizard de documentos/templates.
-- [~] Comprovantes/upgrades/refund/sync Asaas.
+- [~] Comprovantes/refund/sync Asaas implementados; upgrades seguem pendentes.
 - [x] Catalogo servicos/pacotes.
 - [x] Matricula e beneficios.
 

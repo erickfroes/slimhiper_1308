@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Eye,
   Download,
+  Undo2,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
 import Dialog from '@/components/ui/Dialog';
@@ -28,14 +29,21 @@ import {
   createPatientInvoice,
   createPatientReceipt,
   createPatientSubscription,
+  getPaymentReceiptSignedUrl,
   getPatientFinancialSummary,
+  refundPatientPayment,
   registerPatientManualPayment,
   sendPaymentReminder,
+  syncAsaasPayment,
 } from '@/services/billingApi';
 import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
 
 function formatBRL(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+function formatBRLCents(value: number) {
+  return formatBRL(value / 100);
 }
 
 function formatDate(dateStr: string) {
@@ -187,8 +195,18 @@ function StatusPill({ status }: { status: string }) {
     vencido: { label: 'Vencido', cls: 'bg-red-100 text-red-700' },
     cancelado: { label: 'Cancelado', cls: 'bg-gray-100 text-gray-500' },
     ativa: { label: 'Ativa', cls: 'bg-blue-100 text-blue-700' },
+    active: { label: 'Ativa', cls: 'bg-blue-100 text-blue-700' },
+    paused: { label: 'Pausada', cls: 'bg-amber-100 text-amber-700' },
+    cancelled: { label: 'Cancelada', cls: 'bg-gray-100 text-gray-500' },
     concluida: { label: 'Concluída', cls: 'bg-green-100 text-green-700' },
     pendente_aprovacao: { label: 'Pend. Aprovação', cls: 'bg-amber-100 text-amber-700' },
+    pending_review: { label: 'Em analise', cls: 'bg-amber-100 text-amber-700' },
+    approved: { label: 'Aprovado', cls: 'bg-green-100 text-green-700' },
+    rejected: { label: 'Rejeitado', cls: 'bg-red-100 text-red-700' },
+    requested: { label: 'Solicitado', cls: 'bg-amber-100 text-amber-700' },
+    processing: { label: 'Processando', cls: 'bg-blue-100 text-blue-700' },
+    succeeded: { label: 'Concluido', cls: 'bg-green-100 text-green-700' },
+    failed: { label: 'Falhou', cls: 'bg-red-100 text-red-700' },
   };
   const entry = map[status] ?? { label: status, cls: 'bg-muted text-muted-foreground' };
   return (
@@ -274,6 +292,13 @@ export default function TabFinanceiro({
   const [paymentMethod, setPaymentMethod] = useState<
     'pix' | 'cartao_credito' | 'cartao_debito' | 'boleto' | 'dinheiro' | 'transferencia'
   >('pix');
+  const [refundModal, setRefundModal] = useState<{
+    paymentId?: string | null;
+    invoiceId?: string | null;
+    label: string;
+  } | null>(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundAmount, setRefundAmount] = useState('');
   const [invoiceActionKey, setInvoiceActionKey] = useState(() =>
     createBillingActionKey('invoice', patientId)
   );
@@ -588,6 +613,81 @@ export default function TabFinanceiro({
     }
   };
 
+  const handleOpenRefundModal = (
+    payment: NonNullable<PatientFinancialSummary['paymentHistory']>[number]
+  ) => {
+    resetCreationFeedback();
+    setRefundModal({
+      paymentId: payment.id,
+      label: payment.description,
+    });
+    setRefundAmount(String(payment.amount).replace('.', ','));
+    setRefundReason('');
+  };
+
+  const handleConfirmRefund = async () => {
+    resetCreationFeedback();
+    if (!refundModal) return;
+    const parsedAmount = parseCurrencyAmount(refundAmount);
+    if (parsedAmount === null) {
+      setCreationError('Informe um valor valido para estorno.');
+      return;
+    }
+    if (refundReason.trim().length < 10) {
+      setCreationError('Informe um motivo de estorno com pelo menos 10 caracteres.');
+      return;
+    }
+
+    setLocalActionLoading('refund');
+    try {
+      const result = await refundPatientPayment({
+        paymentId: refundModal.paymentId,
+        invoiceId: refundModal.invoiceId,
+        amountCents: Math.round(parsedAmount * 100),
+        reason: refundReason.trim(),
+        idempotencyKey: `refund:${refundModal.paymentId ?? refundModal.invoiceId}:${Date.now()}`,
+      });
+      if (result.error) {
+        setCreationError(result.error.message);
+        return;
+      }
+      setRefundModal(null);
+      await refreshAfterLocalAction('Estorno solicitado e registrado para conciliacao.');
+    } finally {
+      setLocalActionLoading(null);
+    }
+  };
+
+  const handleSyncCharge = async (invoiceId: string) => {
+    resetCreationFeedback();
+    setLocalActionLoading(`sync:${invoiceId}`);
+    try {
+      const result = await syncAsaasPayment(invoiceId, 'patient_360_manual_sync');
+      if (result.error) {
+        setCreationError(result.error.message);
+        return;
+      }
+      await refreshAfterLocalAction('Sincronizacao da cobranca solicitada.');
+    } finally {
+      setLocalActionLoading(null);
+    }
+  };
+
+  const handleOpenPaymentReceipt = async (receiptId: string) => {
+    resetCreationFeedback();
+    setLocalActionLoading(`payment-receipt:${receiptId}`);
+    try {
+      const result = await getPaymentReceiptSignedUrl(receiptId);
+      if (result.error || !result.data?.url) {
+        setCreationError(result.error?.message ?? 'Nao foi possivel abrir o comprovante.');
+        return;
+      }
+      window.open(result.data.url, '_blank', 'noopener,noreferrer');
+    } finally {
+      setLocalActionLoading(null);
+    }
+  };
+
   useEffect(() => {
     void loadFinancial();
   }, [loadFinancial]);
@@ -629,6 +729,9 @@ export default function TabFinanceiro({
   const charges = liveFinancial.charges ?? [];
   const receipts = liveFinancial.receipts ?? [];
   const negotiations = liveFinancial.negotiations ?? [];
+  const paymentReceipts = liveFinancial.paymentReceipts ?? [];
+  const subscriptions = liveFinancial.subscriptions ?? [];
+  const refunds = liveFinancial.refunds ?? [];
   const futureParcelas = liveFinancial.futureParcelas ?? 0;
   const futureParcelasAmount = liveFinancial.futureParcelasAmount ?? 0;
   const overdueParcelasCount = liveFinancial.overdueParcelasCount ?? 0;
@@ -1013,6 +1116,60 @@ export default function TabFinanceiro({
           </div>
         </Dialog>
       )}
+      {refundModal && (
+        <Dialog
+          open
+          title="Solicitar estorno"
+          description="Estorno auditado via Edge Function. Confirme valor e motivo antes de enviar."
+          onOpenChange={(open) => {
+            if (!open && localActionLoading !== 'refund') setRefundModal(null);
+          }}
+        >
+          <div className="space-y-3 text-sm" aria-busy={localActionLoading === 'refund'}>
+            <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
+              Pagamento: <span className="font-semibold text-foreground">{refundModal.label}</span>
+            </p>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Valor do estorno</span>
+              <input
+                className="w-full rounded border px-2 py-1"
+                inputMode="decimal"
+                value={refundAmount}
+                disabled={localActionLoading === 'refund'}
+                onChange={(event) => setRefundAmount(event.target.value)}
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Motivo</span>
+              <textarea
+                className="min-h-24 w-full rounded border px-2 py-1"
+                value={refundReason}
+                disabled={localActionLoading === 'refund'}
+                onChange={(event) => setRefundReason(event.target.value)}
+                placeholder="Descreva o motivo operacional do estorno"
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-primary text-xs"
+                disabled={localActionLoading === 'refund'}
+                onClick={() => void handleConfirmRefund()}
+              >
+                {localActionLoading === 'refund' ? 'Solicitando...' : 'Confirmar estorno'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary text-xs"
+                disabled={localActionLoading === 'refund'}
+                onClick={() => setRefundModal(null)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      )}
 
       {/* ── Histórico de pagamentos ── */}
       <Section
@@ -1054,7 +1211,7 @@ export default function TabFinanceiro({
                       </p>
                     </div>
                   </div>
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
                     {p.receiptId ? (
                       <button
                         type="button"
@@ -1070,6 +1227,14 @@ export default function TabFinanceiro({
                     ) : (
                       <span className="text-xs text-muted-foreground">Sem recibo</span>
                     )}
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={!canWriteFinancial || isLocalActionLoading}
+                      onClick={() => handleOpenRefundModal(p)}
+                    >
+                      <Undo2 size={12} /> Estornar
+                    </button>
                   </div>
                 </article>
               ))}
@@ -1115,6 +1280,12 @@ export default function TabFinanceiro({
                     >
                       Recibo
                     </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Estorno
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1148,6 +1319,16 @@ export default function TabFinanceiro({
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
+                      </td>
+                      <td className="py-2.5">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 text-xs text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!canWriteFinancial || isLocalActionLoading}
+                          onClick={() => handleOpenRefundModal(p)}
+                        >
+                          <Undo2 size={12} /> Estornar
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1199,8 +1380,16 @@ export default function TabFinanceiro({
                       </p>
                     </div>
                   </div>
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
                     <StatusPill status={c.status} />
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={!canWriteFinancial || isLocalActionLoading}
+                      onClick={() => void handleSyncCharge(c.id)}
+                    >
+                      <RefreshCw size={12} /> Sync
+                    </button>
                   </div>
                 </article>
               ))}
@@ -1246,6 +1435,12 @@ export default function TabFinanceiro({
                     >
                       Enviada em
                     </th>
+                    <th
+                      scope="col"
+                      className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    >
+                      Sync
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1268,12 +1463,136 @@ export default function TabFinanceiro({
                       <td className="py-2.5 text-muted-foreground">
                         {c.sentAt ? formatDate(c.sentAt) : '—'}
                       </td>
+                      <td className="py-2.5">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!canWriteFinancial || isLocalActionLoading}
+                          onClick={() => void handleSyncCharge(c.id)}
+                        >
+                          <RefreshCw size={12} /> Sync
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </>
+        )}
+      </Section>
+
+      <Section
+        title="Comprovantes enviados"
+        icon={<Receipt size={16} />}
+        count={paymentReceipts.length}
+        defaultOpen={paymentReceipts.some((receipt) => receipt.status === 'pending_review')}
+      >
+        {paymentReceipts.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            Nenhum comprovante enviado pelo paciente.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {paymentReceipts.map((receipt) => (
+              <article
+                key={receipt.id}
+                className="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {receipt.fileName ?? 'Comprovante'}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatBRLCents(receipt.amountCents)} - enviado em{' '}
+                    {formatDate((receipt.uploadedAt ?? receipt.submittedAt ?? '').slice(0, 10))}
+                  </p>
+                  {receipt.rejectionReason ? (
+                    <p className="mt-1 text-xs text-red-600">Motivo: {receipt.rejectionReason}</p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill status={receipt.status} />
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isLocalActionLoading}
+                    onClick={() => void handleOpenPaymentReceipt(receipt.id)}
+                  >
+                    <Eye size={12} /> Abrir
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section
+        title="Recorrencia"
+        icon={<RefreshCw size={16} />}
+        count={subscriptions.length}
+        defaultOpen={subscriptions.length > 0}
+      >
+        {subscriptions.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            Nenhuma assinatura recorrente vinculada.
+          </p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {subscriptions.map((subscription) => (
+              <article key={subscription.id} className="rounded-lg border border-border p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {subscription.description ?? 'Assinatura'}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {subscription.cycle} - proxima em{' '}
+                      {formatDate((subscription.nextDueDate ?? '').slice(0, 10))}
+                    </p>
+                  </div>
+                  <StatusPill status={subscription.status} />
+                </div>
+                <p className="mt-3 text-sm font-bold tabular-nums text-foreground">
+                  {formatBRLCents(subscription.amountCents)}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section
+        title="Estornos"
+        icon={<Undo2 size={16} />}
+        count={refunds.length}
+        defaultOpen={refunds.length > 0}
+      >
+        {refunds.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            Nenhum estorno registrado.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {refunds.map((refund) => (
+              <article
+                key={refund.id}
+                className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">
+                    {formatBRLCents(refund.amountCents)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Solicitado em {formatDate((refund.requestedAt ?? '').slice(0, 10))} -{' '}
+                    {refund.reason}
+                  </p>
+                </div>
+                <StatusPill status={refund.status} />
+              </article>
+            ))}
+          </div>
         )}
       </Section>
 

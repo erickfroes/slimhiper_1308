@@ -4,23 +4,39 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   CalendarClock,
+  Check,
   CheckCircle2,
   CircleDollarSign,
+  Eye,
+  Loader2,
   LockKeyhole,
   ReceiptText,
   RefreshCcw,
   ShieldCheck,
+  XCircle,
 } from 'lucide-react';
-import { getClinicFinanceOverview, getClinicFinanceReconciliation } from '@/services/billingApi';
+import {
+  getClinicFinanceM13Dashboard,
+  getClinicFinanceOverview,
+  getClinicFinanceReconciliation,
+  getPaymentReceiptSignedUrl,
+  reviewPaymentReceipt,
+  syncAsaasPayment,
+} from '@/services/billingApi';
 import type { ClinicFinanceDivergence } from '@/services/billingApi';
 
 type FinanceOverviewResult = Awaited<ReturnType<typeof getClinicFinanceOverview>>['data'];
 type FinanceReconciliationResult = Awaited<
   ReturnType<typeof getClinicFinanceReconciliation>
 >['data'];
+type FinanceM13Result = Awaited<ReturnType<typeof getClinicFinanceM13Dashboard>>['data'];
 
 function brl(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+function brlCents(value: number) {
+  return brl(value / 100);
 }
 
 function dateLabel(value: string | null | undefined) {
@@ -56,6 +72,26 @@ function safeServiceMessage(message: string | null | undefined) {
 function safeEventErrorMessage(message: string | null | undefined) {
   if (!message) return null;
   return 'Falha operacional registrada. Consulte auditoria autorizada para detalhes.';
+}
+
+function receiptStatusLabel(status: string) {
+  const map: Record<string, string> = {
+    pending_review: 'Pendente',
+    approved: 'Aprovado',
+    rejected: 'Rejeitado',
+    failed: 'Falhou',
+  };
+  return map[status] ?? status;
+}
+
+function compactDateTime(value: string | null | undefined) {
+  if (!value) return 'Sem data';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date);
 }
 
 const chargeStatusLabel = {
@@ -111,27 +147,38 @@ function AmountPair({ divergence }: { divergence: ClinicFinanceDivergence }) {
 export default function ClinicFinanceiroContent() {
   const [data, setData] = useState<FinanceOverviewResult>(null);
   const [reconciliation, setReconciliation] = useState<FinanceReconciliationResult>(null);
+  const [m13, setM13] = useState<FinanceM13Result>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reconciliationError, setReconciliationError] = useState<string | null>(null);
+  const [m13Error, setM13Error] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadFinanceOverview = useCallback(async () => {
     setLoading(true);
     setError(null);
     setReconciliationError(null);
+    setM13Error(null);
+    setActionError(null);
 
     try {
-      const [overviewResult, reconciliationResult] = await Promise.all([
+      const [overviewResult, reconciliationResult, m13Result] = await Promise.all([
         getClinicFinanceOverview(),
         getClinicFinanceReconciliation(),
+        getClinicFinanceM13Dashboard(),
       ]);
       setData(overviewResult.data);
       setReconciliation(reconciliationResult.data);
+      setM13(m13Result.data);
       setError(safeServiceMessage(overviewResult.error?.message) ?? null);
       setReconciliationError(safeServiceMessage(reconciliationResult.error?.message) ?? null);
+      setM13Error(safeServiceMessage(m13Result.error?.message) ?? null);
     } catch (requestError) {
       setData(null);
       setReconciliation(null);
+      setM13(null);
       setError(errorMessage(requestError));
     } finally {
       setLoading(false);
@@ -141,6 +188,55 @@ export default function ClinicFinanceiroContent() {
   useEffect(() => {
     void loadFinanceOverview();
   }, [loadFinanceOverview]);
+
+  const openPaymentReceipt = async (receiptId: string) => {
+    setActionLoading(`open:${receiptId}`);
+    setActionError(null);
+    const result = await getPaymentReceiptSignedUrl(receiptId);
+    setActionLoading(null);
+    if (result.error || !result.data?.url) {
+      setActionError(result.error?.message ?? 'Nao foi possivel abrir o comprovante.');
+      return;
+    }
+    window.open(result.data.url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleReceiptReview = async (receiptId: string, decision: 'approve' | 'reject') => {
+    const reason =
+      decision === 'reject'
+        ? window.prompt('Informe o motivo da rejeicao do comprovante:')
+        : (window.prompt('Observacao da aprovacao, se houver:') ?? '');
+    if (decision === 'reject' && !reason?.trim()) return;
+
+    setActionLoading(`${decision}:${receiptId}`);
+    setActionMessage(null);
+    setActionError(null);
+    const result = await reviewPaymentReceipt(receiptId, decision, reason?.trim() || undefined);
+    setActionLoading(null);
+    if (result.error) {
+      setActionError(result.error.message);
+      return;
+    }
+    setActionMessage(
+      decision === 'approve' ? 'Comprovante aprovado e baixa registrada.' : 'Comprovante rejeitado.'
+    );
+    await loadFinanceOverview();
+  };
+
+  const handleSyncInvoice = async (invoiceId: string | null) => {
+    if (!invoiceId) return;
+    setActionLoading(`sync:${invoiceId}`);
+    setActionMessage(null);
+    setActionError(null);
+    const result = await syncAsaasPayment(invoiceId, 'manual_clinic_reconciliation');
+    setActionLoading(null);
+    if (result.error) {
+      setActionError(result.error.message);
+      return;
+    }
+    setActionMessage('Sincronizacao solicitada para a cobranca.');
+    await loadFinanceOverview();
+  };
 
   if (loading) {
     return (
@@ -295,6 +391,19 @@ export default function ClinicFinanceiroContent() {
         })}
       </section>
 
+      {actionMessage || actionError ? (
+        <section
+          role={actionError ? 'alert' : 'status'}
+          className={`rounded-2xl border p-4 text-sm ${
+            actionError
+              ? 'border-red-200 bg-red-50 text-red-700'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+          }`}
+        >
+          {actionError ?? actionMessage}
+        </section>
+      ) : null}
+
       <section className="bg-card border rounded-2xl p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -317,6 +426,192 @@ export default function ClinicFinanceiroContent() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="bg-card border rounded-2xl p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold">Comprovantes, recorrencia e estornos</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Fila financeira do M13 com revisao de comprovantes, recorrencias e syncs recentes.
+            </p>
+          </div>
+          <ReceiptText size={18} className="text-muted-foreground" />
+        </div>
+
+        {m13Error ? (
+          <div
+            role="alert"
+            className="mt-4 rounded-lg border border-red-200 p-3 text-sm text-red-700"
+          >
+            <p className="font-semibold">Fila M13 indisponivel</p>
+            <p className="mt-1 text-red-600">{m13Error}</p>
+          </div>
+        ) : m13 ? (
+          <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold">Comprovantes pendentes</h3>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  {m13.receiptQueue.length}
+                </span>
+              </div>
+              {m13.receiptQueue.length === 0 ? (
+                <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+                  Nenhum comprovante aguardando revisao.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {m13.receiptQueue.map((receipt) => (
+                    <article key={receipt.id} className="rounded-lg border p-3 text-sm">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-foreground">{receipt.patientName}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {receipt.fileName ?? 'Comprovante'} - {brlCents(receipt.amountCents)} -
+                            enviado em {compactDateTime(receipt.uploadedAt ?? receipt.submittedAt)}
+                          </p>
+                          <span className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-700">
+                            {receiptStatusLabel(receipt.status)}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="btn-secondary inline-flex items-center gap-1 text-xs"
+                            disabled={actionLoading === `open:${receipt.id}`}
+                            onClick={() => void openPaymentReceipt(receipt.id)}
+                          >
+                            {actionLoading === `open:${receipt.id}` ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Eye size={13} />
+                            )}
+                            Abrir
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary inline-flex items-center gap-1 text-xs"
+                            disabled={actionLoading === `approve:${receipt.id}`}
+                            onClick={() => void handleReceiptReview(receipt.id, 'approve')}
+                          >
+                            <Check size={13} />
+                            Aprovar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary inline-flex items-center gap-1 text-xs"
+                            disabled={actionLoading === `reject:${receipt.id}`}
+                            onClick={() => void handleReceiptReview(receipt.id, 'reject')}
+                          >
+                            <XCircle size={13} />
+                            Rejeitar
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold">Recorrencia</h3>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center text-sm">
+                  <div className="rounded-lg border p-2">
+                    <p className="text-xs text-muted-foreground">Ativas</p>
+                    <p className="text-lg font-semibold">{m13.recurrence.active}</p>
+                  </div>
+                  <div className="rounded-lg border p-2">
+                    <p className="text-xs text-muted-foreground">Pausadas</p>
+                    <p className="text-lg font-semibold">{m13.recurrence.paused}</p>
+                  </div>
+                  <div className="rounded-lg border p-2">
+                    <p className="text-xs text-muted-foreground">Canceladas</p>
+                    <p className="text-lg font-semibold">{m13.recurrence.cancelled}</p>
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {m13.recurrence.upcoming.slice(0, 4).map((subscription) => (
+                    <div
+                      key={subscription.id}
+                      className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground"
+                    >
+                      <p className="font-semibold text-foreground">{subscription.patientName}</p>
+                      <p>
+                        {brlCents(subscription.amountCents)} - proxima em{' '}
+                        {dateLabel(subscription.nextDueDate)}
+                      </p>
+                    </div>
+                  ))}
+                  {m13.recurrence.upcoming.length === 0 ? (
+                    <p className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
+                      Nenhuma recorrencia proxima encontrada.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold">Estornos recentes</h3>
+                <div className="mt-2 space-y-2">
+                  {m13.refunds.slice(0, 4).map((refund) => (
+                    <div key={refund.id} className="rounded-lg border p-3 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-foreground">{refund.patientName}</p>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+                          {refund.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-muted-foreground">
+                        {brlCents(refund.amountCents)} - {compactDateTime(refund.requestedAt)}
+                      </p>
+                    </div>
+                  ))}
+                  {m13.refunds.length === 0 ? (
+                    <p className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
+                      Nenhum estorno recente.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold">Syncs pendentes/recentes</h3>
+                <div className="mt-2 space-y-2">
+                  {m13.syncJobs.slice(0, 4).map((job) => (
+                    <div
+                      key={job.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border p-3 text-xs"
+                    >
+                      <span className="min-w-0 truncate">
+                        {job.reason} - {compactDateTime(job.requestedAt)}
+                      </span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+                        {job.status}
+                      </span>
+                    </div>
+                  ))}
+                  {m13.syncJobs.length === 0 ? (
+                    <p className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
+                      Nenhum sync pendente.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              {m13.lastRun ? (
+                <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
+                  Ultima reconciliacao M13: {m13.lastRun.status}, {m13.lastRun.queuedSyncCount}{' '}
+                  syncs enfileirados e {m13.lastRun.pendingReceiptCount} comprovantes pendentes.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">Nenhum contrato M13 foi retornado.</p>
+        )}
       </section>
 
       <section className="bg-card border rounded-2xl p-5">
@@ -438,6 +733,24 @@ export default function ClinicFinanceiroContent() {
                         </span>
                         <span>Vencimento</span>
                         <span className="text-foreground">{dateLabel(divergence.dueDate)}</span>
+                        {divergence.invoiceId ? (
+                          <>
+                            <span>Acao</span>
+                            <button
+                              type="button"
+                              className="inline-flex w-fit items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={actionLoading === `sync:${divergence.invoiceId}`}
+                              onClick={() => void handleSyncInvoice(divergence.invoiceId)}
+                            >
+                              {actionLoading === `sync:${divergence.invoiceId}` ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <RefreshCcw size={12} />
+                              )}
+                              Sincronizar
+                            </button>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                   </article>

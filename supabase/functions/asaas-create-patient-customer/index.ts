@@ -46,6 +46,47 @@ function safeErrorMessage(error: unknown) {
   return String(error);
 }
 
+async function getOrCreateBillingExternalReference(
+  admin: ReturnType<typeof createClient>,
+  tenantId: string,
+  patientId: string
+) {
+  const existing = await admin
+    .from('billing_external_references')
+    .select('reference')
+    .eq('tenant_id', tenantId)
+    .eq('patient_id', patientId)
+    .maybeSingle();
+
+  if (existing.error) throw existing.error;
+  if (existing.data?.reference) return String(existing.data.reference);
+
+  const reference = `shr_${crypto.randomUUID().replaceAll('-', '')}`;
+  const inserted = await admin
+    .from('billing_external_references')
+    .insert({
+      tenant_id: tenantId,
+      patient_id: patientId,
+      reference,
+      metadata: { source: 'asaas-create-patient-customer' },
+    })
+    .select('reference')
+    .single();
+
+  if (!inserted.error && inserted.data?.reference) return String(inserted.data.reference);
+
+  const retry = await admin
+    .from('billing_external_references')
+    .select('reference')
+    .eq('tenant_id', tenantId)
+    .eq('patient_id', patientId)
+    .maybeSingle();
+
+  if (retry.error) throw retry.error;
+  if (retry.data?.reference) return String(retry.data.reference);
+  throw inserted.error ?? new Error('billing_external_reference_failed');
+}
+
 async function resolvePatientTenant(params: {
   supabase: ReturnType<typeof createClient>;
   userId: string;
@@ -218,6 +259,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    const externalReference = await getOrCreateBillingExternalReference(admin, tenantId, patientId);
+
     const providerResponse = await fetch(`${asaasBase}/customers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', access_token: asaasKey },
@@ -226,7 +269,7 @@ Deno.serve(async (req) => {
         email: asString(pii?.email) || undefined,
         mobilePhone: safePhone(pii?.phone),
         cpfCnpj,
-        externalReference: patientId,
+        externalReference,
       }),
     });
 
@@ -259,7 +302,11 @@ Deno.serve(async (req) => {
           patient_id: patientId,
           asaas_customer_id: providerCustomerId,
           status: 'active',
-          metadata: { provider: 'asaas', cpf_cnpj_last4: cpfCnpj.slice(-4) },
+          metadata: {
+            provider: 'asaas',
+            cpf_cnpj_last4: cpfCnpj.slice(-4),
+            external_reference: externalReference,
+          },
         },
         { onConflict: 'tenant_id,patient_id' }
       )

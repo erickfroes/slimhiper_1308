@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   Camera,
   CheckCircle2,
   FileText,
   Image as ImageIcon,
   Loader2,
   Lock,
+  Upload,
 } from 'lucide-react';
 import {
   ChatAvailabilityStatus,
@@ -19,6 +21,7 @@ import DataState from '@/components/ui/DataState';
 import type { PatientPortalSnapshot } from '@/services/patientPortalApi';
 import { getChatAttachmentSignedUrl } from '@/services/chatApi';
 import type { PatientChatAttachment } from '@/domain/types';
+import { uploadPatientPaymentReceipt } from '@/services/billingApi';
 import {
   getPatientPortalEvolutionSummary,
   getProgressPhotoSignedUrl,
@@ -38,6 +41,31 @@ function formatDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Sem data';
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(date);
+}
+
+function paymentReceiptStatusLabel(status: string) {
+  const map: Record<string, string> = {
+    pending_upload: 'Upload pendente',
+    pending_review: 'Em analise',
+    approved: 'Aprovado',
+    rejected: 'Rejeitado',
+    failed: 'Falhou',
+    deleted: 'Removido',
+  };
+  return map[status] ?? status;
+}
+
+function paymentReceiptStatusClass(status: string) {
+  if (status === 'approved') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (status === 'rejected' || status === 'failed') return 'border-red-200 bg-red-50 text-red-700';
+  if (status === 'pending_review') return 'border-amber-200 bg-amber-50 text-amber-700';
+  return 'border-slate-200 bg-slate-50 text-slate-600';
+}
+
+function isOpenInvoiceStatus(status: string) {
+  return !['pago', 'paid', 'confirmed', 'received', 'cancelado', 'cancelled'].includes(
+    status.toLowerCase()
+  );
 }
 
 export function getCheckinQuestions(questions: unknown[]) {
@@ -275,9 +303,75 @@ export function PortalDocumentsSection({
 }
 
 export function PortalFinanceSection({ snapshot }: SnapshotProps) {
+  const [receipts, setReceipts] = useState(snapshot.paymentReceipts);
+  const [filesByInvoice, setFilesByInvoice] = useState<Record<string, File | null>>({});
+  const [uploadingInvoiceId, setUploadingInvoiceId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setReceipts(snapshot.paymentReceipts);
+    setFilesByInvoice({});
+    setNotice(null);
+    setError(null);
+  }, [snapshot.selectedPatientId, snapshot.paymentReceipts]);
+
+  async function handleUpload(invoice: PatientPortalSnapshot['invoices'][number]) {
+    const file = filesByInvoice[invoice.id];
+    setNotice(null);
+    setError(null);
+    if (!file) {
+      setError('Selecione um arquivo de comprovante para enviar.');
+      return;
+    }
+
+    setUploadingInvoiceId(invoice.id);
+    const result = await uploadPatientPaymentReceipt({
+      patientId: snapshot.selectedPatientId,
+      invoiceId: invoice.id,
+      amountCents: invoice.amountCents,
+      file,
+    });
+    setUploadingInvoiceId(null);
+
+    if (result.error || !result.data) {
+      setError(result.error?.message ?? 'Nao foi possivel enviar o comprovante.');
+      return;
+    }
+
+    const uploadedReceipt = result.data;
+    setReceipts((current) => [
+      uploadedReceipt,
+      ...current.filter((item) => item.id !== uploadedReceipt.id),
+    ]);
+    setFilesByInvoice((current) => ({ ...current, [invoice.id]: null }));
+    setNotice('Comprovante enviado para analise financeira.');
+  }
+
+  const orphanReceipts = receipts.filter((receipt) => !receipt.invoiceId);
+
   return (
-    <div className="space-y-3">
-      <h2 className="text-lg font-bold text-foreground">Financeiro proprio</h2>
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-foreground">Financeiro proprio</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Acompanhe pendencias, pague por link seguro e envie comprovantes privados para analise.
+        </p>
+      </div>
+      {notice ? (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {notice}
+        </p>
+      ) : null}
+      {error ? (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
+        </p>
+      ) : null}
       {snapshot.invoices.length === 0 ? (
         <DataState
           kind="empty"
@@ -311,9 +405,91 @@ export function PortalFinanceSection({ snapshot }: SnapshotProps) {
                 Abrir link de pagamento
               </a>
             ) : null}
+            <div className="mt-4 space-y-2">
+              {receipts
+                .filter((receipt) => receipt.invoiceId === invoice.id)
+                .map((receipt) => (
+                  <div
+                    key={receipt.id}
+                    className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm"
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="font-medium text-foreground">
+                        {receipt.fileName ?? 'Comprovante enviado'} -{' '}
+                        {formatCurrency(receipt.amountCents)}
+                      </span>
+                      <span
+                        className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-xs font-semibold ${paymentReceiptStatusClass(receipt.status)}`}
+                      >
+                        {paymentReceiptStatusLabel(receipt.status)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Enviado em {formatDate(receipt.uploadedAt ?? receipt.submittedAt)}
+                    </p>
+                    {receipt.rejectionReason ? (
+                      <p className="mt-1 text-xs text-red-600">Motivo: {receipt.rejectionReason}</p>
+                    ) : null}
+                  </div>
+                ))}
+            </div>
+            {isOpenInvoiceStatus(invoice.status) ? (
+              <div className="mt-4 rounded-xl border border-dashed border-border p-3">
+                <label className="block space-y-2 text-sm">
+                  <span className="font-semibold text-foreground">Enviar comprovante</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+                    disabled={uploadingInvoiceId === invoice.id}
+                    className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary-foreground"
+                    onChange={(event) =>
+                      setFilesByInvoice((current) => ({
+                        ...current,
+                        [invoice.id]: event.currentTarget.files?.[0] ?? null,
+                      }))
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void handleUpload(invoice)}
+                  disabled={uploadingInvoiceId === invoice.id}
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                >
+                  {uploadingInvoiceId === invoice.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Upload className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {uploadingInvoiceId === invoice.id ? 'Enviando...' : 'Enviar comprovante'}
+                </button>
+              </div>
+            ) : null}
           </article>
         ))
       )}
+      {orphanReceipts.length > 0 ? (
+        <section className="rounded-2xl border border-border p-4">
+          <h3 className="font-semibold text-foreground">Comprovantes sem cobranca vinculada</h3>
+          <div className="mt-3 space-y-2">
+            {orphanReceipts.map((receipt) => (
+              <div
+                key={receipt.id}
+                className="flex flex-col gap-2 rounded-xl bg-muted/40 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+              >
+                <span className="text-foreground">
+                  {receipt.fileName ?? 'Comprovante'} - {formatCurrency(receipt.amountCents)}
+                </span>
+                <span
+                  className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-xs font-semibold ${paymentReceiptStatusClass(receipt.status)}`}
+                >
+                  {paymentReceiptStatusLabel(receipt.status)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
