@@ -705,39 +705,50 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Patient360 com bloco "Prontuario" e tabs densas.
-- [ ] SOAP mobile em accordion ou tabs, nao tres colunas.
-- [ ] Sidebar vira drawer no mobile.
-- [ ] Autosave com indicador discreto: salvo, salvando, erro.
-- [ ] Finalizar atendimento com revisao e confirmacao.
-- [ ] Auditoria visivel para admin/profissional autorizado.
-- [ ] Equipe assistencial editavel por permissao.
+- [x] Patient360 com bloco "Prontuario" e tabs densas.
+- [x] SOAP mobile em accordion ou tabs, nao tres colunas.
+- [x] Sidebar vira drawer no mobile.
+- [x] Autosave com indicador discreto: salvo, salvando, erro.
+- [x] Finalizar atendimento com revisao e confirmacao.
+- [x] Auditoria visivel para admin/profissional autorizado.
+- [x] Equipe assistencial editavel por permissao.
 
 Checklist backend:
 
-- [ ] Criar `medical_records` se ainda nao existir como entidade oficial.
-- [ ] Criar `clinical_notes`.
-- [ ] Criar `record_attachments`.
-- [ ] Criar `record_access_audit`.
-- [ ] Criar `patient_care_team`.
-- [ ] RPC `initialize_medical_record`.
-- [ ] RPC `autosave_encounter`.
-- [ ] RPC `create_note_from_encounter`.
-- [ ] Trigger/audit para abertura e escrita de prontuario.
+- [x] Criar `medical_records` se ainda nao existir como entidade oficial.
+- [x] Criar `clinical_notes`.
+- [x] Criar `record_attachments`.
+- [x] Criar `record_access_audit`.
+- [x] Criar `patient_care_team`.
+- [x] RPC `initialize_medical_record`.
+- [x] RPC `autosave_encounter`.
+- [x] RPC `create_note_from_encounter`.
+- [x] Trigger/audit para abertura e escrita de prontuario.
 
 Checklist seguranca:
 
-- [ ] Prontuario e PHI com RLS fail-closed.
-- [ ] Leitura de prontuario auditada quando politica exigir.
-- [ ] Service role somente em backend confiavel.
-- [ ] Anexos via signed URL curta.
-- [ ] Profissional ve apenas pacientes de tenant/unidade/equipe permitidos.
+- [x] Prontuario e PHI com RLS fail-closed.
+- [x] Leitura de prontuario auditada quando politica exigir.
+- [x] Service role somente em backend confiavel.
+- [x] Anexos via signed URL curta.
+- [x] Profissional ve apenas pacientes de tenant/unidade/equipe permitidos.
 
 Aceite:
 
-- [ ] Abrir paciente cria ou localiza prontuario unico.
-- [ ] SOAP autosalva e finaliza em nota longitudinal.
-- [ ] Auditoria registra acesso/escrita sem conteudo clinico bruto em logs.
+- [x] Abrir paciente cria ou localiza prontuario unico.
+- [x] SOAP autosalva e finaliza em nota longitudinal.
+- [x] Auditoria registra acesso/escrita sem conteudo clinico bruto em logs.
+
+Implementacao M08:
+
+- Migracao `20260607023000_290_medical_records_care_team.sql` cria a fundacao
+  longitudinal (`medical_records`, `clinical_notes`, `record_attachments`,
+  `record_access_audit`, `patient_care_team`), RLS, RPCs de inicializacao,
+  autosave, nota a partir de SOAP, snapshot e edicao de equipe.
+- Paciente 360 ganhou bloco e aba `Prontuario`; o snapshot passa a inicializar
+  o prontuario e preencher equipe assistencial real quando ha permissao.
+- Atendimento SOAP ganhou autosave visivel, revisao antes de finalizar,
+  materializacao de nota longitudinal e UX mobile com tabs/drawer.
 
 ### M09 - Medidas, fotos, bioimpedancia, labs e evolucao corporal
 

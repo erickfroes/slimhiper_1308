@@ -141,6 +141,44 @@ function validateFinalSoap(input: PersistSoapInput) {
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+async function autosaveSoapDraft(input: PersistSoapInput): Promise<PersistSoapResult> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc('autosave_encounter', {
+    p_patient_id: input.patientId,
+    p_encounter_id: input.encounterId ?? null,
+    p_appointment_id: input.appointmentId ?? null,
+    p_soap_note_id: input.soapNoteId ?? null,
+    p_subjective: input.subjective,
+    p_objective: input.objective,
+    p_assessment: input.assessment,
+    p_plan: input.plan,
+  });
+
+  if (error) throw error;
+
+  const record = asRecord(data);
+  const encounterId = asString(record.encounterId);
+  const soapNoteId = asString(record.soapNoteId);
+
+  if (!encounterId || !soapNoteId) {
+    throw new Error('invalid_autosave_encounter_contract');
+  }
+
+  return {
+    encounterId,
+    soapNoteId,
+    status: 'draft',
+  };
+}
+
 export async function getEncounterContext(
   patientId: string
 ): Promise<{ data: EncounterContext | null; error: SafeServiceError | null }> {
@@ -254,6 +292,10 @@ async function persistSoap(
       soapNoteId: input.soapNoteId ?? 'mock-soap',
       status,
     };
+  }
+
+  if (status === 'draft') {
+    return autosaveSoapDraft(input);
   }
 
   const { supabase, tenantId, userId, patientId, encounter } = await ensureEncounter({
@@ -374,6 +416,15 @@ async function persistSoap(
   });
 
   if (auditError) throw auditError;
+
+  if (status === 'final') {
+    const { error: noteError } = await supabase.rpc('create_note_from_encounter', {
+      p_encounter_id: encounter.id,
+      p_soap_note_id: soapResult.data.id,
+    });
+
+    if (noteError) throw noteError;
+  }
 
   return {
     encounterId: encounter.id,

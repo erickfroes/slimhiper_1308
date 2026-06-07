@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { Patient360Summary } from '@/domain/types';
 import TabResumo from './tabs/TabResumo';
 import TabTimeline from './tabs/TabTimeline';
+import TabProntuario from './tabs/TabProntuario';
 import TabConsultas from './tabs/TabConsultas';
 import TabNutricao from './tabs/TabNutricao';
 import TabPrescricoes from './tabs/TabPrescricoes';
@@ -19,6 +20,7 @@ import { ShieldOff } from 'lucide-react';
 const TABS = [
   { key: 'tab-resumo', label: 'Resumo', id: 'resumo' },
   { key: 'tab-timeline', label: 'Timeline', id: 'timeline' },
+  { key: 'tab-prontuario', label: 'Prontuario', id: 'prontuario' },
   { key: 'tab-consultas', label: 'Consultas', id: 'consultas' },
   { key: 'tab-nutricao', label: 'Nutrição', id: 'nutricao' },
   { key: 'tab-prescricoes', label: 'Prescrições', id: 'prescricoes' },
@@ -67,6 +69,10 @@ const TAB_PERMISSION_RULES: Partial<
   relatorios: {
     permissions: ['reports.read', 'reports.write'],
     description: 'reports.read',
+  },
+  prontuario: {
+    permissions: ['encounters.read', 'soap.read'],
+    description: 'encounters.read ou soap.read',
   },
 };
 
@@ -210,6 +216,14 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
         )}
         {!isActiveTabForbidden && activeTab === 'timeline' && (
           <TabTimeline events={data.recentTimeline} patientId={data.profile.id} />
+        )}
+        {!isActiveTabForbidden && activeTab === 'prontuario' && (
+          <TabProntuario
+            patientId={patientId}
+            data={data}
+            permissions={userContext?.permissions ?? []}
+            currentRole={userContext?.activeTenantRole ?? null}
+          />
         )}
         {!isActiveTabForbidden && activeTab === 'consultas' && (
           <TabConsultas patientId={patientId} initialAppointments={data.upcomingAppointments} />

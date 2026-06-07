@@ -969,6 +969,36 @@ async function buildAndReturnSummary({
   const nutritionNoteRows = Array.isArray(nutritionNotesRes.data)
     ? (nutritionNotesRes.data as Record<string, unknown>[])
     : [];
+  let recordCareTeam: string[] = [];
+  let recordLastUpdate: string | null = null;
+
+  if (tenantPermissions.has('soap.read')) {
+    const { data: recordSnapshot, error: recordSnapshotError } = await supabase.rpc(
+      'get_medical_record_snapshot',
+      {
+        p_patient_id: patientId,
+        p_include_audit: false,
+      }
+    );
+
+    if (recordSnapshotError) {
+      console.error('[patient-360-summary] record_snapshot_unavailable', {
+        code: recordSnapshotError.code ?? 'record_snapshot_error',
+      });
+    } else {
+      const snapshot = asRecord(recordSnapshot);
+      const record = asRecord(snapshot.record);
+      recordLastUpdate = asString(record.updatedAt ?? record.lastWrittenAt ?? record.lastAccessedAt) || null;
+      recordCareTeam = asArray(snapshot.careTeam)
+        .map((member) => {
+          const item = asRecord(member);
+          const name = asString(item.name, 'Profissional');
+          const role = asString(item.roleLabel ?? item.specialty ?? item.roleCode);
+          return role ? `${name} - ${role}` : name;
+        })
+        .filter(Boolean);
+    }
+  }
 
   const lastUpdate =
     [
@@ -984,6 +1014,7 @@ async function buildAndReturnSummary({
       nutritionPlanRow?.updated_at,
       ...(nutritionHistoryRows ?? []).map((plan) => plan.updated_at),
       ...(nutritionNoteRows ?? []).map((note) => note.created_at),
+      recordLastUpdate,
       asRecord(dailySummaryRes.data).lastSignalAt,
       chatThreadRes.data?.updated_at,
       ...(Array.isArray(latestChatMessageRes.data)
@@ -1148,7 +1179,7 @@ async function buildAndReturnSummary({
       phone: maskPhone(piiRes.data?.phone),
       email: maskEmail(piiRes.data?.email),
       cpfMasked: maskCpf(piiRes.data?.cpf_masked),
-      careTeam: [],
+      careTeam: recordCareTeam,
       createdAt: patient.created_at,
     },
     activePackage,

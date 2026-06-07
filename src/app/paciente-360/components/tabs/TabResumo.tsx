@@ -289,6 +289,7 @@ export default function TabResumo({
         minute: '2-digit',
       })
     : 'Sem sinais hoje';
+  const careTeamPreview = data.profile.careTeam.slice(0, 3);
 
   return (
     <div className="space-y-5">
@@ -534,6 +535,57 @@ export default function TabResumo({
                     : 'sem agenda'}
               </p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card-base p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <SectionHeader
+              icon={FileText}
+              label="Prontuario"
+              iconBg="bg-sky-50"
+              iconColor="text-sky-600"
+              badge={
+                <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                  Longitudinal
+                </span>
+              }
+            />
+            <p className="text-sm text-muted-foreground">
+              SOAP, evolucoes, medidas, anexos, equipe assistencial e auditoria clinica em uma aba
+              unica do Paciente 360.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {careTeamPreview.length > 0 ? (
+                careTeamPreview.map((member) => (
+                  <span
+                    key={member}
+                    className="rounded-full border border-border bg-muted px-2 py-1 text-xs font-medium text-muted-foreground"
+                  >
+                    {member}
+                  </span>
+                ))
+              ) : (
+                <span className="rounded-full border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
+                  Equipe ainda nao atribuida
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+            <a href="?tab=prontuario" className="btn-primary justify-center px-3 py-2 text-sm">
+              <FileText size={14} />
+              Abrir prontuario
+            </a>
+            <a
+              href={`/clinic/patients/${data.profile.id}/encounter`}
+              className="btn-secondary justify-center px-3 py-2 text-sm"
+            >
+              <Stethoscope size={14} />
+              Atendimento SOAP
+            </a>
           </div>
         </div>
       </div>
