@@ -1,12 +1,26 @@
 import type {
-  AppointmentSummary,
-  AppointmentStatus,
-  AppointmentType,
   AlertSeverity,
+  AppointmentStatus,
+  AppointmentSummary,
+  AppointmentType,
+  DashboardAccess,
+  DashboardActionCategory,
+  DashboardActionItem,
+  DashboardActionPriority,
   DashboardAlert,
+  DashboardCohortItem,
   DashboardDegradedSection,
+  DashboardDocumentPendencyItem,
+  DashboardFinancialPendencyItem,
+  DashboardLowAdherenceItem,
+  DashboardOperationalInsights,
+  DashboardOperationalSections,
+  DashboardRecentMessageItem,
+  DashboardRenewalItem,
+  DashboardSectionEnvelope,
   DashboardSnapshot,
   DashboardStats,
+  PatientListRow,
   PatientReviewItem,
   WaitingQueueEntry,
 } from '@/domain/types';
@@ -18,6 +32,27 @@ export interface DashboardProvider {
 
 type BrowserSupabaseClient = ReturnType<typeof createBrowserSupabaseClient>;
 
+const actionCategories = new Set<DashboardActionCategory>([
+  'fila',
+  'adesao',
+  'clinico',
+  'financeiro',
+  'documento',
+  'mensagem',
+  'renovacao',
+  'comercial',
+  'estoque',
+]);
+
+const actionPriorities = new Set<DashboardActionPriority>(['critico', 'alto', 'medio', 'baixo']);
+
+const priorityRank: Record<DashboardActionPriority, number> = {
+  critico: 0,
+  alto: 1,
+  medio: 2,
+  baixo: 3,
+};
+
 function isMockExplicitlyEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 }
@@ -26,98 +61,35 @@ export function canUseMockDashboardProvider(): boolean {
   return isMockExplicitlyEnabled();
 }
 
-let mockDashboardProviderPromise: Promise<DashboardProvider> | null = null;
-
-function getMockDashboardProvider(): Promise<DashboardProvider> {
-  mockDashboardProviderPromise ??= import('@/services/mockApi').then((mockApi) => ({
-    async getDashboardSnapshot() {
-      const [stats, waitingQueue, todayAppointments, alerts, patientsNeedingReview] =
-        await Promise.all([
-          mockApi.getDashboardStats(),
-          mockApi.getWaitingQueue(),
-          mockApi.getTodayAppointments(),
-          mockApi.getDashboardAlerts(),
-          mockApi.getPatientsNeedingReview(),
-        ]);
-
-      return {
-        stats,
-        waitingQueue,
-        todayAppointments,
-        alerts,
-        patientsNeedingReview,
-      };
-    },
-  }));
-
-  return mockDashboardProviderPromise;
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
-type PatientNameRow = {
-  patient_id: string;
-  full_name: string | null;
-};
-
-type AppointmentRow = {
-  id: string;
-  patient_id: string;
-  status: string | null;
-  scheduled_at: string;
-  duration_minutes: number | null;
-  practitioner_id: string | null;
-  location: string | null;
-  notes: string | null;
-};
-
-type AlertRow = {
-  id: string;
-  patient_id: string;
-  title: string;
-  description: string | null;
-  severity: string | null;
-  alert_type: string | null;
-  created_at: string;
-};
-
-type ChatThreadUnreadRow = {
-  unread_count: number | null;
-};
-
-type DashboardInsightsRpc = {
-  crm?: {
-    canRead?: boolean;
-    openLeads?: number;
-    overdueTasks?: number;
-    href?: string;
-  };
-  inventory?: {
-    canRead?: boolean;
-    criticalStockItems?: number;
-    expiringLots?: number;
-    daysToExpiry?: number;
-    href?: string;
-  };
-};
-
-type DailyAdherenceRow = {
-  patientId: string;
-  adherencePercent: number;
-  reason: string;
-  severity: string;
-  lastSignalAt: string | null;
-  href: string;
-};
-
-function todayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start: start.toISOString(), end: end.toISOString() };
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 
-function mapAppointmentStatus(status: string | null | undefined): AppointmentStatus {
-  const normalized = (status ?? '').toLowerCase();
+function asString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function clampPercent(value: unknown) {
+  return Math.max(0, Math.min(100, Math.round(asNumber(value))));
+}
+
+function normalizeAppointmentStatus(status: unknown): AppointmentStatus {
+  const normalized = asString(status).toLowerCase();
   if (normalized === 'arrived' || normalized === 'chegou') return 'chegou';
   if (normalized === 'triage' || normalized === 'triagem') return 'triagem';
   if (normalized === 'measurements' || normalized === 'medidas') return 'medidas';
@@ -135,511 +107,791 @@ function mapAppointmentStatus(status: string | null | undefined): AppointmentSta
   return 'agendado';
 }
 
-function mapAlertSeverity(severity: string | null | undefined): AlertSeverity {
-  const normalized = (severity ?? '').toLowerCase();
+function normalizeAppointmentType(value: unknown): AppointmentType {
+  const normalized = asString(value).toLowerCase();
+  if (normalized === 'retorno') return 'retorno';
+  if (normalized === 'nutricao' || normalized === 'nutricao_clinica') return 'nutricao';
+  if (normalized === 'avaliacao_inicial') return 'avaliacao_inicial';
+  if (normalized === 'bioimpedancia') return 'bioimpedancia';
+  if (normalized === 'checkup') return 'checkup';
+  return 'consulta_medica';
+}
+
+function normalizeSeverity(value: unknown): AlertSeverity {
+  const normalized = asString(value).toLowerCase();
   if (normalized === 'critical' || normalized === 'critico') return 'critico';
   if (normalized === 'high' || normalized === 'alto') return 'alto';
   if (normalized === 'low' || normalized === 'baixo') return 'baixo';
   return 'medio';
 }
 
-function waitingMinutesFromScheduledAt(scheduledAt: string) {
-  const scheduled = new Date(scheduledAt).getTime();
-  if (Number.isNaN(scheduled)) return 0;
-  return Math.max(0, Math.floor((Date.now() - scheduled) / 60000));
+function priorityFromSeverity(value: AlertSeverity): DashboardActionPriority {
+  if (value === 'critico') return 'critico';
+  if (value === 'alto') return 'alto';
+  if (value === 'baixo') return 'baixo';
+  return 'medio';
 }
 
-function uniqueValues(values: string[]) {
-  return Array.from(new Set(values.filter(Boolean)));
+function normalizeActionPriority(value: unknown): DashboardActionPriority {
+  const normalized = asString(value).toLowerCase() as DashboardActionPriority;
+  return actionPriorities.has(normalized) ? normalized : 'medio';
 }
 
-function normalizeDashboardInsights(payload: unknown): DashboardStats['operationalInsights'] {
-  const record = payload && typeof payload === 'object' ? (payload as DashboardInsightsRpc) : {};
-  const crm = record.crm ?? {};
-  const inventory = record.inventory ?? {};
+function normalizeActionCategory(value: unknown): DashboardActionCategory {
+  const normalized = asString(value).toLowerCase() as DashboardActionCategory;
+  return actionCategories.has(normalized) ? normalized : 'clinico';
+}
+
+function normalizeAccess(value: unknown): DashboardAccess {
+  const record = asRecord(value);
+  return {
+    patients: asBoolean(record.patients),
+    agenda: asBoolean(record.agenda),
+    documents: asBoolean(record.documents),
+    financial: asBoolean(record.financial),
+    chat: asBoolean(record.chat),
+    crm: asBoolean(record.crm),
+    inventory: asBoolean(record.inventory),
+  };
+}
+
+function normalizeDashboardInsights(value: unknown): DashboardOperationalInsights {
+  const record = asRecord(value);
+  const crm = asRecord(record.crm);
+  const inventory = asRecord(record.inventory);
 
   return {
     crm: {
-      canRead: crm.canRead === true,
-      openLeads: Number(crm.openLeads ?? 0),
-      overdueTasks: Number(crm.overdueTasks ?? 0),
-      href: typeof crm.href === 'string' ? crm.href : '/clinic/crm',
+      canRead: asBoolean(crm.canRead),
+      openLeads: asNumber(crm.openLeads),
+      overdueTasks: asNumber(crm.overdueTasks),
+      href: asString(crm.href, '/clinic/crm'),
     },
     inventory: {
-      canRead: inventory.canRead === true,
-      criticalStockItems: Number(inventory.criticalStockItems ?? 0),
-      expiringLots: Number(inventory.expiringLots ?? 0),
-      daysToExpiry: Number(inventory.daysToExpiry ?? 30),
-      href: typeof inventory.href === 'string' ? inventory.href : '/clinic/inventory',
+      canRead: asBoolean(inventory.canRead),
+      criticalStockItems: asNumber(inventory.criticalStockItems),
+      expiringLots: asNumber(inventory.expiringLots),
+      daysToExpiry: asNumber(inventory.daysToExpiry, 30),
+      href: asString(inventory.href, '/clinic/inventory'),
     },
   };
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+function normalizeStats(value: unknown): DashboardStats {
+  const record = asRecord(value);
+  return {
+    consultasHoje: asNumber(record.consultasHoje),
+    consultasConcluidas: asNumber(record.consultasConcluidas),
+    filaEspera: asNumber(record.filaEspera),
+    programasAtivos: asNumber(record.programasAtivos),
+    alertasClinicos: asNumber(record.alertasClinicos),
+    mensagensNaoLidas: asNumber(record.mensagensNaoLidas),
+    documentosPendentes: asNumber(record.documentosPendentes),
+    inadimplentes: asNumber(record.inadimplentes),
+    taxaOcupacao: clampPercent(record.taxaOcupacao),
+    baixaAdesao: asNumber(record.baixaAdesao),
+    renovacoesPendentes: asNumber(record.renovacoesPendentes),
+    operationalInsights: normalizeDashboardInsights(record.operationalInsights),
+  };
 }
 
-function asString(value: unknown, fallback = '') {
-  return typeof value === 'string' ? value : fallback;
+function normalizeWaitingQueueEntry(value: unknown): WaitingQueueEntry | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const patientId = asString(record.patientId);
+  if (!id || !patientId) return null;
+
+  return {
+    id,
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    appointmentType: normalizeAppointmentType(record.appointmentType),
+    status: normalizeAppointmentStatus(record.status),
+    scheduledTime: asString(record.scheduledTime),
+    arrivedAt: asString(record.arrivedAt) || undefined,
+    waitingMinutes: Math.max(0, Math.round(asNumber(record.waitingMinutes))),
+    professionalName: asString(record.professionalName, 'Equipe clinica'),
+    room: asString(record.room) || undefined,
+  };
 }
 
-function asNumber(value: unknown, fallback = 0) {
-  const numberValue = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(numberValue) ? numberValue : fallback;
+function normalizeAppointment(value: unknown): AppointmentSummary | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const patientId = asString(record.patientId);
+  if (!id || !patientId) return null;
+
+  return {
+    id,
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    type: normalizeAppointmentType(record.type),
+    status: normalizeAppointmentStatus(record.status),
+    scheduledAt: asString(record.scheduledAt),
+    durationMinutes: Math.max(1, Math.round(asNumber(record.durationMinutes, 30))),
+    professionalName: asString(record.professionalName, 'Equipe clinica'),
+    professionalRole: asString(record.professionalRole, 'Profissional'),
+    roomName: asString(record.roomName) || undefined,
+    attendanceLink: asString(record.attendanceLink) || undefined,
+    recommendedReturn: asString(record.recommendedReturn) || undefined,
+  };
 }
 
-function normalizeDailyAdherenceRows(payload: unknown): DailyAdherenceRow[] {
-  if (!Array.isArray(payload)) return [];
+function normalizeAlert(value: unknown): DashboardAlert | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const patientId = asString(record.patientId);
+  if (!id || !patientId) return null;
 
-  return payload
+  const category = asString(record.category).toLowerCase();
+  const allowedCategory: DashboardAlert['category'] =
+    category === 'financeiro' ||
+    category === 'adesao' ||
+    category === 'documento' ||
+    category === 'protocolo'
+      ? category
+      : 'clinico';
+
+  return {
+    id,
+    patientId,
+    severity: normalizeSeverity(record.severity),
+    title: asString(record.title, 'Alerta operacional'),
+    description: asString(record.description),
+    createdAt: asString(record.createdAt),
+    isResolved: asBoolean(record.isResolved),
+    category: allowedCategory,
+  };
+}
+
+function normalizeReviewItem(value: unknown): PatientReviewItem | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+
+  return {
+    id,
+    name: asString(record.name, 'Paciente sem nome'),
+    issue: asString(record.issue, 'Revisao pendente'),
+    severity: normalizeSeverity(record.severity),
+  };
+}
+
+function normalizeLowAdherenceItem(value: unknown): DashboardLowAdherenceItem | null {
+  const record = asRecord(value);
+  const patientId = asString(record.patientId);
+  if (!patientId) return null;
+
+  return {
+    id: asString(record.id, `low-adherence-${patientId}`),
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    adherencePercent: clampPercent(record.adherencePercent),
+    reason: asString(record.reason, 'Adesao diaria baixa'),
+    severity: normalizeSeverity(record.severity),
+    lastSignalAt: asString(record.lastSignalAt) || null,
+    href: asString(record.href, `/clinic/patients/${patientId}?tab=timeline`),
+  };
+}
+
+function normalizeFinancialPendency(value: unknown): DashboardFinancialPendencyItem | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const patientId = asString(record.patientId);
+  if (!id || !patientId) return null;
+
+  return {
+    id,
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    status: asString(record.status, 'pending'),
+    amountCents: asNumber(record.amountCents),
+    dueDate: asString(record.dueDate) || null,
+    daysOverdue: Math.max(0, Math.round(asNumber(record.daysOverdue))),
+    href: asString(record.href, `/clinic/financeiro?patientId=${patientId}`),
+  };
+}
+
+function normalizeDocumentPendency(value: unknown): DashboardDocumentPendencyItem | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const patientId = asString(record.patientId);
+  if (!id || !patientId) return null;
+
+  return {
+    id,
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    name: asString(record.name, 'Documento pendente'),
+    status: asString(record.status, 'pending'),
+    generatedAt: asString(record.generatedAt) || null,
+    href: asString(record.href, `/clinic/documents?patientId=${patientId}`),
+  };
+}
+
+function normalizeRecentMessage(value: unknown): DashboardRecentMessageItem | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const threadId = asString(record.threadId, id);
+  const patientId = asString(record.patientId);
+  if (!id || !threadId || !patientId) return null;
+
+  return {
+    id,
+    threadId,
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    unreadCount: Math.max(0, Math.round(asNumber(record.unreadCount))),
+    lastMessageAt: asString(record.lastMessageAt) || null,
+    owner: asString(record.owner, 'Inbox'),
+    href: asString(record.href, `/clinic/inbox?threadId=${threadId}`),
+  };
+}
+
+function normalizeRenewal(value: unknown): DashboardRenewalItem | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const patientId = asString(record.patientId);
+  if (!id || !patientId) return null;
+
+  return {
+    id,
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    programName: asString(record.programName, 'Programa ativo'),
+    endDate: asString(record.endDate) || null,
+    daysToEnd: Math.round(asNumber(record.daysToEnd)),
+    href: asString(record.href, `/clinic/patients/${patientId}`),
+  };
+}
+
+function normalizeCohort(value: unknown): DashboardCohortItem | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+
+  return {
+    id,
+    label: asString(record.label, 'Coorte'),
+    activePatients: asNumber(record.activePatients),
+    lowAdherenceCount: asNumber(record.lowAdherenceCount),
+    renewalsCount: asNumber(record.renewalsCount),
+    href: asString(record.href, '/clinic/programs'),
+  };
+}
+
+function normalizeActionItem(value: unknown): DashboardActionItem | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const href = asString(record.href);
+  if (!id || !href) return null;
+
+  return {
+    id,
+    category: normalizeActionCategory(record.category),
+    priority: normalizeActionPriority(record.priority),
+    patientId: asString(record.patientId) || undefined,
+    patientName: asString(record.patientName) || undefined,
+    title: asString(record.title, 'Acao operacional'),
+    reason: asString(record.reason, 'Revisao pendente'),
+    owner: asString(record.owner, 'Equipe'),
+    slaLabel: asString(record.slaLabel, 'Hoje'),
+    ctaLabel: asString(record.ctaLabel, 'Abrir'),
+    href,
+    metricLabel: asString(record.metricLabel) || undefined,
+    createdAt: asString(record.createdAt) || undefined,
+    dueAt: asString(record.dueAt) || undefined,
+  };
+}
+
+function normalizeSection<T>(
+  value: unknown,
+  mapper: (item: unknown) => T | null,
+  fallbackCanRead = true
+): DashboardSectionEnvelope<T[]> {
+  if (Array.isArray(value)) {
+    return {
+      canRead: fallbackCanRead,
+      data: value.map(mapper).filter((item): item is T => Boolean(item)),
+      error: null,
+    };
+  }
+
+  const record = asRecord(value);
+  return {
+    canRead: asBoolean(record.canRead, fallbackCanRead),
+    data: asArray(record.data)
+      .map(mapper)
+      .filter((item): item is T => Boolean(item)),
+    error: asString(record.error) || null,
+    updatedAt: asString(record.updatedAt) || undefined,
+  };
+}
+
+function statusLabel(status: AppointmentStatus) {
+  const labels: Record<AppointmentStatus, string> = {
+    agendado: 'Agendado',
+    chegou: 'Chegou',
+    triagem: 'Triagem',
+    medidas: 'Medidas',
+    bioimpedancia: 'Bioimpedancia',
+    aguardando_medico: 'Aguardando medico',
+    em_consulta: 'Em consulta',
+    checkout: 'Checkout',
+    concluido: 'Concluido',
+    falta: 'Falta',
+    cancelado: 'Cancelado',
+  };
+  return labels[status];
+}
+
+function waitingPriority(waitingMinutes: number): DashboardActionPriority {
+  if (waitingMinutes >= 45) return 'critico';
+  if (waitingMinutes >= 20) return 'alto';
+  return 'medio';
+}
+
+function duePriority(days: number | undefined, threshold: number): DashboardActionPriority {
+  return days !== undefined && days >= threshold ? 'alto' : 'medio';
+}
+
+function documentPriority(status: string): DashboardActionPriority {
+  return status === 'failed' || status === 'expired' ? 'alto' : 'medio';
+}
+
+function unreadPriority(unreadCount: number): DashboardActionPriority {
+  return unreadCount >= 5 ? 'alto' : 'medio';
+}
+
+function buildActionQueue(input: {
+  waitingQueue: WaitingQueueEntry[];
+  alerts: DashboardAlert[];
+  lowAdherence: DashboardLowAdherenceItem[];
+  financialPendencies: DashboardFinancialPendencyItem[];
+  documentPendencies: DashboardDocumentPendencyItem[];
+  recentMessages: DashboardRecentMessageItem[];
+  renewalPipeline: DashboardRenewalItem[];
+}) {
+  const actions: DashboardActionItem[] = [
+    ...input.waitingQueue.map((entry) => ({
+      id: `queue-${entry.id}`,
+      category: 'fila' as const,
+      priority: waitingPriority(entry.waitingMinutes),
+      patientId: entry.patientId,
+      patientName: entry.patientName,
+      title: 'Paciente na fila',
+      reason: `${statusLabel(entry.status)} aguardando atendimento.`,
+      owner: entry.professionalName,
+      slaLabel: entry.waitingMinutes > 0 ? `${entry.waitingMinutes} min em espera` : 'No horario',
+      ctaLabel: 'Abrir atendimento',
+      href: `/clinic/patients/${entry.patientId}/encounter`,
+      metricLabel: statusLabel(entry.status),
+      createdAt: entry.arrivedAt ?? entry.scheduledTime,
+    })),
+    ...input.lowAdherence.map((item) => ({
+      id: `adherence-${item.patientId}`,
+      category: 'adesao' as const,
+      priority: priorityFromSeverity(item.severity),
+      patientId: item.patientId,
+      patientName: item.patientName,
+      title: 'Adesao diaria baixa',
+      reason: `${item.reason}: ${item.adherencePercent}% hoje.`,
+      owner: 'Equipe de acompanhamento',
+      slaLabel: 'Acao hoje',
+      ctaLabel: 'Abrir 360',
+      href: item.href,
+      metricLabel: `${item.adherencePercent}%`,
+      createdAt: item.lastSignalAt ?? undefined,
+    })),
+    ...input.alerts.map((alert) => ({
+      id: `alert-${alert.id}`,
+      category: alert.category === 'adesao' ? ('adesao' as const) : ('clinico' as const),
+      priority: priorityFromSeverity(alert.severity),
+      patientId: alert.patientId,
+      title: alert.title,
+      reason: alert.description || 'Alerta ativo no paciente.',
+      owner: 'Equipe clinica',
+      slaLabel:
+        alert.severity === 'critico' || alert.severity === 'alto' ? 'Prioridade hoje' : 'Monitorar',
+      ctaLabel: 'Abrir paciente',
+      href: `/clinic/patients/${alert.patientId}`,
+      createdAt: alert.createdAt,
+    })),
+    ...input.financialPendencies.map((item) => ({
+      id: `financial-${item.id}`,
+      category: 'financeiro' as const,
+      priority: duePriority(item.daysOverdue, 7),
+      patientId: item.patientId,
+      patientName: item.patientName,
+      title: 'Pendencia financeira',
+      reason: `Cobranca ${item.status.toLowerCase()} vinculada ao paciente.`,
+      owner: 'Financeiro',
+      slaLabel: item.daysOverdue ? `Vencida ha ${item.daysOverdue} dias` : 'Revisar hoje',
+      ctaLabel: 'Abrir financeiro',
+      href: item.href,
+      dueAt: item.dueDate ?? undefined,
+    })),
+    ...input.documentPendencies.map((item) => ({
+      id: `document-${item.id}`,
+      category: 'documento' as const,
+      priority: documentPriority(item.status),
+      patientId: item.patientId,
+      patientName: item.patientName,
+      title: item.name,
+      reason: `Documento com status ${item.status}.`,
+      owner: 'Documentos',
+      slaLabel: 'Regularizar hoje',
+      ctaLabel: 'Abrir documentos',
+      href: item.href,
+      createdAt: item.generatedAt ?? undefined,
+    })),
+    ...input.recentMessages.map((item) => ({
+      id: `message-${item.threadId}`,
+      category: 'mensagem' as const,
+      priority: unreadPriority(item.unreadCount),
+      patientId: item.patientId,
+      patientName: item.patientName,
+      title: 'Mensagem sem resposta',
+      reason: `${item.unreadCount} mensagens nao lidas na conversa.`,
+      owner: item.owner,
+      slaLabel: 'Responder hoje',
+      ctaLabel: 'Abrir conversa',
+      href: item.href,
+      metricLabel: `${item.unreadCount} nao lidas`,
+      createdAt: item.lastMessageAt ?? undefined,
+    })),
+    ...input.renewalPipeline.map((item) => ({
+      id: `renewal-${item.id}`,
+      category: 'renovacao' as const,
+      priority:
+        item.daysToEnd !== undefined && item.daysToEnd <= 7
+          ? ('alto' as const)
+          : ('medio' as const),
+      patientId: item.patientId,
+      patientName: item.patientName,
+      title: 'Renovacao proxima',
+      reason: `${item.programName} esta perto do encerramento.`,
+      owner: 'Comercial',
+      slaLabel:
+        item.daysToEnd !== undefined && item.daysToEnd >= 0
+          ? `${item.daysToEnd} dias restantes`
+          : 'Revisar ciclo',
+      ctaLabel: 'Abrir programa',
+      href: item.href,
+      dueAt: item.endDate ?? undefined,
+    })),
+  ];
+
+  return actions.sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority]).slice(0, 12);
+}
+
+function createSection<T>(
+  canRead: boolean,
+  data: T[],
+  error: string | null = null
+): DashboardSectionEnvelope<T[]> {
+  return { canRead, data, error };
+}
+
+function collectDegradedSections(
+  value: unknown,
+  sections: DashboardOperationalSections
+): DashboardDegradedSection[] {
+  const declared = asArray(asRecord(value).degradedSections)
     .map((item) => {
       const record = asRecord(item);
-      const patientId = asString(record.patientId);
-      if (!patientId) return null;
-
+      const key = asString(record.key);
+      if (!key) return null;
       return {
-        patientId,
-        adherencePercent: Math.max(0, Math.min(100, Math.round(asNumber(record.adherencePercent)))),
-        reason: asString(record.reason, 'Adesao diaria baixa'),
-        severity: asString(record.severity, 'medium'),
-        lastSignalAt: asString(record.lastSignalAt) || null,
-        href: asString(record.href, `/clinic/patients/${patientId}?tab=timeline`),
-      } satisfies DailyAdherenceRow;
+        key,
+        label: asString(record.label, key),
+        canRead: asBoolean(record.canRead),
+        error: asString(record.error, 'Leitura parcial indisponivel.'),
+      };
     })
-    .filter((item): item is DailyAdherenceRow => Boolean(item));
-}
+    .filter((item): item is DashboardDegradedSection => Boolean(item));
 
-function dashboardFallbackInsights(): DashboardStats['operationalInsights'] {
-  return normalizeDashboardInsights({});
-}
+  const sectionLabels: Array<[keyof DashboardOperationalSections, string]> = [
+    ['lowAdherence', 'Baixa adesao'],
+    ['financialPendencies', 'Pendencias financeiras'],
+    ['documentPendencies', 'Pendencias documentais'],
+    ['recentMessages', 'Mensagens recentes'],
+    ['renewalPipeline', 'Renovacoes'],
+    ['cohortPanel', 'Coortes'],
+  ];
 
-function formatDashboardSectionError(error: unknown) {
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = String((error as { message?: unknown }).message ?? '').trim();
-    if (message) return message;
+  for (const [key, label] of sectionLabels) {
+    const section = sections[key];
+    if (section.error) {
+      declared.push({ key, label, canRead: section.canRead, error: section.error });
+    }
   }
-  return 'Leitura parcial indisponivel.';
-}
 
-async function readDashboardSection<T>(
-  degradedSections: DashboardDegradedSection[],
-  key: string,
-  label: string,
-  task: PromiseLike<T>,
-  fallback: T
-) {
-  try {
-    return await task;
-  } catch (error) {
-    degradedSections.push({
-      key,
-      label,
-      canRead: false,
-      error: formatDashboardSectionError(error),
-    });
-    return fallback;
-  }
-}
-
-async function readDashboardCount(
-  degradedSections: DashboardDegradedSection[],
-  key: string,
-  label: string,
-  task: PromiseLike<{ count: number | null; error: unknown }>
-) {
-  try {
-    const result = await task;
-    if (result.error) throw result.error;
-    return result.count ?? 0;
-  } catch (error) {
-    degradedSections.push({
-      key,
-      label,
-      canRead: false,
-      error: formatDashboardSectionError(error),
-    });
-    return 0;
-  }
-}
-
-async function readDashboardRows<T>(
-  degradedSections: DashboardDegradedSection[],
-  key: string,
-  label: string,
-  task: PromiseLike<{ data: unknown[] | null; error: unknown }>
-) {
-  try {
-    const result = await task;
-    if (result.error) throw result.error;
-    return (result.data ?? []) as T[];
-  } catch (error) {
-    degradedSections.push({
-      key,
-      label,
-      canRead: false,
-      error: formatDashboardSectionError(error),
-    });
-    return [] as T[];
-  }
-}
-
-async function getOperationalInsights(supabase: BrowserSupabaseClient) {
-  const { data, error } = await supabase.rpc('get_crm_inventory_dashboard_insights', {
-    p_days_to_expiry: 30,
-  });
-
-  if (error) throw error;
-  return normalizeDashboardInsights(data);
-}
-
-async function resolveActiveTenantId(supabase: BrowserSupabaseClient) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError) throw userError;
-  if (!user) throw new Error('unauthenticated');
-
-  const [profileResult, { data: memberships, error: membershipsError }] = await Promise.all([
-    supabase.from('profiles').select('active_tenant_id').eq('id', user.id).maybeSingle(),
-    supabase
-      .from('tenant_memberships')
-      .select('tenant_id,status')
-      .eq('user_id', user.id)
-      .eq('status', 'active'),
-  ]);
-
-  if (profileResult.error) throw profileResult.error;
-  if (membershipsError) throw membershipsError;
-
-  const activeMemberships = memberships ?? [];
-  const preferredTenantId =
-    typeof profileResult.data?.active_tenant_id === 'string'
-      ? profileResult.data.active_tenant_id
-      : null;
-  const preferredMembership = preferredTenantId
-    ? activeMemberships.find((membership) => membership.tenant_id === preferredTenantId)
-    : null;
-  const tenantId = preferredMembership?.tenant_id ?? activeMemberships[0]?.tenant_id ?? null;
-
-  if (!tenantId) throw new Error('no_active_tenant');
-  return tenantId;
-}
-
-async function getPatientNamesForClient(
-  supabase: BrowserSupabaseClient,
-  tenantId: string,
-  patientIds: string[]
-) {
-  if (patientIds.length === 0) return new Map<string, string>();
-  const { data, error } = await supabase
-    .from('patient_pii')
-    .select('patient_id,full_name')
-    .eq('tenant_id', tenantId)
-    .in('patient_id', patientIds);
-  if (error) throw error;
-  return new Map(
-    ((data ?? []) as PatientNameRow[]).map((row) => [
-      row.patient_id,
-      row.full_name ?? 'Paciente sem nome',
-    ])
-  );
-}
-
-async function getTodayAppointmentRows(
-  tenantId: string,
-  supabase: BrowserSupabaseClient = createBrowserSupabaseClient()
-) {
-  const { start, end } = todayRange();
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('id,patient_id,status,scheduled_at,duration_minutes,practitioner_id,location,notes')
-    .eq('tenant_id', tenantId)
-    .gte('scheduled_at', start)
-    .lt('scheduled_at', end)
-    .order('scheduled_at', { ascending: true });
-
-  if (error) throw error;
-  return (data ?? []) as AppointmentRow[];
-}
-
-async function getActiveAlertRows(
-  tenantId: string,
-  limit = 10,
-  supabase: BrowserSupabaseClient = createBrowserSupabaseClient()
-) {
-  const { data, error } = await supabase
-    .from('patient_alerts')
-    .select('id,patient_id,title,description,severity,alert_type,created_at')
-    .eq('tenant_id', tenantId)
-    .eq('status', 'active')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-
-  if (error) throw error;
-  return (data ?? []) as AlertRow[];
-}
-
-async function getDailyAdherenceRows(supabase: BrowserSupabaseClient) {
-  const { data, error } = await supabase.rpc('get_clinic_daily_adherence_snapshot', {
-    p_target_date: null,
-    p_limit: 8,
-  });
-
-  if (error) throw error;
-  return normalizeDailyAdherenceRows(data);
-}
-
-const queueStatuses: AppointmentStatus[] = [
-  'chegou',
-  'triagem',
-  'medidas',
-  'bioimpedancia',
-  'aguardando_medico',
-  'em_consulta',
-  'checkout',
-];
-
-function mapWaitingQueueRows(
-  rows: AppointmentRow[],
-  names: Map<string, string>
-): WaitingQueueEntry[] {
-  return rows.map((row) => ({
-    id: row.id,
-    patientId: row.patient_id,
-    patientName: names.get(row.patient_id) ?? 'Paciente sem nome',
-    appointmentType: 'consulta_medica' as AppointmentType,
-    status: mapAppointmentStatus(row.status),
-    scheduledTime: row.scheduled_at,
-    waitingMinutes: waitingMinutesFromScheduledAt(row.scheduled_at),
-    professionalName: 'Equipe clinica',
-    room: row.location ?? undefined,
-  }));
-}
-
-function mapAppointmentRows(
-  rows: AppointmentRow[],
-  names: Map<string, string>
-): AppointmentSummary[] {
-  return rows.map((row) => ({
-    id: row.id,
-    patientId: row.patient_id,
-    patientName: names.get(row.patient_id) ?? 'Paciente sem nome',
-    type: 'consulta_medica' as AppointmentType,
-    status: mapAppointmentStatus(row.status),
-    scheduledAt: row.scheduled_at,
-    durationMinutes: row.duration_minutes ?? 30,
-    professionalName: 'Equipe clinica',
-    professionalRole: 'Profissional',
-    roomName: row.location ?? undefined,
-    notes: row.notes ?? undefined,
-  }));
-}
-
-function mapAlertRows(rows: AlertRow[]): DashboardAlert[] {
-  return rows.map((row) => ({
-    id: row.id,
-    patientId: row.patient_id,
-    severity: mapAlertSeverity(row.severity),
-    title: row.title,
-    description: row.description ?? '',
-    createdAt: row.created_at,
-    isResolved: false,
-    category: 'clinico',
-  }));
-}
-
-function mapDailyAdherenceRows(rows: DailyAdherenceRow[]): DashboardAlert[] {
-  return rows.map((row) => ({
-    id: `daily-adherence-${row.patientId}`,
-    patientId: row.patientId,
-    severity: mapAlertSeverity(row.severity),
-    title: 'Adesao diaria baixa',
-    description: `${row.reason}. Progresso de hoje: ${row.adherencePercent}%.`,
-    createdAt: row.lastSignalAt ?? new Date().toISOString(),
-    isResolved: false,
-    category: 'adesao',
-  }));
-}
-
-function mapReviewRows(rows: AlertRow[], names: Map<string, string>): PatientReviewItem[] {
-  return rows.map((row) => ({
-    id: row.patient_id,
-    name: names.get(row.patient_id) ?? 'Paciente sem nome',
-    issue: row.title,
-    severity: mapAlertSeverity(row.severity),
-  }));
-}
-
-function mapDailyReviewRows(
-  rows: DailyAdherenceRow[],
-  names: Map<string, string>
-): PatientReviewItem[] {
-  return rows.map((row) => ({
-    id: row.patientId,
-    name: names.get(row.patientId) ?? 'Paciente sem nome',
-    issue: `${row.reason} (${row.adherencePercent}%)`,
-    severity: mapAlertSeverity(row.severity),
-  }));
-}
-
-function uniqueReviewRows(rows: PatientReviewItem[]) {
   const seen = new Set<string>();
-  return rows.filter((row) => {
-    if (seen.has(row.id)) return false;
-    seen.add(row.id);
+  return declared.filter((section) => {
+    if (seen.has(section.key)) return false;
+    seen.add(section.key);
     return true;
   });
 }
 
+function normalizeDashboardSnapshot(value: unknown): DashboardSnapshot {
+  const record = asRecord(value);
+  const access = normalizeAccess(record.access);
+  const sectionsRecord = asRecord(record.sections);
+  const stats = normalizeStats(record.stats);
+  const waitingQueue = asArray(record.waitingQueue)
+    .map(normalizeWaitingQueueEntry)
+    .filter((item): item is WaitingQueueEntry => Boolean(item));
+  const todayAppointments = asArray(record.todayAppointments)
+    .map(normalizeAppointment)
+    .filter((item): item is AppointmentSummary => Boolean(item));
+  const alerts = asArray(record.alerts)
+    .map(normalizeAlert)
+    .filter((item): item is DashboardAlert => Boolean(item));
+  const patientsNeedingReview = asArray(record.patientsNeedingReview)
+    .map(normalizeReviewItem)
+    .filter((item): item is PatientReviewItem => Boolean(item));
+
+  const lowAdherence = normalizeSection(
+    sectionsRecord.lowAdherence,
+    normalizeLowAdherenceItem,
+    access.patients
+  );
+  const financialPendencies = normalizeSection(
+    sectionsRecord.financialPendencies,
+    normalizeFinancialPendency,
+    access.financial
+  );
+  const documentPendencies = normalizeSection(
+    sectionsRecord.documentPendencies,
+    normalizeDocumentPendency,
+    access.documents
+  );
+  const recentMessages = normalizeSection(
+    sectionsRecord.recentMessages,
+    normalizeRecentMessage,
+    access.chat
+  );
+  const renewalPipeline = normalizeSection(
+    sectionsRecord.renewalPipeline,
+    normalizeRenewal,
+    access.patients
+  );
+  const cohortPanel = normalizeSection(
+    sectionsRecord.cohortPanel,
+    normalizeCohort,
+    access.patients
+  );
+
+  const generatedActions = buildActionQueue({
+    waitingQueue,
+    alerts,
+    lowAdherence: lowAdherence.data,
+    financialPendencies: financialPendencies.data,
+    documentPendencies: documentPendencies.data,
+    recentMessages: recentMessages.data,
+    renewalPipeline: renewalPipeline.data,
+  });
+  const actionableQueue = normalizeSection(
+    sectionsRecord.actionableQueue ?? generatedActions,
+    normalizeActionItem,
+    true
+  );
+  const actionData = actionableQueue.data.length > 0 ? actionableQueue.data : generatedActions;
+
+  const sections: DashboardOperationalSections = {
+    actionableQueue: { ...actionableQueue, data: actionData },
+    lowAdherence,
+    financialPendencies,
+    documentPendencies,
+    recentMessages,
+    renewalPipeline,
+    cohortPanel,
+  };
+
+  return {
+    stats,
+    waitingQueue,
+    todayAppointments,
+    alerts,
+    patientsNeedingReview,
+    access,
+    sections,
+    actionableQueue: actionData,
+    degradedSections: collectDegradedSections(value, sections),
+  };
+}
+
+function createMockSections(input: {
+  stats: DashboardStats;
+  waitingQueue: WaitingQueueEntry[];
+  alerts: DashboardAlert[];
+  patientsNeedingReview: PatientReviewItem[];
+  patients: PatientListRow[];
+}): DashboardOperationalSections {
+  const lowAdherence = input.patientsNeedingReview.slice(0, 4).map((patient) => ({
+    id: `mock-low-${patient.id}`,
+    patientId: patient.id,
+    patientName: patient.name,
+    adherencePercent: patient.severity === 'critico' ? 28 : patient.severity === 'alto' ? 45 : 58,
+    reason: patient.issue,
+    severity: patient.severity,
+    lastSignalAt: new Date().toISOString(),
+    href: `/clinic/patients/${patient.id}?tab=timeline`,
+  }));
+  const financialPendencies = input.patients
+    .filter(
+      (patient) =>
+        patient.financialStatus === 'inadimplente' || patient.financialStatus === 'pendente'
+    )
+    .slice(0, 4)
+    .map((patient, index) => ({
+      id: `mock-financial-${patient.id}`,
+      patientId: patient.id,
+      patientName: patient.name,
+      status: patient.financialStatus,
+      amountCents: 45000 + index * 12000,
+      dueDate: new Date(Date.now() - (index + 2) * 86400000).toISOString().slice(0, 10),
+      daysOverdue: index + 2,
+      href: `/clinic/financeiro?patientId=${patient.id}`,
+    }));
+  const documentPendencies = input.patients.slice(0, 3).map((patient, index) => ({
+    id: `mock-document-${patient.id}`,
+    patientId: patient.id,
+    patientName: patient.name,
+    name: index === 0 ? 'Contrato pendente de assinatura' : 'Termo de acompanhamento',
+    status: index === 0 ? 'pending_signature' : 'draft',
+    generatedAt: new Date(Date.now() - index * 3600000).toISOString(),
+    href: `/clinic/documents?patientId=${patient.id}`,
+  }));
+  const recentMessages = input.patients.slice(2, 5).map((patient, index) => ({
+    id: `mock-message-${patient.id}`,
+    threadId: `mock-thread-${patient.id}`,
+    patientId: patient.id,
+    patientName: patient.name,
+    unreadCount: index + 1,
+    lastMessageAt: new Date(Date.now() - (index + 1) * 1800000).toISOString(),
+    owner: 'Inbox',
+    href: `/clinic/inbox?threadId=mock-thread-${patient.id}`,
+  }));
+  const renewalPipeline = input.patients.slice(4, 7).map((patient, index) => ({
+    id: `mock-renewal-${patient.id}`,
+    patientId: patient.id,
+    patientName: patient.name,
+    programName: patient.activePackage,
+    endDate: new Date(Date.now() + (index + 4) * 86400000).toISOString().slice(0, 10),
+    daysToEnd: index + 4,
+    href: `/clinic/patients/${patient.id}`,
+  }));
+  const cohortPanel = [
+    {
+      id: 'mock-cohort-emagrecimento',
+      label: 'Emagrecimento',
+      activePatients: input.patients.filter((patient) => patient.programType === 'emagrecimento')
+        .length,
+      lowAdherenceCount: lowAdherence.length,
+      renewalsCount: renewalPipeline.length,
+      href: '/clinic/programs',
+    },
+    {
+      id: 'mock-cohort-longevidade',
+      label: 'Longevidade',
+      activePatients: input.patients.filter((patient) => patient.programType === 'longevidade')
+        .length,
+      lowAdherenceCount: 1,
+      renewalsCount: 0,
+      href: '/clinic/programs',
+    },
+  ];
+
+  const actions = buildActionQueue({
+    waitingQueue: input.waitingQueue,
+    alerts: input.alerts,
+    lowAdherence,
+    financialPendencies,
+    documentPendencies,
+    recentMessages,
+    renewalPipeline,
+  });
+
+  return {
+    actionableQueue: createSection(true, actions),
+    lowAdherence: createSection(true, lowAdherence),
+    financialPendencies: createSection(true, financialPendencies),
+    documentPendencies: createSection(true, documentPendencies),
+    recentMessages: createSection(true, recentMessages),
+    renewalPipeline: createSection(true, renewalPipeline),
+    cohortPanel: createSection(true, cohortPanel),
+  };
+}
+
+let mockDashboardProviderPromise: Promise<DashboardProvider> | null = null;
+
+function getMockDashboardProvider(): Promise<DashboardProvider> {
+  mockDashboardProviderPromise ??= import('@/services/mockApi').then((mockApi) => ({
+    async getDashboardSnapshot() {
+      const [stats, waitingQueue, todayAppointments, alerts, patientsNeedingReview, patients] =
+        await Promise.all([
+          mockApi.getDashboardStats(),
+          mockApi.getWaitingQueue(),
+          mockApi.getTodayAppointments(),
+          mockApi.getDashboardAlerts(),
+          mockApi.getPatientsNeedingReview(),
+          mockApi.getPatientList(),
+        ]);
+
+      const access: DashboardAccess = {
+        patients: true,
+        agenda: true,
+        documents: true,
+        financial: true,
+        chat: true,
+        crm: true,
+        inventory: true,
+      };
+      const sections = createMockSections({
+        stats,
+        waitingQueue,
+        alerts,
+        patientsNeedingReview,
+        patients,
+      });
+
+      return {
+        stats: {
+          ...stats,
+          baixaAdesao: sections.lowAdherence.data.length,
+          renovacoesPendentes: sections.renewalPipeline.data.length,
+        },
+        waitingQueue,
+        todayAppointments,
+        alerts,
+        patientsNeedingReview,
+        access,
+        sections,
+        actionableQueue: sections.actionableQueue.data,
+        degradedSections: [],
+      };
+    },
+  }));
+
+  return mockDashboardProviderPromise;
+}
+
+async function getRpcDashboardSnapshot(supabase: BrowserSupabaseClient) {
+  const { data, error } = await supabase.rpc('get_clinic_dashboard_snapshot', {
+    p_target_date: null,
+    p_limit: 12,
+  });
+
+  if (error) throw error;
+  return normalizeDashboardSnapshot(data);
+}
+
 const supabaseDashboardProvider: DashboardProvider = {
   async getDashboardSnapshot() {
-    const supabase = createBrowserSupabaseClient();
-    const tenantId = await resolveActiveTenantId(supabase);
-    const degradedSections: DashboardDegradedSection[] = [];
-    const [todayAppointments, activeAlertRows, dailyAdherenceRows] = await Promise.all([
-      readDashboardSection(
-        degradedSections,
-        'todayAppointments',
-        'Agenda do dia',
-        getTodayAppointmentRows(tenantId, supabase),
-        [] as AppointmentRow[]
-      ),
-      readDashboardSection(
-        degradedSections,
-        'alerts',
-        'Alertas clinicos',
-        getActiveAlertRows(tenantId, 10, supabase),
-        [] as AlertRow[]
-      ),
-      readDashboardSection(
-        degradedSections,
-        'dailyAdherence',
-        'Adesao diaria',
-        getDailyAdherenceRows(supabase),
-        [] as DailyAdherenceRow[]
-      ),
-    ]);
-    const completedToday = todayAppointments.filter(
-      (appointment) => mapAppointmentStatus(appointment.status) === 'concluido'
-    ).length;
-    const queueRows = todayAppointments.filter((appointment) =>
-      queueStatuses.includes(mapAppointmentStatus(appointment.status))
-    );
-    const [
-      activeProgramsCount,
-      activeAlertsCount,
-      pendingDocumentsCount,
-      overdueInvoicesCount,
-      unreadThreadRows,
-      operationalInsights,
-    ] = await Promise.all([
-      readDashboardCount(
-        degradedSections,
-        'activePrograms',
-        'Programas ativos',
-        supabase
-          .from('patient_program_enrollments')
-          .select('id', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId)
-          .eq('status', 'ativo')
-      ),
-      readDashboardCount(
-        degradedSections,
-        'activeAlertsCount',
-        'Contagem de alertas',
-        supabase
-          .from('patient_alerts')
-          .select('id', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId)
-          .eq('status', 'active')
-      ),
-      readDashboardCount(
-        degradedSections,
-        'pendingDocuments',
-        'Documentos pendentes',
-        supabase
-          .from('generated_documents')
-          .select('id', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId)
-          .in('status', ['draft', 'pending_signature', 'sent_for_signature'])
-      ),
-      readDashboardCount(
-        degradedSections,
-        'overdueInvoices',
-        'Cobrancas vencidas',
-        supabase
-          .from('patient_invoices')
-          .select('id', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId)
-          .in('status', ['OVERDUE', 'overdue', 'vencido'])
-      ),
-      readDashboardRows<ChatThreadUnreadRow>(
-        degradedSections,
-        'unreadThreads',
-        'Mensagens nao lidas',
-        supabase
-          .from('patient_chat_threads')
-          .select('unread_count')
-          .eq('tenant_id', tenantId)
-          .gt('unread_count', 0)
-      ),
-      readDashboardSection(
-        degradedSections,
-        'operationalInsights',
-        'Inteligencia operacional',
-        getOperationalInsights(supabase),
-        dashboardFallbackInsights()
-      ),
-    ]);
-
-    const unreadMessages = unreadThreadRows.reduce((sum, row) => sum + (row.unread_count ?? 0), 0);
-    const patientNames = await readDashboardSection(
-      degradedSections,
-      'patientNames',
-      'Identificacao de pacientes',
-      getPatientNamesForClient(
-        supabase,
-        tenantId,
-        uniqueValues([
-          ...todayAppointments.map((row) => row.patient_id),
-          ...activeAlertRows.map((row) => row.patient_id),
-          ...dailyAdherenceRows.map((row) => row.patientId),
-        ])
-      ),
-      new Map<string, string>()
-    );
-    const clinicalAlerts = mapAlertRows(activeAlertRows);
-    const dailyAdherenceAlerts = mapDailyAdherenceRows(dailyAdherenceRows);
-    const reviewRows = uniqueReviewRows([
-      ...mapDailyReviewRows(dailyAdherenceRows, patientNames),
-      ...mapReviewRows(activeAlertRows, patientNames),
-    ]);
-
-    return {
-      stats: {
-        consultasHoje: todayAppointments.length,
-        consultasConcluidas: completedToday,
-        filaEspera: queueRows.length,
-        programasAtivos: activeProgramsCount,
-        alertasClinicos: activeAlertsCount + dailyAdherenceRows.length,
-        mensagensNaoLidas: unreadMessages,
-        documentosPendentes: pendingDocumentsCount,
-        inadimplentes: overdueInvoicesCount,
-        taxaOcupacao: todayAppointments.length
-          ? Math.round((completedToday / todayAppointments.length) * 100)
-          : 0,
-        operationalInsights,
-      },
-      waitingQueue: mapWaitingQueueRows(queueRows, patientNames),
-      todayAppointments: mapAppointmentRows(todayAppointments, patientNames),
-      alerts: [...dailyAdherenceAlerts, ...clinicalAlerts].slice(0, 10),
-      patientsNeedingReview: reviewRows.slice(0, 6),
-      degradedSections,
-    };
+    return getRpcDashboardSnapshot(createBrowserSupabaseClient());
   },
 };
 

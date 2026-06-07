@@ -635,6 +635,125 @@ export interface DashboardOperationalInsights {
   };
 }
 
+export interface DashboardAccess {
+  patients: boolean;
+  agenda: boolean;
+  documents: boolean;
+  financial: boolean;
+  chat: boolean;
+  crm: boolean;
+  inventory: boolean;
+}
+
+export interface DashboardSectionEnvelope<T> {
+  canRead: boolean;
+  data: T;
+  error?: string | null;
+  updatedAt?: string;
+}
+
+export type DashboardActionCategory =
+  | 'fila'
+  | 'adesao'
+  | 'clinico'
+  | 'financeiro'
+  | 'documento'
+  | 'mensagem'
+  | 'renovacao'
+  | 'comercial'
+  | 'estoque';
+
+export type DashboardActionPriority = 'critico' | 'alto' | 'medio' | 'baixo';
+
+export interface DashboardActionItem {
+  id: string;
+  category: DashboardActionCategory;
+  priority: DashboardActionPriority;
+  patientId?: string;
+  patientName?: string;
+  title: string;
+  reason: string;
+  owner: string;
+  slaLabel: string;
+  ctaLabel: string;
+  href: string;
+  metricLabel?: string;
+  createdAt?: string;
+  dueAt?: string;
+}
+
+export interface DashboardLowAdherenceItem {
+  id: string;
+  patientId: string;
+  patientName: string;
+  adherencePercent: number;
+  reason: string;
+  severity: AlertSeverity;
+  lastSignalAt?: string | null;
+  href: string;
+}
+
+export interface DashboardFinancialPendencyItem {
+  id: string;
+  patientId: string;
+  patientName: string;
+  status: string;
+  amountCents?: number;
+  dueDate?: string | null;
+  daysOverdue?: number;
+  href: string;
+}
+
+export interface DashboardDocumentPendencyItem {
+  id: string;
+  patientId: string;
+  patientName: string;
+  name: string;
+  status: string;
+  generatedAt?: string | null;
+  href: string;
+}
+
+export interface DashboardRecentMessageItem {
+  id: string;
+  threadId: string;
+  patientId: string;
+  patientName: string;
+  unreadCount: number;
+  lastMessageAt?: string | null;
+  owner: string;
+  href: string;
+}
+
+export interface DashboardRenewalItem {
+  id: string;
+  patientId: string;
+  patientName: string;
+  programName: string;
+  endDate?: string | null;
+  daysToEnd?: number;
+  href: string;
+}
+
+export interface DashboardCohortItem {
+  id: string;
+  label: string;
+  activePatients: number;
+  lowAdherenceCount: number;
+  renewalsCount: number;
+  href: string;
+}
+
+export interface DashboardOperationalSections {
+  actionableQueue: DashboardSectionEnvelope<DashboardActionItem[]>;
+  lowAdherence: DashboardSectionEnvelope<DashboardLowAdherenceItem[]>;
+  financialPendencies: DashboardSectionEnvelope<DashboardFinancialPendencyItem[]>;
+  documentPendencies: DashboardSectionEnvelope<DashboardDocumentPendencyItem[]>;
+  recentMessages: DashboardSectionEnvelope<DashboardRecentMessageItem[]>;
+  renewalPipeline: DashboardSectionEnvelope<DashboardRenewalItem[]>;
+  cohortPanel: DashboardSectionEnvelope<DashboardCohortItem[]>;
+}
+
 export interface DashboardStats {
   consultasHoje: number;
   consultasConcluidas: number;
@@ -645,6 +764,8 @@ export interface DashboardStats {
   documentosPendentes: number;
   inadimplentes: number;
   taxaOcupacao: number;
+  baixaAdesao?: number;
+  renovacoesPendentes?: number;
   operationalInsights?: DashboardOperationalInsights;
 }
 
@@ -662,6 +783,9 @@ export interface DashboardSnapshot {
   alerts: DashboardAlert[];
   patientsNeedingReview: PatientReviewItem[];
   degradedSections?: DashboardDegradedSection[];
+  access?: DashboardAccess;
+  sections?: DashboardOperationalSections;
+  actionableQueue?: DashboardActionItem[];
 }
 
 export interface WaitingQueueEntry {
