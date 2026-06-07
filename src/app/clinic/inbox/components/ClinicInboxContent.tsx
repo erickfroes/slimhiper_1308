@@ -671,42 +671,6 @@ export default function ClinicInboxContent() {
                   sendLabel="Responder"
                 />
               </div>
-
-              <div className="hidden">
-                <label
-                  htmlFor="inbox-reply"
-                  className="text-xs font-semibold text-muted-foreground"
-                >
-                  Responder paciente
-                </label>
-                <textarea
-                  id="inbox-reply"
-                  value={replyText}
-                  onChange={(event) => setReplyText(event.target.value)}
-                  rows={3}
-                  maxLength={1000}
-                  className="input-base min-h-24 resize-y py-2 text-sm"
-                  placeholder="Digite uma resposta operacional. Não inclua dados sensíveis desnecessários."
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    O botão fica bloqueado durante envio e o serviço usa chave local para reduzir
-                    duplicidade no retry.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void handleSendReply()}
-                    disabled={
-                      !replyText.trim() ||
-                      sendInFlight ||
-                      selectedConversation.status === 'archived'
-                    }
-                    className="btn-primary gap-2 disabled:opacity-60"
-                  >
-                    {sendInFlight ? 'Enviando...' : 'Enviar resposta'}
-                  </button>
-                </div>
-              </div>
             </div>
           )}
         </section>

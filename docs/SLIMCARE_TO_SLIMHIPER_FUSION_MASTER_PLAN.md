@@ -110,24 +110,24 @@ Subagents usados:
 
 ## 5. Visao executiva das lacunas Slim Care -> SlimHiper
 
-| Modulo | Slim Care tem a mais | SlimHiper hoje | Maturidade alvo |
-| --- | --- | --- | --- |
-| Portal paciente diario | Home mobile, agua, refeicoes, treino, check-in, evolucao, streaks e timeline diaria | `/patient` consolidado com check-ins, docs, financeiro, chat e notificacoes | N5 |
-| Onboarding e perfil | Onboarding assistencial, perfil editavel, metas, programa e upgrade | Perfil/vinculo parcial via portal e admin | N4 |
-| Comunidade | Feed paciente, comentarios, prompts semanais e moderacao | Ausente como modulo | N4 depois de hardening |
-| Chat avancado | Disponibilidade, respostas rapidas, anexos/imagens, SLA | Inbox/chat ja existe, mas mais operacional | N5 |
-| Dashboard operacional | Coortes, baixa adesao, mensagens recentes, renovacao, prioridade | Dashboard real/fallback ja existe | N5 |
-| Carteira de pacientes | Triagem, prioridade, drawer e mapa acionavel | Lista robusta + 360 | N5 |
-| Agenda e fila | Agenda dia/semana/mes, retornos, bloqueios, fila dedicada | Agenda/fila integradas parcialmente | N5 |
-| Prontuario longitudinal | Medical record, anexos, auditoria, fotos, visitas | 360 + encounter + clinicalRecords | N5 |
-| Fotos e evolucao | Fotos de progresso e evolucao corporal dedicada | Dados nutricionais e medidas, sem modulo forte de fotos | N4 |
-| Prescricoes regulatorias | Itens, metadados regulatorios, assinatura legal, PDF | `prescriptions_placeholder` + RPCs MVP | N5 |
-| Documentos/templates | Biblioteca de templates, categorias, drawer e wizard | Documentos e D4Sign reais, template management menor | N5 |
-| Comercial | Servicos, pacotes, programas, tiers, beneficios e upgrades | Programas/builder, sem catalogo separado completo | N5 |
-| Financeiro | Comprovantes, recorrencia, upgrades, refund, sync gateway | Asaas real, overview/reconciliacao, faltam alguns fluxos | N5 |
-| Settings/equipe | Chat hours, auto message, legal, compliance, permissoes | Settings clinico/admin fortes, faltam alguns blocos | N5 |
-| Jobs operacionais | Automacoes, stuck attendance, reminders, seeds/backfills | Helpers existem, falta cron versionado | N5 |
-| Relatorios persistentes | Historico e artifacts exportados | Export blob atual | N4 |
+| Modulo                   | Slim Care tem a mais                                                                | SlimHiper hoje                                                              | Maturidade alvo        |
+| ------------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------- |
+| Portal paciente diario   | Home mobile, agua, refeicoes, treino, check-in, evolucao, streaks e timeline diaria | `/patient` consolidado com check-ins, docs, financeiro, chat e notificacoes | N5                     |
+| Onboarding e perfil      | Onboarding assistencial, perfil editavel, metas, programa e upgrade                 | Perfil/vinculo parcial via portal e admin                                   | N4                     |
+| Comunidade               | Feed paciente, comentarios, prompts semanais e moderacao                            | Ausente como modulo                                                         | N4 depois de hardening |
+| Chat avancado            | Disponibilidade, respostas rapidas, anexos/imagens, SLA                             | Inbox/chat ja existe, mas mais operacional                                  | N5                     |
+| Dashboard operacional    | Coortes, baixa adesao, mensagens recentes, renovacao, prioridade                    | Dashboard real/fallback ja existe                                           | N5                     |
+| Carteira de pacientes    | Triagem, prioridade, drawer e mapa acionavel                                        | Lista robusta + 360                                                         | N5                     |
+| Agenda e fila            | Agenda dia/semana/mes, retornos, bloqueios, fila dedicada                           | Agenda/fila integradas parcialmente                                         | N5                     |
+| Prontuario longitudinal  | Medical record, anexos, auditoria, fotos, visitas                                   | 360 + encounter + clinicalRecords                                           | N5                     |
+| Fotos e evolucao         | Fotos de progresso e evolucao corporal dedicada                                     | Dados nutricionais e medidas, sem modulo forte de fotos                     | N4                     |
+| Prescricoes regulatorias | Itens, metadados regulatorios, assinatura legal, PDF                                | `prescriptions_placeholder` + RPCs MVP                                      | N5                     |
+| Documentos/templates     | Biblioteca de templates, categorias, drawer e wizard                                | Documentos e D4Sign reais, template management menor                        | N5                     |
+| Comercial                | Servicos, pacotes, programas, tiers, beneficios e upgrades                          | Programas/builder, sem catalogo separado completo                           | N5                     |
+| Financeiro               | Comprovantes, recorrencia, upgrades, refund, sync gateway                           | Asaas real, overview/reconciliacao, faltam alguns fluxos                    | N5                     |
+| Settings/equipe          | Chat hours, auto message, legal, compliance, permissoes                             | Settings clinico/admin fortes, faltam alguns blocos                         | N5                     |
+| Jobs operacionais        | Automacoes, stuck attendance, reminders, seeds/backfills                            | Helpers existem, falta cron versionado                                      | N5                     |
+| Relatorios persistentes  | Historico e artifacts exportados                                                    | Export blob atual                                                           | N4                     |
 
 ## 6. Plano por modulo
 
@@ -178,38 +178,38 @@ UI e UX alvo:
 Status do corte 2026-06-06:
 
 - [x] Corte frontend inicial implementado em `/patient`, com aba `Diario`,
-  deep links `?tab=diario&action=water|meal|workout|checkin|message`, acoes
-  rapidas, dialogs acessiveis, timeline diaria e estado otimista com rollback.
+      deep links `?tab=diario&action=water|meal|workout|checkin|message`, acoes
+      rapidas, dialogs acessiveis, timeline diaria e estado otimista com rollback.
 - [x] Service `patientDailyApi` conectado a RPCs Supabase para snapshot diario,
-  agua, refeicao, treino e check-in, mantendo fallback local quando o contrato
-  estiver indisponivel.
+      agua, refeicao, treino e check-in, mantendo fallback local quando o contrato
+      estiver indisponivel.
 - [x] Migration `20260606153000_220_patient_daily_habits.sql` criada com
-  tabelas de habitos diarios, RLS, bucket privado `meal-photos`, RPCs
-  patient-scoped e timeline/alertas basicos.
+      tabelas de habitos diarios, RLS, bucket privado `meal-photos`, RPCs
+      patient-scoped e timeline/alertas basicos.
 - [x] Migrations M01 `20260606153000`, `20260606170000` e `20260606183000`
-  aplicadas no Supabase local apos reparo do historico local divergente.
+      aplicadas no Supabase local apos reparo do historico local divergente.
 - [x] Dashboard clinico consome `get_clinic_daily_adherence_snapshot` para
-  baixa adesao diaria sem retornar PII no RPC.
+      baixa adesao diaria sem retornar PII no RPC.
 - [x] Paciente 360 recebe sinais via `patient_timeline_events` e resumo
-  agregado dedicado de habitos diarios em `patient-360-summary`.
+      agregado dedicado de habitos diarios em `patient-360-summary`.
 - [x] Foto de refeicao usa bucket privado, validacao de tipo/tamanho e
-  visualizacao clinica por signed URL curta via Edge Function
-  `meal-photo-signed-url`, sem expor caminho de storage no RPC agregado.
+      visualizacao clinica por signed URL curta via Edge Function
+      `meal-photo-signed-url`, sem expor caminho de storage no RPC agregado.
 - [x] Retencao M01 definida em migration de governanca: dados diarios por 6
-  anos, fotos de refeicao por 180 dias e helpers service-role em dry-run para
-  expirar dados/marcar fotos para remocao.
+      anos, fotos de refeicao por 180 dias e helpers service-role em dry-run para
+      expirar dados/marcar fotos para remocao.
 - [x] Alertas operacionais M01 podem ser emitidos por helper service-role para
-  baixa adesao, check-in ausente e foto de refeicao pendente de revisao.
+      baixa adesao, check-in ausente e foto de refeicao pendente de revisao.
 - [x] Browser smoke mobile autenticado executado com paciente local de smoke em
-  `/patient?tab=diario&action=water`, cobrindo 360px, 390px, 768px e desktop,
-  sem redirect para login, sem erros de console/rede e sem overflow horizontal.
+      `/patient?tab=diario&action=water`, cobrindo 360px, 390px, 768px e desktop,
+      sem redirect para login, sem erros de console/rede e sem overflow horizontal.
 - [x] Checks do corte executados: `npm run type-check`, `npm run lint`,
-  `npm run build`, `git diff --check` e smoke local autenticado apos
-  modularizacao do portal.
+      `npm run build`, `git diff --check` e smoke local autenticado apos
+      modularizacao do portal.
 - [x] Portal paciente modularizado: `PatientPortalContent` concentra estado,
-  navegacao e handlers, enquanto as abas de resumo, documentos, financeiro,
-  chat, notificacoes e check-ins ficam em secoes dedicadas com estados vazios
-  reutilizando componentes compartilhados.
+      navegacao e handlers, enquanto as abas de resumo, documentos, financeiro,
+      chat, notificacoes e check-ins ficam em secoes dedicadas com estados vazios
+      reutilizando componentes compartilhados.
 
 Checklist mobile:
 
@@ -230,15 +230,15 @@ Checklist produto:
 - [x] Definir se refeicao exige foto obrigatoria, opcional ou por programa.
 - [x] Definir metas por programa, paciente ou default da clinica.
 - [x] Definir visibilidade para clinica: resumo agregado para `patients.read`,
-  metadados de fotos somente com `nutrition.read` e signed URL sob demanda.
+      metadados de fotos somente com `nutrition.read` e signed URL sob demanda.
 - [x] Definir quando gerar alertas no M01: baixa adesao, ausencia de check-in,
-  humor/energia/sintomas de risco e foto pendente de revisao.
+      humor/energia/sintomas de risco e foto pendente de revisao.
 - [x] Definir retencao de fotos e dados diarios.
 
 Checklist backend:
 
 - [x] Criar ou confirmar tabelas `water_entries`, `meal_entries`,
-  `workout_entries`, `daily_checkins`.
+      `workout_entries`, `daily_checkins`.
 - [x] Criar view/RPC `get_patient_daily_snapshot`.
 - [x] Criar RPCs patient-scoped para inserir agua, refeicao, treino e check-in.
 - [x] Criar policies para `patient_accounts` e `guardian_links`.
@@ -248,7 +248,7 @@ Checklist backend:
 - [x] Atualizar `patient-360-summary` para incluir sinais diarios agregados.
 - [x] Atualizar dashboard clinico com baixa adesao derivada desses sinais.
 - [x] Criar governanca de retencao e emissao dry-run/execute de alertas
-  operacionais diarios.
+      operacionais diarios.
 
 Checklist frontend:
 
@@ -266,7 +266,7 @@ Checklist seguranca:
 - [x] Fotos de refeicao nunca em bucket publico.
 - [x] Signed URLs nunca logadas.
 - [x] Signed URLs bloqueadas para fotos vencidas ou marcadas para remocao por
-  retencao.
+      retencao.
 - [x] Paciente nao pode escrever para outro paciente.
 - [x] Guardian so acessa vinculo ativo.
 - [x] Logs sanitizados sem texto livre sensivel de check-in.
@@ -275,7 +275,7 @@ Checklist seguranca:
 Aceite:
 
 - [x] Paciente registra agua, refeicao, treino e check-in no celular em ate 3
-  toques por fluxo comum.
+      toques por fluxo comum.
 - [x] Profissional ve resumo de adesao no Paciente 360.
 - [x] Dashboard mostra baixa adesao sem leitura direta de PII no browser.
 - [x] Sem mock silencioso com `NEXT_PUBLIC_USE_MOCK_DATA=false`.
@@ -332,7 +332,7 @@ Checklist seguranca:
 
 - [x] Paciente nao altera campos clinicos restritos.
 - [x] Dados pessoais atualizados pelo paciente entram em fila de revisao quando
-  necessario.
+      necessario.
 - [x] Lembretes nao expõem medicamento em notificacao externa sem consentimento.
 
 Aceite:
@@ -404,19 +404,19 @@ Aceite:
 Status do corte 2026-06-06:
 
 - [x] Migration `20260606220000_240_program_community_moderation.sql` criada com
-  tabelas, RLS, RPCs patient-scoped, RPCs de moderacao, denuncia, prompt semanal,
-  rate limit, triagem de risco e RBAC `community.moderate`.
+      tabelas, RLS, RPCs patient-scoped, RPCs de moderacao, denuncia, prompt semanal,
+      rate limit, triagem de risco e RBAC `community.moderate`.
 - [x] Service `communityApi` criado com mock somente sob
-  `NEXT_PUBLIC_USE_MOCK_DATA=true` e chamadas reais por RPC.
+      `NEXT_PUBLIC_USE_MOCK_DATA=true` e chamadas reais por RPC.
 - [x] Portal paciente recebeu aba `Comunidade` com feed por programa, composer,
-  estados de moderacao, denuncia e comentarios em bottom sheet.
+      estados de moderacao, denuncia e comentarios em bottom sheet.
 - [x] Clinica recebeu `/clinic/community` no `DashboardShell`, com cards de
-  moderacao, filtros, acoes auditadas e prompt semanal.
+      moderacao, filtros, acoes auditadas e prompt semanal.
 - [x] Runbook `docs/COMMUNITY_MODERATION_RUNBOOK.md` documenta contratos,
-  permissoes, seguranca e checks.
+      permissoes, seguranca e checks.
 - [ ] Imagens de comunidade permanecem fora deste corte por serem opcionais; se
-  entrarem depois, devem usar storage privado, validacao de arquivo e signed URL
-  curta.
+      entrarem depois, devem usar storage privado, validacao de arquivo e signed URL
+      curta.
 
 ### M04 - Chat e inbox avancados
 
@@ -430,9 +430,20 @@ Origem Slim Care:
 
 Estado SlimHiper:
 
-- `ClinicInboxContent` existe.
-- `notificationsApi`, `chatApi` e portal paciente ja permitem mensagens.
-- Falta experiencia completa de disponibilidade, anexos, atalhos e SLA.
+- [x] M04 implementado no corte `b745f26` com inbox/portal evoluidos,
+      componentes compartilhados, anexos privados, respostas rapidas,
+      disponibilidade e SLA operacional.
+- [x] `ClinicInboxContent`, `PatientPortalContent`,
+      `PatientPortalSections`, `chatApi`, `patientPortalApi` e
+      `notificationsApi` atualizados.
+- [x] Migration `20260606223000_250_chat_inbox_advanced.sql` criada para
+      horarios, atalhos, SLA, anexos, bucket privado, signed URLs e helper de SLA.
+- [x] Contratos ja existentes em
+      `20260601133000_181_chat_notifications_inbox_foundation.sql` cobrem unread
+      counts, atribuicao de thread e mudanca de status.
+- [R] Aplicacao em banco real e agendamento recorrente de
+  `notify_chat_sla_breaches` dependem de ambiente/operacao autorizada; nao foi
+  executado `supabase db push`.
 
 Decisao de fusao:
 
@@ -442,38 +453,38 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Chat full-height no paciente.
-- [ ] Input fixo com safe area.
-- [ ] Botao de anexos por menu.
-- [ ] Estado de envio: enviando, enviado, falhou, reenviar.
-- [ ] Badge de horario indisponivel.
-- [ ] Respostas rapidas no portal clinico.
-- [ ] Fila inbox com SLA e dono.
-- [ ] Mensagem automatica identificada como automatica.
+- [x] Chat full-height no paciente.
+- [x] Input fixo com safe area.
+- [x] Botao de anexos por menu.
+- [x] Estado de envio: enviando, enviado, falhou, reenviar.
+- [x] Badge de horario indisponivel.
+- [x] Respostas rapidas no portal clinico.
+- [x] Fila inbox com SLA e dono.
+- [x] Mensagem automatica identificada como automatica.
 
 Checklist backend:
 
-- [ ] Tabelas `chat_shortcuts`, `chat_service_hours`, `chat_sla_policies`.
-- [ ] Tabela ou storage de `chat_attachments`.
-- [ ] Signed URL para anexos.
-- [ ] Trigger para unread counts.
-- [ ] Job para SLA estourado.
-- [ ] RPC para atribuir thread e mudar status.
+- [x] Tabelas `chat_shortcuts`, `chat_service_hours`, `chat_sla_policies`.
+- [x] Tabela ou storage de `chat_attachments`.
+- [x] Signed URL para anexos.
+- [x] Trigger para unread counts.
+- [x] Job/helper service-role para SLA estourado.
+- [x] RPC para atribuir thread e mudar status.
 
 Checklist seguranca:
 
-- [ ] Anexos privados.
-- [ ] Validacao de tipo/tamanho.
-- [ ] Thread sempre tenant-scoped e patient-scoped.
-- [ ] Paciente nao lista threads de outro paciente.
-- [ ] Logs sem conteudo de mensagem.
+- [x] Anexos privados.
+- [x] Validacao de tipo/tamanho.
+- [x] Thread sempre tenant-scoped e patient-scoped.
+- [x] Paciente nao lista threads de outro paciente.
+- [x] Logs sem conteudo de mensagem.
 
 Aceite:
 
-- [ ] Paciente envia texto e anexo no celular.
-- [ ] Clinica responde por inbox com resposta rapida.
-- [ ] SLA aparece e notifica atraso.
-- [ ] Falha de anexo nao derruba thread.
+- [x] Paciente envia texto e anexo no celular.
+- [x] Clinica responde por inbox com resposta rapida.
+- [x] SLA aparece e notifica atraso.
+- [x] Falha de anexo nao derruba thread.
 
 ### M05 - Dashboard operacional com inteligencia acionavel
 
@@ -550,7 +561,7 @@ Checklist backend:
 
 - [ ] View/RPC de carteira por tenant.
 - [ ] Campos agregados: adesao, financeiro, documentos, ultima mensagem,
-  proxima consulta, programa ativo.
+      proxima consulta, programa ativo.
 - [ ] Permissoes por secao: clinical, financial, documents, chat.
 - [ ] Audit log para abertura de dados sensiveis se politica exigir.
 
@@ -594,7 +605,7 @@ Checklist UI/mobile:
 - [ ] Mobile abre primeiro a agenda do dia.
 - [ ] Semana/mes como visualizacao secundaria.
 - [ ] Fila com status claros: aguardando, chamado, em atendimento, checkout,
-  falta, cancelado.
+      falta, cancelado.
 - [ ] Retornos com proxima acao e contato.
 - [ ] Cancelamento/falta exigem motivo.
 - [ ] Drawer do paciente com contato, pendencias, pacote e alerta.
@@ -623,7 +634,7 @@ Checklist seguranca:
 Aceite:
 
 - [ ] Criar consulta, confirmar, colocar na fila, chamar, iniciar SOAP,
-  finalizar e registrar timeline.
+      finalizar e registrar timeline.
 - [ ] Falta/cancelamento auditados.
 - [ ] Mobile permite operar agenda do dia sem tabela horizontal.
 
@@ -848,7 +859,7 @@ Decisao de fusao:
 Checklist UI/mobile:
 
 - [ ] Wizard: paciente -> categoria -> template -> variaveis -> revisao ->
-  gerar -> liberar/assinar.
+      gerar -> liberar/assinar.
 - [ ] Biblioteca de templates com filtros, status e duplicar.
 - [ ] Drawer de documento full-screen no mobile.
 - [ ] Status visual com icone + texto + cor.
@@ -914,7 +925,7 @@ Checklist UI/mobile:
 
 - [ ] `Servicos`: lista, criar, editar, ativar/desativar, duplicar.
 - [ ] `Pacotes`: composicao de servicos, beneficios, limites, comunidade,
-  chat prioritario, renovacao.
+      chat prioritario, renovacao.
 - [ ] `Programas`: fases, documentos, check-ins, equipe, financeiro.
 - [ ] `Upgrades`: solicitar, cotar, aprovar, rejeitar, gerar cobranca.
 - [ ] Mobile com tabs simples e formularios em etapas.
@@ -923,7 +934,7 @@ Checklist UI/mobile:
 Checklist backend:
 
 - [ ] Confirmar ou criar tabelas `services`, `packages`, `package_services`,
-  `programs`, `program_packages`.
+      `programs`, `program_packages`.
 - [ ] Criar `upgrade_requests`.
 - [ ] RPC de contexto comercial do paciente.
 - [ ] RPC de cotacao/aprovacao/rejeicao.
@@ -1161,99 +1172,99 @@ Aceite:
 
 ## 7. Matriz pagina a pagina
 
-| Slim Care | Funcao | SlimHiper alvo | Status inicial | Maturidade alvo |
-| --- | --- | --- | --- | --- |
-| `/home` | Cockpit diario do paciente | `/patient`, tab `Hoje` | [ ] | N5 |
-| `/onboarding` | Onboarding assistencial | `/patient`, fluxo inicial | [ ] | N4 |
-| `/water` | Registro de agua | `/patient`, acao rapida | [ ] | N5 |
-| `/meals` | Registro de refeicoes/fotos | `/patient`, acao rapida + 360 nutricao | [ ] | N5 |
-| `/workouts` | Registro de treino | `/patient`, acao rapida + 360 | [ ] | N4 |
-| `/checkin` | Check-in diario | `/patient`, check-in | [~] | N5 |
-| `/evolution` | Evolucao corporal | `/patient` + `/clinic/patients/[id]` | [ ] | N4 |
-| `/chat` | Chat paciente | `/patient`, chat | [~] | N5 |
-| `/community` | Comunidade paciente | `/patient`, comunidade | [ ] | N4 |
-| `/profile` | Perfil e conta | `/patient`, minha jornada | [ ] | N4 |
-| `/documents` | Documentos paciente | `/patient`, documentos | [~] | N5 |
-| `/financial` | Financeiro paciente | `/patient`, financeiro | [~] | N5 |
-| `/care-plan` | Plano, orientacoes, medicacoes | `/patient`, plano | [ ] | N4 |
-| `/portal/dashboard` | Cockpit operacional | `/clinic/dashboard` | [~] | N5 |
-| `/portal/schedule` | Agenda | `/clinic/agenda` | [~] | N5 |
-| `/portal/attendance` | Fila de atendimento | `/clinic/agenda?tab=fila` ou `/clinic/attendance` | [ ] | N5 |
-| `/portal/patients` | Carteira/lista | `/clinic/patients` | [~] | N5 |
-| `/portal/patients/case` | Caso 360 | `/clinic/patients/[patientId]` | [~] | N5 |
-| `/portal/clinical/record` | Prontuario | `/clinic/patients/[patientId]?tab=prontuario` | [ ] | N5 |
-| `/portal/clinical/encounter` | Atendimento ao vivo | `/clinic/patients/[patientId]/encounter` | [~] | N5 |
-| `/portal/clinical/measurements` | Medidas | 360/encounter clinical records | [~] | N5 |
-| `/portal/clinical/photos` | Fotos progresso | 360 evolucao/fotos | [ ] | N4 |
-| `/portal/clinical/visits` | Visitas clinicas | 360 timeline/prontuario | [ ] | N4 |
-| `/portal/prescriptions` | Prescricoes | 360 prescricoes + modulo dedicado futuro | [~] | N5 |
-| `/portal/documents` | Documentos | `/clinic/documents` | [~] | N5 |
-| `/portal/documents/templates` | Templates | `/clinic/documents?tab=templates` | [ ] | N5 |
-| `/portal/messages` | Mensagens | `/clinic/inbox` | [~] | N5 |
-| `/portal/community` | Moderacao comunidade | `/clinic/community` futuro | [ ] | N4 |
-| `/portal/commercial` | Cockpit comercial | `/clinic/programs` + comercial futuro | [~] | N5 |
-| `/portal/commercial/services` | Servicos | `/clinic/programs?tab=services` futuro | [ ] | N5 |
-| `/portal/commercial/packages` | Pacotes | `/clinic/programs?tab=packages` futuro | [ ] | N5 |
-| `/portal/commercial/programs` | Programas | `/clinic/programs` | [~] | N5 |
-| `/portal/financial` | Financeiro | `/clinic/financeiro` | [~] | N5 |
-| `/portal/staff` | Profissionais | `/clinic/settings?tab=team` ou admin tenant | [~] | N5 |
-| `/portal/users` | Usuarios | admin tenant/settings | [~] | N5 |
-| `/portal/users/permissions` | Permissoes | admin/settings RBAC | [~] | N5 |
-| `/portal/settings` | Configuracoes | `/clinic/settings` | [~] | N5 |
+| Slim Care                       | Funcao                         | SlimHiper alvo                                    | Status inicial | Maturidade alvo |
+| ------------------------------- | ------------------------------ | ------------------------------------------------- | -------------- | --------------- |
+| `/home`                         | Cockpit diario do paciente     | `/patient`, tab `Hoje`                            | [ ]            | N5              |
+| `/onboarding`                   | Onboarding assistencial        | `/patient`, fluxo inicial                         | [ ]            | N4              |
+| `/water`                        | Registro de agua               | `/patient`, acao rapida                           | [ ]            | N5              |
+| `/meals`                        | Registro de refeicoes/fotos    | `/patient`, acao rapida + 360 nutricao            | [ ]            | N5              |
+| `/workouts`                     | Registro de treino             | `/patient`, acao rapida + 360                     | [ ]            | N4              |
+| `/checkin`                      | Check-in diario                | `/patient`, check-in                              | [~]            | N5              |
+| `/evolution`                    | Evolucao corporal              | `/patient` + `/clinic/patients/[id]`              | [ ]            | N4              |
+| `/chat`                         | Chat paciente                  | `/patient`, chat                                  | [x]            | N5              |
+| `/community`                    | Comunidade paciente            | `/patient`, comunidade                            | [ ]            | N4              |
+| `/profile`                      | Perfil e conta                 | `/patient`, minha jornada                         | [ ]            | N4              |
+| `/documents`                    | Documentos paciente            | `/patient`, documentos                            | [~]            | N5              |
+| `/financial`                    | Financeiro paciente            | `/patient`, financeiro                            | [~]            | N5              |
+| `/care-plan`                    | Plano, orientacoes, medicacoes | `/patient`, plano                                 | [ ]            | N4              |
+| `/portal/dashboard`             | Cockpit operacional            | `/clinic/dashboard`                               | [~]            | N5              |
+| `/portal/schedule`              | Agenda                         | `/clinic/agenda`                                  | [~]            | N5              |
+| `/portal/attendance`            | Fila de atendimento            | `/clinic/agenda?tab=fila` ou `/clinic/attendance` | [ ]            | N5              |
+| `/portal/patients`              | Carteira/lista                 | `/clinic/patients`                                | [~]            | N5              |
+| `/portal/patients/case`         | Caso 360                       | `/clinic/patients/[patientId]`                    | [~]            | N5              |
+| `/portal/clinical/record`       | Prontuario                     | `/clinic/patients/[patientId]?tab=prontuario`     | [ ]            | N5              |
+| `/portal/clinical/encounter`    | Atendimento ao vivo            | `/clinic/patients/[patientId]/encounter`          | [~]            | N5              |
+| `/portal/clinical/measurements` | Medidas                        | 360/encounter clinical records                    | [~]            | N5              |
+| `/portal/clinical/photos`       | Fotos progresso                | 360 evolucao/fotos                                | [ ]            | N4              |
+| `/portal/clinical/visits`       | Visitas clinicas               | 360 timeline/prontuario                           | [ ]            | N4              |
+| `/portal/prescriptions`         | Prescricoes                    | 360 prescricoes + modulo dedicado futuro          | [~]            | N5              |
+| `/portal/documents`             | Documentos                     | `/clinic/documents`                               | [~]            | N5              |
+| `/portal/documents/templates`   | Templates                      | `/clinic/documents?tab=templates`                 | [ ]            | N5              |
+| `/portal/messages`              | Mensagens                      | `/clinic/inbox`                                   | [x]            | N5              |
+| `/portal/community`             | Moderacao comunidade           | `/clinic/community` futuro                        | [ ]            | N4              |
+| `/portal/commercial`            | Cockpit comercial              | `/clinic/programs` + comercial futuro             | [~]            | N5              |
+| `/portal/commercial/services`   | Servicos                       | `/clinic/programs?tab=services` futuro            | [ ]            | N5              |
+| `/portal/commercial/packages`   | Pacotes                        | `/clinic/programs?tab=packages` futuro            | [ ]            | N5              |
+| `/portal/commercial/programs`   | Programas                      | `/clinic/programs`                                | [~]            | N5              |
+| `/portal/financial`             | Financeiro                     | `/clinic/financeiro`                              | [~]            | N5              |
+| `/portal/staff`                 | Profissionais                  | `/clinic/settings?tab=team` ou admin tenant       | [~]            | N5              |
+| `/portal/users`                 | Usuarios                       | admin tenant/settings                             | [~]            | N5              |
+| `/portal/users/permissions`     | Permissoes                     | admin/settings RBAC                               | [~]            | N5              |
+| `/portal/settings`              | Configuracoes                  | `/clinic/settings`                                | [~]            | N5              |
 
 ## 8. Matriz functions Slim Care -> destino SlimHiper
 
-| Function Slim Care | Destino recomendado | SlimHiper/gap |
-| --- | --- | --- |
-| `agendaAutomations` | Cron + RPC/Edge | Criar jobs de agenda/lembrete |
-| `agendaOnCreate` | Trigger | Automatizar efeitos de consulta |
-| `attendanceCreateFromSchedule` | Trigger/RPC | Formalizar fila |
-| `detectStuckAttendance` | Cron + RPC | Criar alerta de fila presa |
-| `startAttendanceEncounter` | RPC | Ligar fila ao SOAP |
-| `completeAttendanceEncounter` | RPC | Fechamento atomico |
-| `encounterAutosave` | RPC | Autosave visivel |
-| `recordCreateNoteFromEncounter` | RPC/Trigger | Nota longitudinal |
-| `recordInitialize` | Trigger/RPC | Prontuario unico |
-| `recordAuditLog` | Trigger/RPC | Auditoria de prontuario |
-| `confirmPatientReturn` | RPC | Retornos |
-| `syncConfirmedAppointmentToQueue` | Trigger | Consulta confirmada vira fila |
-| `ReturnHook` | Trigger | Absorver em retornos |
-| `processUpgradeQuote` | RPC + Edge opcional | Upgrades |
-| `resolvePatientCommercialContext` | View/RPC | Contexto comercial |
-| `getPatientCommercialData` | View/RPC | Dados comerciais para UI |
-| `syncPackageEnrollment` | Trigger | Matricula/pacote |
-| `createAsaasCharge` | Edge | Ja ha invoice/subscription; avaliar charge avulsa |
-| `refundAsaasCharge` | Edge | Falta refund |
-| `syncAsaasReference` | Edge/Cron | Falta sync ativo |
-| `syncAsaasChargeStatus` | Edge/Cron | Completar conciliacao |
-| `asaasWebhook` | Edge | Existe `webhook-asaas` |
-| `asaasStatusMapper` | Helper/RPC | Consolidar mapper |
-| `mapAsaasStatus` | Helper/RPC | Consolidar mapper |
-| `notifyReceiptStatusChange` | Trigger/notification | Falta comprovante |
-| `checkPaymentGatewayConfig` | Edge admin-only | Health provider |
-| `generateDocumentPDF` | Edge | Existe `generate-document` |
-| `generatePrescriptionPDF` | Edge | Falta prescricao regulatoria completa |
-| `linkDocumentToRecord` | RPC | Falta prontuario/document link forte |
-| `signDocument` | Edge | Existe D4Sign para documentos nao-prescricao |
-| `receiveOfficialElectronicSignature` | Edge | D4Sign/webhook parcial |
-| `receiveQualifiedSignature` | Edge | Futuro legal |
-| `receiveIcpBrasilSignature` | Edge | Futuro legal |
-| `registerQualifiedSignatureValidationResult` | RPC | Futuro legal |
-| `registerSignatureValidationResult` | RPC | Futuro legal |
-| `evaluateComplianceReadiness` | RPC/View | Falta compliance runtime |
-| `backfillComplianceReadiness` | One-shot | Futuro script |
-| `auditLegacyComplianceData` | One-shot/read-only | Futuro script |
-| `backfillPrescriptionRegulatoryClassification` | One-shot | Futuro script |
-| `migrateLegacySignatureAndRegulatoryStatus` | One-shot | Futuro script |
-| `seedDocumentTemplates` | One-shot | Ja ha bootstrap; revisar |
-| `calculateOperationalIntelligence` | View materializada/RPC | Expandir dashboard |
-| `generateMedicationReminders` | Cron/RPC | Futuro medicacao |
-| `createClinicianProfile` | RPC/Trigger | Admin/settings |
-| `checkPermission` | RPC/helper | Ja ha RBAC; consolidar |
-| `healthCheck` | Route/Edge | `/api/health` existe; provider health futuro |
-| `seedPermissions` | One-shot | Ja ha bootstrap core; revisar |
-| `seedPlatformSettings` | One-shot | Revisar settings seed |
-| `migrateLegacyClinicianReferences` | One-shot | So se houver migracao real |
+| Function Slim Care                             | Destino recomendado    | SlimHiper/gap                                     |
+| ---------------------------------------------- | ---------------------- | ------------------------------------------------- |
+| `agendaAutomations`                            | Cron + RPC/Edge        | Criar jobs de agenda/lembrete                     |
+| `agendaOnCreate`                               | Trigger                | Automatizar efeitos de consulta                   |
+| `attendanceCreateFromSchedule`                 | Trigger/RPC            | Formalizar fila                                   |
+| `detectStuckAttendance`                        | Cron + RPC             | Criar alerta de fila presa                        |
+| `startAttendanceEncounter`                     | RPC                    | Ligar fila ao SOAP                                |
+| `completeAttendanceEncounter`                  | RPC                    | Fechamento atomico                                |
+| `encounterAutosave`                            | RPC                    | Autosave visivel                                  |
+| `recordCreateNoteFromEncounter`                | RPC/Trigger            | Nota longitudinal                                 |
+| `recordInitialize`                             | Trigger/RPC            | Prontuario unico                                  |
+| `recordAuditLog`                               | Trigger/RPC            | Auditoria de prontuario                           |
+| `confirmPatientReturn`                         | RPC                    | Retornos                                          |
+| `syncConfirmedAppointmentToQueue`              | Trigger                | Consulta confirmada vira fila                     |
+| `ReturnHook`                                   | Trigger                | Absorver em retornos                              |
+| `processUpgradeQuote`                          | RPC + Edge opcional    | Upgrades                                          |
+| `resolvePatientCommercialContext`              | View/RPC               | Contexto comercial                                |
+| `getPatientCommercialData`                     | View/RPC               | Dados comerciais para UI                          |
+| `syncPackageEnrollment`                        | Trigger                | Matricula/pacote                                  |
+| `createAsaasCharge`                            | Edge                   | Ja ha invoice/subscription; avaliar charge avulsa |
+| `refundAsaasCharge`                            | Edge                   | Falta refund                                      |
+| `syncAsaasReference`                           | Edge/Cron              | Falta sync ativo                                  |
+| `syncAsaasChargeStatus`                        | Edge/Cron              | Completar conciliacao                             |
+| `asaasWebhook`                                 | Edge                   | Existe `webhook-asaas`                            |
+| `asaasStatusMapper`                            | Helper/RPC             | Consolidar mapper                                 |
+| `mapAsaasStatus`                               | Helper/RPC             | Consolidar mapper                                 |
+| `notifyReceiptStatusChange`                    | Trigger/notification   | Falta comprovante                                 |
+| `checkPaymentGatewayConfig`                    | Edge admin-only        | Health provider                                   |
+| `generateDocumentPDF`                          | Edge                   | Existe `generate-document`                        |
+| `generatePrescriptionPDF`                      | Edge                   | Falta prescricao regulatoria completa             |
+| `linkDocumentToRecord`                         | RPC                    | Falta prontuario/document link forte              |
+| `signDocument`                                 | Edge                   | Existe D4Sign para documentos nao-prescricao      |
+| `receiveOfficialElectronicSignature`           | Edge                   | D4Sign/webhook parcial                            |
+| `receiveQualifiedSignature`                    | Edge                   | Futuro legal                                      |
+| `receiveIcpBrasilSignature`                    | Edge                   | Futuro legal                                      |
+| `registerQualifiedSignatureValidationResult`   | RPC                    | Futuro legal                                      |
+| `registerSignatureValidationResult`            | RPC                    | Futuro legal                                      |
+| `evaluateComplianceReadiness`                  | RPC/View               | Falta compliance runtime                          |
+| `backfillComplianceReadiness`                  | One-shot               | Futuro script                                     |
+| `auditLegacyComplianceData`                    | One-shot/read-only     | Futuro script                                     |
+| `backfillPrescriptionRegulatoryClassification` | One-shot               | Futuro script                                     |
+| `migrateLegacySignatureAndRegulatoryStatus`    | One-shot               | Futuro script                                     |
+| `seedDocumentTemplates`                        | One-shot               | Ja ha bootstrap; revisar                          |
+| `calculateOperationalIntelligence`             | View materializada/RPC | Expandir dashboard                                |
+| `generateMedicationReminders`                  | Cron/RPC               | Futuro medicacao                                  |
+| `createClinicianProfile`                       | RPC/Trigger            | Admin/settings                                    |
+| `checkPermission`                              | RPC/helper             | Ja ha RBAC; consolidar                            |
+| `healthCheck`                                  | Route/Edge             | `/api/health` existe; provider health futuro      |
+| `seedPermissions`                              | One-shot               | Ja ha bootstrap core; revisar                     |
+| `seedPlatformSettings`                         | One-shot               | Revisar settings seed                             |
+| `migrateLegacyClinicianReferences`             | One-shot               | So se houver migracao real                        |
 
 ## 9. Sequencia de execucao em uma leva
 
@@ -1395,11 +1406,11 @@ A fusao Slim Care -> SlimHiper so deve ser considerada pronta quando:
 - [ ] Paciente mobile consegue executar habitos diarios sem friccao.
 - [ ] Clinica opera agenda -> fila -> atendimento -> prontuario -> financeiro.
 - [ ] Paciente 360 mostra sinais diarios, risco, documentos, financeiro, chat,
-  prescricoes e plano com permissoes corretas.
+      prescricoes e plano com permissoes corretas.
 - [ ] Admin e settings controlam permissoes, equipe, webhooks, integracoes e
-  observabilidade.
+      observabilidade.
 - [ ] Asaas e D4Sign permanecem testados em sandbox/homologacao quando o corte
-  tocar provider.
+      tocar provider.
 - [ ] Nenhum dado sensivel, segredo ou payload bruto foi exposto.
 - [ ] Runbooks e checklists foram atualizados.
 - [ ] `type-check`, `lint`, `build` e `git diff --check` passaram.
@@ -1427,7 +1438,7 @@ Checklist:
 - [ ] Garantir que mensagens moderadas nao trafegam para client.
 - [ ] Manter audit log sem conteudo bruto.
 - [ ] Testar thread normal, mensagem moderada, usuario sem permissao e
-  cross-patient.
+      cross-patient.
 
 Aceite:
 
@@ -1494,7 +1505,7 @@ Checklist:
 - [ ] Confirmar que nenhum dado clinico/financeiro/paciente e capturado.
 - [ ] Documentar decisao antes de producao.
 - [ ] Nao remover Rocket sem tarefa especifica, mas bloquear go-live se
-  governanca nao estiver clara.
+      governanca nao estiver clara.
 
 Aceite:
 
