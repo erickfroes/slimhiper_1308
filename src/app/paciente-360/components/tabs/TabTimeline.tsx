@@ -38,6 +38,7 @@ import {
   Smartphone,
   ExternalLink,
   FlaskConical,
+  Camera,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
 import { getPatientTimeline } from '@/services/patient360Api';
@@ -201,6 +202,18 @@ const eventTypeConfig: Record<TimelineEventType, EventConfig> = {
     iconColor: 'text-teal-600',
     iconBg: 'bg-teal-50',
     label: 'Resultado de exame',
+  },
+  foto_progresso_registrada: {
+    icon: Camera,
+    iconColor: 'text-blue-600',
+    iconBg: 'bg-blue-50',
+    label: 'Foto de progresso',
+  },
+  foto_progresso_liberada: {
+    icon: Camera,
+    iconColor: 'text-emerald-600',
+    iconBg: 'bg-emerald-50',
+    label: 'Foto liberada',
   },
   plano_alimentar_publicado: {
     icon: Utensils,

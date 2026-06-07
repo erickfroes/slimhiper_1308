@@ -1,7 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { CheckCircle2, FileText, Image as ImageIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Activity,
+  Camera,
+  CheckCircle2,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Lock,
+} from 'lucide-react';
 import {
   ChatAvailabilityStatus,
   ChatImageViewer,
@@ -11,6 +19,12 @@ import DataState from '@/components/ui/DataState';
 import type { PatientPortalSnapshot } from '@/services/patientPortalApi';
 import { getChatAttachmentSignedUrl } from '@/services/chatApi';
 import type { PatientChatAttachment } from '@/domain/types';
+import {
+  getPatientPortalEvolutionSummary,
+  getProgressPhotoSignedUrl,
+  type PatientPortalEvolutionSummary,
+  type ProgressPhotoSummary,
+} from '@/services/clinicalRecordsApi';
 
 type BusyKey = string | null;
 type CheckinAnswers = Record<string, Record<string, string>>;
@@ -73,7 +87,143 @@ export function PortalSummarySection({ snapshot }: SnapshotProps) {
           vinculo podem alternar pacientes pelo seletor acima.
         </p>
       </div>
+      <PortalEvolutionSummaryBlock patientId={snapshot.selectedPatientId} />
     </div>
+  );
+}
+
+function PortalEvolutionSummaryBlock({ patientId }: { patientId: string }) {
+  const [summary, setSummary] = useState<PatientPortalEvolutionSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      const result = await getPatientPortalEvolutionSummary(patientId);
+      if (cancelled) return;
+      setSummary(result.data);
+      setError(result.error?.message ?? null);
+      setLoading(false);
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId]);
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-border p-4 md:col-span-2">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          Carregando evolucao corporal...
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !summary) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 md:col-span-2">
+        {error ?? 'Evolucao corporal indisponivel no momento.'}
+      </div>
+    );
+  }
+
+  const measurement = summary.latestMeasurement;
+
+  return (
+    <div className="rounded-2xl border border-border p-4 md:col-span-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-semibold text-foreground">Evolucao corporal</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Somente medidas e fotos liberadas pela equipe aparecem aqui.
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+          <Lock className="h-3 w-3" aria-hidden="true" />
+          Privado
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl bg-muted/50 p-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <Activity className="h-4 w-4" aria-hidden="true" />
+            Peso
+          </div>
+          <p className="mt-2 text-lg font-bold text-foreground">
+            {measurement?.weightKg ? `${measurement.weightKg} kg` : '-'}
+          </p>
+        </div>
+        <div className="rounded-xl bg-muted/50 p-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <Activity className="h-4 w-4" aria-hidden="true" />
+            IMC
+          </div>
+          <p className="mt-2 text-lg font-bold text-foreground">{measurement?.bmi ?? '-'}</p>
+        </div>
+        <div className="rounded-xl bg-muted/50 p-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <Camera className="h-4 w-4" aria-hidden="true" />
+            Fotos liberadas
+          </div>
+          <p className="mt-2 text-lg font-bold text-foreground">{summary.releasedPhotos.length}</p>
+        </div>
+      </div>
+      {summary.releasedPhotos.length > 0 ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {summary.releasedPhotos.slice(0, 6).map((photo) => (
+            <ReleasedPhotoButton key={photo.id} patientId={patientId} photo={photo} />
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-muted-foreground">
+          Nenhuma foto corporal foi liberada para este vinculo ainda.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ReleasedPhotoButton({
+  patientId,
+  photo,
+}: {
+  patientId: string;
+  photo: ProgressPhotoSummary;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleOpen() {
+    if (loading) return;
+    setLoading(true);
+    const result = await getProgressPhotoSignedUrl(patientId, photo.id);
+    setLoading(false);
+    if (!result.data?.url) return;
+    window.open(result.data.url, '_blank', 'noopener,noreferrer');
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleOpen()}
+      disabled={loading}
+      className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-semibold text-foreground disabled:opacity-60"
+    >
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      ) : (
+        <Camera className="h-4 w-4" aria-hidden="true" />
+      )}
+      Foto {formatDate(photo.photoDate)}
+    </button>
   );
 }
 

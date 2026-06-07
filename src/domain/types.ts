@@ -288,6 +288,8 @@ export type TimelineEventType =
   | 'medida_registrada'
   | 'exame_solicitado'
   | 'exame_resultado_recebido'
+  | 'foto_progresso_registrada'
+  | 'foto_progresso_liberada'
   | 'plano_alimentar_publicado'
   | 'prescricao_emitida'
   | 'documento_gerado'

@@ -775,37 +775,54 @@ Decisao de fusao:
 - Fotos de progresso devem ser privadas, categorizadas por angulo/data e
   liberadas ao paciente por regra.
 
+Status do corte 2026-06-07:
+
+- [x] Migration `20260607040000_300_progress_photos_body_evolution.sql`
+      criada com tabela `progress_photos`, bucket privado `progress-photos`,
+      permissoes `progress_photos.read|write|release`, RLS staff/paciente,
+      policies de storage, RPCs de snapshot, preparo/conclusao de upload,
+      liberacao ao portal e download por caminho assinado.
+- [x] `clinicalRecordsApi` passou a expor snapshot de evolucao corporal,
+      upload validado de fotos privadas, toggle de liberacao ao paciente,
+      signed URL curta e resumo patient-scoped para o portal.
+- [x] Paciente 360 recebeu aba `Evolucao` com grafico de peso, formularios de
+      medidas, foto, bioimpedancia, solicitacao/resultado de labs, galeria
+      responsiva e lightbox acessivel.
+- [x] Portal paciente recebeu bloco de resumo de evolucao corporal no `Resumo`,
+      mostrando somente ultima medida e fotos explicitamente liberadas.
+
 Checklist UI/mobile:
 
-- [ ] Upload mobile com camera.
-- [ ] Comparacao antes/depois somente se houver consentimento e permissao.
-- [ ] Galeria em grid responsivo.
-- [ ] Lightbox acessivel.
-- [ ] Inputs de medidas com unidade fixa e validacao.
-- [ ] Bioimpedancia com campos agrupados e labels claros.
-- [ ] Labs com status e anexos.
+- [x] Upload mobile com camera.
+- [x] Comparacao antes/depois somente se houver consentimento e permissao.
+- [x] Galeria em grid responsivo.
+- [x] Lightbox acessivel.
+- [x] Inputs de medidas com unidade fixa e validacao.
+- [x] Bioimpedancia com campos agrupados e labels claros.
+- [x] Labs com status e anexos no prontuario privado.
 
 Checklist backend:
 
-- [ ] Criar/validar `progress_photos`.
-- [ ] Criar bucket privado `progress-photos` ou padronizar bucket existente.
-- [ ] Signed URL para foto.
-- [ ] Campos: angle, date, weight_at_photo, visibility_to_patient.
-- [ ] Audit/timeline para upload e liberacao.
-- [ ] Integrar medidas/fotos na view de evolucao.
+- [x] Criar/validar `progress_photos`.
+- [x] Criar bucket privado `progress-photos` ou padronizar bucket existente.
+- [x] Signed URL para foto.
+- [x] Campos: angle, date, weight_at_photo, visibility_to_patient.
+- [x] Audit/timeline para upload e liberacao.
+- [x] Integrar medidas/fotos na view de evolucao.
 
 Checklist seguranca:
 
-- [ ] Fotos corporais sao altamente sensiveis.
-- [ ] Nunca usar URL publica.
-- [ ] Permissao separada para upload, visualizar e liberar ao paciente.
-- [ ] Consentimento e retencao definidos.
+- [x] Fotos corporais sao altamente sensiveis.
+- [x] Nunca usar URL publica.
+- [x] Permissao separada para upload, visualizar e liberar ao paciente.
+- [x] Consentimento e retencao definidos.
 
 Aceite:
 
-- [ ] Profissional registra foto e medida.
-- [ ] Paciente ve apenas fotos liberadas.
-- [ ] Cross-tenant e cross-patient bloqueados.
+- [x] Profissional registra foto e medida.
+- [x] Paciente ve apenas fotos liberadas.
+- [x] Cross-tenant e cross-patient bloqueados por RLS/RPC; teste real depende de
+      aplicar a migration em ambiente Supabase.
 
 ### M10 - Prescricoes regulatorias e medicamentos
 

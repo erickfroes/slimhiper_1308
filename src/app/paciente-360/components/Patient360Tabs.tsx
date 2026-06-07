@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { Patient360Summary } from '@/domain/types';
 import TabResumo from './tabs/TabResumo';
+import TabEvolucao from './tabs/TabEvolucao';
 import TabTimeline from './tabs/TabTimeline';
 import TabProntuario from './tabs/TabProntuario';
 import TabConsultas from './tabs/TabConsultas';
@@ -19,6 +20,7 @@ import { ShieldOff } from 'lucide-react';
 
 const TABS = [
   { key: 'tab-resumo', label: 'Resumo', id: 'resumo' },
+  { key: 'tab-evolucao', label: 'Evolucao', id: 'evolucao' },
   { key: 'tab-timeline', label: 'Timeline', id: 'timeline' },
   { key: 'tab-prontuario', label: 'Prontuario', id: 'prontuario' },
   { key: 'tab-consultas', label: 'Consultas', id: 'consultas' },
@@ -73,6 +75,10 @@ const TAB_PERMISSION_RULES: Partial<
   prontuario: {
     permissions: ['encounters.read', 'soap.read'],
     description: 'encounters.read ou soap.read',
+  },
+  evolucao: {
+    permissions: ['progress_photos.read'],
+    description: 'progress_photos.read',
   },
 };
 
@@ -216,6 +222,13 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
         )}
         {!isActiveTabForbidden && activeTab === 'timeline' && (
           <TabTimeline events={data.recentTimeline} patientId={data.profile.id} />
+        )}
+        {!isActiveTabForbidden && activeTab === 'evolucao' && (
+          <TabEvolucao
+            patientId={patientId}
+            goalWeightKg={data.clinicalStatus.goalWeightKg}
+            permissions={userContext?.permissions ?? []}
+          />
         )}
         {!isActiveTabForbidden && activeTab === 'prontuario' && (
           <TabProntuario
