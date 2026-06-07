@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import DashboardShell from '@/components/DashboardShell';
 import { finalizeEncounterSoap, getEncounterContext, saveSoapDraft } from '@/services/encounterApi';
 import {
@@ -208,7 +208,9 @@ function parseNumericInput(value: string): number | null {
 export default function EncounterPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const patientId = params?.patientId as string;
+  const appointmentId = searchParams.get('appointmentId');
 
   const [data, setData] = useState<Patient360Summary | null>(null);
   const [clinicalRecords, setClinicalRecords] = useState<ClinicalRecordsData | null>(null);
@@ -292,6 +294,7 @@ export default function EncounterPage() {
     const result = await saveSoapDraft({
       patientId,
       encounterId,
+      appointmentId,
       soapNoteId,
       subjective: soap.S,
       objective: soap.O,
@@ -319,6 +322,7 @@ export default function EncounterPage() {
     const result = await finalizeEncounterSoap({
       patientId,
       encounterId,
+      appointmentId,
       soapNoteId,
       subjective: soap.S,
       objective: soap.O,
@@ -354,6 +358,7 @@ export default function EncounterPage() {
     const result = await saveSoapDraft({
       patientId,
       encounterId,
+      appointmentId,
       soapNoteId,
       subjective: soap.S,
       objective: soap.O,

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,22 +15,39 @@ import {
   ArrowRight,
   Pencil,
   XCircle,
+  PhoneCall,
+  PlayCircle,
+  UserRound,
+  Bell,
+  Package,
+  CalendarPlus,
+  UserCheck,
+  ClipboardCheck,
+  Ban,
 } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
 import PageHeader from '@/components/PageHeader';
 import Dialog from '@/components/ui/Dialog';
+import Tabs from '@/components/ui/Tabs';
+import DataState from '@/components/ui/DataState';
 import type {
+  AttendanceQueueStatus,
   AppointmentStatus,
   AppointmentSummary,
   AppointmentType,
+  BlockedSlotSummary,
   PatientListRow,
+  PatientReturnSummary,
   WaitingQueueEntry,
 } from '@/domain/types';
 import {
+  callAttendanceQueue,
   cancelAppointment,
   createAppointment,
   getAgendaDay,
   getNextAppointmentStatus,
+  recordPatientReturnAction,
+  startAttendanceEncounter,
   updateAppointment,
   updateAppointmentStatus,
   type AppointmentMutationInput,
@@ -55,6 +73,14 @@ const workflowStages: WorkflowStage[] = [
     bgColor: 'bg-blue-50',
     borderColor: 'border-blue-200',
     dotColor: 'bg-blue-500',
+  },
+  {
+    key: 'confirmado',
+    label: 'Confirmado',
+    color: 'text-indigo-700',
+    bgColor: 'bg-indigo-50',
+    borderColor: 'border-indigo-200',
+    dotColor: 'bg-indigo-500',
   },
   {
     key: 'chegou',
@@ -137,6 +163,7 @@ const appointmentTypeLabel: Record<AppointmentType, string> = {
 
 const appointmentStatusLabel: Record<AppointmentStatus, string> = {
   agendado: 'Agendado',
+  confirmado: 'Confirmado',
   chegou: 'Chegou',
   triagem: 'Triagem',
   medidas: 'Medidas',
@@ -148,6 +175,80 @@ const appointmentStatusLabel: Record<AppointmentStatus, string> = {
   falta: 'Falta',
   cancelado: 'Cancelado',
 };
+
+type AgendaTab = 'agenda' | 'fila' | 'retornos';
+
+type PatientDrawerTarget =
+  | { kind: 'appointment'; item: AppointmentSummary }
+  | { kind: 'queue'; item: WaitingQueueEntry }
+  | { kind: 'return'; item: PatientReturnSummary };
+
+const queueStatusLabel: Record<AttendanceQueueStatus, string> = {
+  scheduled: 'Confirmado',
+  waiting: 'Aguardando',
+  called: 'Chamado',
+  in_attendance: 'Em atendimento',
+  checkout: 'Checkout',
+  completed: 'Concluido',
+  no_show: 'Falta',
+  cancelled: 'Cancelado',
+  stuck: 'Preso',
+};
+
+const returnStatusLabel: Record<PatientReturnSummary['status'], string> = {
+  pendente: 'Pendente',
+  contatado: 'Contatado',
+  agendado: 'Agendado',
+  dispensado: 'Dispensado',
+  vencido: 'Vencido',
+  cancelado: 'Cancelado',
+};
+
+function isAgendaTab(value: string | null): value is AgendaTab {
+  return value === 'agenda' || value === 'fila' || value === 'retornos';
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getWeekDates(selectedDate: string) {
+  const [year, month, day] = selectedDate.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  const start = new Date(date);
+  start.setDate(date.getDate() - date.getDay());
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const current = new Date(start);
+    current.setDate(start.getDate() + index);
+    return getLocalDateValue(current);
+  });
+}
+
+function getInitials(name: string) {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
 
 const MONTHS_PT = [
   'Janeiro',
@@ -601,6 +702,86 @@ function MiniCalendar({ selectedDate, calendarEvents, onSelectDate }: MiniCalend
 
 // ─── WORKFLOW KANBAN COLUMN ───────────────────────────────────────────────────
 
+function WeekStrip({
+  selectedDate,
+  calendarEvents,
+  onSelectDate,
+}: {
+  selectedDate: string;
+  calendarEvents: Record<string, number>;
+  onSelectDate: (date: string) => void;
+}) {
+  const days = getWeekDates(selectedDate);
+  const today = getLocalDateValue();
+
+  return (
+    <div className="grid grid-cols-7 gap-1 rounded-2xl border border-border bg-card p-2 shadow-sm">
+      {days.map((dateValue) => {
+        const date = new Date(`${dateValue}T00:00:00`);
+        const selected = dateValue === selectedDate;
+        const count = calendarEvents[dateValue] ?? 0;
+
+        return (
+          <button
+            key={dateValue}
+            type="button"
+            onClick={() => onSelectDate(dateValue)}
+            className={[
+              'min-h-14 rounded-xl px-1.5 py-2 text-center transition-colors',
+              selected
+                ? 'bg-primary text-primary-foreground'
+                : dateValue === today
+                  ? 'bg-primary/10 text-primary'
+                  : 'hover:bg-muted',
+            ].join(' ')}
+          >
+            <span className="block text-[10px] font-semibold uppercase">
+              {DAYS_PT[date.getDay()]}
+            </span>
+            <span className="mt-0.5 block text-sm font-bold tabular-nums">{date.getDate()}</span>
+            <span className="mt-0.5 block text-[10px] font-medium opacity-80">
+              {count > 0 ? `${count} cons.` : 'Livre'}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function BlockedSlotsPanel({ slots }: { slots: BlockedSlotSummary[] }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Ban size={16} className="text-muted-foreground" />
+          <span className="text-sm font-semibold text-foreground">Bloqueios</span>
+        </div>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+          {slots.length}
+        </span>
+      </div>
+      {slots.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nenhum bloqueio para o dia.</p>
+      ) : (
+        <div className="space-y-2">
+          {slots.map((slot) => (
+            <div key={slot.id} className="rounded-xl border border-border bg-muted/30 px-3 py-2">
+              <p className="text-xs font-semibold text-foreground">{slot.reason}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {formatDateTime(slot.startAt)} - {formatDateTime(slot.endAt)}
+              </p>
+              {slot.location ? (
+                <p className="mt-0.5 text-xs text-muted-foreground">{slot.location}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface KanbanColumnProps {
   stage: WorkflowStage;
   appointments: AppointmentSummary[];
@@ -857,7 +1038,9 @@ function WaitingQueuePanel({ queue, isLoading, onRefresh }: WaitingQueuePanelPro
     'checkout',
   ];
   const activeQueue = queue.filter((entry) => activeStatuses.includes(entry.status));
-  const waiting = queue.filter((entry) => entry.status === 'agendado' || entry.status === 'chegou');
+  const waiting = queue.filter((entry) =>
+    ['agendado', 'confirmado', 'chegou'].includes(entry.status)
+  );
 
   return (
     <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
@@ -968,6 +1151,449 @@ function WaitingQueuePanel({ queue, isLoading, onRefresh }: WaitingQueuePanelPro
 
 // ─── WORKFLOW PROGRESS BAR ────────────────────────────────────────────────────
 
+function QueueStatusBadge({ status }: { status?: AttendanceQueueStatus }) {
+  const normalized = status ?? 'waiting';
+  const classes: Record<AttendanceQueueStatus, string> = {
+    scheduled: 'bg-blue-50 text-blue-700 border-blue-200',
+    waiting: 'bg-amber-50 text-amber-700 border-amber-200',
+    called: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    in_attendance: 'bg-teal-50 text-teal-700 border-teal-200',
+    checkout: 'bg-lime-50 text-lime-700 border-lime-200',
+    completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    no_show: 'bg-red-50 text-red-700 border-red-200',
+    cancelled: 'bg-slate-100 text-slate-600 border-slate-200',
+    stuck: 'bg-red-50 text-red-700 border-red-200',
+  };
+
+  return (
+    <span
+      className={[
+        'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold',
+        classes[normalized],
+      ].join(' ')}
+    >
+      {queueStatusLabel[normalized]}
+    </span>
+  );
+}
+
+function QueueWorkspace({
+  queue,
+  isLoading,
+  actionId,
+  onRefresh,
+  onCall,
+  onStart,
+  onOpenPatient,
+}: {
+  queue: WaitingQueueEntry[];
+  isLoading: boolean;
+  actionId: string | null;
+  onRefresh: () => void;
+  onCall: (entry: WaitingQueueEntry) => void;
+  onStart: (entry: WaitingQueueEntry) => void;
+  onOpenPatient: (entry: WaitingQueueEntry) => void;
+}) {
+  const activeQueue = queue.filter(
+    (entry) => !['completed', 'cancelled', 'no_show'].includes(entry.queueStatus ?? 'waiting')
+  );
+  const calledCount = activeQueue.filter((entry) => entry.queueStatus === 'called').length;
+  const waitingCount = activeQueue.filter((entry) =>
+    ['scheduled', 'waiting', 'stuck'].includes(entry.queueStatus ?? 'waiting')
+  ).length;
+  const inAttendanceCount = activeQueue.filter((entry) =>
+    ['in_attendance', 'checkout'].includes(entry.queueStatus ?? 'waiting')
+  ).length;
+
+  if (isLoading) {
+    return (
+      <DataState
+        kind="loading"
+        title="Carregando fila"
+        description="Sincronizando agenda e atendimentos do dia."
+      />
+    );
+  }
+
+  if (activeQueue.length === 0) {
+    return (
+      <DataState
+        kind="empty"
+        title="Fila vazia"
+        description="Consultas confirmadas ou pacientes com check-in aparecem aqui."
+        actionLabel="Atualizar"
+        onAction={onRefresh}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {[
+          { label: 'Aguardando', value: waitingCount, icon: Users },
+          { label: 'Chamados', value: calledCount, icon: PhoneCall },
+          { label: 'Em atendimento', value: inAttendanceCount, icon: UserCheck },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={item.label}
+              className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {item.label}
+                </span>
+                <Icon size={16} className="text-primary" />
+              </div>
+              <p className="mt-2 text-2xl font-bold text-foreground">{item.value}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        {activeQueue.map((entry) => {
+          const status = entry.queueStatus ?? 'waiting';
+          const canCall = ['scheduled', 'waiting', 'stuck'].includes(status);
+          const canStart = ['called', 'waiting', 'in_attendance', 'checkout'].includes(status);
+          const busy = actionId === entry.id;
+
+          return (
+            <article
+              key={entry.id}
+              className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">
+                  {getInitials(entry.patientName)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">{entry.patientName}</h3>
+                    <QueueStatusBadge status={entry.queueStatus} />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {appointmentTypeLabel[entry.appointmentType]} - {entry.professionalName}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-xl bg-muted/40 px-3 py-2">
+                  <span className="block font-semibold text-foreground">Horario</span>
+                  <span className="text-muted-foreground">
+                    {formatDateTime(entry.scheduledTime)}
+                  </span>
+                </div>
+                <div className="rounded-xl bg-muted/40 px-3 py-2">
+                  <span className="block font-semibold text-foreground">Espera</span>
+                  <span className="text-muted-foreground">{entry.waitingMinutes} min</span>
+                </div>
+                <div className="rounded-xl bg-muted/40 px-3 py-2">
+                  <span className="block font-semibold text-foreground">Sala</span>
+                  <span className="text-muted-foreground">{entry.room ?? 'A definir'}</span>
+                </div>
+                <div className="rounded-xl bg-muted/40 px-3 py-2">
+                  <span className="block font-semibold text-foreground">Alertas</span>
+                  <span className="text-muted-foreground">{entry.alertCount ?? 0}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenPatient(entry)}
+                  className="btn-secondary text-xs"
+                >
+                  <UserRound size={13} />
+                  Paciente
+                </button>
+                {canCall ? (
+                  <button
+                    type="button"
+                    onClick={() => onCall(entry)}
+                    disabled={busy}
+                    className="btn-secondary text-xs disabled:opacity-60"
+                  >
+                    <PhoneCall size={13} />
+                    {busy ? 'Chamando...' : 'Chamar'}
+                  </button>
+                ) : null}
+                {canStart ? (
+                  <button
+                    type="button"
+                    onClick={() => onStart(entry)}
+                    disabled={busy}
+                    className="btn-primary text-xs disabled:opacity-60"
+                  >
+                    <PlayCircle size={13} />
+                    {busy ? 'Abrindo...' : 'Iniciar atendimento'}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ReturnsWorkspace({
+  returns,
+  isLoading,
+  actionId,
+  onContacted,
+  onDismiss,
+  onSchedule,
+  onOpenPatient,
+}: {
+  returns: PatientReturnSummary[];
+  isLoading: boolean;
+  actionId: string | null;
+  onContacted: (item: PatientReturnSummary) => void;
+  onDismiss: (item: PatientReturnSummary) => void;
+  onSchedule: (item: PatientReturnSummary) => void;
+  onOpenPatient: (item: PatientReturnSummary) => void;
+}) {
+  if (isLoading) {
+    return (
+      <DataState
+        kind="loading"
+        title="Carregando retornos"
+        description="Buscando proximas acoes de acompanhamento."
+      />
+    );
+  }
+
+  if (returns.length === 0) {
+    return (
+      <DataState
+        kind="empty"
+        title="Nenhum retorno pendente"
+        description="Retornos criados apos atendimento ou acompanhamento aparecem nesta fila."
+      />
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      {returns.map((item) => {
+        const busy = actionId === item.id;
+        return (
+          <article key={item.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-foreground">{item.patientName}</h3>
+                <p className="mt-1 text-xs text-muted-foreground">{item.reason}</p>
+              </div>
+              <StatusBadge status={item.status} label={returnStatusLabel[item.status]} size="xs" />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-xl bg-muted/40 px-3 py-2">
+                <span className="block font-semibold text-foreground">Prazo</span>
+                <span className="text-muted-foreground">{formatDate(item.dueDate)}</span>
+              </div>
+              <div className="rounded-xl bg-muted/40 px-3 py-2">
+                <span className="block font-semibold text-foreground">Contato</span>
+                <span className="text-muted-foreground">
+                  {item.patientPhone ?? 'Nao informado'}
+                </span>
+              </div>
+              <div className="rounded-xl bg-muted/40 px-3 py-2">
+                <span className="block font-semibold text-foreground">Pacote</span>
+                <span className="text-muted-foreground">
+                  {item.activePackageName ?? 'Sem pacote'}
+                </span>
+              </div>
+              <div className="rounded-xl bg-muted/40 px-3 py-2">
+                <span className="block font-semibold text-foreground">Alertas</span>
+                <span className="text-muted-foreground">{item.alertCount ?? 0}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenPatient(item)}
+                className="btn-secondary text-xs"
+              >
+                <UserRound size={13} />
+                Paciente
+              </button>
+              <button
+                type="button"
+                onClick={() => onContacted(item)}
+                disabled={busy}
+                className="btn-secondary text-xs disabled:opacity-60"
+              >
+                <PhoneCall size={13} />
+                Contato feito
+              </button>
+              <button
+                type="button"
+                onClick={() => onSchedule(item)}
+                disabled={busy}
+                className="btn-primary text-xs disabled:opacity-60"
+              >
+                <CalendarPlus size={13} />
+                Agendar
+              </button>
+              <button
+                type="button"
+                onClick={() => onDismiss(item)}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-60"
+              >
+                <ClipboardCheck size={13} />
+                Dispensar
+              </button>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function PatientOperationalDrawer({
+  target,
+  onClose,
+  onStart,
+  onScheduleReturn,
+}: {
+  target: PatientDrawerTarget;
+  onClose: () => void;
+  onStart: (input: { appointmentId?: string | null; queueId?: string | null }) => void;
+  onScheduleReturn: (item: PatientReturnSummary) => void;
+}) {
+  const item = target.item;
+  const appointmentId =
+    target.kind === 'appointment'
+      ? target.item.id
+      : target.kind === 'queue'
+        ? target.item.appointmentId
+        : target.item.targetAppointmentId;
+  const queueId = target.kind === 'queue' ? (target.item.queueId ?? target.item.id) : undefined;
+  const patientHref = `/clinic/patients/${item.patientId}`;
+
+  return (
+    <Dialog
+      open
+      title={item.patientName}
+      description="Contexto rapido para operar agenda, fila e retorno."
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      placement="right"
+      mobileFullscreen
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/30 p-3">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">
+            {getInitials(item.patientName)}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">{item.patientName}</p>
+            <p className="text-xs text-muted-foreground">
+              {item.patientPhone ?? 'Contato nao informado'}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border border-border px-3 py-2">
+            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+              <Package size={13} />
+              Pacote
+            </div>
+            <p className="mt-1 text-sm font-semibold text-foreground">
+              {item.activePackageName ?? 'Sem pacote ativo'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border px-3 py-2">
+            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+              <Bell size={13} />
+              Alertas
+            </div>
+            <p className="mt-1 text-sm font-semibold text-foreground">{item.alertCount ?? 0}</p>
+          </div>
+        </div>
+
+        {target.kind === 'queue' ? (
+          <div className="rounded-xl border border-border px-3 py-2 text-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="font-semibold text-foreground">Fila</span>
+              <QueueStatusBadge status={target.item.queueStatus} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Espera de {target.item.waitingMinutes} min · {target.item.room ?? 'Sala a definir'}
+            </p>
+          </div>
+        ) : null}
+
+        {target.kind === 'appointment' ? (
+          <div className="rounded-xl border border-border px-3 py-2 text-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="font-semibold text-foreground">Consulta</span>
+              <StatusBadge status={target.item.status} size="xs" />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {appointmentTypeLabel[target.item.type]} · {formatDateTime(target.item.scheduledAt)}
+            </p>
+          </div>
+        ) : null}
+
+        {target.kind === 'return' ? (
+          <div className="rounded-xl border border-border px-3 py-2 text-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="font-semibold text-foreground">Retorno</span>
+              <StatusBadge
+                status={target.item.status}
+                label={returnStatusLabel[target.item.status]}
+                size="xs"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Prazo {formatDate(target.item.dueDate)} · {target.item.reason}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+          <Link href={patientHref} className="btn-secondary text-sm">
+            <UserRound size={14} />
+            Abrir 360
+          </Link>
+          {appointmentId ? (
+            <button
+              type="button"
+              onClick={() => onStart({ appointmentId, queueId })}
+              className="btn-primary text-sm"
+            >
+              <PlayCircle size={14} />
+              Iniciar atendimento
+            </button>
+          ) : null}
+          {target.kind === 'return' ? (
+            <button
+              type="button"
+              onClick={() => onScheduleReturn(target.item)}
+              className="btn-secondary text-sm"
+            >
+              <CalendarPlus size={14} />
+              Agendar retorno
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 function WorkflowProgressBar({ appointments }: { appointments: AppointmentSummary[] }) {
   const total = appointments.length;
   const concluded = appointments.filter((a) => a.status === 'concluido').length;
@@ -982,7 +1608,9 @@ function WorkflowProgressBar({ appointments }: { appointments: AppointmentSummar
       'checkout',
     ].includes(a.status)
   ).length;
-  const scheduled = appointments.filter((a) => a.status === 'agendado').length;
+  const scheduled = appointments.filter((a) =>
+    ['agendado', 'confirmado'].includes(a.status)
+  ).length;
   const absent = appointments.filter((a) => ['falta', 'cancelado'].includes(a.status)).length;
   const percent = (value: number) => (total > 0 ? `${(value / total) * 100}%` : '0%');
 
@@ -1045,14 +1673,26 @@ function WorkflowProgressBar({ appointments }: { appointments: AppointmentSummar
 // ─── MAIN CONTENT ─────────────────────────────────────────────────────────────
 
 export default function AgendaContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(() => getLocalDateValue());
+  const [activeTab, setActiveTab] = useState<AgendaTab>(() => {
+    const tab = searchParams.get('tab');
+    return isAgendaTab(tab) ? tab : 'agenda';
+  });
   const [activeView, setActiveView] = useState<'kanban' | 'lista'>('kanban');
   const [appointments, setAppointments] = useState<AppointmentSummary[]>([]);
   const [waitingQueue, setWaitingQueue] = useState<WaitingQueueEntry[]>([]);
+  const [returns, setReturns] = useState<PatientReturnSummary[]>([]);
+  const [blockedSlots, setBlockedSlots] = useState<BlockedSlotSummary[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [transitioningId, setTransitioningId] = useState<string | null>(null);
+  const [queueActionId, setQueueActionId] = useState<string | null>(null);
+  const [returnActionId, setReturnActionId] = useState<string | null>(null);
+  const [patientDrawerTarget, setPatientDrawerTarget] = useState<PatientDrawerTarget | null>(null);
+  const [schedulingReturnId, setSchedulingReturnId] = useState<string | null>(null);
   const [appointmentFormMode, setAppointmentFormMode] = useState<'create' | 'edit' | null>(null);
   const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
   const [appointmentForm, setAppointmentForm] = useState<AppointmentFormState>(() =>
@@ -1075,10 +1715,14 @@ export default function AgendaContent() {
       const data = await getAgendaDay(selectedDate);
       setAppointments(data.appointments);
       setWaitingQueue(data.waitingQueue);
+      setReturns(data.returns);
+      setBlockedSlots(data.blockedSlots);
       setCalendarEvents(data.calendarEvents);
     } catch (error) {
       setAppointments([]);
       setWaitingQueue([]);
+      setReturns([]);
+      setBlockedSlots([]);
       setCalendarEvents({});
       setLoadError(error instanceof Error ? error.message : 'Erro ao carregar agenda.');
     } finally {
@@ -1089,6 +1733,21 @@ export default function AgendaContent() {
   useEffect(() => {
     void loadAgenda();
   }, [loadAgenda]);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (isAgendaTab(tab)) setActiveTab(tab);
+  }, [searchParams]);
+
+  const handleTabChange = useCallback(
+    (tab: AgendaTab) => {
+      setActiveTab(tab);
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.set('tab', tab);
+      router.replace(`/clinic/agenda?${nextParams.toString()}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
 
   const handleAdvanceStatus = useCallback(
     async (appointment: AppointmentSummary) => {
@@ -1114,6 +1773,77 @@ export default function AgendaContent() {
     [loadAgenda]
   );
 
+  const handleCallQueue = useCallback(
+    async (entry: WaitingQueueEntry) => {
+      const queueId = entry.queueId ?? entry.id;
+      setQueueActionId(entry.id);
+      setLoadError(null);
+
+      const result = await callAttendanceQueue(queueId);
+      if (result.error) {
+        setLoadError(result.error.message);
+      } else {
+        await loadAgenda();
+      }
+
+      setQueueActionId(null);
+    },
+    [loadAgenda]
+  );
+
+  const handleStartAttendance = useCallback(
+    async (input: { appointmentId?: string | null; queueId?: string | null }) => {
+      if (!input.appointmentId && !input.queueId) return;
+
+      setQueueActionId(input.queueId ?? input.appointmentId ?? null);
+      setTransitioningId(input.appointmentId ?? null);
+      setLoadError(null);
+
+      const result = await startAttendanceEncounter(input);
+      setQueueActionId(null);
+      setTransitioningId(null);
+
+      if (result.error || !result.data) {
+        setLoadError(result.error?.message ?? 'Nao foi possivel iniciar atendimento.');
+        return;
+      }
+
+      router.push(result.data.href);
+    },
+    [router]
+  );
+
+  const handleStartQueueEntry = useCallback(
+    (entry: WaitingQueueEntry) => {
+      void handleStartAttendance({
+        appointmentId: entry.appointmentId,
+        queueId: entry.queueId ?? entry.id,
+      });
+    },
+    [handleStartAttendance]
+  );
+
+  const handleReturnAction = useCallback(
+    async (
+      item: PatientReturnSummary,
+      action: 'contacted' | 'dismissed',
+      notes?: string | null
+    ) => {
+      setReturnActionId(item.id);
+      setLoadError(null);
+
+      const result = await recordPatientReturnAction(item.id, action, { notes });
+      if (result.error) {
+        setLoadError(result.error.message);
+      } else {
+        await loadAgenda();
+      }
+
+      setReturnActionId(null);
+    },
+    [loadAgenda]
+  );
+
   const loadPatientOptions = useCallback(async () => {
     setPatientOptionsLoading(true);
     try {
@@ -1133,20 +1863,38 @@ export default function AgendaContent() {
     if (appointmentFormSubmitting) return;
     setAppointmentFormMode(null);
     setEditingAppointmentId(null);
+    setSchedulingReturnId(null);
     setAppointmentFormError(null);
   };
 
   const openCreateAppointment = () => {
     setAppointmentFormMode('create');
     setEditingAppointmentId(null);
+    setSchedulingReturnId(null);
     setAppointmentForm(createEmptyAppointmentForm(selectedDate));
     setAppointmentFormError(null);
+    void loadPatientOptions();
+  };
+
+  const openScheduleReturn = (item: PatientReturnSummary) => {
+    setAppointmentFormMode('create');
+    setEditingAppointmentId(null);
+    setSchedulingReturnId(item.id);
+    setAppointmentForm({
+      ...createEmptyAppointmentForm(item.dueDate || selectedDate),
+      patientId: item.patientId,
+      type: 'retorno',
+      notes: item.reason,
+    });
+    setAppointmentFormError(null);
+    setPatientDrawerTarget(null);
     void loadPatientOptions();
   };
 
   const openEditAppointment = (appointment: AppointmentSummary) => {
     setAppointmentFormMode('edit');
     setEditingAppointmentId(appointment.id);
+    setSchedulingReturnId(null);
     setAppointmentForm(appointmentToForm(appointment));
     setAppointmentFormError(null);
     void loadPatientOptions();
@@ -1167,6 +1915,18 @@ export default function AgendaContent() {
     if (result.error || !result.data) {
       setAppointmentFormError(result.error?.message ?? 'Nao foi possivel salvar consulta.');
       return;
+    }
+
+    if (schedulingReturnId) {
+      const returnResult = await recordPatientReturnAction(schedulingReturnId, 'scheduled', {
+        appointmentId: result.data.id,
+        notes: 'Retorno agendado pela agenda clinica.',
+      });
+
+      if (returnResult.error) {
+        setAppointmentFormError(returnResult.error.message);
+        return;
+      }
     }
 
     closeAppointmentForm();
@@ -1254,6 +2014,15 @@ export default function AgendaContent() {
         />
       )}
 
+      {patientDrawerTarget && (
+        <PatientOperationalDrawer
+          target={patientDrawerTarget}
+          onClose={() => setPatientDrawerTarget(null)}
+          onStart={(input) => void handleStartAttendance(input)}
+          onScheduleReturn={openScheduleReturn}
+        />
+      )}
+
       {/* Page header */}
       <PageHeader
         title="Agenda e Fila"
@@ -1302,100 +2071,143 @@ export default function AgendaContent() {
         </div>
       )}
 
+      <Tabs
+        label="Modulos da agenda"
+        value={activeTab}
+        onValueChange={handleTabChange}
+        items={[
+          { id: 'agenda', label: 'Agenda', badge: appointments.length },
+          { id: 'fila', label: 'Fila', badge: waitingQueue.length },
+          { id: 'retornos', label: 'Retornos', badge: returns.length },
+        ]}
+      />
+
       {/* Main layout */}
-      <div className="flex gap-5 items-start">
-        {/* LEFT COLUMN: Calendar + Queue */}
-        <div className="flex flex-col gap-4 w-64 flex-shrink-0">
-          <MiniCalendar
-            selectedDate={selectedDate}
-            calendarEvents={calendarEvents}
-            onSelectDate={setSelectedDate}
-          />
-          <WaitingQueuePanel queue={waitingQueue} isLoading={isLoading} onRefresh={loadAgenda} />
-        </div>
-
-        {/* RIGHT COLUMN: Workflow + Schedule */}
-        <div className="flex-1 min-w-0 flex flex-col gap-4">
-          {/* Progress bar */}
-          <WorkflowProgressBar appointments={appointments} />
-
-          {/* View toggle */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 bg-muted rounded-xl p-1">
-              <button
-                onClick={() => setActiveView('kanban')}
-                className={[
-                  'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
-                  activeView === 'kanban'
-                    ? 'bg-card shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                ].join(' ')}
-              >
-                Fluxo Clínico
-              </button>
-              <button
-                onClick={() => setActiveView('lista')}
-                className={[
-                  'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
-                  activeView === 'lista'
-                    ? 'bg-card shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                ].join(' ')}
-              >
-                Lista do Dia
-              </button>
-            </div>
-
-            {/* Stage legend */}
-            <div className="hidden xl:flex items-center gap-2 flex-wrap">
-              {workflowStages.map((stage, i) => (
-                <React.Fragment key={stage.key}>
-                  <span
-                    className={[
-                      'flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border',
-                      stage.bgColor,
-                      stage.color,
-                      stage.borderColor,
-                    ].join(' ')}
-                  >
-                    <span className={['w-1.5 h-1.5 rounded-full', stage.dotColor].join(' ')} />
-                    {stage.label}
-                  </span>
-                  {i < workflowStages.length - 1 && (
-                    <ArrowRight size={10} className="text-muted-foreground/40 flex-shrink-0" />
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
+      {activeTab === 'agenda' ? (
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[16rem_minmax(0,1fr)]">
+          {/* LEFT COLUMN: Calendar + Queue */}
+          <div className="flex flex-col gap-4">
+            <WeekStrip
+              selectedDate={selectedDate}
+              calendarEvents={calendarEvents}
+              onSelectDate={setSelectedDate}
+            />
+            <MiniCalendar
+              selectedDate={selectedDate}
+              calendarEvents={calendarEvents}
+              onSelectDate={setSelectedDate}
+            />
+            <WaitingQueuePanel queue={waitingQueue} isLoading={isLoading} onRefresh={loadAgenda} />
+            <BlockedSlotsPanel slots={blockedSlots} />
           </div>
 
-          {/* Kanban / List view */}
-          {activeView === 'kanban' ? (
-            <div className="overflow-x-auto pb-2">
-              <div className="flex gap-3 min-w-max">
-                {workflowStages.map((stage) => (
-                  <KanbanColumn
-                    key={stage.key}
-                    stage={stage}
-                    appointments={appointments}
-                    transitioningId={transitioningId}
-                    onAdvanceStatus={handleAdvanceStatus}
-                    onEditAppointment={openEditAppointment}
-                    onCancelAppointment={handleCancelAppointment}
-                  />
+          {/* RIGHT COLUMN: Workflow + Schedule */}
+          <div className="flex-1 min-w-0 flex flex-col gap-4">
+            {/* Progress bar */}
+            <WorkflowProgressBar appointments={appointments} />
+
+            {/* View toggle */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1 bg-muted rounded-xl p-1">
+                <button
+                  onClick={() => setActiveView('kanban')}
+                  className={[
+                    'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
+                    activeView === 'kanban'
+                      ? 'bg-card shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  ].join(' ')}
+                >
+                  Fluxo Clínico
+                </button>
+                <button
+                  onClick={() => setActiveView('lista')}
+                  className={[
+                    'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
+                    activeView === 'lista'
+                      ? 'bg-card shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  ].join(' ')}
+                >
+                  Lista do Dia
+                </button>
+              </div>
+
+              {/* Stage legend */}
+              <div className="hidden xl:flex items-center gap-2 flex-wrap">
+                {workflowStages.map((stage, i) => (
+                  <React.Fragment key={stage.key}>
+                    <span
+                      className={[
+                        'flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border',
+                        stage.bgColor,
+                        stage.color,
+                        stage.borderColor,
+                      ].join(' ')}
+                    >
+                      <span className={['w-1.5 h-1.5 rounded-full', stage.dotColor].join(' ')} />
+                      {stage.label}
+                    </span>
+                    {i < workflowStages.length - 1 && (
+                      <ArrowRight size={10} className="text-muted-foreground/40 flex-shrink-0" />
+                    )}
+                  </React.Fragment>
                 ))}
               </div>
             </div>
-          ) : (
-            <DaySchedule
-              appointments={appointments}
-              transitioningId={transitioningId}
-              onEditAppointment={openEditAppointment}
-              onCancelAppointment={handleCancelAppointment}
-            />
-          )}
+
+            {/* Kanban / List view */}
+            {activeView === 'kanban' ? (
+              <div className="overflow-x-auto pb-2">
+                <div className="flex gap-3 min-w-max">
+                  {workflowStages.map((stage) => (
+                    <KanbanColumn
+                      key={stage.key}
+                      stage={stage}
+                      appointments={appointments}
+                      transitioningId={transitioningId}
+                      onAdvanceStatus={handleAdvanceStatus}
+                      onEditAppointment={openEditAppointment}
+                      onCancelAppointment={handleCancelAppointment}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <DaySchedule
+                appointments={appointments}
+                transitioningId={transitioningId}
+                onEditAppointment={openEditAppointment}
+                onCancelAppointment={handleCancelAppointment}
+              />
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {activeTab === 'fila' ? (
+        <QueueWorkspace
+          queue={waitingQueue}
+          isLoading={isLoading}
+          actionId={queueActionId}
+          onRefresh={loadAgenda}
+          onCall={handleCallQueue}
+          onStart={handleStartQueueEntry}
+          onOpenPatient={(entry) => setPatientDrawerTarget({ kind: 'queue', item: entry })}
+        />
+      ) : null}
+
+      {activeTab === 'retornos' ? (
+        <ReturnsWorkspace
+          returns={returns}
+          isLoading={isLoading}
+          actionId={returnActionId}
+          onContacted={(item) => void handleReturnAction(item, 'contacted')}
+          onDismiss={(item) => void handleReturnAction(item, 'dismissed')}
+          onSchedule={openScheduleReturn}
+          onOpenPatient={(item) => setPatientDrawerTarget({ kind: 'return', item })}
+        />
+      ) : null}
     </div>
   );
 }

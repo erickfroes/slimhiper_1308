@@ -619,41 +619,60 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Mobile abre primeiro a agenda do dia.
-- [ ] Semana/mes como visualizacao secundaria.
-- [ ] Fila com status claros: aguardando, chamado, em atendimento, checkout,
+- [x] Mobile abre primeiro a agenda do dia.
+- [x] Semana/mes como visualizacao secundaria.
+- [x] Fila com status claros: aguardando, chamado, em atendimento, checkout,
       falta, cancelado.
-- [ ] Retornos com proxima acao e contato.
-- [ ] Cancelamento/falta exigem motivo.
-- [ ] Drawer do paciente com contato, pendencias, pacote e alerta.
-- [ ] Botao "Iniciar atendimento" leva ao SOAP correto.
+- [x] Retornos com proxima acao e contato.
+- [x] Cancelamento/falta exigem motivo.
+- [x] Drawer do paciente com contato, pendencias, pacote e alerta.
+- [x] Botao "Iniciar atendimento" leva ao SOAP correto.
 
 Checklist backend:
 
-- [ ] Revisar `appointments` e `queue_events` para suportar todos os estados.
-- [ ] Criar tabela `attendance_queue` ou formalizar `queue_events` como fila.
-- [ ] Criar `attendance_status_history`.
-- [ ] Criar `blocked_slots`.
-- [ ] Criar `patient_returns` ou mapear em `appointments` com tipo/status.
-- [ ] RPC `start_attendance_encounter`.
-- [ ] RPC `complete_attendance_encounter`.
-- [ ] Trigger para criar fila a partir de consulta confirmada.
-- [ ] Cron/RPC para detectar atendimento preso.
-- [ ] Timezone por tenant/unidade.
+- [x] Revisar `appointments` e `queue_events` para suportar todos os estados.
+- [x] Criar tabela `attendance_queue` ou formalizar `queue_events` como fila.
+- [x] Criar `attendance_status_history`.
+- [x] Criar `blocked_slots`.
+- [x] Criar `patient_returns` ou mapear em `appointments` com tipo/status.
+- [x] RPC `start_attendance_encounter`.
+- [x] RPC `complete_attendance_encounter`.
+- [x] Trigger para criar fila a partir de consulta confirmada.
+- [x] Cron/RPC para detectar atendimento preso.
+- [x] Timezone por tenant/unidade.
 
 Checklist seguranca:
 
-- [ ] Usuario sem `agenda.write` nao muda status.
-- [ ] Usuario sem `encounters.write` nao inicia atendimento.
-- [ ] Motivos de cancelamento/falta podem conter PII: logs sanitizados.
-- [ ] Attendance links precisam allowlist/https.
+- [x] Usuario sem `agenda.write` nao muda status.
+- [x] Usuario sem `encounters.write` nao inicia atendimento.
+- [x] Motivos de cancelamento/falta podem conter PII: logs sanitizados.
+- [x] Attendance links precisam allowlist/https.
 
 Aceite:
 
-- [ ] Criar consulta, confirmar, colocar na fila, chamar, iniciar SOAP,
+- [x] Criar consulta, confirmar, colocar na fila, chamar, iniciar SOAP,
       finalizar e registrar timeline.
-- [ ] Falta/cancelamento auditados.
-- [ ] Mobile permite operar agenda do dia sem tabela horizontal.
+- [x] Falta/cancelamento auditados.
+- [x] Mobile permite operar agenda do dia sem tabela horizontal.
+
+Status do corte 2026-06-07:
+
+- [x] Migration `20260607013000_280_agenda_attendance_queue_returns.sql`
+      criada com status `confirmado`, `attendance_queue`,
+      `attendance_status_history`, `blocked_slots`, `patient_returns`,
+      policies por `agenda.write`/`encounters.write`, snapshot diario,
+      trigger de fila, RPCs de criar/editar/cancelar/status, chamar fila,
+      iniciar/finalizar atendimento, confirmar retorno e detectar fila presa.
+- [x] `/clinic/agenda` ganhou tabs internas `Agenda`, `Fila` e `Retornos`,
+      faixa semanal, calendario mensal secundario, painel de bloqueios,
+      fila dedicada em cards, drawer operacional do paciente e agendamento de
+      retorno a partir da propria fila.
+- [x] `agendaApi` passou a consumir RPCs do contrato M07 e normalizar
+      `attendanceQueueStatus`, retornos e bloqueios.
+- [x] SOAP/Encounter passou a propagar `appointmentId` de deep links e chamar
+      `complete_attendance_encounter` ao finalizar SOAP vinculado a consulta.
+- [x] Checks locais executados ate este ponto: `npm run type-check`,
+      `npm run lint` e `npm run build`.
 
 ### M08 - Atendimento, prontuario longitudinal e equipe assistencial
 

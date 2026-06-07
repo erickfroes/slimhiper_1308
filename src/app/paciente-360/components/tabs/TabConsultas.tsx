@@ -49,7 +49,8 @@ const appointmentTypeOptions: Array<{ value: AppointmentType; label: string }> =
 ];
 
 const appointmentNextStatusLabel: Partial<Record<AppointmentStatus, string>> = {
-  agendado: 'Marcar chegada',
+  agendado: 'Confirmar consulta',
+  confirmado: 'Marcar chegada',
   chegou: 'Iniciar triagem',
   triagem: 'Registrar medidas',
   medidas: 'Bioimpedancia',

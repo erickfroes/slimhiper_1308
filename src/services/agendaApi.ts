@@ -1,7 +1,11 @@
 import type {
+  AttendanceQueueStatus,
   AppointmentSummary,
   AppointmentStatus,
   AppointmentType,
+  BlockedSlotSummary,
+  PatientReturnStatus,
+  PatientReturnSummary,
   WaitingQueueEntry,
 } from '@/domain/types';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
@@ -9,7 +13,10 @@ import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supab
 export interface AgendaDayData {
   appointments: AppointmentSummary[];
   waitingQueue: WaitingQueueEntry[];
+  returns: PatientReturnSummary[];
+  blockedSlots: BlockedSlotSummary[];
   calendarEvents: Record<string, number>;
+  timezone?: string;
 }
 
 export interface SafeServiceError {
@@ -28,13 +35,37 @@ export interface AppointmentMutationInput {
 
 interface AgendaProvider {
   getAgendaDay(date: string): Promise<AgendaDayData>;
-  updateAppointmentStatus(appointmentId: string, nextStatus: AppointmentStatus): Promise<void>;
+  updateAppointmentStatus(
+    appointmentId: string,
+    nextStatus: AppointmentStatus,
+    reason?: string | null
+  ): Promise<void>;
   createAppointment(input: AppointmentMutationInput): Promise<{ id: string }>;
   updateAppointment(
     appointmentId: string,
     input: AppointmentMutationInput
   ): Promise<{ id: string }>;
   cancelAppointment(appointmentId: string, reason?: string | null): Promise<void>;
+  callAttendanceQueue(queueId: string): Promise<void>;
+  startAttendanceEncounter(input: {
+    appointmentId?: string | null;
+    queueId?: string | null;
+  }): Promise<StartAttendanceEncounterResult>;
+  recordPatientReturnAction(
+    returnId: string,
+    action: PatientReturnAction,
+    options?: { appointmentId?: string | null; notes?: string | null }
+  ): Promise<void>;
+}
+
+export type PatientReturnAction = 'contacted' | 'scheduled' | 'dismissed' | 'cancelled';
+
+export interface StartAttendanceEncounterResult {
+  encounterId: string;
+  appointmentId: string;
+  queueId: string;
+  patientId: string;
+  href: string;
 }
 
 type PatientNameRow = {
@@ -56,38 +87,10 @@ type AppointmentRow = {
   notes: string | null;
 };
 
-type AppointmentStatusRow = {
-  tenant_id: string;
-  patient_id: string;
-  status: string | null;
-  arrived_at: string | null;
-};
-
-type AppointmentConflictRow = Pick<
-  AppointmentRow,
-  'id' | 'patient_id' | 'status' | 'scheduled_at' | 'duration_minutes' | 'location'
->;
-
-type PatientTenantRow = {
-  id: string;
-  tenant_id: string;
-};
-
-const ACTIVE_QUEUE_STATUSES: AppointmentStatus[] = [
-  'chegou',
-  'triagem',
-  'medidas',
-  'bioimpedancia',
-  'aguardando_medico',
-  'em_consulta',
-  'checkout',
-];
-
-const AGENDA_QUEUE_STATUSES: AppointmentStatus[] = ['agendado', ...ACTIVE_QUEUE_STATUSES];
-
 const APPOINTMENT_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
-  agendado: ['chegou', 'triagem', 'cancelado', 'falta'],
-  chegou: ['triagem', 'cancelado'],
+  agendado: ['confirmado', 'cancelado', 'falta'],
+  confirmado: ['chegou', 'cancelado', 'falta'],
+  chegou: ['triagem', 'aguardando_medico', 'cancelado', 'falta'],
   triagem: ['medidas', 'aguardando_medico', 'cancelado'],
   medidas: ['bioimpedancia', 'aguardando_medico', 'cancelado'],
   bioimpedancia: ['aguardando_medico', 'cancelado'],
@@ -131,6 +134,8 @@ function getMockAgendaProvider(): Promise<AgendaProvider> {
       return {
         appointments,
         waitingQueue,
+        returns: [],
+        blockedSlots: [],
         calendarEvents: { [date]: appointments.length },
       };
     },
@@ -144,6 +149,21 @@ function getMockAgendaProvider(): Promise<AgendaProvider> {
       return { id: appointmentId };
     },
     async cancelAppointment() {
+      return undefined;
+    },
+    async callAttendanceQueue() {
+      return undefined;
+    },
+    async startAttendanceEncounter() {
+      return {
+        encounterId: 'mock-encounter',
+        appointmentId: 'mock-appointment',
+        queueId: 'mock-queue',
+        patientId: 'patient-001',
+        href: '/clinic/patients/patient-001/encounter',
+      };
+    },
+    async recordPatientReturnAction() {
       return undefined;
     },
   }));
@@ -160,42 +180,10 @@ function shiftIsoDate(value: string, date: string) {
   return `${date}T${hours}:${minutes}:${seconds}`;
 }
 
-function localDateValue(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function dayRange(date: string) {
-  const start = new Date(`${date}T00:00:00`);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-
-function monthRange(date: string) {
-  const [year, month] = date.split('-').map(Number);
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 1);
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-
-function isoDateKey(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
-  return localDateValue(date);
-}
-
-function timeLabel(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-}
-
 function mapAppointmentStatus(status: string | null | undefined): AppointmentStatus {
   const normalized = (status ?? '').toLowerCase();
   if (normalized === 'scheduled' || normalized === 'agendado') return 'agendado';
+  if (normalized === 'confirmed' || normalized === 'confirmado') return 'confirmado';
   if (normalized === 'arrived' || normalized === 'chegou') return 'chegou';
   if (normalized === 'triage' || normalized === 'triagem') return 'triagem';
   if (normalized === 'measurements' || normalized === 'medidas') return 'medidas';
@@ -245,118 +233,6 @@ function normalizeOptionalText(value: string | null | undefined) {
   return normalized ? normalized : null;
 }
 
-function normalizeComparableText(value: string | null | undefined) {
-  return normalizeOptionalText(value)?.toLocaleLowerCase('pt-BR') ?? null;
-}
-
-function rangesOverlap(startA: number, endA: number, startB: number, endB: number) {
-  return startA < endB && startB < endA;
-}
-
-function waitingMinutes(scheduledAt: string, arrivedAt: string | null) {
-  const reference = arrivedAt ? new Date(arrivedAt).getTime() : new Date(scheduledAt).getTime();
-  if (Number.isNaN(reference)) return 0;
-  return Math.max(0, Math.floor((Date.now() - reference) / 60000));
-}
-
-async function resolveActiveTenantId() {
-  const supabase = createBrowserSupabaseClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError) throw userError;
-  if (!user) throw new Error('unauthenticated');
-
-  const [{ data: profile }, { data: memberships, error: membershipsError }] = await Promise.all([
-    supabase.from('profiles').select('active_tenant_id').eq('id', user.id).maybeSingle(),
-    supabase
-      .from('tenant_memberships')
-      .select('tenant_id,status')
-      .eq('user_id', user.id)
-      .eq('status', 'active'),
-  ]);
-
-  if (membershipsError) throw membershipsError;
-
-  const activeMemberships = memberships ?? [];
-  const preferredTenantId =
-    typeof profile?.active_tenant_id === 'string' ? profile.active_tenant_id : null;
-  const preferredMembership = preferredTenantId
-    ? activeMemberships.find((membership) => membership.tenant_id === preferredTenantId)
-    : null;
-  const tenantId = preferredMembership?.tenant_id ?? activeMemberships[0]?.tenant_id ?? null;
-
-  if (!tenantId) throw new Error('no_active_tenant');
-  return tenantId;
-}
-
-async function assertPatientInTenant(patientId: string, tenantId: string) {
-  const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase
-    .from('patients')
-    .select('id,tenant_id')
-    .eq('id', patientId)
-    .eq('tenant_id', tenantId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) throw new Error('patient_not_found_or_forbidden');
-  return data as PatientTenantRow;
-}
-
-async function assertNoAppointmentConflict(
-  tenantId: string,
-  input: AppointmentMutationInput,
-  excludeAppointmentId?: string
-) {
-  const supabase = createBrowserSupabaseClient();
-  const scheduledAt = new Date(input.scheduledAt);
-  const durationMinutes = input.durationMinutes ?? 30;
-  const requestedStart = scheduledAt.getTime();
-  const requestedEnd = requestedStart + durationMinutes * 60000;
-  const day = dayRange(localDateValue(scheduledAt));
-  const normalizedLocation = normalizeComparableText(input.location);
-
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('id,patient_id,status,scheduled_at,duration_minutes,location')
-    .eq('tenant_id', tenantId)
-    .gte('scheduled_at', day.start)
-    .lt('scheduled_at', day.end)
-    .not('status', 'in', '(cancelado,falta)');
-
-  if (error) throw error;
-
-  const conflict = ((data ?? []) as AppointmentConflictRow[]).find((row) => {
-    if (excludeAppointmentId && row.id === excludeAppointmentId) return false;
-
-    const rowStart = new Date(row.scheduled_at).getTime();
-    if (Number.isNaN(rowStart)) return false;
-
-    const rowDuration = row.duration_minutes ?? 30;
-    const rowEnd = rowStart + rowDuration * 60000;
-    if (!rangesOverlap(requestedStart, requestedEnd, rowStart, rowEnd)) return false;
-
-    const samePatient = row.patient_id === input.patientId;
-    const sameLocation =
-      !!normalizedLocation && normalizeComparableText(row.location) === normalizedLocation;
-
-    return samePatient || sameLocation;
-  });
-
-  if (!conflict) return;
-
-  const samePatient = conflict.patient_id === input.patientId;
-  const conflictTime = timeLabel(conflict.scheduled_at);
-  throw new Error(
-    samePatient
-      ? `Conflito de horario: este paciente ja possui consulta as ${conflictTime}.`
-      : `Conflito de horario: o local informado ja possui consulta as ${conflictTime}.`
-  );
-}
-
 async function getPatientNames(tenantId: string, patientIds: string[]) {
   if (patientIds.length === 0) return new Map<string, string>();
   const supabase = createBrowserSupabaseClient();
@@ -400,251 +276,309 @@ function asServiceError(error: unknown, fallback: string): SafeServiceError {
   return { message: fallback };
 }
 
-function toWaitingQueueEntry(row: AppointmentRow, names: Map<string, string>): WaitingQueueEntry {
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown, fallback = '') {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return fallback;
+}
+
+function asNumber(value: unknown, fallback = 0) {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+const attendanceQueueStatusValues = new Set<AttendanceQueueStatus>([
+  'scheduled',
+  'waiting',
+  'called',
+  'in_attendance',
+  'checkout',
+  'completed',
+  'no_show',
+  'cancelled',
+  'stuck',
+]);
+
+const patientReturnStatusValues = new Set<PatientReturnStatus>([
+  'pendente',
+  'contatado',
+  'agendado',
+  'dispensado',
+  'vencido',
+  'cancelado',
+]);
+
+function normalizeAttendanceQueueStatus(value: unknown): AttendanceQueueStatus | undefined {
+  const normalized = asString(value).toLowerCase() as AttendanceQueueStatus;
+  return attendanceQueueStatusValues.has(normalized) ? normalized : undefined;
+}
+
+function normalizePatientReturnStatus(value: unknown): PatientReturnStatus {
+  const normalized = asString(value).toLowerCase() as PatientReturnStatus;
+  return patientReturnStatusValues.has(normalized) ? normalized : 'pendente';
+}
+
+function normalizeAppointmentSummary(value: unknown): AppointmentSummary | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const patientId = asString(record.patientId);
+  if (!id || !patientId) return null;
+
   return {
-    id: row.id,
-    patientId: row.patient_id,
-    patientName: names.get(row.patient_id) ?? 'Paciente sem nome',
-    appointmentType: mapAppointmentType(row.type),
-    status: mapAppointmentStatus(row.status),
-    scheduledTime: timeLabel(row.scheduled_at),
-    arrivedAt: row.arrived_at ? timeLabel(row.arrived_at) : undefined,
-    waitingMinutes: waitingMinutes(row.scheduled_at, row.arrived_at),
-    professionalName: 'Equipe clinica',
-    room: row.location ?? undefined,
+    id,
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    patientPhone: asString(record.patientPhone) || undefined,
+    activePackageName: asString(record.activePackageName) || undefined,
+    alertCount: asNumber(record.alertCount),
+    type: mapAppointmentType(asString(record.type)),
+    status: mapAppointmentStatus(asString(record.status)),
+    scheduledAt: asString(record.scheduledAt),
+    durationMinutes: Math.max(1, Math.round(asNumber(record.durationMinutes, 30))),
+    professionalName: asString(record.professionalName, 'Equipe clinica'),
+    professionalRole: asString(record.professionalRole, 'Profissional'),
+    roomName: asString(record.roomName) || undefined,
+    notes: asString(record.notes) || undefined,
+    attendanceLink: asString(record.attendanceLink) || undefined,
+    attendanceQueueId: asString(record.attendanceQueueId) || undefined,
+    attendanceQueueStatus: normalizeAttendanceQueueStatus(record.attendanceQueueStatus),
+    recommendedReturn: asString(record.recommendedReturn) || undefined,
+  };
+}
+
+function normalizeWaitingQueueEntry(value: unknown): WaitingQueueEntry | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const patientId = asString(record.patientId);
+  if (!id || !patientId) return null;
+
+  return {
+    id,
+    queueId: asString(record.queueId, id),
+    appointmentId: asString(record.appointmentId) || undefined,
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    patientPhone: asString(record.patientPhone) || undefined,
+    activePackageName: asString(record.activePackageName) || undefined,
+    alertCount: asNumber(record.alertCount),
+    appointmentType: mapAppointmentType(asString(record.appointmentType)),
+    status: mapAppointmentStatus(asString(record.status)),
+    queueStatus: normalizeAttendanceQueueStatus(record.queueStatus),
+    scheduledTime: asString(record.scheduledTime),
+    arrivedAt: asString(record.arrivedAt) || undefined,
+    calledAt: asString(record.calledAt) || undefined,
+    startedAt: asString(record.startedAt) || undefined,
+    completedAt: asString(record.completedAt) || undefined,
+    waitingMinutes: Math.max(0, Math.round(asNumber(record.waitingMinutes))),
+    professionalName: asString(record.professionalName, 'Equipe clinica'),
+    room: asString(record.room) || undefined,
+    encounterId: asString(record.encounterId) || undefined,
+    attendanceLink: asString(record.attendanceLink) || undefined,
+  };
+}
+
+function normalizePatientReturn(value: unknown): PatientReturnSummary | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const patientId = asString(record.patientId);
+  if (!id || !patientId) return null;
+
+  return {
+    id,
+    patientId,
+    patientName: asString(record.patientName, 'Paciente sem nome'),
+    patientPhone: asString(record.patientPhone) || undefined,
+    activePackageName: asString(record.activePackageName) || undefined,
+    alertCount: asNumber(record.alertCount),
+    dueDate: asString(record.dueDate),
+    status: normalizePatientReturnStatus(record.status),
+    reason: asString(record.reason, 'Retorno pendente'),
+    contactMethod: asString(record.contactMethod) || undefined,
+    lastContactAt: asString(record.lastContactAt) || undefined,
+    nextActionAt: asString(record.nextActionAt) || undefined,
+    sourceAppointmentId: asString(record.sourceAppointmentId) || undefined,
+    targetAppointmentId: asString(record.targetAppointmentId) || undefined,
+    notes: asString(record.notes) || undefined,
+    href: asString(record.href) || undefined,
+  };
+}
+
+function normalizeBlockedSlot(value: unknown): BlockedSlotSummary | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const startAt = asString(record.startAt);
+  const endAt = asString(record.endAt);
+  if (!id || !startAt || !endAt) return null;
+
+  return {
+    id,
+    startAt,
+    endAt,
+    status: asString(record.status) === 'cancelled' ? 'cancelled' : 'active',
+    reason: asString(record.reason, 'Horario bloqueado'),
+    location: asString(record.location) || undefined,
+  };
+}
+
+function normalizeCalendarEvents(value: unknown): Record<string, number> {
+  const record = asRecord(value);
+  return Object.fromEntries(
+    Object.entries(record).map(([key, total]) => [key, Math.max(0, Math.round(asNumber(total)))])
+  );
+}
+
+function normalizeAgendaDayPayload(payload: unknown): AgendaDayData {
+  const record = asRecord(payload);
+  return {
+    appointments: asArray(record.appointments)
+      .map(normalizeAppointmentSummary)
+      .filter((item): item is AppointmentSummary => Boolean(item)),
+    waitingQueue: asArray(record.waitingQueue)
+      .map(normalizeWaitingQueueEntry)
+      .filter((item): item is WaitingQueueEntry => Boolean(item)),
+    returns: asArray(record.returns)
+      .map(normalizePatientReturn)
+      .filter((item): item is PatientReturnSummary => Boolean(item)),
+    blockedSlots: asArray(record.blockedSlots)
+      .map(normalizeBlockedSlot)
+      .filter((item): item is BlockedSlotSummary => Boolean(item)),
+    calendarEvents: normalizeCalendarEvents(record.calendarEvents),
+    timezone: asString(record.timezone) || undefined,
+  };
+}
+
+function normalizeStartAttendancePayload(payload: unknown): StartAttendanceEncounterResult {
+  const record = asRecord(payload);
+  const encounterId = asString(record.encounterId);
+  const appointmentId = asString(record.appointmentId);
+  const queueId = asString(record.queueId);
+  const patientId = asString(record.patientId);
+
+  if (!encounterId || !appointmentId || !queueId || !patientId) {
+    throw new Error('Contrato invalido ao iniciar atendimento.');
+  }
+
+  return {
+    encounterId,
+    appointmentId,
+    queueId,
+    patientId,
+    href:
+      asString(record.href) ||
+      `/clinic/patients/${patientId}/encounter?appointmentId=${appointmentId}&encounterId=${encounterId}`,
   };
 }
 
 const supabaseAgendaProvider: AgendaProvider = {
   async getAgendaDay(date) {
     const supabase = createBrowserSupabaseClient();
-    const tenantId = await resolveActiveTenantId();
-    const day = dayRange(date);
-    const month = monthRange(date);
-
-    const [appointmentsResult, monthAppointmentsResult] = await Promise.all([
-      supabase
-        .from('appointments')
-        .select(
-          'id,tenant_id,patient_id,type,status,scheduled_at,arrived_at,duration_minutes,practitioner_id,location,notes'
-        )
-        .eq('tenant_id', tenantId)
-        .gte('scheduled_at', day.start)
-        .lt('scheduled_at', day.end)
-        .order('scheduled_at', { ascending: true }),
-      supabase
-        .from('appointments')
-        .select('scheduled_at')
-        .eq('tenant_id', tenantId)
-        .gte('scheduled_at', month.start)
-        .lt('scheduled_at', month.end),
-    ]);
-
-    if (appointmentsResult.error) throw appointmentsResult.error;
-    if (monthAppointmentsResult.error) throw monthAppointmentsResult.error;
-
-    const rows = (appointmentsResult.data ?? []) as AppointmentRow[];
-    const names = await getPatientNames(
-      tenantId,
-      rows.map((row) => row.patient_id)
-    );
-    const appointments = rows.map((row) => toAppointmentSummary(row, names));
-    const waitingQueue = rows
-      .filter((row) => AGENDA_QUEUE_STATUSES.includes(mapAppointmentStatus(row.status)))
-      .map((row) => toWaitingQueueEntry(row, names));
-    const calendarEvents = (monthAppointmentsResult.data ?? []).reduce<Record<string, number>>(
-      (events, row) => {
-        const key = isoDateKey(row.scheduled_at);
-        events[key] = (events[key] ?? 0) + 1;
-        return events;
-      },
-      {}
-    );
-
-    return { appointments, waitingQueue, calendarEvents };
-  },
-
-  async updateAppointmentStatus(appointmentId, nextStatus) {
-    const supabase = createBrowserSupabaseClient();
-    const { data: current, error: currentError } = await supabase
-      .from('appointments')
-      .select('tenant_id,patient_id,status,arrived_at')
-      .eq('id', appointmentId)
-      .single();
-
-    if (currentError) throw currentError;
-
-    const row = current as AppointmentStatusRow;
-    const currentStatus = mapAppointmentStatus(row.status);
-    const allowed = APPOINTMENT_TRANSITIONS[currentStatus] ?? [];
-
-    if (!allowed.includes(nextStatus)) {
-      throw new Error(`Invalid appointment transition: ${currentStatus} -> ${nextStatus}`);
-    }
-
-    const now = new Date().toISOString();
-    const shouldSetArrival =
-      !row.arrived_at && (nextStatus === 'chegou' || ACTIVE_QUEUE_STATUSES.includes(nextStatus));
-
-    const { error: updateError } = await supabase
-      .from('appointments')
-      .update({
-        status: nextStatus,
-        arrived_at: shouldSetArrival ? now : row.arrived_at,
-        updated_at: now,
-      })
-      .eq('id', appointmentId)
-      .eq('tenant_id', row.tenant_id);
-
-    if (updateError) throw updateError;
-
-    const { error: queueEventError } = await supabase.from('queue_events').insert({
-      tenant_id: row.tenant_id,
-      patient_id: row.patient_id,
-      appointment_id: appointmentId,
-      event_type: 'appointment_status_transition',
-      status: 'closed',
-      event_at: now,
-      metadata: {
-        fromStatus: currentStatus,
-        toStatus: nextStatus,
-      },
+    const { data, error } = await supabase.rpc('get_agenda_day_snapshot', {
+      p_target_date: date,
     });
 
-    if (queueEventError) throw queueEventError;
+    if (error) throw error;
+    return normalizeAgendaDayPayload(data);
+  },
+
+  async updateAppointmentStatus(appointmentId, nextStatus, reason) {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('update_appointment_status', {
+      p_appointment_id: appointmentId,
+      p_next_status: nextStatus,
+      p_reason: reason ?? null,
+    });
+
+    if (error) throw error;
   },
 
   async createAppointment(input) {
     assertAppointmentMutationInput(input);
 
     const supabase = createBrowserSupabaseClient();
-    const tenantId = await resolveActiveTenantId();
-    await assertPatientInTenant(input.patientId, tenantId);
-    await assertNoAppointmentConflict(tenantId, input);
-    const now = new Date().toISOString();
-
-    const { data, error } = await supabase
-      .from('appointments')
-      .insert({
-        tenant_id: tenantId,
-        patient_id: input.patientId,
-        type: input.type,
-        status: 'agendado',
-        scheduled_at: new Date(input.scheduledAt).toISOString(),
-        duration_minutes: input.durationMinutes ?? 30,
-        location: normalizeOptionalText(input.location),
-        notes: normalizeOptionalText(input.notes),
-      })
-      .select('id')
-      .single();
-
-    if (error) throw error;
-
-    const { error: queueEventError } = await supabase.from('queue_events').insert({
-      tenant_id: tenantId,
-      patient_id: input.patientId,
-      appointment_id: data.id,
-      event_type: 'appointment_created',
-      status: 'open',
-      event_at: now,
-      metadata: {
-        scheduledAt: input.scheduledAt,
-        type: input.type,
-      },
+    const { data, error } = await supabase.rpc('create_agenda_appointment', {
+      p_patient_id: input.patientId,
+      p_type: input.type,
+      p_scheduled_at: new Date(input.scheduledAt).toISOString(),
+      p_duration_minutes: input.durationMinutes ?? 30,
+      p_location: normalizeOptionalText(input.location),
+      p_notes: normalizeOptionalText(input.notes),
     });
 
-    if (queueEventError) throw queueEventError;
-    return { id: data.id };
+    if (error) throw error;
+    const id = asString(asRecord(data).id);
+    if (!id) throw new Error('Contrato invalido ao criar consulta.');
+    return { id };
   },
 
   async updateAppointment(appointmentId, input) {
     assertAppointmentMutationInput(input);
 
     const supabase = createBrowserSupabaseClient();
-    const tenantId = await resolveActiveTenantId();
-    await assertPatientInTenant(input.patientId, tenantId);
-    await assertNoAppointmentConflict(tenantId, input, appointmentId);
-    const now = new Date().toISOString();
-
-    const { data, error } = await supabase
-      .from('appointments')
-      .update({
-        patient_id: input.patientId,
-        type: input.type,
-        scheduled_at: new Date(input.scheduledAt).toISOString(),
-        duration_minutes: input.durationMinutes ?? 30,
-        location: normalizeOptionalText(input.location),
-        notes: normalizeOptionalText(input.notes),
-        updated_at: now,
-      })
-      .eq('id', appointmentId)
-      .eq('tenant_id', tenantId)
-      .select('id')
-      .single();
-
-    if (error) throw error;
-
-    const { error: queueEventError } = await supabase.from('queue_events').insert({
-      tenant_id: tenantId,
-      patient_id: input.patientId,
-      appointment_id: appointmentId,
-      event_type: 'appointment_updated',
-      status: 'closed',
-      event_at: now,
-      metadata: {
-        scheduledAt: input.scheduledAt,
-        type: input.type,
-      },
+    const { data, error } = await supabase.rpc('update_agenda_appointment', {
+      p_appointment_id: appointmentId,
+      p_patient_id: input.patientId,
+      p_type: input.type,
+      p_scheduled_at: new Date(input.scheduledAt).toISOString(),
+      p_duration_minutes: input.durationMinutes ?? 30,
+      p_location: normalizeOptionalText(input.location),
+      p_notes: normalizeOptionalText(input.notes),
     });
 
-    if (queueEventError) throw queueEventError;
-    return { id: data.id };
+    if (error) throw error;
+    const id = asString(asRecord(data).id, appointmentId);
+    return { id };
   },
 
   async cancelAppointment(appointmentId, reason) {
     const supabase = createBrowserSupabaseClient();
-    const { data: current, error: currentError } = await supabase
-      .from('appointments')
-      .select('tenant_id,patient_id,status,arrived_at')
-      .eq('id', appointmentId)
-      .single();
-
-    if (currentError) throw currentError;
-
-    const row = current as AppointmentStatusRow;
-    const currentStatus = mapAppointmentStatus(row.status);
-    if (['concluido', 'cancelado', 'falta'].includes(currentStatus)) {
-      throw new Error(`Consulta nao pode ser cancelada no status ${currentStatus}.`);
-    }
-
-    const now = new Date().toISOString();
-    const normalizedReason = normalizeOptionalText(reason);
-    const { error: updateError } = await supabase
-      .from('appointments')
-      .update({
-        status: 'cancelado',
-        updated_at: now,
-        notes: normalizedReason ?? 'Cancelada sem motivo operacional informado.',
-      })
-      .eq('id', appointmentId)
-      .eq('tenant_id', row.tenant_id);
-
-    if (updateError) throw updateError;
-
-    const { error: queueEventError } = await supabase.from('queue_events').insert({
-      tenant_id: row.tenant_id,
-      patient_id: row.patient_id,
-      appointment_id: appointmentId,
-      event_type: 'appointment_cancelled',
-      status: 'closed',
-      event_at: now,
-      metadata: {
-        fromStatus: currentStatus,
-        reasonProvided: Boolean(normalizedReason),
-      },
+    const { error } = await supabase.rpc('cancel_agenda_appointment', {
+      p_appointment_id: appointmentId,
+      p_reason: reason ?? null,
     });
 
-    if (queueEventError) throw queueEventError;
+    if (error) throw error;
+  },
+
+  async callAttendanceQueue(queueId) {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('call_attendance_queue', {
+      p_queue_id: queueId,
+    });
+
+    if (error) throw error;
+  },
+
+  async startAttendanceEncounter(input) {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('start_attendance_encounter', {
+      p_appointment_id: input.appointmentId ?? null,
+      p_queue_id: input.queueId ?? null,
+    });
+
+    if (error) throw error;
+    return normalizeStartAttendancePayload(data);
+  },
+
+  async recordPatientReturnAction(returnId, action, options) {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('confirm_patient_return', {
+      p_return_id: returnId,
+      p_action: action,
+      p_appointment_id: options?.appointmentId ?? null,
+      p_notes: options?.notes ?? null,
+    });
+
+    if (error) throw error;
   },
 };
 
@@ -705,10 +639,11 @@ export async function getPatientAppointments(
 
 export async function updateAppointmentStatus(
   appointmentId: string,
-  nextStatus: AppointmentStatus
+  nextStatus: AppointmentStatus,
+  reason?: string | null
 ): Promise<void> {
   return runAgendaOperation((provider) =>
-    provider.updateAppointmentStatus(appointmentId, nextStatus)
+    provider.updateAppointmentStatus(appointmentId, nextStatus, reason)
   );
 }
 
@@ -750,6 +685,46 @@ export async function cancelAppointment(
     return { error: null };
   } catch (error) {
     return { error: asServiceError(error, 'Nao foi possivel cancelar consulta.') };
+  }
+}
+
+export async function callAttendanceQueue(
+  queueId: string
+): Promise<{ error: SafeServiceError | null }> {
+  try {
+    await runAgendaOperation((provider) => provider.callAttendanceQueue(queueId));
+    return { error: null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Nao foi possivel chamar paciente na fila.') };
+  }
+}
+
+export async function startAttendanceEncounter(input: {
+  appointmentId?: string | null;
+  queueId?: string | null;
+}): Promise<{ data: StartAttendanceEncounterResult | null; error: SafeServiceError | null }> {
+  try {
+    return {
+      data: await runAgendaOperation((provider) => provider.startAttendanceEncounter(input)),
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Nao foi possivel iniciar atendimento.') };
+  }
+}
+
+export async function recordPatientReturnAction(
+  returnId: string,
+  action: PatientReturnAction,
+  options?: { appointmentId?: string | null; notes?: string | null }
+): Promise<{ error: SafeServiceError | null }> {
+  try {
+    await runAgendaOperation((provider) =>
+      provider.recordPatientReturnAction(returnId, action, options)
+    );
+    return { error: null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Nao foi possivel registrar retorno.') };
   }
 }
 

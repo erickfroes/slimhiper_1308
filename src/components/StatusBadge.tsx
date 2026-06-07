@@ -25,6 +25,7 @@ type BadgeVariant =
 const badgeConfig: Record<string, { label: string; classes: string }> = {
   // Appointment statuses
   agendado: { label: 'Agendado', classes: 'bg-blue-50 text-blue-700 border-blue-200' },
+  confirmado: { label: 'Confirmado', classes: 'bg-sky-50 text-sky-700 border-sky-200' },
   chegou: { label: 'Chegou', classes: 'bg-purple-50 text-purple-700 border-purple-200' },
   triagem: { label: 'Triagem', classes: 'bg-amber-50 text-amber-700 border-amber-200' },
   medidas: { label: 'Medidas', classes: 'bg-orange-50 text-orange-700 border-orange-200' },

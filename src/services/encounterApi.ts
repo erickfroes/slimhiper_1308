@@ -23,6 +23,7 @@ export interface EncounterContext {
 export interface PersistSoapInput extends SoapFields {
   patientId: string;
   encounterId?: string | null;
+  appointmentId?: string | null;
   soapNoteId?: string | null;
 }
 
@@ -42,6 +43,7 @@ type EncounterRow = {
   id: string;
   tenant_id: string;
   patient_id: string;
+  appointment_id: string | null;
   status: string | null;
 };
 
@@ -158,7 +160,7 @@ export async function getEncounterContext(
     const { supabase, tenantId } = await resolveTenantPatientContext(patientId);
     const { data: latestEncounter, error: encounterError } = await supabase
       .from('encounters')
-      .select('id,tenant_id,patient_id,status')
+      .select('id,tenant_id,patient_id,appointment_id,status')
       .eq('tenant_id', tenantId)
       .eq('patient_id', patientId)
       .order('created_at', { ascending: false })
@@ -195,6 +197,7 @@ export async function getEncounterContext(
 async function ensureEncounter(input: {
   patientId: string;
   encounterId?: string | null;
+  appointmentId?: string | null;
   status: 'open' | 'closed';
 }) {
   const { supabase, tenantId, userId, patientId } = await resolveTenantPatientContext(
@@ -205,7 +208,7 @@ async function ensureEncounter(input: {
   if (input.encounterId) {
     const { data: encounter, error } = await supabase
       .from('encounters')
-      .select('id,tenant_id,patient_id,status')
+      .select('id,tenant_id,patient_id,appointment_id,status')
       .eq('id', input.encounterId)
       .eq('tenant_id', tenantId)
       .eq('patient_id', patientId)
@@ -226,12 +229,13 @@ async function ensureEncounter(input: {
     .insert({
       tenant_id: tenantId,
       patient_id: patientId,
+      appointment_id: input.appointmentId ?? null,
       status: input.status,
       encounter_type: 'clinic_visit',
       started_at: now,
       created_by: userId,
     })
-    .select('id,tenant_id,patient_id,status')
+    .select('id,tenant_id,patient_id,appointment_id,status')
     .single();
 
   if (error) throw error;
@@ -255,6 +259,7 @@ async function persistSoap(
   const { supabase, tenantId, userId, patientId, encounter } = await ensureEncounter({
     patientId: input.patientId,
     encounterId: input.encounterId,
+    appointmentId: input.appointmentId,
     status: status === 'final' ? 'closed' : 'open',
   });
   if (input.soapNoteId) {
@@ -343,6 +348,16 @@ async function persistSoap(
     });
 
     if (timelineError) throw timelineError;
+
+    if (encounter.appointment_id) {
+      const { error: attendanceError } = await supabase.rpc('complete_attendance_encounter', {
+        p_encounter_id: encounter.id,
+        p_follow_up_due_date: null,
+        p_follow_up_reason: null,
+      });
+
+      if (attendanceError) throw attendanceError;
+    }
   }
 
   const { error: auditError } = await supabase.from('audit_logs').insert({

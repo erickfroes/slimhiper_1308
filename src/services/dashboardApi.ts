@@ -90,6 +90,7 @@ function clampPercent(value: unknown) {
 
 function normalizeAppointmentStatus(status: unknown): AppointmentStatus {
   const normalized = asString(status).toLowerCase();
+  if (normalized === 'confirmed' || normalized === 'confirmado') return 'confirmado';
   if (normalized === 'arrived' || normalized === 'chegou') return 'chegou';
   if (normalized === 'triage' || normalized === 'triagem') return 'triagem';
   if (normalized === 'measurements' || normalized === 'medidas') return 'medidas';
@@ -431,6 +432,7 @@ function normalizeSection<T>(
 function statusLabel(status: AppointmentStatus) {
   const labels: Record<AppointmentStatus, string> = {
     agendado: 'Agendado',
+    confirmado: 'Confirmado',
     chegou: 'Chegou',
     triagem: 'Triagem',
     medidas: 'Medidas',

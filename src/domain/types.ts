@@ -206,6 +206,7 @@ export interface PatientNegotiation {
 
 export type AppointmentStatus =
   | 'agendado'
+  | 'confirmado'
   | 'chegou'
   | 'triagem'
   | 'medidas'
@@ -229,7 +230,10 @@ export interface AppointmentSummary {
   id: string;
   patientId: string;
   patientName: string;
+  patientPhone?: string;
   patientAvatarUrl?: string;
+  activePackageName?: string;
+  alertCount?: number;
   type: AppointmentType;
   status: AppointmentStatus;
   scheduledAt: string;
@@ -239,6 +243,8 @@ export interface AppointmentSummary {
   roomName?: string;
   notes?: string;
   attendanceLink?: string;
+  attendanceQueueId?: string;
+  attendanceQueueStatus?: AttendanceQueueStatus;
   recommendedReturn?: string; // ISO date string for recommended follow-up
 }
 
@@ -788,18 +794,76 @@ export interface DashboardSnapshot {
   actionableQueue?: DashboardActionItem[];
 }
 
+export type AttendanceQueueStatus =
+  | 'scheduled'
+  | 'waiting'
+  | 'called'
+  | 'in_attendance'
+  | 'checkout'
+  | 'completed'
+  | 'no_show'
+  | 'cancelled'
+  | 'stuck';
+
 export interface WaitingQueueEntry {
   id: string;
+  queueId?: string;
+  appointmentId?: string;
   patientId: string;
   patientName: string;
+  patientPhone?: string;
   patientAvatarUrl?: string;
+  activePackageName?: string;
+  alertCount?: number;
   appointmentType: AppointmentType;
   status: AppointmentStatus;
+  queueStatus?: AttendanceQueueStatus;
   scheduledTime: string;
   arrivedAt?: string;
+  calledAt?: string;
+  startedAt?: string;
+  completedAt?: string;
   waitingMinutes: number;
   professionalName: string;
   room?: string;
+  encounterId?: string;
+  attendanceLink?: string;
+}
+
+export type PatientReturnStatus =
+  | 'pendente'
+  | 'contatado'
+  | 'agendado'
+  | 'dispensado'
+  | 'vencido'
+  | 'cancelado';
+
+export interface PatientReturnSummary {
+  id: string;
+  patientId: string;
+  patientName: string;
+  patientPhone?: string;
+  activePackageName?: string;
+  alertCount?: number;
+  dueDate: string;
+  status: PatientReturnStatus;
+  reason: string;
+  contactMethod?: string;
+  lastContactAt?: string;
+  nextActionAt?: string;
+  sourceAppointmentId?: string;
+  targetAppointmentId?: string;
+  notes?: string;
+  href?: string;
+}
+
+export interface BlockedSlotSummary {
+  id: string;
+  startAt: string;
+  endAt: string;
+  status: 'active' | 'cancelled';
+  reason: string;
+  location?: string;
 }
 
 // Patient list row
