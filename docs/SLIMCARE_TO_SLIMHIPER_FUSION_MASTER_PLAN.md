@@ -506,29 +506,46 @@ Decisao de fusao:
 - Adicionar filas acionaveis inspiradas no Slim Care.
 - Priorizar "quem precisa de acao hoje" sobre graficos decorativos.
 
+Status do corte 2026-06-07:
+
+- [x] RPC `get_clinic_dashboard_snapshot` criada em migration nova com secoes
+      `{ canRead, error, data }`, agregados por permissao e sem leitura direta
+      ampla de PII pelo browser.
+- [x] `dashboardApi` passou a consumir o snapshot RPC no caminho real e manteve
+      mock apenas quando `NEXT_PUBLIC_USE_MOCK_DATA=true`.
+- [x] Dashboard operacional ganhou fila acionavel unificada com motivo, dono,
+      SLA, prioridade, CTA e chips de filtro.
+- [x] Baixa adesao diaria, pendencias financeiras, pendencias documentais,
+      mensagens recentes, renovacoes e coortes entram como sinais separados.
+- [x] Usuario sem `financial.read` recebe valor restrito e secao financeira com
+      `canRead=false`, sem expor contagens/valores.
+- [~] Browser smoke autenticado local ficou limitado por ausencia de sessao
+      clinica no navegador; smoke anonimo confirmou redirect fail-closed para
+      `/auth/login`. Checks de codigo passaram.
+
 Checklist UI/mobile:
 
-- [ ] KPIs em 2 colunas no mobile.
-- [ ] Filas em cards empilhados.
-- [ ] Filtros em drawer ou chips.
-- [ ] Cada item com motivo, dono, SLA e CTA.
-- [ ] Erro parcial por secao.
-- [ ] Skeleton sem layout shift.
+- [x] KPIs em 2 colunas no mobile.
+- [x] Filas em cards empilhados.
+- [x] Filtros em drawer ou chips.
+- [x] Cada item com motivo, dono, SLA e CTA.
+- [x] Erro parcial por secao.
+- [x] Skeleton sem layout shift.
 
 Checklist backend:
 
-- [ ] Criar ou expandir `get_clinic_dashboard_snapshot`.
-- [ ] Retornar secoes `{ data, error, canRead }`.
-- [ ] Adicionar baixa adesao derivada dos habitos diarios.
-- [ ] Adicionar pendencias financeiras e documentais.
-- [ ] Adicionar renovacoes/upgrades quando modulo comercial estiver pronto.
-- [ ] Evitar leituras diretas de PII no browser.
+- [x] Criar ou expandir `get_clinic_dashboard_snapshot`.
+- [x] Retornar secoes `{ data, error, canRead }`.
+- [x] Adicionar baixa adesao derivada dos habitos diarios.
+- [x] Adicionar pendencias financeiras e documentais.
+- [x] Adicionar renovacoes/upgrades quando modulo comercial estiver pronto.
+- [x] Evitar leituras diretas de PII no browser.
 
 Aceite:
 
-- [ ] Dashboard carrega com erro parcial sem tela branca.
-- [ ] Usuario sem permissao financeira nao ve valores.
-- [ ] Mobile mostra filas acionaveis sem tabela horizontal.
+- [x] Dashboard carrega com erro parcial sem tela branca.
+- [x] Usuario sem permissao financeira nao ve valores.
+- [x] Mobile mostra filas acionaveis sem tabela horizontal.
 
 ### M06 - Carteira de pacientes, triagem e prioridade
 
