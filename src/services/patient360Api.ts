@@ -209,12 +209,85 @@ function normalizeAppointment(
   };
 }
 
+type PrescriptionItemSummary = NonNullable<
+  Patient360Summary['prescriptions'][number]['items']
+>[number];
+
+type PrescriptionReminderSummary = NonNullable<
+  Patient360Summary['prescriptions'][number]['medicationReminders']
+>[number];
+
+type PrescriptionRegulatorySummary = NonNullable<
+  Patient360Summary['prescriptions'][number]['regulatory']
+>;
+
+type PrescriptionPdfArtifactSummary = NonNullable<
+  Patient360Summary['prescriptions'][number]['pdfArtifact']
+>;
+
 function normalizePrescription(
   item: unknown,
   patientId: string
 ): Patient360Summary['prescriptions'][number] | null {
   const record = asRecord(item);
   if (!record) return null;
+  const items = Array.isArray(record.items)
+    ? record.items
+        .map((entry): PrescriptionItemSummary | null => {
+          const itemRecord = asRecord(entry);
+          if (!itemRecord) return null;
+          const normalized: PrescriptionItemSummary = {
+            id: asString(itemRecord.id),
+            label: asString(itemRecord.label),
+            itemType: asString(
+              itemRecord.itemType,
+              'medicamento'
+            ) as PrescriptionItemSummary['itemType'],
+            scheduleTimes: Array.isArray(itemRecord.scheduleTimes)
+              ? itemRecord.scheduleTimes.map((time) => String(time))
+              : [],
+            reminderEnabled: asBoolean(itemRecord.reminderEnabled),
+          };
+          if (typeof itemRecord.dosage === 'string') normalized.dosage = itemRecord.dosage;
+          if (typeof itemRecord.route === 'string') normalized.route = itemRecord.route;
+          if (typeof itemRecord.frequency === 'string') normalized.frequency = itemRecord.frequency;
+          if (typeof itemRecord.duration === 'string') normalized.duration = itemRecord.duration;
+          if (typeof itemRecord.quantity === 'string') normalized.quantity = itemRecord.quantity;
+          if (typeof itemRecord.instructions === 'string') {
+            normalized.instructions = itemRecord.instructions;
+          }
+          if (typeof itemRecord.startDate === 'string') normalized.startDate = itemRecord.startDate;
+          if (typeof itemRecord.endDate === 'string') normalized.endDate = itemRecord.endDate;
+          return normalized;
+        })
+        .filter((entry): entry is PrescriptionItemSummary => Boolean(entry))
+    : undefined;
+  const regulatory = asRecord(record.regulatory);
+  const pdfArtifact = asRecord(record.pdfArtifact);
+  const reminders = Array.isArray(record.medicationReminders)
+    ? record.medicationReminders
+        .map((entry): PrescriptionReminderSummary | null => {
+          const reminder = asRecord(entry);
+          if (!reminder) return null;
+          const normalized: PrescriptionReminderSummary = {
+            id: asString(reminder.id),
+            title: asString(reminder.title),
+            scheduleTimes: Array.isArray(reminder.scheduleTimes)
+              ? reminder.scheduleTimes.map((time) => String(time))
+              : [],
+            status: asString(reminder.status, 'active') as PrescriptionReminderSummary['status'],
+          };
+          if (typeof reminder.medicationLabel === 'string') {
+            normalized.medicationLabel = reminder.medicationLabel;
+          }
+          if (typeof reminder.dosage === 'string') normalized.dosage = reminder.dosage;
+          if (typeof reminder.instructions === 'string') {
+            normalized.instructions = reminder.instructions;
+          }
+          return normalized;
+        })
+        .filter((entry): entry is PrescriptionReminderSummary => Boolean(entry))
+    : undefined;
 
   return {
     id: asString(record.id),
@@ -244,7 +317,47 @@ function normalizePrescription(
       typeof record.signatureStatus === 'string'
         ? (record.signatureStatus as Patient360Summary['prescriptions'][number]['signatureStatus'])
         : undefined,
+    signatureRequirement:
+      typeof record.signatureRequirement === 'string'
+        ? (record.signatureRequirement as Patient360Summary['prescriptions'][number]['signatureRequirement'])
+        : undefined,
     version: typeof record.version === 'string' ? record.version : undefined,
+    requiresReview: asBoolean(record.requiresReview),
+    patientVisible: asBoolean(record.patientVisible, true),
+    items,
+    regulatory: regulatory
+      ? {
+          classification: asString(regulatory.classification),
+          scope: asString(regulatory.scope),
+          signatureRequirement: asString(
+            regulatory.signatureRequirement,
+            'none'
+          ) as PrescriptionRegulatorySummary['signatureRequirement'],
+          signatureStatus: asString(
+            regulatory.signatureStatus,
+            'not_required'
+          ) as PrescriptionRegulatorySummary['signatureStatus'],
+          d4signAllowed: asBoolean(regulatory.d4signAllowed),
+          providerPolicy:
+            typeof regulatory.providerPolicy === 'string' ? regulatory.providerPolicy : undefined,
+          prescriberName:
+            typeof regulatory.prescriberName === 'string' ? regulatory.prescriberName : undefined,
+        }
+      : undefined,
+    pdfArtifact: pdfArtifact
+      ? {
+          id: asString(pdfArtifact.id),
+          status: asString(
+            pdfArtifact.status,
+            'generated'
+          ) as PrescriptionPdfArtifactSummary['status'],
+          versionNumber: asNumber(pdfArtifact.versionNumber, 1),
+          generatedAt:
+            typeof pdfArtifact.generatedAt === 'string' ? pdfArtifact.generatedAt : undefined,
+          releasedToPatient: asBoolean(pdfArtifact.releasedToPatient),
+        }
+      : undefined,
+    medicationReminders: reminders,
   };
 }
 

@@ -292,6 +292,8 @@ export type TimelineEventType =
   | 'foto_progresso_liberada'
   | 'plano_alimentar_publicado'
   | 'prescricao_emitida'
+  | 'prescricao_atualizada'
+  | 'prescricao_cancelada'
   | 'documento_gerado'
   | 'documento_assinado'
   | 'pagamento_recebido'
@@ -381,14 +383,66 @@ export interface PatientPrescriptionSummary {
     | 'prescricao_medica'
     | 'suplementacao'
     | 'orientacoes_nutricionais'
-    | 'orientacoes_gerais';
+    | 'orientacoes_gerais'
+    | 'plano_alimentar';
   status?: 'ativo' | 'expirado' | 'cancelado' | 'pendente_assinatura' | 'rascunho';
   issueDate?: string;
   validity?: string;
   linkedDocumentId?: string;
   linkedDocument?: string;
-  signatureStatus?: 'assinado' | 'pendente' | 'nao_requerido';
+  signatureStatus?: 'assinado' | 'pendente' | 'nao_requerido' | 'nao_configurado' | 'rejeitado';
+  signatureRequirement?: 'none' | 'd4sign_optional' | 'qualified_or_icp_required';
   version?: string;
+  requiresReview?: boolean;
+  patientVisible?: boolean;
+  items?: PatientPrescriptionItemSummary[];
+  regulatory?: PatientPrescriptionRegulatorySummary;
+  pdfArtifact?: PatientPrescriptionPdfArtifactSummary;
+  medicationReminders?: PatientPrescriptionMedicationReminderSummary[];
+}
+
+export interface PatientPrescriptionItemSummary {
+  id: string;
+  label: string;
+  itemType: 'medicamento' | 'suplemento' | 'orientacao' | 'plano_alimentar';
+  dosage?: string;
+  route?: string;
+  frequency?: string;
+  duration?: string;
+  quantity?: string;
+  instructions?: string;
+  startDate?: string;
+  endDate?: string;
+  scheduleTimes?: string[];
+  reminderEnabled?: boolean;
+}
+
+export interface PatientPrescriptionRegulatorySummary {
+  classification: string;
+  scope: string;
+  signatureRequirement: 'none' | 'd4sign_optional' | 'qualified_or_icp_required';
+  signatureStatus: 'not_required' | 'not_configured' | 'pending' | 'validated' | 'rejected';
+  d4signAllowed: boolean;
+  providerPolicy?: string;
+  prescriberName?: string;
+}
+
+export interface PatientPrescriptionPdfArtifactSummary {
+  id: string;
+  status: 'generated' | 'superseded' | 'cancelled' | 'failed';
+  versionNumber: number;
+  generatedAt?: string;
+  releasedToPatient: boolean;
+}
+
+export interface PatientPrescriptionMedicationReminderSummary {
+  id: string;
+  title: string;
+  medicationLabel?: string;
+  dosage?: string;
+  instructions?: string;
+  scheduleTimes: string[];
+  status: 'active' | 'paused' | 'archived';
 }
 
 export interface PatientNutritionPlanSummary {

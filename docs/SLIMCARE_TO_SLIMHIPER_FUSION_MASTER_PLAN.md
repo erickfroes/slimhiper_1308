@@ -857,41 +857,62 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Lista de prescricoes com status, validade e assinatura.
-- [ ] Editor em etapas: dados, itens, posologia, orientacoes, revisao.
-- [ ] Duplicar prescricao com revisao obrigatoria.
-- [ ] Cancelar com motivo.
-- [ ] Paciente ve medicamentos e lembretes em formato simples.
-- [ ] Mobile do profissional prioriza leitura e acoes, nao edicao complexa.
+- [x] Lista de prescricoes com status, validade e assinatura.
+- [x] Editor em etapas: dados, itens, posologia, orientacoes, revisao.
+- [x] Duplicar prescricao com revisao obrigatoria.
+- [x] Cancelar com motivo.
+- [x] Paciente ve medicamentos e lembretes em formato simples.
+- [x] Mobile do profissional prioriza leitura e acoes, nao edicao complexa.
 
 Checklist backend:
 
-- [ ] Criar `prescriptions` oficial.
-- [ ] Criar `prescription_items`.
-- [ ] Criar `prescription_versions`.
-- [ ] Criar `prescription_regulatory_metadata`.
-- [ ] Criar ou integrar `legal_signatures`.
-- [ ] Criar `medication_reminders`.
-- [ ] Edge/RPC para gerar PDF de prescricao.
-- [ ] RPC para emitir, duplicar, cancelar e vincular documento.
-- [ ] RLS por `prescriptions.read/write`.
-- [ ] Audit/versioning imutavel.
+- [x] Criar `prescriptions` oficial.
+- [x] Criar `prescription_items`.
+- [x] Criar `prescription_versions`.
+- [x] Criar `prescription_regulatory_metadata`.
+- [x] Criar ou integrar `legal_signatures`.
+- [x] Criar `medication_reminders`.
+- [x] Edge/RPC para gerar PDF de prescricao.
+- [x] RPC para emitir, duplicar, cancelar e vincular documento.
+- [x] RLS por `prescriptions.read/write`.
+- [x] Audit/versioning imutavel.
 
 Checklist seguranca/legal:
 
-- [ ] Definir escopo legal de assinatura.
-- [ ] Definir se D4Sign e suficiente para alguma categoria.
-- [ ] Prescricao medica nao deve usar assinatura inadequada.
-- [ ] Logs sem texto de prescricao.
-- [ ] PDF privado e signed URL curta.
-- [ ] Historico imutavel apos emissao.
+- [x] Definir escopo legal de assinatura.
+- [x] Definir se D4Sign e suficiente para alguma categoria.
+- [x] Prescricao medica nao deve usar assinatura inadequada.
+- [x] Logs sem texto de prescricao.
+- [x] PDF privado e signed URL curta.
+- [x] Historico imutavel apos emissao.
 
 Aceite:
 
-- [ ] Profissional autorizado emite prescricao.
-- [ ] Nutricionista nao emite prescricao medica se sem permissao.
-- [ ] Paciente acessa PDF permitido.
-- [ ] Cancelamento e duplicacao ficam auditados.
+- [x] Profissional autorizado emite prescricao.
+- [x] Nutricionista nao emite prescricao medica se sem permissao.
+- [x] Paciente acessa PDF permitido.
+- [x] Cancelamento e duplicacao ficam auditados.
+
+Status do corte 2026-06-07:
+
+- [x] Migration `20260607053000_310_prescription_regulatory_medications.sql`
+      cria o contrato oficial M10, migra dados do
+      `prescriptions_placeholder`, preserva compatibilidade das RPCs legadas,
+      troca `medication_reminders.prescription_id` para `prescriptions`,
+      aplica RLS por `prescriptions.read/write` e protege edicao silenciosa de
+      registros emitidos.
+- [x] Edge Functions `generate-prescription-pdf` e
+      `prescription-pdf-signed-url` geram PDF privado em bucket
+      `prescription-pdfs` e devolvem apenas signed URL curta, sem logar texto
+      de prescricao.
+- [x] `patient-360-summary`, `patient360Api`, `prescriptionsApi` e
+      `TabPrescricoes` foram atualizados para itens estruturados, metadados
+      regulatorios, assinatura, PDF, duplicacao com revisao e cancelamento com
+      motivo.
+- [x] Decisao legal conservadora aplicada: D4Sign fica opcional apenas para
+      documentos nao medicos; prescricao medica fica bloqueada para D4Sign
+      simples e marcada como exigindo fluxo qualificado/ICP antes de assinatura
+      produtiva.
 
 ### M11 - Documentos, templates, D4Sign e biblioteca
 

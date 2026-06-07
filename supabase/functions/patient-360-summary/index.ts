@@ -34,6 +34,8 @@ type TimelineEventType =
   | 'exame_resultado_recebido'
   | 'plano_alimentar_publicado'
   | 'prescricao_emitida'
+  | 'prescricao_atualizada'
+  | 'prescricao_cancelada'
   | 'documento_gerado'
   | 'documento_assinado'
   | 'pagamento_recebido'
@@ -77,6 +79,8 @@ const VALID_EVENT_TYPES: Set<TimelineEventType> = new Set([
   'exame_resultado_recebido',
   'plano_alimentar_publicado',
   'prescricao_emitida',
+  'prescricao_atualizada',
+  'prescricao_cancelada',
   'documento_gerado',
   'documento_assinado',
   'pagamento_recebido',
@@ -243,54 +247,178 @@ function mapPackageStatus(value: unknown): string {
 
 function mapPrescriptionStatus(value: unknown): string {
   const normalized = String(value ?? '').toLowerCase();
-  if (normalized === 'final' || normalized === 'active' || normalized === 'ativo') return 'ativo';
-  if (normalized === 'cancelled' || normalized === 'canceled' || normalized === 'cancelado') {
+  if (['final', 'active', 'ativo', 'issued'].includes(normalized)) return 'ativo';
+  if (['expired', 'expirado'].includes(normalized)) return 'expirado';
+  if (['cancelled', 'canceled', 'cancelado'].includes(normalized)) {
     return 'cancelado';
   }
   return 'rascunho';
+}
+
+function mapPrescriptionSignatureStatus(value: unknown): string {
+  const normalized = String(value ?? '').toLowerCase();
+  if (['validated', 'assinado'].includes(normalized)) return 'assinado';
+  if (['pending', 'pendente'].includes(normalized)) return 'pendente';
+  if (['not_configured', 'nao_configurado'].includes(normalized)) return 'nao_configurado';
+  if (['rejected', 'rejeitado'].includes(normalized)) return 'rejeitado';
+  return 'nao_requerido';
+}
+
+function firstRelationRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return value.length > 0 ? asRecord(value[0]) : null;
+  const record = asRecord(value);
+  return Object.keys(record).length > 0 ? record : null;
+}
+
+function mapPrescriptionItems(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const row = asRecord(item);
+    return {
+      id: asString(row.id),
+      label: asString(row.label, 'Item'),
+      itemType: asString(row.item_type ?? row.itemType, 'medicamento'),
+      dosage: asString(row.dosage) || undefined,
+      route: asString(row.route) || undefined,
+      frequency: asString(row.frequency) || undefined,
+      duration: asString(row.duration) || undefined,
+      quantity: asString(row.quantity) || undefined,
+      instructions: asString(row.instructions) || undefined,
+      startDate: asString(row.start_date ?? row.startDate) || undefined,
+      endDate: asString(row.end_date ?? row.endDate) || undefined,
+      scheduleTimes: Array.isArray(row.schedule_times)
+        ? row.schedule_times.map((time) => String(time))
+        : Array.isArray(row.scheduleTimes)
+          ? row.scheduleTimes.map((time) => String(time))
+          : [],
+      reminderEnabled: asBoolean(row.reminder_enabled ?? row.reminderEnabled, false),
+    };
+  });
+}
+
+function mapPrescriptionPdfArtifact(value: unknown) {
+  const row = firstRelationRecord(value);
+  if (!row) return undefined;
+  return {
+    id: asString(row.id),
+    status: asString(row.status, 'generated'),
+    versionNumber: asNumber(row.version_number ?? row.versionNumber, 1),
+    generatedAt: asString(row.generated_at ?? row.generatedAt) || undefined,
+    releasedToPatient: asBoolean(row.released_to_patient ?? row.releasedToPatient, false),
+  };
+}
+
+function mapPrescriptionRegulatory(value: unknown) {
+  const row = firstRelationRecord(value);
+  if (!row) return undefined;
+  return {
+    classification: asString(row.regulatory_classification ?? row.classification, 'orientation'),
+    scope: asString(row.prescription_scope ?? row.scope, 'clinical'),
+    signatureRequirement: asString(
+      row.legal_signature_requirement ?? row.signatureRequirement,
+      'none'
+    ),
+    signatureStatus: asString(row.legal_signature_status ?? row.signatureStatus, 'not_required'),
+    d4signAllowed: asBoolean(row.d4sign_allowed ?? row.d4signAllowed, false),
+    providerPolicy: asString(row.provider_policy ?? row.providerPolicy) || undefined,
+    prescriberName: asString(row.prescriber_name ?? row.prescriberName) || undefined,
+  };
 }
 
 function mapPrescriptionSummary(row: Record<string, unknown>, patientId: string) {
   const status = String(row.status ?? '');
   const prescriptionText = typeof row.prescription_text === 'string' ? row.prescription_text : '';
   const instructions = typeof row.instructions === 'string' ? row.instructions : '';
+  const items = mapPrescriptionItems(row.prescription_items ?? row.items);
+  const firstItem = items[0];
+  const regulatory = mapPrescriptionRegulatory(row.prescription_regulatory_metadata);
+  const pdfArtifact = mapPrescriptionPdfArtifact(row.prescription_pdf_artifacts);
+  const signatureStatus = regulatory
+    ? mapPrescriptionSignatureStatus(regulatory.signatureStatus)
+    : 'nao_requerido';
 
   return {
     id: String(row.id ?? ''),
     patientId,
     medicationName:
-      typeof row.medication_name === 'string' && row.medication_name.trim()
+      asString(row.title) ||
+      (typeof row.medication_name === 'string' && row.medication_name.trim()
         ? row.medication_name
-        : 'Prescricao registrada',
+        : firstItem?.label ?? 'Prescricao registrada'),
     dosage:
-      typeof row.dosage === 'string' && row.dosage.trim()
+      firstItem?.dosage ||
+      (typeof row.dosage === 'string' && row.dosage.trim()
         ? row.dosage
-        : prescriptionText || 'Conforme orientacao',
+        : prescriptionText || 'Conforme orientacao'),
     frequency:
-      typeof row.frequency === 'string' && row.frequency.trim()
+      firstItem?.frequency ||
+      (typeof row.frequency === 'string' && row.frequency.trim()
         ? row.frequency
-        : 'Conforme orientacao',
+        : 'Conforme orientacao'),
     startDate:
-      typeof row.start_date === 'string'
-        ? row.start_date
+      typeof row.issue_date === 'string'
+        ? row.issue_date
+        : typeof row.start_date === 'string'
+          ? row.start_date
         : typeof row.created_at === 'string'
           ? row.created_at
           : new Date(0).toISOString(),
-    endDate: typeof row.end_date === 'string' ? row.end_date : undefined,
-    prescribedBy: 'Equipe medica',
-    isActive: status === 'final',
-    notes: instructions || prescriptionText || undefined,
+    endDate:
+      typeof row.valid_until === 'string'
+        ? row.valid_until
+        : typeof row.end_date === 'string'
+          ? row.end_date
+          : undefined,
+    prescribedBy:
+      regulatory?.prescriberName ||
+      (typeof row.created_by === 'string' ? row.created_by : 'Equipe medica'),
+    isActive: ['final', 'issued', 'active', 'ativo'].includes(status.toLowerCase()),
+    notes: asString(row.summary) || instructions || prescriptionText || undefined,
     category: typeof row.category === 'string' ? row.category : undefined,
     status: mapPrescriptionStatus(status),
-    issueDate: typeof row.created_at === 'string' ? row.created_at : undefined,
-    validity: typeof row.end_date === 'string' ? row.end_date : undefined,
+    issueDate:
+      typeof row.issue_date === 'string'
+        ? row.issue_date
+        : typeof row.created_at === 'string'
+          ? row.created_at
+          : undefined,
+    validity:
+      typeof row.valid_until === 'string'
+        ? row.valid_until
+        : typeof row.end_date === 'string'
+          ? row.end_date
+          : undefined,
     linkedDocumentId:
       typeof row.linked_document_id === 'string' ? row.linked_document_id : undefined,
     linkedDocument: typeof row.linked_document_id === 'string' ? row.linked_document_id : undefined,
-    signatureStatus: 'nao_requerido',
+    signatureStatus,
+    signatureRequirement: regulatory?.signatureRequirement,
     version:
-      typeof row.version === 'number' || typeof row.version === 'string'
-        ? String(row.version)
+      typeof row.current_version === 'number' || typeof row.current_version === 'string'
+        ? String(row.current_version)
+        : typeof row.version === 'number' || typeof row.version === 'string'
+          ? String(row.version)
+          : undefined,
+    requiresReview: asBoolean(row.requires_review ?? row.requiresReview, false),
+    patientVisible: asBoolean(row.patient_visible ?? row.patientVisible, true),
+    items,
+    regulatory,
+    pdfArtifact,
+    medicationReminders: Array.isArray(row.medication_reminders)
+      ? row.medication_reminders.map((reminder) => {
+          const reminderRow = asRecord(reminder);
+          return {
+            id: asString(reminderRow.id),
+            title: asString(reminderRow.title, 'Lembrete do tratamento'),
+            medicationLabel: asString(reminderRow.medication_label) || undefined,
+            dosage: asString(reminderRow.dosage) || undefined,
+            instructions: asString(reminderRow.instructions) || undefined,
+            scheduleTimes: Array.isArray(reminderRow.schedule_times)
+              ? reminderRow.schedule_times.map((time) => String(time))
+              : [],
+            status: asString(reminderRow.status, 'active'),
+          };
+        })
         : undefined,
   };
 }
@@ -780,9 +908,9 @@ async function buildAndReturnSummary({
       : Promise.resolve({ data: null, error: null }),
     tenantPermissions.has('prescriptions.read')
       ? supabase
-          .from('prescriptions_placeholder')
+          .from('prescriptions')
           .select(
-            'id, status, prescription_text, medication_name, dosage, frequency, instructions, start_date, end_date, created_by, created_at, updated_at, category, linked_document_id, version'
+            'id, status, title, summary, issue_date, valid_until, created_by, created_at, updated_at, category, linked_document_id, current_version, requires_review, patient_visible, prescription_items(id, position, item_type, label, dosage, route, frequency, duration, quantity, instructions, start_date, end_date, schedule_times, reminder_enabled), prescription_regulatory_metadata(prescription_scope, regulatory_classification, legal_signature_requirement, legal_signature_status, d4sign_allowed, provider_policy, prescriber_name), prescription_pdf_artifacts(id, status, version_number, generated_at, released_to_patient), medication_reminders(id, title, medication_label, dosage, instructions, schedule_times, status)'
           )
           .eq('patient_id', patientId)
           .eq('tenant_id', patient.tenant_id)

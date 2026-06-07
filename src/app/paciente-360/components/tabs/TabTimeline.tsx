@@ -39,6 +39,7 @@ import {
   ExternalLink,
   FlaskConical,
   Camera,
+  XCircle,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
 import { getPatientTimeline } from '@/services/patient360Api';
@@ -226,6 +227,18 @@ const eventTypeConfig: Record<TimelineEventType, EventConfig> = {
     iconColor: 'text-indigo-600',
     iconBg: 'bg-indigo-50',
     label: 'Prescrição emitida',
+  },
+  prescricao_atualizada: {
+    icon: FilePlus,
+    iconColor: 'text-indigo-600',
+    iconBg: 'bg-indigo-50',
+    label: 'Prescricao atualizada',
+  },
+  prescricao_cancelada: {
+    icon: XCircle,
+    iconColor: 'text-red-600',
+    iconBg: 'bg-red-50',
+    label: 'Prescricao cancelada',
   },
   documento_gerado: {
     icon: FileText,
