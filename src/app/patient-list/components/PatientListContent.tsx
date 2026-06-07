@@ -20,6 +20,14 @@ import {
   Users,
   Phone,
   Pencil,
+  ClipboardList,
+  ShieldAlert,
+  CalendarClock,
+  FileText,
+  WalletCards,
+  ArrowRight,
+  Activity,
+  LockKeyhole,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
@@ -29,22 +37,33 @@ import Dialog from '@/components/ui/Dialog';
 import {
   createPatient,
   createPatientReviewFlag,
+  auditPatientWalletContextOpen,
   getPatientFormSnapshot,
-  getPatientListPage,
+  getPatientWalletSnapshot,
   updatePatient,
   type PatientMutationInput,
 } from '@/services/patientsApi';
 import type {
-  PatientListRow,
   ProgramType,
   FinancialStatus,
   AdherenceLevel,
   PatientStatus,
+  PatientPriorityBand,
+  PatientWalletAccess,
+  PatientWalletRow,
+  PatientWalletSnapshot,
 } from '@/domain/types';
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
-type SortKey = keyof PatientListRow;
+type SortKey =
+  | 'name'
+  | 'age'
+  | 'activePackage'
+  | 'currentWeek'
+  | 'weeklyAdherence'
+  | 'financialStatus'
+  | 'priorityScore';
 type SortDir = 'asc' | 'desc';
 
 const programTypeLabel: Record<ProgramType, string> = {
@@ -70,6 +89,243 @@ function adherenceBg(level: AdherenceLevel): string {
     regular: 'text-amber-700',
     critico: 'text-red-700',
   }[level];
+}
+
+const priorityBandLabel: Record<PatientPriorityBand, string> = {
+  critico: 'Critica',
+  alto: 'Alta',
+  medio: 'Media',
+  baixo: 'Baixa',
+};
+
+const priorityBandColor: Record<PatientPriorityBand, string> = {
+  critico: 'border-red-200 bg-red-50 text-red-700',
+  alto: 'border-orange-200 bg-orange-50 text-orange-700',
+  medio: 'border-amber-200 bg-amber-50 text-amber-700',
+  baixo: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+};
+
+const priorityFilterOptions: Array<{ value: PatientPriorityBand; label: string }> = [
+  { value: 'critico', label: 'Critica' },
+  { value: 'alto', label: 'Alta' },
+  { value: 'medio', label: 'Media' },
+  { value: 'baixo', label: 'Baixa' },
+];
+
+function PriorityBadge({ band, score }: { band: PatientPriorityBand; score?: number }) {
+  return (
+    <span
+      className={[
+        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold',
+        priorityBandColor[band],
+      ].join(' ')}
+    >
+      <ShieldAlert size={11} />
+      {priorityBandLabel[band]}
+      {typeof score === 'number' ? <span className="tabular-nums">{score}</span> : null}
+    </span>
+  );
+}
+
+function formatDateTime(value: string | undefined) {
+  if (!value) return 'Sem registro';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sem registro';
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function sectionStatus(access: PatientWalletAccess[keyof PatientWalletAccess]) {
+  return access.canRead ? 'Liberado' : (access.error ?? 'Sem permissao');
+}
+
+function WalletMetric({
+  label,
+  value,
+  helper,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  helper: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        <Icon size={15} className="text-muted-foreground" />
+      </div>
+      <p className="mt-2 text-xl font-bold text-foreground tabular-nums">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
+    </div>
+  );
+}
+
+function PatientContextDrawer({
+  patient,
+  access,
+  reviewing,
+  onClose,
+  onMarkReview,
+}: {
+  patient: PatientWalletRow;
+  access: PatientWalletAccess;
+  reviewing: boolean;
+  onClose: () => void;
+  onMarkReview: (patientId: string) => void;
+}) {
+  const lockedSections = Object.entries(access).filter(([, section]) => !section.canRead);
+
+  return (
+    <Dialog
+      open
+      title={patient.name}
+      description="Contexto operacional da carteira. O Paciente 360 continua sendo a ficha completa."
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      placement="right"
+      mobileFullscreen
+    >
+      <div className="space-y-5">
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <PriorityBadge band={patient.priorityBand} score={patient.priorityScore} />
+              <p className="mt-3 text-sm font-semibold text-foreground">
+                {patient.scoreExplanation}
+              </p>
+            </div>
+            <div className="rounded-lg bg-card px-3 py-2 text-center shadow-sm">
+              <p className="text-[11px] font-semibold uppercase text-muted-foreground">Score</p>
+              <p className="text-2xl font-bold text-foreground tabular-nums">
+                {patient.priorityScore}
+              </p>
+            </div>
+          </div>
+
+          {patient.scoreReasons.length > 0 ? (
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+              {patient.scoreReasons.map((reason) => (
+                <li key={`${patient.id}-${reason}`} className="flex gap-2">
+                  <span className="mt-2 h-1.5 w-1.5 rounded-full bg-primary" />
+                  <span>{reason}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-muted-foreground">Sem motivo critico na carga atual.</p>
+          )}
+
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <Link href={patient.nextAction.href} className="btn-primary text-sm">
+              <ArrowRight size={15} />
+              {patient.nextAction.label}
+            </Link>
+            <Link href={`/clinic/patients/${patient.id}`} className="btn-secondary text-sm">
+              <Eye size={15} />
+              Abrir 360
+            </Link>
+            <button
+              type="button"
+              disabled={reviewing}
+              onClick={() => onMarkReview(patient.id)}
+              className="btn-secondary text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Flag size={15} />
+              {reviewing ? 'Marcando...' : 'Marcar revisao'}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <WalletMetric
+            label="Adesao"
+            value={`${patient.weeklyAdherence}%`}
+            helper={patient.adherenceLevel}
+            icon={Activity}
+          />
+          <WalletMetric
+            label="Proxima consulta"
+            value={patient.nextAppointment ?? 'Sem agenda'}
+            helper={formatDateTime(patient.nextAppointmentAt)}
+            icon={CalendarClock}
+          />
+          <WalletMetric
+            label="Documentos"
+            value={access.documents.canRead ? patient.pendingDocumentCount : '-'}
+            helper={sectionStatus(access.documents)}
+            icon={FileText}
+          />
+          <WalletMetric
+            label="Chat"
+            value={access.chat.canRead ? patient.unreadChatCount : '-'}
+            helper={
+              access.chat.canRead
+                ? formatDateTime(patient.lastMessageAt)
+                : sectionStatus(access.chat)
+            }
+            icon={MessageSquare}
+          />
+        </div>
+
+        <div className="rounded-lg border border-border">
+          <div className="border-b border-border px-4 py-3">
+            <h3 className="text-sm font-semibold text-foreground">Mapa por secao</h3>
+          </div>
+          <div className="divide-y divide-border text-sm">
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <span>Clinico</span>
+              <span className="font-medium text-foreground">
+                {patient.alertCount} alerta(s), {patient.activeProgramName}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <span>Financeiro</span>
+              <span className="font-medium text-foreground">
+                {access.financial.canRead
+                  ? `${patient.financialOverdueCount} vencida(s), ${patient.financialPendingCount} pendente(s)`
+                  : sectionStatus(access.financial)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <span>Documentos</span>
+              <span className="font-medium text-foreground">
+                {access.documents.canRead
+                  ? `${patient.pendingDocumentCount} pendente(s)`
+                  : sectionStatus(access.documents)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <span>Chat</span>
+              <span className="font-medium text-foreground">
+                {access.chat.canRead
+                  ? `${patient.unreadChatCount} nao lida(s)`
+                  : sectionStatus(access.chat)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {lockedSections.length > 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="flex gap-2">
+              <LockKeyhole size={15} className="mt-0.5 flex-shrink-0" />
+              <span>
+                Algumas secoes foram omitidas por permissao:{' '}
+                {lockedSections.map(([key]) => key).join(', ')}.
+              </span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Dialog>
+  );
 }
 
 // ─── Adherence Bar ────────────────────────────────────────────────────────────
@@ -337,7 +593,8 @@ export default function PatientListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialSearch = searchParams.get('search') ?? '';
-  const [patients, setPatients] = useState<PatientListRow[]>([]);
+  const [patients, setPatients] = useState<PatientWalletRow[]>([]);
+  const [walletSnapshot, setWalletSnapshot] = useState<PatientWalletSnapshot | null>(null);
   const [totalPatients, setTotalPatients] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -346,6 +603,7 @@ export default function PatientListContent() {
   const [filterProgram, setFilterProgram] = useState<ProgramType | ''>('');
   const [filterFinancial, setFilterFinancial] = useState<FinancialStatus | ''>('');
   const [filterAdherence, setFilterAdherence] = useState<AdherenceLevel | ''>('');
+  const [filterPriority, setFilterPriority] = useState<PatientPriorityBand | ''>('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -359,9 +617,12 @@ export default function PatientListContent() {
   const [patientFormLoading, setPatientFormLoading] = useState(false);
   const [patientFormSubmitting, setPatientFormSubmitting] = useState(false);
   const [reviewActionPatientId, setReviewActionPatientId] = useState<string | null>(null);
+  const [contextPatient, setContextPatient] = useState<PatientWalletRow | null>(null);
   const loadRequestIdRef = useRef(0);
 
-  const hasDerivedFilters = Boolean(filterProgram || filterFinancial || filterAdherence);
+  const hasDerivedFilters = Boolean(
+    filterProgram || filterFinancial || filterAdherence || filterPriority
+  );
   const usesServerPagination = !hasDerivedFilters;
 
   const loadPatients = useCallback(async () => {
@@ -370,7 +631,7 @@ export default function PatientListContent() {
     setLoading(true);
     setLoadError(null);
 
-    const result = await getPatientListPage({
+    const result = await getPatientWalletSnapshot({
       search,
       status: filterStatus,
       page: usesServerPagination ? page : 1,
@@ -381,6 +642,7 @@ export default function PatientListContent() {
 
     if (result.error || !result.data) {
       setPatients([]);
+      setWalletSnapshot(null);
       setTotalPatients(0);
       setLoadError(result.error?.message ?? 'Falha ao carregar lista de pacientes.');
       setLoading(false);
@@ -389,6 +651,7 @@ export default function PatientListContent() {
     }
 
     setPatients(result.data.rows);
+    setWalletSnapshot(result.data);
     setTotalPatients(result.data.total);
     setLoading(false);
   }, [filterStatus, page, pageSize, search, usesServerPagination]);
@@ -415,6 +678,7 @@ export default function PatientListContent() {
     if (filterProgram) result = result.filter((p) => p.programType === filterProgram);
     if (filterFinancial) result = result.filter((p) => p.financialStatus === filterFinancial);
     if (filterAdherence) result = result.filter((p) => p.adherenceLevel === filterAdherence);
+    if (filterPriority) result = result.filter((p) => p.priorityBand === filterPriority);
     if (sortKey) {
       result.sort((a, b) => {
         const av = a[sortKey];
@@ -427,7 +691,7 @@ export default function PatientListContent() {
       });
     }
     return result;
-  }, [patients, filterProgram, filterFinancial, filterAdherence, sortKey, sortDir]);
+  }, [patients, filterProgram, filterFinancial, filterAdherence, filterPriority, sortKey, sortDir]);
 
   const effectiveTotalPatients = usesServerPagination ? totalPatients : filtered.length;
   const totalPages = Math.max(1, Math.ceil(effectiveTotalPatients / pageSize));
@@ -467,6 +731,7 @@ export default function PatientListContent() {
     setFilterProgram('');
     setFilterFinancial('');
     setFilterAdherence('');
+    setFilterPriority('');
     setSearch('');
     setPage(1);
   };
@@ -565,9 +830,123 @@ export default function PatientListContent() {
     await loadPatients();
   };
 
-  const activeFilters = [filterStatus, filterProgram, filterFinancial, filterAdherence].filter(
-    Boolean
-  ).length;
+  const openPatientContext = async (patient: PatientWalletRow) => {
+    setContextPatient(patient);
+    const access = walletSnapshot?.access ?? {
+      clinical: { canRead: true },
+      financial: { canRead: true },
+      documents: { canRead: true },
+      chat: { canRead: true },
+    };
+    const sections = (
+      Object.entries(access) as Array<[keyof PatientWalletAccess, { canRead: boolean }]>
+    )
+      .filter(([, section]) => section.canRead)
+      .map(([key]) => key);
+    const result = await auditPatientWalletContextOpen(patient.id, sections);
+    if (result.error) {
+      toast.warning('Contexto aberto, mas a auditoria nao foi registrada.');
+    }
+  };
+
+  const activeFilterChips = useMemo(
+    () =>
+      [
+        search.trim()
+          ? {
+              key: 'search',
+              label: `Busca: ${search.trim()}`,
+              onRemove: () => {
+                setSearch('');
+                setPage(1);
+              },
+            }
+          : null,
+        filterStatus
+          ? {
+              key: 'status',
+              label: `Status: ${filterStatus}`,
+              onRemove: () => {
+                setFilterStatus('');
+                setPage(1);
+              },
+            }
+          : null,
+        filterProgram
+          ? {
+              key: 'program',
+              label: `Programa: ${programTypeLabel[filterProgram]}`,
+              onRemove: () => {
+                setFilterProgram('');
+                setPage(1);
+              },
+            }
+          : null,
+        filterFinancial
+          ? {
+              key: 'financial',
+              label: `Financeiro: ${filterFinancial}`,
+              onRemove: () => {
+                setFilterFinancial('');
+                setPage(1);
+              },
+            }
+          : null,
+        filterAdherence
+          ? {
+              key: 'adherence',
+              label: `Adesao: ${filterAdherence}`,
+              onRemove: () => {
+                setFilterAdherence('');
+                setPage(1);
+              },
+            }
+          : null,
+        filterPriority
+          ? {
+              key: 'priority',
+              label: `Prioridade: ${priorityBandLabel[filterPriority]}`,
+              onRemove: () => {
+                setFilterPriority('');
+                setPage(1);
+              },
+            }
+          : null,
+      ].filter((chip): chip is { key: string; label: string; onRemove: () => void } =>
+        Boolean(chip)
+      ),
+    [filterAdherence, filterFinancial, filterPriority, filterProgram, filterStatus, search]
+  );
+
+  const activeFilters = activeFilterChips.length;
+  const localWalletSummary = useMemo(
+    () => ({
+      highPriority: filtered.filter(
+        (patient) => patient.priorityBand === 'critico' || patient.priorityBand === 'alto'
+      ).length,
+      criticalPriority: filtered.filter((patient) => patient.priorityBand === 'critico').length,
+      lowAdherence: filtered.filter((patient) => patient.weeklyAdherence < 60).length,
+      pendingDocuments: filtered.reduce(
+        (total, patient) => total + patient.pendingDocumentCount,
+        0
+      ),
+      unreadChats: filtered.reduce((total, patient) => total + patient.unreadChatCount, 0),
+      pendingFinancial: filtered.filter(
+        (patient) =>
+          patient.financialStatus === 'inadimplente' || patient.financialStatus === 'pendente'
+      ).length,
+    }),
+    [filtered]
+  );
+
+  const priorityPatients = useMemo(
+    () =>
+      [...filtered]
+        .sort((a, b) => b.priorityScore - a.priorityScore)
+        .filter((patient) => patient.priorityBand === 'critico' || patient.priorityBand === 'alto')
+        .slice(0, 4),
+    [filtered]
+  );
 
   return (
     <div className="p-6 xl:p-8 max-w-screen-2xl mx-auto">
@@ -583,10 +962,26 @@ export default function PatientListContent() {
           onSubmit={handleSubmitPatientForm}
         />
       )}
+      {contextPatient && (
+        <PatientContextDrawer
+          patient={contextPatient}
+          access={
+            walletSnapshot?.access ?? {
+              clinical: { canRead: true },
+              financial: { canRead: true },
+              documents: { canRead: true },
+              chat: { canRead: true },
+            }
+          }
+          reviewing={reviewActionPatientId === contextPatient.id}
+          onClose={() => setContextPatient(null)}
+          onMarkReview={(patientId) => void handleMarkReview(patientId)}
+        />
+      )}
 
       <PageHeader
         title="Pacientes"
-        subtitle={`${totalPatients} pacientes no contrato real · ${patients.filter((p) => p.status === 'ativo').length} ativos nesta carga`}
+        subtitle={`${totalPatients} pacientes no contrato real - ${patients.filter((p) => p.status === 'ativo').length} ativos nesta carga`}
         actions={
           <button type="button" onClick={openCreatePatient} className="btn-primary text-sm">
             <Users size={15} />
@@ -594,6 +989,92 @@ export default function PatientListContent() {
           </button>
         }
       />
+
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-6">
+        <WalletMetric
+          label="Prioridade alta"
+          value={localWalletSummary.highPriority}
+          helper={`${localWalletSummary.criticalPriority} critica(s)`}
+          icon={ShieldAlert}
+        />
+        <WalletMetric
+          label="Baixa adesao"
+          value={localWalletSummary.lowAdherence}
+          helper="abaixo de 60%"
+          icon={Activity}
+        />
+        <WalletMetric
+          label="Financeiro"
+          value={
+            walletSnapshot?.access.financial.canRead ? localWalletSummary.pendingFinancial : '-'
+          }
+          helper={sectionStatus(walletSnapshot?.access.financial ?? { canRead: true })}
+          icon={WalletCards}
+        />
+        <WalletMetric
+          label="Documentos"
+          value={
+            walletSnapshot?.access.documents.canRead ? localWalletSummary.pendingDocuments : '-'
+          }
+          helper={sectionStatus(walletSnapshot?.access.documents ?? { canRead: true })}
+          icon={FileText}
+        />
+        <WalletMetric
+          label="Chat"
+          value={walletSnapshot?.access.chat.canRead ? localWalletSummary.unreadChats : '-'}
+          helper={sectionStatus(walletSnapshot?.access.chat ?? { canRead: true })}
+          icon={MessageSquare}
+        />
+        <WalletMetric
+          label="Carregados"
+          value={filtered.length}
+          helper={`${walletSnapshot?.summary.total ?? totalPatients} no filtro`}
+          icon={ClipboardList}
+        />
+      </div>
+
+      {priorityPatients.length > 0 ? (
+        <div className="mb-4 rounded-lg border border-border bg-card p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Mapa de prioridade</h2>
+              <p className="text-xs text-muted-foreground">
+                Pacientes ordenados pelo score explicavel desta carga.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSortKey('priorityScore');
+                setSortDir('desc');
+              }}
+              className="btn-secondary text-xs"
+            >
+              Ordenar por score
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+            {priorityPatients.map((patient) => (
+              <button
+                key={`priority-${patient.id}`}
+                type="button"
+                onClick={() => void openPatientContext(patient)}
+                className="rounded-lg border border-border bg-muted/20 p-3 text-left transition hover:border-primary/40 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{patient.name}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                      {patient.nextAction.label}
+                    </p>
+                  </div>
+                  <PriorityBadge band={patient.priorityBand} score={patient.priorityScore} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {loadError ? (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -649,9 +1130,25 @@ export default function PatientListContent() {
         )}
       </div>
 
+      {activeFilterChips.length > 0 ? (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {activeFilterChips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={chip.onRemove}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {chip.label}
+              <X size={12} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Filter panel */}
       {filterOpen && (
-        <div className="card-base p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 fade-in">
+        <div className="card-base p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 fade-in">
           <div>
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
               Programa
@@ -729,12 +1226,32 @@ export default function PatientListContent() {
               <option value="critico">Crítico (&lt;55%)</option>
             </select>
           </div>
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+              Prioridade
+            </label>
+            <select
+              value={filterPriority}
+              onChange={(e) => {
+                setFilterPriority(e.target.value as PatientPriorityBand | '');
+                setPage(1);
+              }}
+              className="input-base text-sm"
+            >
+              <option value="">Todas</option>
+              {priorityFilterOptions.map((option) => (
+                <option key={`priority-filter-${option.value}`} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5 mb-4 slide-up">
+        <div className="hidden items-center gap-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-2.5 mb-4 slide-up md:flex">
           <span className="text-sm font-semibold text-primary">
             {selectedIds.size} selecionado(s)
           </span>
@@ -810,13 +1327,6 @@ export default function PatientListContent() {
             paginated.map((patient) => (
               <article key={patient.id} className="space-y-4 p-4">
                 <div className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(patient.id)}
-                    onChange={() => toggleSelect(patient.id)}
-                    className="mt-1 rounded border-input accent-primary"
-                    aria-label={`Selecionar ${patient.name}`}
-                  />
                   <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">
                     {patient.name
                       .split(' ')
@@ -838,8 +1348,22 @@ export default function PatientListContent() {
                           {patient.phone}
                         </p>
                       </div>
-                      <StatusBadge status={patient.status} size="xs" />
+                      <PriorityBadge band={patient.priorityBand} score={patient.priorityScore} />
                     </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-foreground">Triagem</span>
+                    <StatusBadge status={patient.status} size="xs" />
+                  </div>
+                  <p className="mt-2 text-muted-foreground">{patient.scoreExplanation}</p>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Acao sugerida</span>
+                    <span className="text-right font-semibold text-foreground">
+                      {patient.nextAction.label}
+                    </span>
                   </div>
                 </div>
 
@@ -866,9 +1390,13 @@ export default function PatientListContent() {
                     </div>
                   </div>
                   <div className="rounded-xl border border-border bg-muted/30 p-3">
-                    <span className="text-muted-foreground">Financeiro</span>
+                    <span className="text-muted-foreground">Chat</span>
                     <div className="mt-2">
-                      <StatusBadge status={patient.financialStatus} size="xs" />
+                      <span className="font-semibold text-foreground">
+                        {walletSnapshot?.access.chat.canRead
+                          ? `${patient.unreadChatCount} nao lida(s)`
+                          : 'Sem acesso'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -894,9 +1422,25 @@ export default function PatientListContent() {
                       </span>
                     )}
                   </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Documentos</span>
+                    <span className="text-right font-medium text-foreground">
+                      {walletSnapshot?.access.documents.canRead
+                        ? `${patient.pendingDocumentCount} pendente(s)`
+                        : 'Sem acesso'}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void openPatientContext(patient)}
+                    className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
+                    aria-label={`Abrir contexto de ${patient.name}`}
+                  >
+                    <ClipboardList size={15} />
+                  </button>
                   <Link
                     href={`/clinic/patients/${patient.id}`}
                     className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
@@ -935,7 +1479,7 @@ export default function PatientListContent() {
         </div>
 
         <div className="hidden overflow-x-auto scrollbar-thin md:block">
-          <table className="w-full min-w-[1100px]">
+          <table className="w-full min-w-[1220px]">
             <thead>
               <tr className="border-b border-border bg-muted/50">
                 <th scope="col" className="px-4 py-3 w-10">
@@ -947,6 +1491,13 @@ export default function PatientListContent() {
                     aria-label="Selecionar pacientes da pagina"
                   />
                 </th>
+                <SortableHeader
+                  label="Prioridade"
+                  sortKey="priorityScore"
+                  currentKey={sortKey}
+                  currentDir={sortDir}
+                  onSort={handleSort}
+                />
                 <SortableHeader
                   label="Paciente"
                   sortKey="name"
@@ -1020,7 +1571,7 @@ export default function PatientListContent() {
                 Array.from({ length: 8 }).map((_, i) => <SkeletonTableRow key={`skel-row-${i}`} />)
               ) : paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-0">
+                  <td colSpan={12} className="py-0">
                     <EmptyState
                       icon={Users}
                       title="Nenhum paciente encontrado"
@@ -1042,7 +1593,7 @@ export default function PatientListContent() {
                       rowIndex % 2 === 0 ? '' : 'bg-muted/20',
                       selectedIds.has(patient.id) ? 'bg-primary/5' : '',
                     ].join(' ')}
-                    onClick={() => router.push(`/clinic/patients/${patient.id}`)}
+                    onClick={() => void openPatientContext(patient)}
                   >
                     <td className="px-4 py-3">
                       <input
@@ -1053,6 +1604,10 @@ export default function PatientListContent() {
                         className="rounded border-input accent-primary cursor-pointer"
                         aria-label={`Selecionar ${patient.name}`}
                       />
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <PriorityBadge band={patient.priorityBand} score={patient.priorityScore} />
                     </td>
 
                     {/* Name + avatar */}
@@ -1154,12 +1709,31 @@ export default function PatientListContent() {
 
                     {/* Financial */}
                     <td className="px-4 py-3">
-                      <StatusBadge status={patient.financialStatus} size="xs" />
+                      {walletSnapshot?.access.financial.canRead ? (
+                        <StatusBadge status={patient.financialStatus} size="xs" />
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                          <LockKeyhole size={11} />
+                          Sem acesso
+                        </span>
+                      )}
                     </td>
 
                     {/* Actions */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void openPatientContext(patient);
+                          }}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                          aria-label={`Abrir contexto de ${patient.name}`}
+                          title="Abrir contexto"
+                        >
+                          <ClipboardList size={14} />
+                        </button>
                         <Link
                           href={`/clinic/patients/${patient.id}`}
                           onClick={(e) => e.stopPropagation()}

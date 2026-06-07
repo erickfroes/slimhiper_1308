@@ -2,7 +2,11 @@ import type {
   AdherenceLevel,
   FinancialStatus,
   PatientListRow,
+  PatientPriorityBand,
   PatientStatus,
+  PatientWalletAccess,
+  PatientWalletRow,
+  PatientWalletSnapshot,
   ProgramType,
 } from '@/domain/types';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
@@ -80,6 +84,11 @@ export type PatientListPage = {
   pageSize: number;
 };
 
+export type PatientWalletSnapshotParams = PatientListFilters & {
+  page?: number;
+  pageSize?: number;
+};
+
 export type PatientMutationInput = {
   fullName: string;
   preferredName?: string | null;
@@ -111,6 +120,19 @@ const DEFAULT_PROGRAM_TYPE: ProgramType = 'emagrecimento';
 const DEFAULT_FINANCIAL_STATUS: FinancialStatus = 'em_dia';
 const DEFAULT_ADHERENCE_LEVEL: AdherenceLevel = 'critico';
 const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_WALLET_ACCESS: PatientWalletAccess = {
+  clinical: { canRead: true, error: null },
+  financial: { canRead: true, error: null },
+  documents: { canRead: true, error: null },
+  chat: { canRead: true, error: null },
+};
+
+const PRIORITY_BAND_LABEL: Record<PatientPriorityBand, string> = {
+  critico: 'critica',
+  alto: 'alta',
+  medio: 'media',
+  baixo: 'baixa',
+};
 
 function isMockExplicitlyEnabled() {
   return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
@@ -180,6 +202,32 @@ function asNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown, fallback = '') {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  return fallback;
+}
+
+function asStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function clampPercent(value: unknown, fallback = 0) {
+  const numeric = asNumber(value) ?? fallback;
+  return Math.min(100, Math.max(0, Math.round(numeric)));
+}
+
 function adherenceLevel(value: number): AdherenceLevel {
   if (value >= 85) return 'excelente';
   if (value >= 70) return 'bom';
@@ -236,6 +284,297 @@ function mapFinancialStatus(rows: InvoiceRow[]): FinancialStatus {
   }
 
   return DEFAULT_FINANCIAL_STATUS;
+}
+
+function mapPriorityBand(value: unknown): PatientPriorityBand {
+  const normalized = String(value ?? '').toLowerCase();
+  if (normalized === 'critical' || normalized === 'critico' || normalized === 'critica') {
+    return 'critico';
+  }
+  if (normalized === 'high' || normalized === 'alto' || normalized === 'alta') return 'alto';
+  if (normalized === 'medium' || normalized === 'medio' || normalized === 'media') return 'medio';
+  return 'baixo';
+}
+
+function bandFromScore(score: number): PatientPriorityBand {
+  if (score >= 75) return 'critico';
+  if (score >= 50) return 'alto';
+  if (score >= 25) return 'medio';
+  return 'baixo';
+}
+
+function normalizeWalletAccess(value: unknown): PatientWalletAccess {
+  const record = asRecord(value);
+  return {
+    clinical: normalizeSectionAccess(record.clinical, DEFAULT_WALLET_ACCESS.clinical),
+    financial: normalizeSectionAccess(record.financial, DEFAULT_WALLET_ACCESS.financial),
+    documents: normalizeSectionAccess(record.documents, DEFAULT_WALLET_ACCESS.documents),
+    chat: normalizeSectionAccess(record.chat, DEFAULT_WALLET_ACCESS.chat),
+  };
+}
+
+function normalizeSectionAccess(
+  value: unknown,
+  fallback: PatientWalletAccess[keyof PatientWalletAccess]
+) {
+  const record = asRecord(value);
+  return {
+    canRead: asBoolean(record.canRead, fallback.canRead),
+    error: typeof record.error === 'string' ? record.error : null,
+  };
+}
+
+function formatAppointment(value: unknown) {
+  const raw = asString(value);
+  if (!raw) return undefined;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function normalizeWalletRow(value: unknown, access: PatientWalletAccess): PatientWalletRow | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const name = asString(record.name, 'Paciente sem nome');
+  if (!id) return null;
+
+  const weeklyAdherence = clampPercent(record.weeklyAdherence);
+  const priorityScore = clampPercent(record.priorityScore);
+  const priorityBand = mapPriorityBand(record.priorityBand ?? bandFromScore(priorityScore));
+  const financialStatus = mapFinancialStatus([
+    { patient_id: id, status: asString(record.financialStatus) },
+  ]);
+  const nextAction = asRecord(record.nextAction);
+  const nextAppointmentAt = asString(record.nextAppointmentAt);
+
+  return {
+    id,
+    name,
+    age: Math.max(0, Math.round(asNumber(record.age) ?? 0)),
+    phone: asString(record.phone, 'Nao informado'),
+    activePackage: asString(record.activePackage, 'Sem programa'),
+    programType: mapProgramType(asString(record.programType)),
+    currentWeek: Math.max(0, Math.round(asNumber(record.currentWeek) ?? 0)),
+    totalWeeks: Math.max(0, Math.round(asNumber(record.totalWeeks) ?? 0)),
+    weeklyAdherence,
+    adherenceLevel: adherenceLevel(weeklyAdherence),
+    nextAppointment:
+      formatAppointment(nextAppointmentAt) ?? (asString(record.nextAppointment) || undefined),
+    careTeam: asStringArray(record.careTeam),
+    alertCount: Math.max(0, Math.round(asNumber(record.alertCount) ?? 0)),
+    financialStatus,
+    status: mapPatientStatus(asString(record.status)),
+    avatarUrl: asString(record.avatarUrl) || undefined,
+    priorityScore,
+    priorityBand,
+    triageStatus:
+      priorityBand === 'critico'
+        ? 'acao_imediata'
+        : priorityBand === 'alto' || priorityBand === 'medio'
+          ? 'monitorar'
+          : 'rotina',
+    scoreExplanation:
+      asString(record.scoreExplanation) ||
+      `Prioridade ${PRIORITY_BAND_LABEL[priorityBand]} por score ${priorityScore}/100.`,
+    scoreReasons: asStringArray(record.scoreReasons),
+    nextAction: {
+      label: asString(nextAction.label, 'Abrir Paciente 360'),
+      href: asString(nextAction.href, `/clinic/patients/${id}`),
+      kind: ['clinical', 'financial', 'documents', 'chat', 'agenda', 'patient'].includes(
+        asString(nextAction.kind)
+      )
+        ? (asString(nextAction.kind) as PatientWalletRow['nextAction']['kind'])
+        : 'patient',
+    },
+    nextAppointmentAt: nextAppointmentAt || undefined,
+    activeProgramId: asString(record.activeProgramId) || undefined,
+    activeProgramName: asString(
+      record.activeProgramName,
+      asString(record.activePackage, 'Sem programa')
+    ),
+    pendingDocumentCount: access.documents.canRead
+      ? Math.max(0, Math.round(asNumber(record.pendingDocumentCount) ?? 0))
+      : 0,
+    unreadChatCount: access.chat.canRead
+      ? Math.max(0, Math.round(asNumber(record.unreadChatCount) ?? 0))
+      : 0,
+    lastMessageAt: access.chat.canRead ? asString(record.lastMessageAt) || undefined : undefined,
+    financialPendingCount: access.financial.canRead
+      ? Math.max(0, Math.round(asNumber(record.financialPendingCount) ?? 0))
+      : 0,
+    financialOverdueCount: access.financial.canRead
+      ? Math.max(0, Math.round(asNumber(record.financialOverdueCount) ?? 0))
+      : 0,
+    clinicalAlertSeverity: ['critical', 'high', 'medium', 'low'].includes(
+      asString(record.clinicalAlertSeverity)
+    )
+      ? (asString(record.clinicalAlertSeverity) as PatientWalletRow['clinicalAlertSeverity'])
+      : undefined,
+  };
+}
+
+function summarizeWalletRows(
+  rows: PatientWalletRow[],
+  total = rows.length
+): PatientWalletSnapshot['summary'] {
+  return {
+    total,
+    loaded: rows.length,
+    active: rows.filter((row) => row.status === 'ativo').length,
+    highPriority: rows.filter(
+      (row) => row.priorityBand === 'alto' || row.priorityBand === 'critico'
+    ).length,
+    criticalPriority: rows.filter((row) => row.priorityBand === 'critico').length,
+    lowAdherence: rows.filter((row) => row.weeklyAdherence < 60).length,
+    pendingFinancial: rows.filter(
+      (row) => row.financialStatus === 'inadimplente' || row.financialStatus === 'pendente'
+    ).length,
+    pendingDocuments: rows.reduce((acc, row) => acc + row.pendingDocumentCount, 0),
+    unreadChats: rows.reduce((acc, row) => acc + row.unreadChatCount, 0),
+  };
+}
+
+function normalizeWalletSnapshot(
+  value: unknown,
+  page: number,
+  pageSize: number
+): PatientWalletSnapshot | null {
+  const record = asRecord(value);
+  const access = normalizeWalletAccess(record.access);
+  const rows = Array.isArray(record.rows)
+    ? record.rows
+        .map((row) => normalizeWalletRow(row, access))
+        .filter((row): row is PatientWalletRow => Boolean(row))
+    : [];
+  const total = Math.max(0, Math.round(asNumber(record.total) ?? rows.length));
+  const summaryRecord = asRecord(record.summary);
+  const summary: PatientWalletSnapshot['summary'] = {
+    ...summarizeWalletRows(rows, total),
+    total: Math.max(0, Math.round(asNumber(summaryRecord.total) ?? total)),
+    loaded: Math.max(0, Math.round(asNumber(summaryRecord.loaded) ?? rows.length)),
+    active: Math.max(
+      0,
+      Math.round(
+        asNumber(summaryRecord.active) ?? rows.filter((row) => row.status === 'ativo').length
+      )
+    ),
+    highPriority: Math.max(
+      0,
+      Math.round(
+        asNumber(summaryRecord.highPriority) ??
+          rows.filter((row) => row.priorityBand === 'alto' || row.priorityBand === 'critico').length
+      )
+    ),
+    criticalPriority: Math.max(
+      0,
+      Math.round(
+        asNumber(summaryRecord.criticalPriority) ??
+          rows.filter((row) => row.priorityBand === 'critico').length
+      )
+    ),
+    lowAdherence: Math.max(
+      0,
+      Math.round(
+        asNumber(summaryRecord.lowAdherence) ??
+          rows.filter((row) => row.weeklyAdherence < 60).length
+      )
+    ),
+    pendingFinancial: Math.max(
+      0,
+      Math.round(
+        asNumber(summaryRecord.pendingFinancial) ??
+          rows.filter(
+            (row) => row.financialStatus === 'inadimplente' || row.financialStatus === 'pendente'
+          ).length
+      )
+    ),
+    pendingDocuments: Math.max(
+      0,
+      Math.round(
+        asNumber(summaryRecord.pendingDocuments) ??
+          rows.reduce((acc, row) => acc + row.pendingDocumentCount, 0)
+      )
+    ),
+    unreadChats: Math.max(
+      0,
+      Math.round(
+        asNumber(summaryRecord.unreadChats) ??
+          rows.reduce((acc, row) => acc + row.unreadChatCount, 0)
+      )
+    ),
+  };
+
+  return {
+    rows,
+    total,
+    page,
+    pageSize,
+    generatedAt: asString(record.generatedAt, new Date().toISOString()),
+    summary,
+    access,
+  };
+}
+
+function mockWalletRow(row: PatientListRow): PatientWalletRow {
+  const score =
+    (row.alertCount > 0 ? Math.min(35, row.alertCount * 12) : 0) +
+    (row.weeklyAdherence < 55 ? 30 : row.weeklyAdherence < 70 ? 18 : 0) +
+    (row.financialStatus === 'inadimplente' ? 22 : row.financialStatus === 'pendente' ? 12 : 0);
+  const priorityScore = Math.min(100, score);
+  const priorityBand = bandFromScore(priorityScore);
+  const reasons = [
+    row.alertCount > 0 ? `${row.alertCount} alerta(s) ativo(s)` : null,
+    row.weeklyAdherence < 70 ? `Adesao em ${row.weeklyAdherence}%` : null,
+    row.financialStatus !== 'em_dia' ? `Financeiro ${row.financialStatus}` : null,
+  ].filter((item): item is string => Boolean(item));
+  const nextAction =
+    row.alertCount > 0 || row.weeklyAdherence < 70
+      ? {
+          label: 'Revisar plano e acionar paciente',
+          href: `/clinic/patients/${row.id}?tab=timeline`,
+          kind: 'clinical' as const,
+        }
+      : row.financialStatus !== 'em_dia'
+        ? {
+            label: 'Acionar financeiro',
+            href: `/clinic/financeiro?patientId=${row.id}`,
+            kind: 'financial' as const,
+          }
+        : {
+            label: 'Abrir Paciente 360',
+            href: `/clinic/patients/${row.id}`,
+            kind: 'patient' as const,
+          };
+
+  return {
+    ...row,
+    priorityScore,
+    priorityBand,
+    triageStatus:
+      priorityBand === 'critico'
+        ? 'acao_imediata'
+        : priorityBand === 'baixo'
+          ? 'rotina'
+          : 'monitorar',
+    scoreExplanation:
+      reasons.length > 0
+        ? `Prioridade ${PRIORITY_BAND_LABEL[priorityBand]} por ${reasons.join(', ')}.`
+        : 'Prioridade baixa: sem pendencias criticas na carga atual.',
+    scoreReasons: reasons,
+    nextAction,
+    activeProgramName: row.activePackage,
+    pendingDocumentCount: row.alertCount > 1 ? 1 : 0,
+    unreadChatCount: row.alertCount > 2 ? 2 : row.alertCount > 0 ? 1 : 0,
+    financialPendingCount: row.financialStatus === 'pendente' ? 1 : 0,
+    financialOverdueCount: row.financialStatus === 'inadimplente' ? 1 : 0,
+    clinicalAlertSeverity:
+      row.alertCount > 2 ? 'critical' : row.alertCount > 0 ? 'medium' : undefined,
+  };
 }
 
 function validatePatientInput(input: PatientMutationInput) {
@@ -534,6 +873,87 @@ export async function getPatientListPage(
     return { data, error: null };
   } catch (error) {
     return { data: null, error: asServiceError(error, 'Falha ao carregar lista de pacientes.') };
+  }
+}
+
+export async function getPatientWalletSnapshot(
+  params: PatientWalletSnapshotParams = {}
+): Promise<{ data: PatientWalletSnapshot | null; error: SafeServiceError | null }> {
+  const page = Math.max(1, Math.floor(params.page ?? 1));
+  const pageSize = Math.min(100, Math.max(1, Math.floor(params.pageSize ?? DEFAULT_PAGE_SIZE)));
+
+  if (isMockExplicitlyEnabled()) {
+    const search = sanitizePatientSearchQuery(params.search).toLocaleLowerCase('pt-BR');
+    const allRows = (await getMockPatientList()).map(mockWalletRow);
+    const rows = allRows.filter((row) => {
+      const matchesStatus = params.status ? row.status === params.status : true;
+      const matchesSearch = search
+        ? [row.name, row.phone, row.activePackage].some((value) =>
+            value.toLocaleLowerCase('pt-BR').includes(search)
+          )
+        : true;
+      return matchesStatus && matchesSearch;
+    });
+    const from = (page - 1) * pageSize;
+    const pagedRows = rows.slice(from, from + pageSize);
+    return {
+      data: {
+        rows: pagedRows,
+        total: rows.length,
+        page,
+        pageSize,
+        generatedAt: new Date().toISOString(),
+        summary: summarizeWalletRows(pagedRows, rows.length),
+        access: DEFAULT_WALLET_ACCESS,
+      },
+      error: null,
+    };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('get_patient_wallet_snapshot', {
+      p_limit: pageSize,
+      p_offset: (page - 1) * pageSize,
+      p_search: sanitizePatientSearchQuery(params.search),
+      p_status: params.status || null,
+    });
+
+    if (error) throw error;
+
+    const snapshot = normalizeWalletSnapshot(data, page, pageSize);
+    if (!snapshot) {
+      return {
+        data: null,
+        error: { message: 'Contrato invalido da carteira de pacientes.', code: 'invalid_contract' },
+      };
+    }
+
+    return { data: snapshot, error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao carregar carteira de pacientes.') };
+  }
+}
+
+export async function auditPatientWalletContextOpen(
+  patientId: string,
+  sections: Array<keyof PatientWalletAccess>
+): Promise<{ data: { status: string } | null; error: SafeServiceError | null }> {
+  if (!patientId.trim()) {
+    return { data: null, error: { message: 'Paciente invalido para auditoria.' } };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('audit_patient_wallet_context_opened', {
+      p_patient_id: patientId,
+      p_sections: sections,
+    });
+    if (error) throw error;
+    const record = asRecord(data);
+    return { data: { status: asString(record.status, 'logged') }, error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao auditar contexto do paciente.') };
   }
 }
 

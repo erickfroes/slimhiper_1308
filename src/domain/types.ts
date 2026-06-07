@@ -822,6 +822,63 @@ export interface PatientListRow {
   avatarUrl?: string;
 }
 
+export type PatientPriorityBand = 'critico' | 'alto' | 'medio' | 'baixo';
+
+export type PatientWalletSectionKey = 'clinical' | 'financial' | 'documents' | 'chat';
+
+export interface PatientWalletSectionAccess {
+  canRead: boolean;
+  error?: string | null;
+}
+
+export type PatientWalletAccess = Record<PatientWalletSectionKey, PatientWalletSectionAccess>;
+
+export interface PatientWalletAction {
+  label: string;
+  href: string;
+  kind: 'clinical' | 'financial' | 'documents' | 'chat' | 'agenda' | 'patient';
+}
+
+export interface PatientWalletRow extends PatientListRow {
+  priorityScore: number;
+  priorityBand: PatientPriorityBand;
+  triageStatus: 'acao_imediata' | 'monitorar' | 'rotina';
+  scoreExplanation: string;
+  scoreReasons: string[];
+  nextAction: PatientWalletAction;
+  nextAppointmentAt?: string;
+  activeProgramId?: string;
+  activeProgramName: string;
+  pendingDocumentCount: number;
+  unreadChatCount: number;
+  lastMessageAt?: string;
+  financialPendingCount: number;
+  financialOverdueCount: number;
+  clinicalAlertSeverity?: 'critical' | 'high' | 'medium' | 'low';
+}
+
+export interface PatientWalletSummary {
+  total: number;
+  loaded: number;
+  active: number;
+  highPriority: number;
+  criticalPriority: number;
+  lowAdherence: number;
+  pendingFinancial: number;
+  pendingDocuments: number;
+  unreadChats: number;
+}
+
+export interface PatientWalletSnapshot {
+  rows: PatientWalletRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  generatedAt: string;
+  summary: PatientWalletSummary;
+  access: PatientWalletAccess;
+}
+
 export interface DashboardAlert {
   id: string;
   patientId: string;

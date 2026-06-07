@@ -520,8 +520,8 @@ Status do corte 2026-06-07:
 - [x] Usuario sem `financial.read` recebe valor restrito e secao financeira com
       `canRead=false`, sem expor contagens/valores.
 - [~] Browser smoke autenticado local ficou limitado por ausencia de sessao
-      clinica no navegador; smoke anonimo confirmou redirect fail-closed para
-      `/auth/login`. Checks de codigo passaram.
+  clinica no navegador; smoke anonimo confirmou redirect fail-closed para
+  `/auth/login`. Checks de codigo passaram.
 
 Checklist UI/mobile:
 
@@ -568,25 +568,25 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Cards mobile com risco, proxima acao, chat e abrir 360.
-- [ ] Chips de filtro removiveis.
-- [ ] Drawer de contexto no desktop; tela/drawer full-screen no mobile.
-- [ ] Score com explicacao textual.
-- [ ] Selecao em massa apenas desktop ou modo explicito.
+- [x] Cards mobile com risco, proxima acao, chat e abrir 360.
+- [x] Chips de filtro removiveis.
+- [x] Drawer de contexto no desktop; tela/drawer full-screen no mobile.
+- [x] Score com explicacao textual.
+- [x] Selecao em massa apenas desktop ou modo explicito.
 
 Checklist backend:
 
-- [ ] View/RPC de carteira por tenant.
-- [ ] Campos agregados: adesao, financeiro, documentos, ultima mensagem,
+- [x] View/RPC de carteira por tenant.
+- [x] Campos agregados: adesao, financeiro, documentos, ultima mensagem,
       proxima consulta, programa ativo.
-- [ ] Permissoes por secao: clinical, financial, documents, chat.
-- [ ] Audit log para abertura de dados sensiveis se politica exigir.
+- [x] Permissoes por secao: clinical, financial, documents, chat.
+- [x] Audit log para abertura de dados sensiveis se politica exigir.
 
 Aceite:
 
-- [ ] Lista continua performatica.
-- [ ] Profissional entende por que paciente esta em prioridade alta.
-- [ ] Cross-tenant negado em todos os agregados.
+- [x] Lista continua performatica.
+- [x] Profissional entende por que paciente esta em prioridade alta.
+- [x] Cross-tenant negado em todos os agregados.
 
 ### M07 - Agenda, retornos e fila de atendimento
 
@@ -1207,7 +1207,7 @@ Aceite:
 | `/portal/dashboard`             | Cockpit operacional            | `/clinic/dashboard`                               | [~]            | N5              |
 | `/portal/schedule`              | Agenda                         | `/clinic/agenda`                                  | [~]            | N5              |
 | `/portal/attendance`            | Fila de atendimento            | `/clinic/agenda?tab=fila` ou `/clinic/attendance` | [ ]            | N5              |
-| `/portal/patients`              | Carteira/lista                 | `/clinic/patients`                                | [~]            | N5              |
+| `/portal/patients`              | Carteira/lista                 | `/clinic/patients`                                | [x]            | N5              |
 | `/portal/patients/case`         | Caso 360                       | `/clinic/patients/[patientId]`                    | [~]            | N5              |
 | `/portal/clinical/record`       | Prontuario                     | `/clinic/patients/[patientId]?tab=prontuario`     | [ ]            | N5              |
 | `/portal/clinical/encounter`    | Atendimento ao vivo            | `/clinic/patients/[patientId]/encounter`          | [~]            | N5              |

@@ -15,6 +15,7 @@ interface DialogProps {
   footer?: React.ReactNode;
   placement?: DialogPlacement;
   initialFocusRef?: React.RefObject<HTMLElement>;
+  mobileFullscreen?: boolean;
 }
 
 function getFocusableElements(container: HTMLElement) {
@@ -34,6 +35,7 @@ export default function Dialog({
   footer,
   placement = 'center',
   initialFocusRef,
+  mobileFullscreen = false,
 }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -87,7 +89,8 @@ export default function Dialog({
     <div
       className={cx(
         'fixed inset-0 z-50 flex bg-slate-950/40 p-4 backdrop-blur-sm',
-        placement === 'bottom' && 'items-end sm:items-center'
+        placement === 'bottom' && 'items-end sm:items-center',
+        mobileFullscreen && 'max-sm:p-0'
       )}
     >
       <button
@@ -107,7 +110,9 @@ export default function Dialog({
           placement === 'right' && 'ml-auto w-[calc(100vw-2rem)] max-w-xl self-stretch sm:w-full',
           placement === 'center' && 'm-auto w-[calc(100vw-2rem)] max-w-lg sm:w-full',
           placement === 'bottom' &&
-            'mx-auto mb-0 mt-auto w-[calc(100vw-2rem)] max-w-lg rounded-b-none sm:m-auto sm:rounded-lg'
+            'mx-auto mb-0 mt-auto w-[calc(100vw-2rem)] max-w-lg rounded-b-none sm:m-auto sm:rounded-lg',
+          mobileFullscreen &&
+            'max-sm:h-full max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:border-0'
         )}
       >
         <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
