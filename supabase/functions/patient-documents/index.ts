@@ -91,7 +91,7 @@ function getSignatureDisabledReason(params: {
     return 'Documento ja possui assinatura pendente.';
   }
   if (!signableCategories.has(params.category)) {
-    return 'Categoria sem contrato local para envio D4Sign.';
+    return 'Categoria sem contrato local para assinatura digital.';
   }
   if (params.documentStatus === 'cancelado' || params.documentStatus === 'vencido') {
     return 'Documento nao pode ser enviado nesse status.';

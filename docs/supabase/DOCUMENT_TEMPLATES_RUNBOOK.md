@@ -44,3 +44,22 @@ Document templates are part of the setup chain for:
 - Keep placeholders generic and development-safe.
 - If template schema changes, update this runbook and relevant document
   services/functions in the same task.
+
+## M11 Library Contract
+
+M11 adds a template library layer on top of the original document contracts:
+
+- `document_templates.current_version` stores the active library version number.
+- `document_template_versions` stores immutable snapshots when template content,
+  status, category, variables, name or signature enablement changes.
+- `duplicate_document_template(template_id, name)` duplicates an existing
+  template into a draft and writes audit records.
+- Generated document patient access is changed through
+  `set_generated_document_patient_release(...)`, not direct browser updates to
+  `generated_documents`.
+- `document_audit_events` records generation, status changes, release/hide
+  actions, template duplication and signature request/status changes without
+  raw provider payloads, signed URLs or private storage paths.
+
+Common clinical UI should say "assinatura digital". Provider names stay limited
+to admin/integration surfaces and runbooks where they are operationally needed.

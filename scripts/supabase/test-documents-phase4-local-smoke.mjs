@@ -583,11 +583,26 @@ async function run() {
   );
   const generatedDocumentId = generated.json.data.generatedDocument.id;
 
-  await admin
+  const directRelease = await staffSession.client
     .from('generated_documents')
     .update({ released_to_patient: true })
-    .eq('id', generatedDocumentId)
-    .throwOnError();
+    .eq('id', generatedDocumentId);
+  ok(directRelease.error, 'generated_documents direct authenticated update must be blocked');
+
+  const { data: releaseResult, error: releaseError } = await staffSession.client.rpc(
+    'set_generated_document_patient_release',
+    {
+      p_generated_document_id: generatedDocumentId,
+      p_patient_id: IDS.patientA,
+      p_released_to_patient: true,
+      p_reason: 'documents_phase4_local_smoke',
+    }
+  );
+  if (releaseError) throw releaseError;
+  ok(
+    releaseResult?.releasedToPatient === true,
+    'set_generated_document_patient_release must release the generated document'
+  );
 
   const { data: generatedMeta, error: generatedMetaError } = await admin
     .from('generated_documents')
@@ -603,6 +618,14 @@ async function run() {
     generatedMeta.released_to_patient === true,
     'generated document must be released for portal smoke'
   );
+
+  const { count: auditCount, error: auditError } = await admin
+    .from('document_audit_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('generated_document_id', generatedDocumentId)
+    .in('action', ['document.generated', 'document.released_to_patient']);
+  if (auditError) throw auditError;
+  ok((auditCount ?? 0) >= 2, 'document generation and release must be audited');
 
   currentStep = 'checking patient/guardian document RLS';
   await expectDocumentVisibility(

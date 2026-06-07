@@ -373,20 +373,20 @@ create table public.prescription_versions (
     on delete cascade
 );
 
-create index idx_prescriptions_patient_status
+create index if not exists idx_prescriptions_patient_status
   on public.prescriptions(tenant_id, patient_id, status, created_at desc);
-create index idx_prescriptions_patient_validity
+create index if not exists idx_prescriptions_patient_validity
   on public.prescriptions(tenant_id, patient_id, valid_until)
   where status = 'issued';
-create index idx_prescription_items_prescription_position
+create index if not exists idx_prescription_items_prescription_position
   on public.prescription_items(tenant_id, prescription_id, position);
-create index idx_prescription_regulatory_requirement
+create index if not exists idx_prescription_regulatory_requirement
   on public.prescription_regulatory_metadata(tenant_id, legal_signature_requirement, legal_signature_status);
-create index idx_prescription_pdf_artifacts_prescription
+create index if not exists idx_prescription_pdf_artifacts_prescription
   on public.prescription_pdf_artifacts(tenant_id, prescription_id, generated_at desc);
-create index idx_legal_signatures_prescription
+create index if not exists idx_legal_signatures_prescription
   on public.legal_signatures(tenant_id, prescription_id, status);
-create index idx_prescription_versions_prescription
+create index if not exists idx_prescription_versions_prescription
   on public.prescription_versions(tenant_id, prescription_id, version_number desc);
 
 select security.touch_updated_at('public.prescriptions');
@@ -1625,6 +1625,9 @@ select
 from public.prescriptions_placeholder pp
 on conflict (id) do nothing;
 
+alter table public.prescription_items
+  disable trigger trg_prescription_items_prevent_issued_mutation;
+
 insert into public.prescription_items (
   tenant_id,
   prescription_id,
@@ -1661,6 +1664,9 @@ where not exists (
   where pi.tenant_id = pp.tenant_id
     and pi.prescription_id = pp.id
 );
+
+alter table public.prescription_items
+  enable trigger trg_prescription_items_prevent_issued_mutation;
 
 insert into public.prescription_regulatory_metadata (
   tenant_id,

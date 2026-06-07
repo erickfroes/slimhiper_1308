@@ -148,7 +148,7 @@ function RowActions({ doc, patientId, onChanged }: RowActionsProps) {
         doc.canRequestSignature === true
           ? undefined
           : (doc.signatureDisabledReason ??
-            'Envio D4Sign exige signatario real validado para este paciente.'),
+            'Envio para assinatura digital exige signatario real validado para este paciente.'),
     },
   ];
   const actions = allActions.filter((action) => action.always);

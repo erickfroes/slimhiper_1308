@@ -941,39 +941,59 @@ Decisao de fusao:
 - Melhorar UX com biblioteca de templates, categorias e wizard.
 - Unificar linguagem: "assinatura digital", sem expor provedor na UI comum.
 
+Status do corte 2026-06-07:
+
+- [x] `/clinic/documents` redesenhado como workspace de biblioteca, filtros,
+      wizard paciente -> categoria -> template -> variaveis -> revisao ->
+      gerar -> liberar/assinar, tabela desktop e cards mobile.
+- [x] Drawer de documento usa `Dialog` com fullscreen mobile, foco preso,
+      Escape e acoes por teclado.
+- [x] Migration `20260607070000_320_document_library_m11.sql` adiciona
+      `document_template_versions`, `document_audit_events`, versionamento de
+      templates, triggers de auditoria e RPCs auditadas.
+- [x] Update direto autenticado em `generated_documents` foi removido para
+      `insert/update/delete`; liberacao/ocultacao usa
+      `set_generated_document_patient_release`.
+- [x] Duplicacao de templates usa `duplicate_document_template` e nasce como
+      rascunho auditado.
+- [x] UI comum fala "assinatura digital"; nomes de provedor ficam restritos a
+      contratos internos, admin/integracoes e runbooks.
+- [x] Smoke de documentos atualizado para validar bloqueio de update direto,
+      liberacao via RPC e auditoria.
+
 Checklist UI/mobile:
 
-- [ ] Wizard: paciente -> categoria -> template -> variaveis -> revisao ->
+- [x] Wizard: paciente -> categoria -> template -> variaveis -> revisao ->
       gerar -> liberar/assinar.
-- [ ] Biblioteca de templates com filtros, status e duplicar.
-- [ ] Drawer de documento full-screen no mobile.
-- [ ] Status visual com icone + texto + cor.
-- [ ] Falhas de provider como erro operacional, sem payload bruto.
-- [ ] Acao "liberar ao paciente" auditavel.
+- [x] Biblioteca de templates com filtros, status e duplicar.
+- [x] Drawer de documento full-screen no mobile.
+- [x] Status visual com icone + texto + cor.
+- [x] Falhas de provider como erro operacional, sem payload bruto.
+- [x] Acao "liberar ao paciente" auditavel.
 
 Checklist backend:
 
-- [ ] Confirmar `document_templates` cobre categorias e variaveis.
-- [ ] Adicionar versionamento de templates se necessario.
-- [ ] Adicionar audit para gerar/liberar/ocultar/assinar.
-- [ ] Trocar update sensivel direto por RPC/Edge auditada quando aplicavel.
-- [ ] Minimizar provider IDs no frontend.
-- [ ] Criar pacote de evidencia se exigido pelo produto.
+- [x] Confirmar `document_templates` cobre categorias e variaveis.
+- [x] Adicionar versionamento de templates se necessario.
+- [x] Adicionar audit para gerar/liberar/ocultar/assinar.
+- [x] Trocar update sensivel direto por RPC/Edge auditada quando aplicavel.
+- [x] Minimizar provider IDs no frontend.
+- [x] Criar pacote de evidencia se exigido pelo produto.
 
 Checklist seguranca:
 
-- [ ] Signed URL curta.
-- [ ] Storage path nunca enviado ao paciente.
-- [ ] D4Sign webhook fail-closed.
-- [ ] Provider payload minimizado.
-- [ ] Documento so liberado para patient/guardian autorizado.
+- [x] Signed URL curta.
+- [x] Storage path nunca enviado ao paciente.
+- [x] D4Sign webhook fail-closed.
+- [x] Provider payload minimizado.
+- [x] Documento so liberado para patient/guardian autorizado.
 
 Aceite:
 
-- [ ] Criar documento por template.
-- [ ] Enviar assinatura D4Sign.
-- [ ] Receber webhook/idempotencia.
-- [ ] Paciente acessa somente documento liberado.
+- [x] Criar documento por template.
+- [x] Enviar assinatura D4Sign.
+- [x] Receber webhook/idempotencia.
+- [x] Paciente acessa somente documento liberado.
 
 ### M12 - Comercial: servicos, pacotes, programas, beneficios e upgrades
 

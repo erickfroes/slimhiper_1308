@@ -40,6 +40,8 @@ const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 const getSupabaseClient = () => createBrowserSupabaseClient();
 const safeError = (error: unknown, fallback: string): SafeServiceError =>
   error instanceof Error ? { message: error.message || fallback } : { message: fallback };
+const publicDocumentErrorMessage = (message: unknown, fallback: string) =>
+  String(message ?? fallback).replace(/d4sign/gi, 'assinatura digital');
 
 function getAllowedVariableKeys(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
@@ -70,7 +72,7 @@ async function invokeSafe<T>(
     return {
       data: null,
       error: {
-        message: String(data?.error?.message ?? 'Falha na operação.'),
+        message: publicDocumentErrorMessage(data?.error?.message, 'Falha na operacao.'),
         code: String(data?.error?.code ?? 'unknown'),
       },
     };
