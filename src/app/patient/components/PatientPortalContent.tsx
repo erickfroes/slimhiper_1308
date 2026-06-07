@@ -14,6 +14,7 @@ import {
   LogOut,
   MessageSquare,
   RefreshCw,
+  Sparkles,
   UserRound,
   UsersRound,
   type LucideIcon,
@@ -26,6 +27,7 @@ import SectionPanel from '@/components/ui/SectionPanel';
 import Tabs from '@/components/ui/Tabs';
 import { getDocumentSignedUrl } from '@/services/documentsApi';
 import DailyPortalSection from './daily/DailyPortalSection';
+import PatientCommercialSection from './PatientCommercialSection';
 import PatientCommunitySection from './PatientCommunitySection';
 import PatientJourneySection from './PatientJourneySection';
 import {
@@ -56,6 +58,7 @@ type PortalTab =
   | 'resumo'
   | 'diario'
   | 'jornada'
+  | 'beneficios'
   | 'comunidade'
   | 'documentos'
   | 'financeiro'
@@ -67,6 +70,7 @@ const tabs: Array<{ id: PortalTab; label: string; shortLabel: string; icon: Luci
   { id: 'resumo', label: 'Resumo', shortLabel: 'Inicio', icon: Home },
   { id: 'diario', label: 'Diario', shortLabel: 'Hoje', icon: Activity },
   { id: 'jornada', label: 'Minha jornada', shortLabel: 'Jornada', icon: UserRound },
+  { id: 'beneficios', label: 'Beneficios', shortLabel: 'Planos', icon: Sparkles },
   { id: 'comunidade', label: 'Comunidade', shortLabel: 'Grupo', icon: UsersRound },
   { id: 'documentos', label: 'Documentos', shortLabel: 'Docs', icon: FileText },
   { id: 'financeiro', label: 'Financeiro', shortLabel: 'Pagar', icon: CreditCard },
@@ -638,6 +642,10 @@ export default function PatientPortalContent() {
                 onSaveStep={handleSaveOnboardingStep}
                 onOpenTab={(tab) => setActiveTab(tab)}
               />
+            ) : null}
+
+            {activeTab === 'beneficios' ? (
+              <PatientCommercialSection snapshot={snapshot} onActionMessage={setActionMessage} />
             ) : null}
 
             {activeTab === 'comunidade' ? (

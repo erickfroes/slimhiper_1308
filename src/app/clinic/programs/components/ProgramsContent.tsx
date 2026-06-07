@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Archive,
@@ -35,6 +36,8 @@ import {
 } from '@/services/programsApi';
 import { getPatientListPage } from '@/services/patientsApi';
 import Dialog from '@/components/ui/Dialog';
+import Tabs from '@/components/ui/Tabs';
+import CommercialCatalogContent, { type CommercialCatalogTab } from './CommercialCatalogContent';
 
 const colorMap: Record<string, { accent: string; badge: string; dot: string; icon: string }> = {
   teal: {
@@ -89,6 +92,19 @@ const emptySummary: ClinicProgramsSummary = {
   archived: 0,
   activePatients: 0,
 };
+
+type ProgramsSurfaceTab = CommercialCatalogTab | 'programs';
+
+const surfaceTabs: Array<{ id: ProgramsSurfaceTab; label: string }> = [
+  { id: 'services', label: 'Servicos' },
+  { id: 'packages', label: 'Pacotes' },
+  { id: 'programs', label: 'Programas' },
+  { id: 'upgrades', label: 'Upgrades' },
+];
+
+function isSurfaceTab(value: string | null): value is ProgramsSurfaceTab {
+  return typeof value === 'string' && surfaceTabs.some((tab) => tab.id === value);
+}
 
 type EnrollmentResult = {
   programName: string;
@@ -407,6 +423,9 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
 }
 
 export default function ProgramsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [surfaceTab, setSurfaceTab] = useState<ProgramsSurfaceTab>('programs');
   const [filter, setFilter] = useState<ProgramStatus | 'todos'>('todos');
   const [programs, setPrograms] = useState<ClinicProgram[]>([]);
   const [summary, setSummary] = useState<ClinicProgramsSummary>(emptySummary);
@@ -441,6 +460,23 @@ export default function ProgramsContent() {
   useEffect(() => {
     void loadPrograms();
   }, [loadPrograms]);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (isSurfaceTab(tab)) setSurfaceTab(tab);
+  }, [searchParams]);
+
+  const handleSurfaceTabChange = (tab: ProgramsSurfaceTab) => {
+    setSurfaceTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === 'programs') {
+      params.delete('tab');
+    } else {
+      params.set('tab', tab);
+    }
+    const query = params.toString();
+    router.replace(query ? `/clinic/programs?${query}` : '/clinic/programs');
+  };
 
   const filtered = useMemo(
     () => (filter === 'todos' ? programs : programs.filter((program) => program.status === filter)),
@@ -522,9 +558,9 @@ export default function ProgramsContent() {
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Programas e Pacotes</h1>
+          <h1 className="text-xl font-bold text-foreground">Comercial</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Templates clinicos persistidos, enrollment e check-ins por paciente.
+            Servicos, pacotes, programas, beneficios e upgrades auditados.
           </p>
         </div>
         <Link
@@ -536,108 +572,121 @@ export default function ProgramsContent() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <BookOpen size={15} className="text-primary" />
-          </div>
-          <div>
-            <div className="text-lg font-bold text-foreground">{summary.active}</div>
-            <div className="text-xs text-muted-foreground">Programas ativos</div>
-          </div>
-        </div>
-        <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
-            <Users size={15} className="text-teal-600" />
-          </div>
-          <div>
-            <div className="text-lg font-bold text-foreground">{summary.activePatients}</div>
-            <div className="text-xs text-muted-foreground">Pacientes em programas</div>
-          </div>
-        </div>
-        <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
-            <Layers size={15} className="text-violet-600" />
-          </div>
-          <div>
-            <div className="text-lg font-bold text-foreground">{summary.total}</div>
-            <div className="text-xs text-muted-foreground">Templates cadastrados</div>
-          </div>
-        </div>
-      </div>
+      <Tabs
+        items={surfaceTabs}
+        value={surfaceTab}
+        onValueChange={handleSurfaceTabChange}
+        label="Abas comerciais"
+      />
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => void loadPrograms()}
-            className="text-xs font-semibold underline"
-          >
-            Tentar novamente
-          </button>
-        </div>
-      )}
-
-      <div className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit">
-        {(['todos', 'ativo', 'rascunho', 'arquivado'] as const).map((statusFilter) => (
-          <button
-            key={statusFilter}
-            type="button"
-            onClick={() => setFilter(statusFilter)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              filter === statusFilter
-                ? 'bg-card text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {statusFilter === 'todos'
-              ? 'Todos'
-              : statusFilter === 'ativo'
-                ? 'Ativos'
-                : statusFilter === 'rascunho'
-                  ? 'Rascunhos'
-                  : 'Arquivados'}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-64 rounded-lg border border-border bg-card animate-pulse"
-            />
-          ))}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mb-3">
-            <BookOpen size={20} className="text-muted-foreground" />
+      {surfaceTab === 'programs' ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <BookOpen size={15} className="text-primary" />
+              </div>
+              <div>
+                <div className="text-lg font-bold text-foreground">{summary.active}</div>
+                <div className="text-xs text-muted-foreground">Programas ativos</div>
+              </div>
+            </div>
+            <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
+                <Users size={15} className="text-teal-600" />
+              </div>
+              <div>
+                <div className="text-lg font-bold text-foreground">{summary.activePatients}</div>
+                <div className="text-xs text-muted-foreground">Pacientes em programas</div>
+              </div>
+            </div>
+            <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
+                <Layers size={15} className="text-violet-600" />
+              </div>
+              <div>
+                <div className="text-lg font-bold text-foreground">{summary.total}</div>
+                <div className="text-xs text-muted-foreground">Templates cadastrados</div>
+              </div>
+            </div>
           </div>
-          <p className="text-sm font-medium text-foreground">Nenhum programa encontrado</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Crie um programa ou ajuste o filtro selecionado.
-          </p>
-        </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => void loadPrograms()}
+                className="text-xs font-semibold underline"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit">
+            {(['todos', 'ativo', 'rascunho', 'arquivado'] as const).map((statusFilter) => (
+              <button
+                key={statusFilter}
+                type="button"
+                onClick={() => setFilter(statusFilter)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  filter === statusFilter
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {statusFilter === 'todos'
+                  ? 'Todos'
+                  : statusFilter === 'ativo'
+                    ? 'Ativos'
+                    : statusFilter === 'rascunho'
+                      ? 'Rascunhos'
+                      : 'Arquivados'}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="h-64 rounded-lg border border-border bg-card animate-pulse"
+                />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mb-3">
+                <BookOpen size={20} className="text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium text-foreground">Nenhum programa encontrado</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Crie um programa ou ajuste o filtro selecionado.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+              {filtered.map((program) => (
+                <ProgramCard
+                  key={program.id}
+                  program={program}
+                  busy={busyProgramId === program.id}
+                  onArchive={(item) => void runProgramAction(item, 'archive')}
+                  onPublish={(item) => void runProgramAction(item, 'publish')}
+                  onClone={(item) => void runProgramAction(item, 'clone')}
+                  onEnroll={openEnrollment}
+                />
+              ))}
+            </div>
+          )}
+        </>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filtered.map((program) => (
-            <ProgramCard
-              key={program.id}
-              program={program}
-              busy={busyProgramId === program.id}
-              onArchive={(item) => void runProgramAction(item, 'archive')}
-              onPublish={(item) => void runProgramAction(item, 'publish')}
-              onClone={(item) => void runProgramAction(item, 'clone')}
-              onEnroll={openEnrollment}
-            />
-          ))}
-        </div>
+        <CommercialCatalogContent activeTab={surfaceTab} />
       )}
 
-      {enrollmentProgram && (
+      {surfaceTab === 'programs' && enrollmentProgram && (
         <Dialog
           open
           title="Matricular paciente"

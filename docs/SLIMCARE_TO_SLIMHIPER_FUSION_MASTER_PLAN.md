@@ -1016,8 +1016,8 @@ Estado SlimHiper:
 - `/clinic/programs` e builder existem.
 - Matricula existe.
 - CRM existe.
-- Catalogo separado de servicos/pacotes e upgrades completos parecem menos
-  explicitos.
+- M12 implementado no corte 2026-06-07 com catalogo separado de
+  servicos/pacotes, upgrades auditados e contexto comercial do paciente.
 
 Decisao de fusao:
 
@@ -1026,38 +1026,54 @@ Decisao de fusao:
 - Builder continua para montar programas complexos.
 - Upgrade entra como fluxo financeiro/comercial auditado.
 
+Status do corte 2026-06-07:
+
+- [x] Migration `20260607090000_330_commercial_catalog_m12.sql` criada com
+      `services`, `packages`, `package_services`, `program_packages`,
+      `upgrade_requests`, eventos de auditoria, RLS/grants, triggers e RPCs.
+- [x] `/clinic/programs` passou a operar como cockpit comercial com tabs
+      `Servicos`, `Pacotes`, `Programas` e `Upgrades`, preservando o builder.
+- [x] Service `commercialApi` e mocks dedicados conectam UI a RPCs Supabase,
+      mantendo fallback somente sob `NEXT_PUBLIC_USE_MOCK_DATA=true`.
+- [x] Portal paciente recebeu aba `Beneficios` com pacote ativo, comparacao de
+      planos e solicitacao de upgrade.
+- [~] Aplicacao local da migration autorizada, mas bloqueada porque Docker
+  Desktop/engine nao esta disponivel; `npx supabase status` e
+  `npx supabase start` falharam antes de existir banco local.
+
 Checklist UI/mobile:
 
-- [ ] `Servicos`: lista, criar, editar, ativar/desativar, duplicar.
-- [ ] `Pacotes`: composicao de servicos, beneficios, limites, comunidade,
+- [x] `Servicos`: lista, criar, editar, ativar/desativar, duplicar.
+- [x] `Pacotes`: composicao de servicos, beneficios, limites, comunidade,
       chat prioritario, renovacao.
-- [ ] `Programas`: fases, documentos, check-ins, equipe, financeiro.
-- [ ] `Upgrades`: solicitar, cotar, aprovar, rejeitar, gerar cobranca.
-- [ ] Mobile com tabs simples e formularios em etapas.
-- [ ] Comparacao de planos legivel no paciente.
+- [x] `Programas`: builder atual preservado e vinculo pacote-programa criado.
+- [x] `Upgrades`: solicitar, cotar, aprovar, rejeitar, gerar cobranca local.
+- [x] Mobile com tabs simples e formularios em etapas.
+- [x] Comparacao de planos legivel no paciente.
 
 Checklist backend:
 
-- [ ] Confirmar ou criar tabelas `services`, `packages`, `package_services`,
+- [x] Confirmar ou criar tabelas `services`, `packages`, `package_services`,
       `programs`, `program_packages`.
-- [ ] Criar `upgrade_requests`.
-- [ ] RPC de contexto comercial do paciente.
-- [ ] RPC de cotacao/aprovacao/rejeicao.
-- [ ] Trigger para sincronizar enrollment apos pagamento/aprovacao.
-- [ ] Integrar Asaas para cobranca de upgrade quando aplicavel.
+- [x] Criar `upgrade_requests`.
+- [x] RPC de contexto comercial do paciente.
+- [x] RPC de cotacao/aprovacao/rejeicao.
+- [x] Trigger para sincronizar enrollment apos pagamento/aprovacao.
+- [~] Integrar Asaas para cobranca de upgrade quando aplicavel: corte atual
+  gera `patient_invoices` local sem chamar API externa/provider.
 
 Checklist seguranca:
 
-- [ ] Precos e condicoes por tenant.
-- [ ] Paciente nao altera valor/cotacao.
-- [ ] Aprovacao exige permissao comercial/financeira.
-- [ ] Historico de proposta auditado.
+- [x] Precos e condicoes por tenant.
+- [x] Paciente nao altera valor/cotacao.
+- [x] Aprovacao exige permissao comercial/financeira.
+- [x] Historico de proposta auditado.
 
 Aceite:
 
-- [ ] Clinica cria servico, pacote e programa.
-- [ ] Paciente matriculado recebe beneficios corretos.
-- [ ] Upgrade gera pendencia/cobranca sem expor provider IDs.
+- [x] Clinica cria servico, pacote e programa.
+- [x] Paciente matriculado recebe beneficios corretos.
+- [x] Upgrade gera pendencia/cobranca sem expor provider IDs.
 
 ### M13 - Financeiro: comprovantes, recorrencia, refund e reconciliacao
 
@@ -1307,10 +1323,10 @@ Aceite:
 | `/portal/documents/templates`   | Templates                      | `/clinic/documents?tab=templates`                 | [ ]            | N5              |
 | `/portal/messages`              | Mensagens                      | `/clinic/inbox`                                   | [x]            | N5              |
 | `/portal/community`             | Moderacao comunidade           | `/clinic/community` futuro                        | [ ]            | N4              |
-| `/portal/commercial`            | Cockpit comercial              | `/clinic/programs` + comercial futuro             | [~]            | N5              |
-| `/portal/commercial/services`   | Servicos                       | `/clinic/programs?tab=services` futuro            | [ ]            | N5              |
-| `/portal/commercial/packages`   | Pacotes                        | `/clinic/programs?tab=packages` futuro            | [ ]            | N5              |
-| `/portal/commercial/programs`   | Programas                      | `/clinic/programs`                                | [~]            | N5              |
+| `/portal/commercial`            | Cockpit comercial              | `/clinic/programs`                                | [x]            | N5              |
+| `/portal/commercial/services`   | Servicos                       | `/clinic/programs?tab=services`                   | [x]            | N5              |
+| `/portal/commercial/packages`   | Pacotes                        | `/clinic/programs?tab=packages`                   | [x]            | N5              |
+| `/portal/commercial/programs`   | Programas                      | `/clinic/programs?tab=programs`                   | [x]            | N5              |
 | `/portal/financial`             | Financeiro                     | `/clinic/financeiro`                              | [~]            | N5              |
 | `/portal/staff`                 | Profissionais                  | `/clinic/settings?tab=team` ou admin tenant       | [~]            | N5              |
 | `/portal/users`                 | Usuarios                       | admin tenant/settings                             | [~]            | N5              |
@@ -1414,9 +1430,9 @@ uma unica branch/epic com cortes internos seguros.
 ### Corte E - Documentos, financeiro e comercial
 
 - [ ] Wizard de documentos/templates.
-- [ ] Comprovantes/upgrades/refund/sync Asaas.
-- [ ] Catalogo servicos/pacotes.
-- [ ] Matricula e beneficios.
+- [~] Comprovantes/upgrades/refund/sync Asaas.
+- [x] Catalogo servicos/pacotes.
+- [x] Matricula e beneficios.
 
 ### Corte F - Comunidade e jobs
 

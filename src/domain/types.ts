@@ -1121,6 +1121,160 @@ export interface ClinicProgram {
   color: string;
 }
 
+// Commercial catalog types
+
+export type CommercialServiceStatus = 'ativo' | 'inativo' | 'arquivado';
+export type CommercialPackageStatus = 'rascunho' | 'ativo' | 'inativo' | 'arquivado';
+export type CommercialRenewalPolicy = 'manual' | 'automatico' | 'sem_renovacao';
+export type CommercialDeliveryMode = 'presencial' | 'online' | 'hibrido' | 'interno';
+export type CommercialServiceCategory =
+  | 'clinico'
+  | 'nutricao'
+  | 'fitness'
+  | 'exame'
+  | 'documento'
+  | 'suporte'
+  | 'outro';
+
+export type UpgradeRequestStatus =
+  | 'solicitado'
+  | 'cotado'
+  | 'aprovado'
+  | 'rejeitado'
+  | 'cancelado'
+  | 'cobranca_pendente'
+  | 'concluido';
+
+export interface CommercialService {
+  id: string;
+  name: string;
+  category: CommercialServiceCategory;
+  description: string;
+  status: CommercialServiceStatus;
+  basePriceCents: number;
+  durationMinutes?: number | null;
+  unit: string;
+  deliveryMode: CommercialDeliveryMode;
+  packagesCount: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface CommercialPackageService {
+  id?: string;
+  serviceId: string;
+  serviceName: string;
+  category?: CommercialServiceCategory | string;
+  quantity: number;
+  unit: string;
+  limitPerPeriod?: number | null;
+  position?: number;
+}
+
+export interface CommercialProgramLink {
+  programId: string;
+  programName: string;
+  isDefault: boolean;
+  status: string;
+}
+
+export interface CommercialPackage {
+  id: string;
+  name: string;
+  description: string;
+  status: CommercialPackageStatus;
+  priceCents: number;
+  durationWeeks: number;
+  renewalPolicy: CommercialRenewalPolicy;
+  communityAccess: boolean;
+  priorityChat: boolean;
+  benefits: string[];
+  usageLimits: Array<{ label: string; value: string }>;
+  services: CommercialPackageService[];
+  programLinks: CommercialProgramLink[];
+  activePatients: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface CommercialProgramOption {
+  id: string;
+  name: string;
+  status: ProgramStatus;
+  programType: ProgramType;
+}
+
+export interface UpgradeRequest {
+  id: string;
+  patientId: string;
+  patientName: string;
+  enrollmentId?: string | null;
+  currentPackageId?: string | null;
+  currentPackageName?: string | null;
+  targetPackageId: string;
+  targetPackageName: string;
+  targetProgramId?: string | null;
+  status: UpgradeRequestStatus;
+  requestedByRole: 'patient' | 'guardian' | 'staff' | 'system';
+  reason: string;
+  quoteAmountCents?: number | null;
+  quoteCurrency: string;
+  quoteNotes: string;
+  quoteDueDate?: string | null;
+  invoiceId?: string | null;
+  invoiceStatus?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  decidedAt?: string | null;
+}
+
+export interface PatientCommercialPackage {
+  id: string;
+  name: string;
+  description: string;
+  priceCents: number;
+  durationWeeks: number;
+  renewalPolicy: CommercialRenewalPolicy;
+  communityAccess: boolean;
+  priorityChat: boolean;
+  benefits: string[];
+  usageLimits: Array<{ label: string; value: string }>;
+  services: Array<{
+    serviceId?: string;
+    serviceName: string;
+    quantity: number;
+    unit: string;
+    limitPerPeriod?: number | null;
+  }>;
+  programName?: string | null;
+  currentWeek?: number;
+  status?: string;
+}
+
+export interface PatientUpgradeRequest {
+  id: string;
+  targetPackageId: string;
+  targetPackageName: string;
+  status: UpgradeRequestStatus;
+  reason: string;
+  quoteAmountCents?: number | null;
+  quoteCurrency: string;
+  quoteNotes: string;
+  quoteDueDate?: string | null;
+  invoiceStatus?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface PatientCommercialContext {
+  selectedPatientId: string;
+  activeEnrollmentId?: string | null;
+  activePackage?: PatientCommercialPackage | null;
+  upgradeOptions: PatientCommercialPackage[];
+  upgradeRequests: PatientUpgradeRequest[];
+  lastCheckedAt?: string | null;
+}
+
 // ─── Program Builder types ────────────────────────────────────────────────────
 
 export type BuilderStepKey =
