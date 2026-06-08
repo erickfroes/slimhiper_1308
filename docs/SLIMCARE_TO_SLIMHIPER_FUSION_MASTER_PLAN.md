@@ -1180,33 +1180,44 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Settings com tabs horizontais no mobile.
-- [ ] Salvar por secao.
-- [ ] Feedback de status por secao.
-- [ ] Campos avancados colapsados.
-- [ ] Roles predefinidos antes de matriz granular.
-- [ ] Compliance como lista de lacunas acionaveis.
+- [x] Settings com tabs horizontais no mobile.
+- [x] Salvar por secao.
+- [x] Feedback de status por secao.
+- [x] Campos avancados colapsados.
+- [x] Roles predefinidos antes de matriz granular.
+- [x] Compliance como lista de lacunas acionaveis.
 
 Checklist backend:
 
-- [ ] Confirmar RPCs de settings cobrem novos campos.
-- [ ] Criar `chat_service_hours`.
-- [ ] Criar `auto_message_templates`.
-- [ ] Criar `compliance_gaps` se modulo entrar.
-- [ ] Audit log para alteracao de integracoes e permissoes.
+- [x] Confirmar RPCs de settings cobrem novos campos.
+- [x] Criar `chat_service_hours`.
+- [x] Criar `auto_message_templates`.
+- [x] Criar `compliance_gaps` se modulo entrar.
+- [x] Audit log para alteracao de integracoes e permissoes.
 
 Checklist seguranca:
 
-- [ ] Somente admin/owner altera integracoes.
-- [ ] Alterar horario/chat nao deve quebrar inbox.
-- [ ] Permissoes granulares com preview de impacto.
-- [ ] Mudancas sensiveis auditadas.
+- [x] Somente admin/owner altera integracoes.
+- [x] Alterar horario/chat nao deve quebrar inbox.
+- [x] Permissoes granulares com preview de impacto.
+- [x] Mudancas sensiveis auditadas.
 
 Aceite:
 
-- [ ] Clinica configura horario de chat e resposta automatica.
-- [ ] Admin ve lacunas de compliance.
-- [ ] Permissoes permanecem consistentes com RBAC/RLS.
+- [x] Clinica configura horario de chat e resposta automatica.
+- [x] Admin ve lacunas de compliance.
+- [x] Permissoes permanecem consistentes com RBAC/RLS.
+
+Implementacao M14:
+
+- `chat_service_hours` ja existia no M04; o M14 adiciona RPC auditada para
+  settings e preserva o contrato usado pelo inbox/portal.
+- `auto_message_templates`, `compliance_gaps`, seed RBAC incremental,
+  readiness runtime e snapshot admin foram adicionados em
+  `20260607130000_350_settings_team_permissions_compliance.sql`.
+- `/clinic/settings` passou a expor horario de chat, mensagens automaticas,
+  legal/LGPD e compliance acionavel. `/admin/security` passou a listar lacunas
+  de compliance agregadas por tenant.
 
 ### M15 - Relatorios e exports persistentes
 

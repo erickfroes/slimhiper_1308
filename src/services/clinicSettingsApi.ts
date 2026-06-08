@@ -49,6 +49,68 @@ export interface ClinicFinanceSettings {
   emailReceipts: boolean;
 }
 
+export interface ClinicLegalSettings {
+  privacyPolicyUrl: string;
+  termsUrl: string;
+  consentFormVersion: string;
+  dpoEmail: string;
+  lgpdRequestEmail: string;
+  dataRetentionYears: number;
+  requirePatientConsent: boolean;
+}
+
+export interface ClinicChatServiceHour {
+  id?: string;
+  weekday: number;
+  opensAt: string;
+  closesAt: string;
+  timezone: string;
+  autoReply: string;
+  isEnabled: boolean;
+  updatedAt: string | null;
+}
+
+export type AutoMessageChannel = 'chat' | 'portal' | 'email' | 'whatsapp' | 'sms';
+
+export interface AutoMessageTemplate {
+  id: string;
+  code: string;
+  name: string;
+  channel: AutoMessageChannel;
+  triggerEvent: string;
+  body: string;
+  isEnabled: boolean;
+  sortOrder: number;
+  updatedAt: string | null;
+}
+
+export type ComplianceGapSeverity = 'critical' | 'high' | 'medium' | 'low';
+export type ComplianceGapStatus = 'open' | 'acknowledged' | 'resolved' | 'dismissed';
+
+export interface ComplianceGap {
+  id: string;
+  code: string;
+  area: string;
+  severity: ComplianceGapSeverity;
+  status: ComplianceGapStatus;
+  title: string;
+  description: string;
+  remediation: string;
+  ownerRole: string | null;
+  dueAt: string | null;
+  detectedAt: string | null;
+  resolvedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ComplianceSummary {
+  open: number;
+  acknowledged: number;
+  resolved: number;
+  criticalOpen: number;
+  lastEvaluatedAt: string | null;
+}
+
 export interface ClinicUnit {
   id: string;
   code: string;
@@ -124,6 +186,11 @@ export interface ClinicSettingsSnapshot {
   branding: ClinicBrandingSettings;
   portal: ClinicPortalSettings;
   finance: ClinicFinanceSettings;
+  legal: ClinicLegalSettings;
+  chatServiceHours: ClinicChatServiceHour[];
+  autoMessageTemplates: AutoMessageTemplate[];
+  complianceGaps: ComplianceGap[];
+  complianceSummary: ComplianceSummary;
   units: ClinicUnit[];
   team: TeamMember[];
   roles: ClinicRole[];
@@ -140,6 +207,7 @@ export type ClinicSettingsPatch = Partial<{
   branding: ClinicBrandingSettings;
   portal: ClinicPortalSettings;
   finance: ClinicFinanceSettings;
+  legal: ClinicLegalSettings;
   defaultPrograms: { programIds: string[] };
   integrations: Record<string, { enabled: boolean; status?: string }>;
 }>;
@@ -153,6 +221,17 @@ export interface SaveClinicUnitInput {
   city: string;
   phone: string;
   isMain: boolean;
+}
+
+export interface SaveAutoMessageTemplateInput {
+  id?: string;
+  code?: string;
+  name: string;
+  channel: AutoMessageChannel;
+  triggerEvent: string;
+  body: string;
+  isEnabled: boolean;
+  sortOrder: number;
 }
 
 const DEFAULT_PROFILE: ClinicProfileSettings = {
@@ -181,6 +260,35 @@ const DEFAULT_FINANCE: ClinicFinanceSettings = {
   delinquencyAlerts: true,
   emailReceipts: true,
 };
+
+const DEFAULT_LEGAL: ClinicLegalSettings = {
+  privacyPolicyUrl: '',
+  termsUrl: '',
+  consentFormVersion: '',
+  dpoEmail: '',
+  lgpdRequestEmail: '',
+  dataRetentionYears: 6,
+  requirePatientConsent: true,
+};
+
+const DEFAULT_COMPLIANCE_SUMMARY: ComplianceSummary = {
+  open: 0,
+  acknowledged: 0,
+  resolved: 0,
+  criticalOpen: 0,
+  lastEvaluatedAt: null,
+};
+
+const DEFAULT_CHAT_HOURS: ClinicChatServiceHour[] = Array.from({ length: 7 }, (_, weekday) => ({
+  weekday,
+  opensAt: '08:00',
+  closesAt: '18:00',
+  timezone: 'America/Sao_Paulo',
+  autoReply:
+    'Estamos fora do horario de atendimento. Sua mensagem fica registrada e sera respondida no proximo periodo util.',
+  isEnabled: weekday >= 1 && weekday <= 5,
+  updatedAt: null,
+}));
 
 const INTEGRATION_DEFINITIONS = [
   {
@@ -268,6 +376,7 @@ function mapSettings(rawSettings: Record<string, unknown>, tenant: ClinicSetting
   const brandingRecord = asRecord(rawSettings.branding);
   const portalRecord = asRecord(rawSettings.portal);
   const financeRecord = asRecord(rawSettings.finance);
+  const legalRecord = asRecord(rawSettings.legal);
   const defaultProgramsRecord = asRecord(rawSettings.defaultPrograms);
 
   const profile: ClinicProfileSettings = {
@@ -313,11 +422,27 @@ function mapSettings(rawSettings: Record<string, unknown>, tenant: ClinicSetting
     emailReceipts: asBoolean(financeRecord.emailReceipts, DEFAULT_FINANCE.emailReceipts),
   };
 
+  const legal: ClinicLegalSettings = {
+    privacyPolicyUrl: asString(legalRecord.privacyPolicyUrl),
+    termsUrl: asString(legalRecord.termsUrl),
+    consentFormVersion: asString(legalRecord.consentFormVersion),
+    dpoEmail: asString(legalRecord.dpoEmail),
+    lgpdRequestEmail: asString(legalRecord.lgpdRequestEmail),
+    dataRetentionYears: Math.max(
+      1,
+      Math.min(20, asInteger(legalRecord.dataRetentionYears, DEFAULT_LEGAL.dataRetentionYears))
+    ),
+    requirePatientConsent: asBoolean(
+      legalRecord.requirePatientConsent,
+      DEFAULT_LEGAL.requirePatientConsent
+    ),
+  };
+
   const defaultProgramIds = asArray(defaultProgramsRecord.programIds)
     .map((id) => asString(id))
     .filter(Boolean);
 
-  return { profile, branding, portal, finance, defaultProgramIds };
+  return { profile, branding, portal, finance, legal, defaultProgramIds };
 }
 
 function mapUnit(value: unknown): ClinicUnit {
@@ -406,6 +531,113 @@ function mapProgram(value: unknown): ClinicProgramOption {
   };
 }
 
+function normalizeTime(value: unknown, fallback: string) {
+  const text = asString(value, fallback);
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : fallback;
+}
+
+function mapChatServiceHour(value: unknown): ClinicChatServiceHour {
+  const record = asRecord(value);
+  return {
+    id: asString(record.id) || undefined,
+    weekday: Math.max(0, Math.min(6, asInteger(record.weekday))),
+    opensAt: normalizeTime(record.opensAt, '08:00'),
+    closesAt: normalizeTime(record.closesAt, '18:00'),
+    timezone: asString(record.timezone, 'America/Sao_Paulo'),
+    autoReply: asString(record.autoReply),
+    isEnabled: asBoolean(record.isEnabled, true),
+    updatedAt: asString(record.updatedAt) || null,
+  };
+}
+
+function normalizeChatHours(value: unknown): ClinicChatServiceHour[] {
+  const mapped = asArray(value).map(mapChatServiceHour);
+  const byWeekday = new Map(DEFAULT_CHAT_HOURS.map((hour) => [hour.weekday, { ...hour }]));
+
+  mapped.forEach((hour) => {
+    byWeekday.set(hour.weekday, {
+      ...byWeekday.get(hour.weekday),
+      ...hour,
+    });
+  });
+
+  return Array.from(byWeekday.values()).sort((a, b) => a.weekday - b.weekday);
+}
+
+function normalizeAutoMessageChannel(value: unknown): AutoMessageChannel {
+  const normalized = asString(value, 'chat');
+  if (
+    normalized === 'portal' ||
+    normalized === 'email' ||
+    normalized === 'whatsapp' ||
+    normalized === 'sms'
+  ) {
+    return normalized;
+  }
+  return 'chat';
+}
+
+function mapAutoMessageTemplate(value: unknown): AutoMessageTemplate {
+  const record = asRecord(value);
+  return {
+    id: asString(record.id),
+    code: asString(record.code),
+    name: asString(record.name, 'Mensagem automatica'),
+    channel: normalizeAutoMessageChannel(record.channel),
+    triggerEvent: asString(record.triggerEvent, 'after_hours'),
+    body: asString(record.body),
+    isEnabled: asBoolean(record.isEnabled, true),
+    sortOrder: asInteger(record.sortOrder),
+    updatedAt: asString(record.updatedAt) || null,
+  };
+}
+
+function normalizeComplianceSeverity(value: unknown): ComplianceGapSeverity {
+  const normalized = asString(value).toLowerCase();
+  if (normalized === 'critical' || normalized === 'high' || normalized === 'low') {
+    return normalized;
+  }
+  return 'medium';
+}
+
+function normalizeComplianceStatus(value: unknown): ComplianceGapStatus {
+  const normalized = asString(value).toLowerCase();
+  if (normalized === 'acknowledged' || normalized === 'resolved' || normalized === 'dismissed') {
+    return normalized;
+  }
+  return 'open';
+}
+
+function mapComplianceGap(value: unknown): ComplianceGap {
+  const record = asRecord(value);
+  return {
+    id: asString(record.id),
+    code: asString(record.code),
+    area: asString(record.area, 'operational'),
+    severity: normalizeComplianceSeverity(record.severity),
+    status: normalizeComplianceStatus(record.status),
+    title: asString(record.title, 'Lacuna operacional'),
+    description: asString(record.description),
+    remediation: asString(record.remediation),
+    ownerRole: asString(record.ownerRole) || null,
+    dueAt: asString(record.dueAt) || null,
+    detectedAt: asString(record.detectedAt) || null,
+    resolvedAt: asString(record.resolvedAt) || null,
+    updatedAt: asString(record.updatedAt) || null,
+  };
+}
+
+function mapComplianceSummary(value: unknown): ComplianceSummary {
+  const record = asRecord(value);
+  return {
+    open: asInteger(record.open),
+    acknowledged: asInteger(record.acknowledged),
+    resolved: asInteger(record.resolved),
+    criticalOpen: asInteger(record.criticalOpen),
+    lastEvaluatedAt: asString(record.lastEvaluatedAt) || null,
+  };
+}
+
 function mapIntegrations(
   rawSettings: Record<string, unknown>,
   featureFlags: ClinicFeatureFlag[]
@@ -430,8 +662,9 @@ function mapIntegrations(
   });
 }
 
-function mapSnapshot(value: unknown): ClinicSettingsSnapshot {
+function mapSnapshot(value: unknown, operationalValue: unknown = null): ClinicSettingsSnapshot {
   const record = asRecord(value);
+  const operationalRecord = asRecord(operationalValue);
   const rawTenant = asRecord(record.tenant);
   const tenant: ClinicSettingsTenant = {
     id: asString(rawTenant.id),
@@ -441,13 +674,26 @@ function mapSnapshot(value: unknown): ClinicSettingsSnapshot {
     createdAt: asString(rawTenant.createdAt) || null,
     updatedAt: asString(rawTenant.updatedAt) || null,
   };
-  const rawSettings = asRecord(record.settings);
+  const rawSettings = {
+    ...asRecord(record.settings),
+    legal: asRecord(operationalRecord.legal),
+  };
   const mappedSettings = mapSettings(rawSettings, tenant);
   const featureFlags = asArray(record.featureFlags).map(mapFeatureFlag);
 
   return {
     tenant,
     ...mappedSettings,
+    chatServiceHours: normalizeChatHours(operationalRecord.chatServiceHours),
+    autoMessageTemplates: asArray(operationalRecord.autoMessageTemplates)
+      .map(mapAutoMessageTemplate)
+      .filter((template) => template.id),
+    complianceGaps: asArray(operationalRecord.complianceGaps)
+      .map(mapComplianceGap)
+      .filter((gap) => gap.id),
+    complianceSummary: operationalRecord.complianceSummary
+      ? mapComplianceSummary(operationalRecord.complianceSummary)
+      : DEFAULT_COMPLIANCE_SUMMARY,
     units: asArray(record.units)
       .map(mapUnit)
       .filter((unit) => unit.id),
@@ -474,17 +720,23 @@ function mapSnapshot(value: unknown): ClinicSettingsSnapshot {
 export async function getClinicSettings() {
   try {
     const supabase = createBrowserSupabaseClient();
-    const { data, error } = await supabase.rpc('get_clinic_settings_snapshot');
+    const [baseResult, operationalResult] = await Promise.all([
+      supabase.rpc('get_clinic_settings_snapshot'),
+      supabase.rpc('get_clinic_operational_settings_snapshot'),
+    ]);
 
-    if (error) {
+    if (baseResult.error || operationalResult.error) {
       return {
         data: null as ClinicSettingsSnapshot | null,
-        error: asServiceError(error, 'Nao foi possivel carregar configuracoes.'),
+        error: asServiceError(
+          baseResult.error ?? operationalResult.error,
+          'Nao foi possivel carregar configuracoes.'
+        ),
       };
     }
 
     return {
-      data: mapSnapshot(data),
+      data: mapSnapshot(baseResult.data, operationalResult.data),
       error: null as SafeServiceError | null,
     };
   } catch (error) {
@@ -515,6 +767,130 @@ export async function updateClinicSettings(name: string | null, patch: ClinicSet
     return {
       data: null as ClinicSettingsSnapshot | null,
       error: asServiceError(error, 'Nao foi possivel salvar configuracoes.'),
+    };
+  }
+}
+
+export async function saveChatServiceHours(hours: ClinicChatServiceHour[]) {
+  if (hours.length === 0 || hours.length > 7) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'Informe ate sete dias de atendimento.' } as SafeServiceError,
+    };
+  }
+
+  const payload = hours.map((hour) => ({
+    weekday: Math.max(0, Math.min(6, Math.trunc(hour.weekday))),
+    opensAt: normalizeTime(hour.opensAt, '08:00'),
+    closesAt: normalizeTime(hour.closesAt, '18:00'),
+    timezone: hour.timezone.trim() || 'America/Sao_Paulo',
+    autoReply: hour.autoReply.trim(),
+    isEnabled: hour.isEnabled,
+  }));
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('upsert_chat_service_hours', {
+      p_hours: payload,
+    });
+
+    if (error) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: asServiceError(error, 'Nao foi possivel salvar horario de chat.'),
+      };
+    }
+
+    return getClinicSettings();
+  } catch (error) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: asServiceError(error, 'Nao foi possivel salvar horario de chat.'),
+    };
+  }
+}
+
+export async function saveAutoMessageTemplate(input: SaveAutoMessageTemplateInput) {
+  const name = input.name.trim();
+  const body = input.body.trim();
+  const triggerEvent = input.triggerEvent.trim() || 'after_hours';
+
+  if (!name) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'Nome da mensagem automatica obrigatorio.' } as SafeServiceError,
+    };
+  }
+
+  if (body.length < 8) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'Mensagem automatica muito curta.' } as SafeServiceError,
+    };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('upsert_auto_message_template', {
+      p_template_id: input.id || null,
+      p_code: input.code?.trim() || null,
+      p_name: name,
+      p_channel: input.channel,
+      p_trigger_event: triggerEvent,
+      p_body: body,
+      p_is_enabled: input.isEnabled,
+      p_sort_order: input.sortOrder,
+      p_metadata: {},
+    });
+
+    if (error) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: asServiceError(error, 'Nao foi possivel salvar mensagem automatica.'),
+      };
+    }
+
+    return getClinicSettings();
+  } catch (error) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: asServiceError(error, 'Nao foi possivel salvar mensagem automatica.'),
+    };
+  }
+}
+
+export async function updateComplianceGapStatus(
+  gapId: string,
+  status: ComplianceGapStatus,
+  note = ''
+) {
+  if (!gapId.trim()) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'Lacuna de compliance invalida.' } as SafeServiceError,
+    };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('update_compliance_gap_status', {
+      p_gap_id: gapId,
+      p_status: status,
+      p_note: note.trim() || null,
+    });
+
+    if (error) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: asServiceError(error, 'Nao foi possivel atualizar compliance.'),
+      };
+    }
+
+    return getClinicSettings();
+  } catch (error) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: asServiceError(error, 'Nao foi possivel atualizar compliance.'),
     };
   }
 }

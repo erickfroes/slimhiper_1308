@@ -144,11 +144,28 @@ export interface PlatformAdminSupportSummary extends AdminSupportSession {
   tenantName: string;
 }
 
+export interface PlatformComplianceGap {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  code: string;
+  area: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  status: 'open' | 'acknowledged';
+  title: string;
+  description: string;
+  remediation: string;
+  ownerRole: string | null;
+  detectedAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface PlatformAdminSnapshot {
   tenants: AdminTenantRow[];
   webhooks: AdminWebhookEventSummary[];
   audit: AdminAuditEntry[];
   support: PlatformAdminSupportSummary[];
+  complianceGaps: PlatformComplianceGap[];
   warnings: string[];
 }
 
@@ -446,6 +463,37 @@ function mapBreakGlass(value: unknown): AdminBreakGlassRequest {
   };
 }
 
+function normalizeComplianceSeverity(value: unknown): PlatformComplianceGap['severity'] {
+  const normalized = asString(value).toLowerCase();
+  if (normalized === 'critical' || normalized === 'high' || normalized === 'low') {
+    return normalized;
+  }
+  return 'medium';
+}
+
+function normalizeComplianceStatus(value: unknown): PlatformComplianceGap['status'] {
+  return asString(value).toLowerCase() === 'acknowledged' ? 'acknowledged' : 'open';
+}
+
+function mapPlatformComplianceGap(value: unknown): PlatformComplianceGap {
+  const record = asRecord(value);
+  return {
+    id: asString(record.id),
+    tenantId: asString(record.tenantId),
+    tenantName: sanitizeOperationalText(record.tenantName, 'Tenant', 160),
+    code: asString(record.code),
+    area: asString(record.area, 'operational'),
+    severity: normalizeComplianceSeverity(record.severity),
+    status: normalizeComplianceStatus(record.status),
+    title: sanitizeOperationalText(record.title, 'Lacuna operacional', 180),
+    description: sanitizeOperationalText(record.description, '', 320),
+    remediation: sanitizeOperationalText(record.remediation, '', 320),
+    ownerRole: asNullableString(record.ownerRole),
+    detectedAt: asNullableString(record.detectedAt),
+    updatedAt: asNullableString(record.updatedAt),
+  };
+}
+
 function mapTenantDetail(value: unknown): AdminTenantDetail {
   const record = asRecord(value);
   return {
@@ -515,13 +563,39 @@ export async function listWebhookSummaries(limit = 100): Promise<{
   }
 }
 
+export async function listPlatformComplianceGaps(limit = 100): Promise<{
+  data: PlatformComplianceGap[];
+  error: SafeServiceError | null;
+}> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('list_platform_compliance_gaps', {
+      p_limit: limit,
+    });
+
+    if (error) {
+      return { data: [], error: asServiceError(error, 'Falha ao carregar compliance.') };
+    }
+
+    return {
+      data: asArray(data)
+        .map(mapPlatformComplianceGap)
+        .filter((gap) => gap.id && gap.tenantId),
+      error: null,
+    };
+  } catch (error) {
+    return { data: [], error: asServiceError(error, 'Falha ao carregar compliance.') };
+  }
+}
+
 export async function getPlatformAdminSnapshot(): Promise<{
   data: PlatformAdminSnapshot | null;
   error: SafeServiceError | null;
 }> {
-  const [tenantsResult, webhooksResult] = await Promise.all([
+  const [tenantsResult, webhooksResult, complianceResult] = await Promise.all([
     listTenants(),
     listWebhookSummaries(25),
+    listPlatformComplianceGaps(60),
   ]);
 
   const firstError = tenantsResult.error ?? webhooksResult.error;
@@ -550,6 +624,9 @@ export async function getPlatformAdminSnapshot(): Promise<{
   const warnings = detailResults
     .filter(({ result }) => result.error)
     .map(({ tenant }) => `Detalhes operacionais indisponiveis para ${tenant.clinicName}.`);
+  if (complianceResult.error) {
+    warnings.push('Lacunas de compliance indisponiveis no snapshot administrativo.');
+  }
 
   const tenantDetails = detailResults.flatMap(({ result }) => (result.data ? [result.data] : []));
 
@@ -577,6 +654,7 @@ export async function getPlatformAdminSnapshot(): Promise<{
       webhooks: webhooksResult.data,
       audit,
       support,
+      complianceGaps: complianceResult.data,
       warnings,
     },
     error: null,

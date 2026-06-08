@@ -8,16 +8,20 @@ import {
   Camera,
   Check,
   ChevronRight,
+  Clock,
   CreditCard,
   Edit2,
+  FileText,
   Globe,
   Loader2,
   MapPin,
+  MessageSquare,
   Palette,
   Plug,
   Plus,
   RefreshCw,
   Save,
+  ShieldAlert,
   ShieldCheck,
   UserPlus,
   Users,
@@ -26,17 +30,26 @@ import {
 import {
   getClinicSettings,
   inviteClinicMember,
+  saveAutoMessageTemplate,
+  saveChatServiceHours,
   saveClinicUnit,
+  updateComplianceGapStatus,
   updateClinicMemberRole,
   updateClinicSettings,
+  type AutoMessageTemplate,
+  type ClinicChatServiceHour,
   type ClinicBrandingSettings,
   type ClinicFinanceSettings,
   type ClinicIntegration,
+  type ClinicLegalSettings,
   type ClinicPortalSettings,
   type ClinicProfileSettings,
   type ClinicSettingsSnapshot,
   type ClinicUnit,
   type ClinicUnitStatus,
+  type ComplianceGap,
+  type ComplianceGapStatus,
+  type SaveAutoMessageTemplateInput,
   type SaveClinicUnitInput,
 } from '@/services/clinicSettingsApi';
 
@@ -47,9 +60,13 @@ type SectionId =
   | 'papeis'
   | 'branding'
   | 'portal'
+  | 'chat'
+  | 'mensagens'
+  | 'legal'
   | 'integracoes'
   | 'financeiro'
-  | 'programas';
+  | 'programas'
+  | 'compliance';
 
 type ProfileDraft = ClinicProfileSettings & { name: string };
 
@@ -57,6 +74,8 @@ type SaveKey =
   | 'profile'
   | 'branding'
   | 'portal'
+  | 'chatHours'
+  | 'legal'
   | 'integrations'
   | 'finance'
   | 'programs'
@@ -70,9 +89,13 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: React.ElementType }>
   { id: 'papeis', label: 'Papeis', icon: ShieldCheck },
   { id: 'branding', label: 'Branding', icon: Palette },
   { id: 'portal', label: 'Portal', icon: Globe },
+  { id: 'chat', label: 'Chat', icon: Clock },
+  { id: 'mensagens', label: 'Mensagens', icon: MessageSquare },
+  { id: 'legal', label: 'Legal', icon: FileText },
   { id: 'integracoes', label: 'Integracoes', icon: Plug },
   { id: 'financeiro', label: 'Financeiro', icon: CreditCard },
   { id: 'programas', label: 'Programas', icon: BookOpen },
+  { id: 'compliance', label: 'Compliance', icon: ShieldAlert },
 ];
 
 const EMPTY_PROFILE: ProfileDraft = {
@@ -113,6 +136,16 @@ const EMPTY_FINANCE: ClinicFinanceSettings = {
   emailReceipts: true,
 };
 
+const EMPTY_LEGAL: ClinicLegalSettings = {
+  privacyPolicyUrl: '',
+  termsUrl: '',
+  consentFormVersion: '',
+  dpoEmail: '',
+  lgpdRequestEmail: '',
+  dataRetentionYears: 6,
+  requirePatientConsent: true,
+};
+
 const EMPTY_UNIT: SaveClinicUnitInput = {
   code: '',
   name: '',
@@ -121,6 +154,15 @@ const EMPTY_UNIT: SaveClinicUnitInput = {
   city: '',
   phone: '',
   isMain: false,
+};
+
+const EMPTY_AUTO_TEMPLATE: SaveAutoMessageTemplateInput = {
+  name: '',
+  channel: 'chat',
+  triggerEvent: 'after_hours',
+  body: '',
+  isEnabled: true,
+  sortOrder: 0,
 };
 
 function Toggle({
@@ -230,6 +272,10 @@ function textStatus(status: string) {
   if (normalized === 'revoked') return 'Revogado';
   if (normalized === 'rascunho') return 'Rascunho';
   if (normalized === 'ativo') return 'Ativo';
+  if (normalized === 'open') return 'Aberta';
+  if (normalized === 'acknowledged') return 'Reconhecida';
+  if (normalized === 'resolved') return 'Resolvida';
+  if (normalized === 'dismissed') return 'Dispensada';
   return status || 'Indefinido';
 }
 
@@ -245,6 +291,34 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={['rounded-full px-2 py-0.5 text-xs font-medium', color].join(' ')}>
       {textStatus(status)}
+    </span>
+  );
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return 'N/D';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/D';
+  return date.toLocaleDateString('pt-BR');
+}
+
+function ComplianceSeverityBadge({ severity }: { severity: ComplianceGap['severity'] }) {
+  const config = {
+    critical: 'bg-negative-bg text-negative',
+    high: 'bg-warning-bg text-warning',
+    medium: 'bg-primary/10 text-primary',
+    low: 'bg-muted text-muted-foreground',
+  };
+  const label = {
+    critical: 'Critica',
+    high: 'Alta',
+    medium: 'Media',
+    low: 'Baixa',
+  };
+
+  return (
+    <span className={['rounded-full px-2 py-0.5 text-xs font-medium', config[severity]].join(' ')}>
+      {label[severity]}
     </span>
   );
 }
@@ -786,6 +860,14 @@ function SectionPapeis({
     );
   }, [snapshot.rolePermissions]);
   const roleOptions = useMemo(() => snapshot.roles.map((role) => role.name), [snapshot.roles]);
+  const getPermissionDelta = (currentRole: string, nextRole: string) => {
+    const current = permissionsByRole.get(currentRole) ?? new Set<string>();
+    const next = permissionsByRole.get(nextRole) ?? new Set<string>();
+    return {
+      added: Array.from(next).filter((permission) => !current.has(permission)),
+      removed: Array.from(current).filter((permission) => !next.has(permission)),
+    };
+  };
 
   const saveMemberRole = async (member: (typeof snapshot.team)[number]) => {
     const nextRole = memberRoleDraft[member.id] ?? member.roleCode;
@@ -840,47 +922,70 @@ function SectionPapeis({
             </p>
           </div>
           <div className="space-y-2">
-            {snapshot.team.map((member) => (
-              <div
-                key={member.id}
-                className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">{member.fullName}</p>
-                  <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+            {snapshot.team.map((member) => {
+              const nextRole = memberRoleDraft[member.id] ?? member.roleCode;
+              const delta = getPermissionDelta(member.roleCode, nextRole);
+              return (
+                <div key={member.id} className="rounded-lg border border-border px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {member.fullName}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+                    </div>
+                    <select
+                      className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs"
+                      value={nextRole}
+                      disabled={savingMemberId !== null}
+                      onChange={(event) =>
+                        setMemberRoleDraft((current) => ({
+                          ...current,
+                          [member.id]: event.target.value,
+                        }))
+                      }
+                    >
+                      {roleOptions.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn-secondary py-1.5 text-xs"
+                      disabled={savingMemberId !== null}
+                      onClick={() => void saveMemberRole(member)}
+                    >
+                      {savingMemberId === member.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Save size={14} />
+                      )}
+                      Salvar
+                    </button>
+                  </div>
+                  {nextRole !== member.roleCode ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                      <span className="rounded-full bg-positive-bg px-2 py-0.5 font-medium text-positive">
+                        +{delta.added.length} permissoes
+                      </span>
+                      <span className="rounded-full bg-warning-bg px-2 py-0.5 font-medium text-warning">
+                        -{delta.removed.length} permissoes
+                      </span>
+                      {delta.added.slice(0, 4).map((permission) => (
+                        <span
+                          key={permission}
+                          className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground"
+                        >
+                          {permission}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-                <select
-                  className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs"
-                  value={memberRoleDraft[member.id] ?? member.roleCode}
-                  disabled={savingMemberId !== null}
-                  onChange={(event) =>
-                    setMemberRoleDraft((current) => ({
-                      ...current,
-                      [member.id]: event.target.value,
-                    }))
-                  }
-                >
-                  {roleOptions.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="btn-secondary py-1.5 text-xs"
-                  disabled={savingMemberId !== null}
-                  onClick={() => void saveMemberRole(member)}
-                >
-                  {savingMemberId === member.id ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Save size={14} />
-                  )}
-                  Salvar
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1082,6 +1187,464 @@ function SectionPortal({
       <div className="flex justify-end">
         <SaveButton saving={saving} onClick={onSave}>
           Salvar portal
+        </SaveButton>
+      </div>
+    </div>
+  );
+}
+
+const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+
+function SectionChatHours({
+  hours,
+  setHours,
+  saving,
+  onSave,
+}: {
+  hours: ClinicChatServiceHour[];
+  setHours: React.Dispatch<React.SetStateAction<ClinicChatServiceHour[]>>;
+  saving: boolean;
+  onSave: () => void;
+}) {
+  const timezone = hours[0]?.timezone ?? 'America/Sao_Paulo';
+  const updateHour = (
+    weekday: number,
+    patch: Partial<
+      Pick<ClinicChatServiceHour, 'opensAt' | 'closesAt' | 'timezone' | 'autoReply' | 'isEnabled'>
+    >
+  ) =>
+    setHours((current) =>
+      current.map((hour) => (hour.weekday === weekday ? { ...hour, ...patch } : hour))
+    );
+  const updateTimezone = (value: string) =>
+    setHours((current) => current.map((hour) => ({ ...hour, timezone: value })));
+
+  return (
+    <div className="space-y-5">
+      <label className="block space-y-1.5 text-xs font-medium text-muted-foreground">
+        Fuso horario
+        <select
+          value={timezone}
+          onChange={(event) => updateTimezone(event.target.value)}
+          className="input-base"
+        >
+          <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+          <option value="America/Manaus">America/Manaus</option>
+          <option value="America/Belem">America/Belem</option>
+        </select>
+      </label>
+
+      <div className="space-y-2">
+        {hours.map((hour) => (
+          <div
+            key={hour.weekday}
+            className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-border bg-background p-3 md:grid-cols-[56px_1fr_1fr_auto]"
+          >
+            <span className="text-xs font-bold text-foreground">
+              {WEEKDAY_LABELS[hour.weekday]}
+            </span>
+            <label className="min-w-0 text-xs font-medium text-muted-foreground">
+              Abre
+              <input
+                type="time"
+                value={hour.opensAt}
+                disabled={!hour.isEnabled}
+                onChange={(event) => updateHour(hour.weekday, { opensAt: event.target.value })}
+                className="input-base mt-1"
+              />
+            </label>
+            <label className="min-w-0 text-xs font-medium text-muted-foreground">
+              Fecha
+              <input
+                type="time"
+                value={hour.closesAt}
+                disabled={!hour.isEnabled}
+                onChange={(event) => updateHour(hour.weekday, { closesAt: event.target.value })}
+                className="input-base mt-1"
+              />
+            </label>
+            <Toggle
+              label={`Ativar ${WEEKDAY_LABELS[hour.weekday]}`}
+              checked={hour.isEnabled}
+              onChange={(value) => updateHour(hour.weekday, { isEnabled: value })}
+            />
+          </div>
+        ))}
+      </div>
+
+      <details className="rounded-xl border border-border bg-muted/10 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-foreground">
+          Respostas automaticas por dia
+        </summary>
+        <div className="mt-4 space-y-3">
+          {hours.map((hour) => (
+            <label
+              key={hour.weekday}
+              className="block space-y-1.5 text-xs font-medium text-muted-foreground"
+            >
+              {WEEKDAY_LABELS[hour.weekday]}
+              <textarea
+                value={hour.autoReply}
+                onChange={(event) => updateHour(hour.weekday, { autoReply: event.target.value })}
+                className="input-base min-h-20 resize-y"
+              />
+            </label>
+          ))}
+        </div>
+      </details>
+
+      <div className="flex justify-end">
+        <SaveButton saving={saving} onClick={onSave}>
+          Salvar chat
+        </SaveButton>
+      </div>
+    </div>
+  );
+}
+
+function templateToInput(template: AutoMessageTemplate): SaveAutoMessageTemplateInput {
+  return {
+    id: template.id,
+    code: template.code,
+    name: template.name,
+    channel: template.channel,
+    triggerEvent: template.triggerEvent,
+    body: template.body,
+    isEnabled: template.isEnabled,
+    sortOrder: template.sortOrder,
+  };
+}
+
+function SectionAutoMessages({
+  templates,
+  onSnapshotUpdated,
+}: {
+  templates: AutoMessageTemplate[];
+  onSnapshotUpdated: (snapshot: ClinicSettingsSnapshot) => void;
+}) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [draft, setDraft] = useState<SaveAutoMessageTemplateInput>(EMPTY_AUTO_TEMPLATE);
+  const [savingTemplateId, setSavingTemplateId] = useState<string | null>(null);
+  const [messageError, setMessageError] = useState<string | null>(null);
+  const [messageNotice, setMessageNotice] = useState<string | null>(null);
+
+  const update = (key: keyof SaveAutoMessageTemplateInput, value: string | boolean | number) =>
+    setDraft((current) => ({ ...current, [key]: value }));
+
+  const startNew = () => {
+    setDraft(EMPTY_AUTO_TEMPLATE);
+    setFormOpen(true);
+    setMessageError(null);
+    setMessageNotice(null);
+  };
+
+  const startEdit = (template: AutoMessageTemplate) => {
+    setDraft(templateToInput(template));
+    setFormOpen(true);
+    setMessageError(null);
+    setMessageNotice(null);
+  };
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSavingTemplateId(draft.id ?? 'new');
+    setMessageError(null);
+    setMessageNotice(null);
+    const result = await saveAutoMessageTemplate(draft);
+    if (result.error || !result.data) {
+      setMessageError(result.error?.message ?? 'Nao foi possivel salvar mensagem automatica.');
+    } else {
+      onSnapshotUpdated(result.data);
+      setDraft(EMPTY_AUTO_TEMPLATE);
+      setFormOpen(false);
+      setMessageNotice('Mensagem automatica salva com auditoria.');
+    }
+    setSavingTemplateId(null);
+  };
+
+  const toggleTemplate = async (template: AutoMessageTemplate, isEnabled: boolean) => {
+    setSavingTemplateId(template.id);
+    setMessageError(null);
+    setMessageNotice(null);
+    const result = await saveAutoMessageTemplate({ ...templateToInput(template), isEnabled });
+    if (result.error || !result.data) {
+      setMessageError(result.error?.message ?? 'Nao foi possivel atualizar mensagem.');
+    } else {
+      onSnapshotUpdated(result.data);
+      setMessageNotice('Mensagem automatica atualizada.');
+    }
+    setSavingTemplateId(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{templates.length} mensagens configuradas</p>
+        <button type="button" onClick={startNew} className="btn-secondary py-1.5 text-xs">
+          <Plus size={14} />
+          Nova mensagem
+        </button>
+      </div>
+
+      {(messageError || messageNotice) && (
+        <div className="space-y-2">
+          {messageError && <InlineAlert message={messageError} />}
+          {messageNotice && <InlineAlert tone="ok" message={messageNotice} />}
+        </div>
+      )}
+
+      {formOpen && (
+        <form
+          onSubmit={(event) => void submit(event)}
+          className="space-y-3 rounded-xl border border-border bg-muted/10 p-4"
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Nome
+              <input
+                value={draft.name}
+                onChange={(event) => update('name', event.target.value)}
+                className="input-base mt-1"
+              />
+            </label>
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Codigo
+              <input
+                value={draft.code ?? ''}
+                onChange={(event) => update('code', event.target.value)}
+                className="input-base mt-1 font-mono"
+              />
+            </label>
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Canal
+              <select
+                value={draft.channel}
+                onChange={(event) => update('channel', event.target.value)}
+                className="input-base mt-1"
+              >
+                <option value="chat">Chat</option>
+                <option value="portal">Portal</option>
+                <option value="email">E-mail</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="sms">SMS</option>
+              </select>
+            </label>
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Gatilho
+              <select
+                value={draft.triggerEvent}
+                onChange={(event) => update('triggerEvent', event.target.value)}
+                className="input-base mt-1"
+              >
+                <option value="after_hours">Fora do horario</option>
+                <option value="welcome">Boas-vindas</option>
+                <option value="appointment_reminder">Lembrete de agenda</option>
+                <option value="document_ready">Documento pronto</option>
+                <option value="payment_pending">Pagamento pendente</option>
+              </select>
+            </label>
+          </div>
+          <label className="block space-y-1 text-xs font-medium text-muted-foreground">
+            Mensagem
+            <textarea
+              value={draft.body}
+              onChange={(event) => update('body', event.target.value)}
+              className="input-base mt-1 min-h-24 resize-y"
+            />
+          </label>
+          <details className="rounded-xl border border-border bg-background p-3">
+            <summary className="cursor-pointer text-xs font-semibold text-foreground">
+              Avancado
+            </summary>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                Ordem
+                <input
+                  type="number"
+                  min={0}
+                  max={9999}
+                  value={draft.sortOrder}
+                  onChange={(event) => update('sortOrder', Number(event.target.value))}
+                  className="input-base mt-1"
+                />
+              </label>
+              <label className="flex items-center gap-2 pt-6 text-xs font-medium text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={draft.isEnabled}
+                  onChange={(event) => update('isEnabled', event.target.checked)}
+                  className="rounded border-border text-primary focus:ring-primary"
+                />
+                Ativa
+              </label>
+            </div>
+          </details>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className="btn-secondary py-1.5 text-xs"
+              onClick={() => setFormOpen(false)}
+            >
+              <X size={14} />
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="btn-primary py-1.5 text-xs"
+              disabled={savingTemplateId !== null}
+            >
+              {savingTemplateId ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Save size={14} />
+              )}
+              Salvar
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="space-y-2">
+        {templates.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+            Nenhuma mensagem automatica configurada.
+          </div>
+        ) : (
+          templates.map((template) => (
+            <div key={template.id} className="rounded-xl border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-foreground">{template.name}</p>
+                    <StatusBadge status={template.isEnabled ? 'active' : 'inactive'} />
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                      {template.channel}
+                    </span>
+                  </div>
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">
+                    {template.triggerEvent}
+                  </p>
+                  <p className="mt-2 max-h-10 overflow-hidden text-xs text-muted-foreground">
+                    {template.body}
+                  </p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <Toggle
+                    label={`Ativar ${template.name}`}
+                    checked={template.isEnabled}
+                    disabled={savingTemplateId !== null}
+                    onChange={(value) => void toggleTemplate(template, value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => startEdit(template)}
+                    className="btn-ghost p-1.5"
+                    aria-label={`Editar ${template.name}`}
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionLegal({
+  draft,
+  setDraft,
+  saving,
+  onSave,
+}: {
+  draft: ClinicLegalSettings;
+  setDraft: React.Dispatch<React.SetStateAction<ClinicLegalSettings>>;
+  saving: boolean;
+  onSave: () => void;
+}) {
+  const update = (key: keyof ClinicLegalSettings, value: string | number | boolean) =>
+    setDraft((current) => ({ ...current, [key]: value }));
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          E-mail DPO/LGPD
+          <input
+            type="email"
+            value={draft.dpoEmail}
+            onChange={(event) => update('dpoEmail', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          E-mail de solicitacoes LGPD
+          <input
+            type="email"
+            value={draft.lgpdRequestEmail}
+            onChange={(event) => update('lgpdRequestEmail', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          URL politica de privacidade
+          <input
+            value={draft.privacyPolicyUrl}
+            onChange={(event) => update('privacyPolicyUrl', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          URL termos de uso
+          <input
+            value={draft.termsUrl}
+            onChange={(event) => update('termsUrl', event.target.value)}
+            className="input-base"
+          />
+        </label>
+      </div>
+
+      <details className="rounded-xl border border-border bg-muted/10 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-foreground">
+          Campos avancados
+        </summary>
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+            Versao do consentimento
+            <input
+              value={draft.consentFormVersion}
+              onChange={(event) => update('consentFormVersion', event.target.value)}
+              className="input-base"
+            />
+          </label>
+          <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+            Retencao operacional (anos)
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={draft.dataRetentionYears}
+              onChange={(event) => update('dataRetentionYears', Number(event.target.value))}
+              className="input-base"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={draft.requirePatientConsent}
+              onChange={(event) => update('requirePatientConsent', event.target.checked)}
+              className="rounded border-border text-primary focus:ring-primary"
+            />
+            Exigir consentimento do paciente
+          </label>
+        </div>
+      </details>
+
+      <div className="flex justify-end">
+        <SaveButton saving={saving} onClick={onSave}>
+          Salvar legal
         </SaveButton>
       </div>
     </div>
@@ -1328,6 +1891,162 @@ function SectionProgramas({
   );
 }
 
+function SectionCompliance({
+  snapshot,
+  onSnapshotUpdated,
+}: {
+  snapshot: ClinicSettingsSnapshot;
+  onSnapshotUpdated: (snapshot: ClinicSettingsSnapshot) => void;
+}) {
+  const [savingGapId, setSavingGapId] = useState<string | null>(null);
+  const [gapError, setGapError] = useState<string | null>(null);
+  const [gapNotice, setGapNotice] = useState<string | null>(null);
+  const activeGaps = snapshot.complianceGaps.filter((gap) => gap.status !== 'resolved');
+  const resolvedGaps = snapshot.complianceGaps.filter((gap) => gap.status === 'resolved');
+
+  const changeStatus = async (gap: ComplianceGap, status: ComplianceGapStatus) => {
+    setSavingGapId(gap.id);
+    setGapError(null);
+    setGapNotice(null);
+    const result = await updateComplianceGapStatus(gap.id, status);
+    if (result.error || !result.data) {
+      setGapError(result.error?.message ?? 'Nao foi possivel atualizar compliance.');
+    } else {
+      onSnapshotUpdated(result.data);
+      setGapNotice('Status de compliance atualizado com auditoria.');
+    }
+    setSavingGapId(null);
+  };
+
+  const renderGap = (gap: ComplianceGap) => (
+    <div key={gap.id} className="rounded-xl border border-border bg-background p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-foreground">{gap.title}</p>
+            <ComplianceSeverityBadge severity={gap.severity} />
+            <StatusBadge status={gap.status} />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{gap.description}</p>
+          {gap.remediation ? (
+            <p className="mt-2 text-xs font-medium text-foreground">{gap.remediation}</p>
+          ) : null}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span>{gap.area}</span>
+            <span>{gap.code}</span>
+            <span>Atualizado {formatDateTime(gap.updatedAt)}</span>
+          </div>
+        </div>
+        <div className="flex flex-shrink-0 flex-wrap justify-end gap-2">
+          {gap.status === 'open' ? (
+            <button
+              type="button"
+              className="btn-secondary py-1.5 text-xs"
+              disabled={savingGapId !== null}
+              onClick={() => void changeStatus(gap, 'acknowledged')}
+            >
+              {savingGapId === gap.id ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Check size={14} />
+              )}
+              Reconhecer
+            </button>
+          ) : null}
+          {gap.status !== 'resolved' ? (
+            <button
+              type="button"
+              className="btn-primary py-1.5 text-xs"
+              disabled={savingGapId !== null}
+              onClick={() => void changeStatus(gap, 'resolved')}
+            >
+              {savingGapId === gap.id ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <ShieldCheck size={14} />
+              )}
+              Resolver
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn-secondary py-1.5 text-xs"
+              disabled={savingGapId !== null}
+              onClick={() => void changeStatus(gap, 'open')}
+            >
+              Reabrir
+            </button>
+          )}
+          {gap.status !== 'resolved' ? (
+            <button
+              type="button"
+              className="btn-secondary py-1.5 text-xs"
+              disabled={savingGapId !== null}
+              onClick={() => void changeStatus(gap, 'dismissed')}
+            >
+              <X size={14} />
+              Dispensar
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded-xl border border-border bg-background p-3">
+          <p className="text-lg font-bold text-foreground">{snapshot.complianceSummary.open}</p>
+          <p className="text-xs text-muted-foreground">Abertas</p>
+        </div>
+        <div className="rounded-xl border border-border bg-background p-3">
+          <p className="text-lg font-bold text-foreground">
+            {snapshot.complianceSummary.acknowledged}
+          </p>
+          <p className="text-xs text-muted-foreground">Reconhecidas</p>
+        </div>
+        <div className="rounded-xl border border-border bg-background p-3">
+          <p className="text-lg font-bold text-foreground">
+            {snapshot.complianceSummary.criticalOpen}
+          </p>
+          <p className="text-xs text-muted-foreground">Criticas</p>
+        </div>
+        <div className="rounded-xl border border-border bg-background p-3">
+          <p className="text-lg font-bold text-foreground">{snapshot.complianceSummary.resolved}</p>
+          <p className="text-xs text-muted-foreground">Resolvidas</p>
+        </div>
+      </div>
+
+      {(gapError || gapNotice) && (
+        <div className="space-y-2">
+          {gapError && <InlineAlert message={gapError} />}
+          {gapNotice && <InlineAlert tone="ok" message={gapNotice} />}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {activeGaps.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+            Nenhuma lacuna operacional aberta.
+          </div>
+        ) : (
+          activeGaps.map(renderGap)
+        )}
+      </div>
+
+      {resolvedGaps.length > 0 ? (
+        <details className="rounded-xl border border-border bg-muted/10 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-foreground">
+            Lacunas resolvidas
+          </summary>
+          <div className="mt-4 space-y-3">{resolvedGaps.map(renderGap)}</div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ClinicSettingsContent() {
   const [activeSection, setActiveSection] = useState<SectionId>('perfil');
   const [snapshot, setSnapshot] = useState<ClinicSettingsSnapshot | null>(null);
@@ -1340,6 +2059,8 @@ export default function ClinicSettingsContent() {
   const [brandingDraft, setBrandingDraft] = useState<ClinicBrandingSettings>(EMPTY_BRANDING);
   const [portalDraft, setPortalDraft] = useState<ClinicPortalSettings>(EMPTY_PORTAL);
   const [financeDraft, setFinanceDraft] = useState<ClinicFinanceSettings>(EMPTY_FINANCE);
+  const [legalDraft, setLegalDraft] = useState<ClinicLegalSettings>(EMPTY_LEGAL);
+  const [chatHoursDraft, setChatHoursDraft] = useState<ClinicChatServiceHour[]>([]);
   const [integrationDraft, setIntegrationDraft] = useState<Record<string, boolean>>({});
   const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
   const [unitDraft, setUnitDraft] = useState<SaveClinicUnitInput>(EMPTY_UNIT);
@@ -1351,6 +2072,8 @@ export default function ClinicSettingsContent() {
     setBrandingDraft(next.branding);
     setPortalDraft(next.portal);
     setFinanceDraft(next.finance);
+    setLegalDraft(next.legal);
+    setChatHoursDraft(next.chatServiceHours);
     setIntegrationDraft(
       Object.fromEntries(
         next.integrations.map((integration) => [integration.id, integration.enabled])
@@ -1408,6 +2131,23 @@ export default function ClinicSettingsContent() {
 
   const savePortal = () =>
     void savePatch('portal', 'Preferencias do portal salvas.', { portal: portalDraft });
+
+  const saveChatHours = async () => {
+    setSavingKey('chatHours');
+    setSaveError(null);
+    setNotice(null);
+    const result = await saveChatServiceHours(chatHoursDraft);
+    if (result.error || !result.data) {
+      setSaveError(result.error?.message ?? 'Nao foi possivel salvar horario de chat.');
+    } else {
+      applySnapshot(result.data);
+      setNotice('Horario de chat salvo com auditoria.');
+    }
+    setSavingKey(null);
+  };
+
+  const saveLegal = () =>
+    void savePatch('legal', 'Configuracoes legais salvas.', { legal: legalDraft });
 
   const saveIntegrations = () => {
     const integrations = Object.fromEntries(
@@ -1601,6 +2341,31 @@ export default function ClinicSettingsContent() {
           />
         </SectionCard>
 
+        <SectionCard id="chat" title="Horario de Chat" icon={Clock}>
+          <SectionChatHours
+            hours={chatHoursDraft}
+            setHours={setChatHoursDraft}
+            saving={savingKey === 'chatHours'}
+            onSave={() => void saveChatHours()}
+          />
+        </SectionCard>
+
+        <SectionCard id="mensagens" title="Mensagens Automaticas" icon={MessageSquare}>
+          <SectionAutoMessages
+            templates={snapshot.autoMessageTemplates}
+            onSnapshotUpdated={applySnapshot}
+          />
+        </SectionCard>
+
+        <SectionCard id="legal" title="Legal e LGPD" icon={FileText}>
+          <SectionLegal
+            draft={legalDraft}
+            setDraft={setLegalDraft}
+            saving={savingKey === 'legal'}
+            onSave={saveLegal}
+          />
+        </SectionCard>
+
         <SectionCard id="integracoes" title="Integracoes" icon={Plug}>
           <SectionIntegracoes
             integrations={snapshot.integrations}
@@ -1628,6 +2393,10 @@ export default function ClinicSettingsContent() {
             saving={savingKey === 'programs'}
             onSave={savePrograms}
           />
+        </SectionCard>
+
+        <SectionCard id="compliance" title="Compliance Operacional" icon={ShieldAlert}>
+          <SectionCompliance snapshot={snapshot} onSnapshotUpdated={applySnapshot} />
         </SectionCard>
       </div>
     </div>

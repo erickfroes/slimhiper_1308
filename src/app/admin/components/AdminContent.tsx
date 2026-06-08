@@ -13,6 +13,7 @@ import {
   HardDrive,
   LifeBuoy,
   Link2,
+  ShieldAlert,
   Shield,
   Users,
   Webhook,
@@ -26,6 +27,7 @@ import {
   type AdminWebhookEventSummary,
   type PlatformAdminSupportSummary,
   type PlatformAdminSnapshot,
+  type PlatformComplianceGap,
 } from '@/services/adminApi';
 
 type AdminSection =
@@ -138,6 +140,27 @@ function WebhookStatusBadge({ status }: { status: AdminWebhookEventSummary['stat
   );
 }
 
+function ComplianceSeverityBadge({ severity }: { severity: PlatformComplianceGap['severity'] }) {
+  const tone = {
+    critical: 'border-red-200 bg-red-50 text-red-700',
+    high: 'border-amber-200 bg-amber-50 text-amber-700',
+    medium: 'border-blue-200 bg-blue-50 text-blue-700',
+    low: 'border-slate-200 bg-slate-100 text-slate-600',
+  };
+  const label = {
+    critical: 'Critica',
+    high: 'Alta',
+    medium: 'Media',
+    low: 'Baixa',
+  };
+
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${tone[severity]}`}>
+      {label[severity]}
+    </span>
+  );
+}
+
 function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
   return (
     <div className="card-base overflow-hidden">
@@ -217,6 +240,50 @@ function TenantsTable({ tenants }: { tenants: AdminTenantRow[] }) {
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function ComplianceGapsList({ gaps }: { gaps: PlatformComplianceGap[] }) {
+  return (
+    <div className="card-base overflow-hidden">
+      <div className="border-b border-border px-5 py-4">
+        <h2 className="text-sm font-bold text-foreground">Lacunas de compliance</h2>
+      </div>
+      <div className="divide-y divide-border">
+        {gaps.length === 0 ? (
+          <div className="px-5 py-8 text-sm text-muted-foreground">
+            Nenhuma lacuna operacional aberta nos tenants monitorados.
+          </div>
+        ) : (
+          gaps.slice(0, 12).map((gap) => (
+            <div key={gap.id} className="flex items-start gap-3 px-5 py-3">
+              <ShieldAlert size={15} className="mt-0.5 text-primary" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-foreground">{gap.title}</span>
+                  <ComplianceSeverityBadge severity={gap.severity} />
+                  <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                    {gap.status === 'acknowledged' ? 'Reconhecida' : 'Aberta'}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {gap.tenantName} - {gap.area} - {formatDate(gap.updatedAt)}
+                </p>
+                {gap.remediation ? (
+                  <p className="mt-1 text-xs text-foreground">{gap.remediation}</p>
+                ) : null}
+              </div>
+              <Link
+                href={`/admin/tenants/${gap.tenantId}`}
+                className="text-xs font-semibold text-primary"
+              >
+                Tenant
+              </Link>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -355,6 +422,7 @@ function Overview({ snapshot }: { snapshot: PlatformAdminSnapshot }) {
       pendingBreakGlass: tenants.reduce((sum, tenant) => sum + tenant.pendingBreakGlass, 0),
       supportOpen: snapshot.support.filter((session) => session.status !== 'resolved').length,
       auditEvents: snapshot.audit.length,
+      complianceOpen: snapshot.complianceGaps.filter((gap) => gap.status === 'open').length,
     };
   }, [snapshot]);
 
@@ -391,6 +459,12 @@ function Overview({ snapshot }: { snapshot: PlatformAdminSnapshot }) {
           value={stats.auditEvents}
           tone="blue"
         />
+        <StatCard
+          icon={ShieldAlert}
+          label="Compliance aberto"
+          value={stats.complianceOpen}
+          tone={stats.complianceOpen ? 'amber' : 'emerald'}
+        />
       </div>
       {snapshot.warnings.length ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -405,6 +479,7 @@ function Overview({ snapshot }: { snapshot: PlatformAdminSnapshot }) {
         <SupportList sessions={snapshot.support} />
         <AuditList audit={snapshot.audit.slice(0, 8)} />
       </div>
+      <ComplianceGapsList gaps={snapshot.complianceGaps} />
     </div>
   );
 }
@@ -444,25 +519,34 @@ function SectionFromSnapshot({
 
   if (section === 'security') {
     return (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <StatCard
-          icon={Shield}
-          label="Break-glass pendente"
-          value={snapshot.tenants.reduce((sum, tenant) => sum + tenant.pendingBreakGlass, 0)}
-          tone="amber"
-        />
-        <StatCard
-          icon={XCircle}
-          label="Webhooks falhos"
-          value={failedWebhooks.length}
-          tone={failedWebhooks.length ? 'red' : 'emerald'}
-        />
-        <StatCard
-          icon={ClipboardList}
-          label="Eventos auditaveis"
-          value={snapshot.audit.length}
-          tone="blue"
-        />
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+          <StatCard
+            icon={Shield}
+            label="Break-glass pendente"
+            value={snapshot.tenants.reduce((sum, tenant) => sum + tenant.pendingBreakGlass, 0)}
+            tone="amber"
+          />
+          <StatCard
+            icon={XCircle}
+            label="Webhooks falhos"
+            value={failedWebhooks.length}
+            tone={failedWebhooks.length ? 'red' : 'emerald'}
+          />
+          <StatCard
+            icon={ClipboardList}
+            label="Eventos auditaveis"
+            value={snapshot.audit.length}
+            tone="blue"
+          />
+          <StatCard
+            icon={ShieldAlert}
+            label="Compliance aberto"
+            value={snapshot.complianceGaps.length}
+            tone={snapshot.complianceGaps.length ? 'amber' : 'emerald'}
+          />
+        </div>
+        <ComplianceGapsList gaps={snapshot.complianceGaps} />
       </div>
     );
   }
