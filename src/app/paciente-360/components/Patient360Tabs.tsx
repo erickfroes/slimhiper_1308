@@ -141,12 +141,12 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
 
   useEffect(() => {
     if (isPatient360TabId(requestedTab) && requestedTab !== activeTab) {
-      setActiveTab(canAccessTab(requestedTab, userContext) ? requestedTab : 'resumo');
+      setActiveTab(requestedTab);
     }
     if (!requestedTab && activeTab !== 'resumo') {
       setActiveTab('resumo');
     }
-  }, [activeTab, requestedTab, userContext]);
+  }, [activeTab, requestedTab]);
 
   const handleTabChange = useCallback(
     (tabId: Patient360TabId) => {

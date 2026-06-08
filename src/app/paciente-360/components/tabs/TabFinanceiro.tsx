@@ -440,11 +440,9 @@ export default function TabFinanceiro({
         setCreationError('A Edge Function respondeu sem dados da assinatura.');
         return;
       }
-      setPaymentLink(result.data.paymentLink ?? result.data.invoiceUrl ?? null);
+      setPaymentLink(null);
       setCreationNotice(
-        result.data.paymentLink || result.data.invoiceUrl
-          ? 'Assinatura criada. Link de pagamento disponivel abaixo.'
-          : `Assinatura criada (${result.data.id}), mas sem link retornado pela Edge Function.`
+        `Assinatura criada (${result.data.id}) com status ${result.data.status ?? 'registrado'}. A Edge Function de assinatura nao retorna link de pagamento.`
       );
       setSubscriptionActionKey(createBillingActionKey('subscription', patientId));
       setSubModal(false);

@@ -1023,41 +1023,29 @@ export async function createPatient(
     validatePatientInput(input);
 
     const supabase = createBrowserSupabaseClient();
-    const tenantId = await resolveActiveTenantId();
-    const fullName = input.fullName.trim();
     const metadata = input.unitId ? { main_unit_id: input.unitId } : {};
-
-    const { data: patient, error: patientError } = await supabase
-      .from('patients')
-      .insert({
-        tenant_id: tenantId,
+    const { data, error } = await supabase.rpc('upsert_patient_with_pii', {
+      p_patient_id: null,
+      p_payload: {
+        fullName: input.fullName.trim(),
+        preferredName: normalizeOptionalText(input.preferredName),
+        email: normalizeOptionalText(input.email),
+        phone: normalizeOptionalText(input.phone),
+        cpfMasked: normalizeOptionalText(input.cpfMasked),
+        birthDate: normalizeOptionalText(input.birthDate),
+        sexGender: normalizeOptionalText(input.sexGender),
         status: toDbPatientStatus(input.status),
-        preferred_name: normalizeOptionalText(input.preferredName),
         tags: input.tags ?? [],
         metadata,
-      })
-      .select('id')
-      .single();
-
-    if (patientError) throw patientError;
-
-    const { error: piiError } = await supabase.from('patient_pii').insert({
-      tenant_id: tenantId,
-      patient_id: patient.id,
-      full_name: fullName,
-      email: normalizeOptionalText(input.email),
-      phone: normalizeOptionalText(input.phone),
-      cpf_masked: normalizeOptionalText(input.cpfMasked),
-      birth_date: normalizeOptionalText(input.birthDate),
-      sex_gender: normalizeOptionalText(input.sexGender),
+      },
     });
 
-    if (piiError) {
-      await supabase.from('patients').delete().eq('tenant_id', tenantId).eq('id', patient.id);
-      throw piiError;
-    }
+    if (error) throw error;
+    const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+    const id = typeof record.id === 'string' ? record.id : '';
+    if (!id) throw new Error('invalid_patient_upsert_contract');
 
-    return { data: { id: patient.id }, error: null };
+    return { data: { id }, error: null };
   } catch (error) {
     return { data: null, error: asServiceError(error, 'Falha ao cadastrar paciente.') };
   }
@@ -1071,39 +1059,28 @@ export async function updatePatient(
     validatePatientInput(input);
 
     const supabase = createBrowserSupabaseClient();
-    const tenantId = await resolveActiveTenantId();
     const metadata = input.unitId ? { main_unit_id: input.unitId } : {};
-
-    const { error: patientError } = await supabase
-      .from('patients')
-      .update({
-        status: toDbPatientStatus(input.status),
-        preferred_name: normalizeOptionalText(input.preferredName),
-        tags: input.tags ?? [],
-        metadata,
-      })
-      .eq('tenant_id', tenantId)
-      .eq('id', patientId);
-
-    if (patientError) throw patientError;
-
-    const { error: piiError } = await supabase.from('patient_pii').upsert(
-      {
-        tenant_id: tenantId,
-        patient_id: patientId,
-        full_name: input.fullName.trim(),
+    const { data, error } = await supabase.rpc('upsert_patient_with_pii', {
+      p_patient_id: patientId,
+      p_payload: {
+        fullName: input.fullName.trim(),
+        preferredName: normalizeOptionalText(input.preferredName),
         email: normalizeOptionalText(input.email),
         phone: normalizeOptionalText(input.phone),
-        cpf_masked: normalizeOptionalText(input.cpfMasked),
-        birth_date: normalizeOptionalText(input.birthDate),
-        sex_gender: normalizeOptionalText(input.sexGender),
+        cpfMasked: normalizeOptionalText(input.cpfMasked),
+        birthDate: normalizeOptionalText(input.birthDate),
+        sexGender: normalizeOptionalText(input.sexGender),
+        status: toDbPatientStatus(input.status),
+        tags: input.tags ?? [],
+        metadata,
       },
-      { onConflict: 'patient_id' }
-    );
+    });
 
-    if (piiError) throw piiError;
+    if (error) throw error;
+    const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+    const id = typeof record.id === 'string' ? record.id : patientId;
 
-    return { data: { id: patientId }, error: null };
+    return { data: { id }, error: null };
   } catch (error) {
     return { data: null, error: asServiceError(error, 'Falha ao atualizar paciente.') };
   }

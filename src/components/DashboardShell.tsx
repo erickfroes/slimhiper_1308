@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
@@ -113,8 +113,14 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   const [communicationsError, setCommunicationsError] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<'messages' | 'notifications' | null>(null);
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
+  const messagesButtonRef = useRef<HTMLButtonElement | null>(null);
+  const notificationsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const messagesPanelRef = useRef<HTMLDivElement | null>(null);
+  const notificationsPanelRef = useRef<HTMLDivElement | null>(null);
   const communicationsRequestIdRef = useRef(0);
   const cachedSummaryRef = useRef<CommunicationsSummary | null>(null);
+  const messagesPanelId = useId();
+  const notificationsPanelId = useId();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -188,11 +194,32 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   useEffect(() => {
     if (!openMenu) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpenMenu(null);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        const previousMenu = openMenu;
+        setOpenMenu(null);
+        if (previousMenu === 'messages') messagesButtonRef.current?.focus();
+        if (previousMenu === 'notifications') notificationsButtonRef.current?.focus();
+      }
     }
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [openMenu]);
+
+  useEffect(() => {
+    const panel =
+      openMenu === 'messages'
+        ? messagesPanelRef.current
+        : openMenu === 'notifications'
+          ? notificationsPanelRef.current
+          : null;
+    if (!panel) return;
+
+    const focusTarget = panel.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    window.requestAnimationFrame(() => focusTarget?.focus());
   }, [openMenu]);
 
   const isActive = (href: string) => {
@@ -397,9 +424,12 @@ export default function DashboardShell({ children }: DashboardShellProps) {
           <div className="ml-auto flex items-center gap-2" ref={topbarMenuRef}>
             <div className="relative">
               <button
+                ref={messagesButtonRef}
                 type="button"
                 className="relative btn-ghost p-2"
                 aria-label={`Abrir inbox de conversas${totalUnreadMessages ? `, ${totalUnreadMessages} nao lidas` : ''}`}
+                aria-haspopup="dialog"
+                aria-controls={messagesPanelId}
                 aria-expanded={openMenu === 'messages'}
                 onClick={() =>
                   setOpenMenu((current) => (current === 'messages' ? null : 'messages'))
@@ -416,7 +446,10 @@ export default function DashboardShell({ children }: DashboardShellProps) {
               </button>
               {openMenu === 'messages' && (
                 <div
-                  role="menu"
+                  id={messagesPanelId}
+                  ref={messagesPanelRef}
+                  role="dialog"
+                  aria-label="Conversas recentes"
                   className="absolute right-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-lg border border-border bg-card shadow-lg sm:w-80"
                 >
                   <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -493,9 +526,12 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             </div>
             <div className="relative">
               <button
+                ref={notificationsButtonRef}
                 type="button"
                 className="relative btn-ghost p-2"
                 aria-label={`Abrir notificacoes${totalUnreadNotifications ? `, ${totalUnreadNotifications} nao lidas` : ''}`}
+                aria-haspopup="dialog"
+                aria-controls={notificationsPanelId}
                 aria-expanded={openMenu === 'notifications'}
                 onClick={() =>
                   setOpenMenu((current) => (current === 'notifications' ? null : 'notifications'))
@@ -512,7 +548,10 @@ export default function DashboardShell({ children }: DashboardShellProps) {
               </button>
               {openMenu === 'notifications' && (
                 <div
-                  role="menu"
+                  id={notificationsPanelId}
+                  ref={notificationsPanelRef}
+                  role="dialog"
+                  aria-label="Notificacoes recentes"
                   className="absolute right-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-lg border border-border bg-card shadow-lg sm:w-80"
                 >
                   <div className="flex items-center justify-between border-b border-border px-4 py-3">

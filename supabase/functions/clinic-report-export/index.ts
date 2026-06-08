@@ -7,16 +7,56 @@ declare const Deno: {
 
 type Json = Record<string, unknown>;
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const baseCorsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-function jsonResponse(status: number, payload: Json) {
+function configuredAllowedOrigins() {
+  return new Set(
+    [
+      ...(Deno.env.get('APP_ALLOWED_ORIGINS') ?? '').split(','),
+      Deno.env.get('SITE_URL') ?? '',
+      Deno.env.get('NEXT_PUBLIC_SITE_URL') ?? '',
+    ]
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  );
+}
+
+function isLocalOrigin(origin: string) {
+  try {
+    const url = new URL(origin);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function allowedCorsOrigin(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  if (!origin) return null;
+  const configured = configuredAllowedOrigins();
+  return configured.has(origin) || isLocalOrigin(origin) ? origin : null;
+}
+
+function responseHeaders(req: Request) {
+  const headers: Record<string, string> = { ...baseCorsHeaders, 'Content-Type': 'application/json' };
+  const origin = allowedCorsOrigin(req);
+  if (origin) {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers.Vary = 'Origin';
+  }
+  return headers;
+}
+
+function jsonResponse(req: Request, status: number, payload: Json) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: responseHeaders(req),
   });
 }
 
@@ -47,12 +87,17 @@ function isValidReportExportPath(path: string, runId: string, artifactId: string
 
 Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    if (req.headers.get('Origin') && !allowedCorsOrigin(req)) {
+      return new Response('forbidden', { status: 403, headers: responseHeaders(req) });
+    }
+    return new Response('ok', { headers: responseHeaders(req) });
+  }
 
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return jsonResponse(405, {
+  if (req.method !== 'POST') {
+    return jsonResponse(req, 405, {
       ok: false,
-      error: { code: 'method_not_allowed', message: 'Only GET or POST is allowed.' },
+      error: { code: 'method_not_allowed', message: 'Only POST is allowed.' },
       meta: { timestamp },
     });
   }
@@ -61,7 +106,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization') ?? '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
     if (!token) {
-      return jsonResponse(401, {
+      return jsonResponse(req, 401, {
         ok: false,
         error: { code: 'unauthorized', message: 'Missing bearer token.' },
         meta: { timestamp },
@@ -73,7 +118,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       console.error('[clinic-report-export] missing environment configuration');
-      return jsonResponse(500, {
+      return jsonResponse(req, 500, {
         ok: false,
         error: { code: 'server_misconfigured', message: 'Server configuration error.' },
         meta: { timestamp },
@@ -92,27 +137,22 @@ Deno.serve(async (req) => {
       error: authError,
     } = await supabase.auth.getUser();
     if (authError || !user) {
-      return jsonResponse(401, {
+      return jsonResponse(req, 401, {
         ok: false,
         error: { code: 'unauthorized', message: 'Invalid or expired token.' },
         meta: { timestamp },
       });
     }
 
-    const body =
-      req.method === 'POST'
-        ? asRecord(await req.json().catch(() => ({})))
-        : Object.fromEntries(new URL(req.url).searchParams.entries());
-
+    const body = asRecord(await req.json().catch(() => ({})));
     const artifactId = asString(body.artifact_id);
     const runId = asString(body.run_id);
-    const exportToken = asString(body.token);
-    if (!artifactId && !runId) {
-      return jsonResponse(400, {
+    if (!artifactId) {
+      return jsonResponse(req, 400, {
         ok: false,
         error: {
           code: 'invalid_export_request',
-          message: 'Report artifact or run is required.',
+          message: 'Report artifact is required.',
         },
         meta: { timestamp },
       });
@@ -121,7 +161,7 @@ Deno.serve(async (req) => {
     const { data, error } = await supabase.rpc('get_clinic_report_export_artifact', {
       p_artifact_id: artifactId || null,
       p_run_id: runId || null,
-      p_export_token: exportToken || null,
+      p_export_token: null,
     });
     if (error) throw error;
 
@@ -139,7 +179,7 @@ Deno.serve(async (req) => {
       !resolvedRunId ||
       !isValidReportExportPath(path, resolvedRunId, resolvedArtifactId)
     ) {
-      return jsonResponse(500, {
+      return jsonResponse(req, 500, {
         ok: false,
         error: { code: 'invalid_storage_contract', message: 'Invalid storage contract.' },
         meta: { timestamp },
@@ -151,7 +191,7 @@ Deno.serve(async (req) => {
       .createSignedUrl(path, expiresInSeconds, { download: filename });
     if (signedError) throw signedError;
 
-    return jsonResponse(200, {
+    return jsonResponse(req, 200, {
       ok: true,
       data: {
         url: signed.signedUrl,
@@ -170,7 +210,7 @@ Deno.serve(async (req) => {
       name: error instanceof Error ? error.name : 'UnknownError',
     });
 
-    return jsonResponse(status, {
+    return jsonResponse(req, status, {
       ok: false,
       error: {
         code: status === 403 ? 'forbidden_or_expired' : 'internal_error',

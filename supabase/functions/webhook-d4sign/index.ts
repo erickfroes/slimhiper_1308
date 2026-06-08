@@ -16,7 +16,7 @@ declare const Deno: {
 
 const corsHeaders = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': (Deno.env.get('APP_ALLOWED_ORIGINS') ?? Deno.env.get('SITE_URL') ?? Deno.env.get('NEXT_PUBLIC_SITE_URL') ?? 'http://localhost:4028').split(',')[0].trim(),
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type, x-d4sign-signature, x-d4sign-token, idempotency-key',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -243,6 +243,23 @@ Deno.serve(async (req) => {
 
     if (signatureRequestError) throw signatureRequestError;
     if (!signatureRequest) {
+      const { error: deadLetterError } = await supabase.rpc('record_provider_webhook_dead_letter', {
+        p_provider: 'd4sign',
+        p_reason: 'signature_request_not_found',
+        p_idempotency_key: idempotencyKey || null,
+        p_provider_event_id: providerEventId || null,
+        p_provider_document_id: providerDocumentId || null,
+        p_event_type: eventType || null,
+        p_payload_summary: {
+          event_type: eventType,
+          has_provider_event_id: Boolean(providerEventId),
+          has_provider_document_id: Boolean(providerDocumentId),
+          signer_count: Array.isArray(body.signers) ? body.signers.length : 0,
+          received_at: timestamp,
+        },
+      });
+      if (deadLetterError) throw deadLetterError;
+
       await logEdgeEvent(context, 'webhook_ignored', 'warn', 'skipped', {
         provider: 'd4sign',
         reason: 'signature_request_not_found',

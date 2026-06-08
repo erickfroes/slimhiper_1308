@@ -5,9 +5,17 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.*
 *Copia.env
 *copia.env
+*Cópia.env
+*cópia.env
 *copy.env
+*Copy.env
+*.env.bak
+*.env.backup
+*.env.copy
+*.env.copia
 !.env.example
 
 # Next.js build output

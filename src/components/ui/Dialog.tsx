@@ -14,7 +14,7 @@ interface DialogProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   placement?: DialogPlacement;
-  initialFocusRef?: React.RefObject<HTMLElement>;
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
   mobileFullscreen?: boolean;
 }
 

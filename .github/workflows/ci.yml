@@ -62,6 +62,9 @@ jobs:
             git diff --check HEAD~1..HEAD || git diff --check
           fi
 
+      - name: Env hygiene check
+        run: node scripts/security/check-env-hygiene.mjs
+
       - name: Type check
         run: npm run type-check
 

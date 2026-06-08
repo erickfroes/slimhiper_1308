@@ -106,6 +106,7 @@ export interface PatientPortalSnapshot {
   chat: PatientPortalChat;
   notifications: PatientPortalNotification[];
   checkins: PatientPortalCheckin[];
+  warnings: SafeServiceError[];
 }
 
 export type PatientOnboardingStep = 'profile' | 'goals' | 'routine' | 'reminders' | 'consent';
@@ -479,6 +480,7 @@ function normalizeSnapshot(value: unknown): PatientPortalSnapshot | null {
           .map(normalizeCheckin)
           .filter((item): item is PatientPortalCheckin => Boolean(item))
       : [],
+    warnings: [],
   };
 }
 
@@ -531,6 +533,7 @@ async function hydratePatientPortalChat(
   snapshot: PatientPortalSnapshot
 ): Promise<PatientPortalSnapshot> {
   const messageIds = snapshot.chat.messages.map((message) => message.id).filter(Boolean);
+  const warnings = [...snapshot.warnings];
 
   const [attachmentsResult, hoursResult] = await Promise.all([
     messageIds.length
@@ -569,8 +572,16 @@ async function hydratePatientPortalChat(
       ? normalizePortalHoursRows(hoursResult.data.map(asRecord))
       : snapshot.chat.serviceHours;
 
+  if (attachmentsResult.error) {
+    warnings.push({ message: 'Anexos do chat parcialmente indisponiveis.' });
+  }
+  if (hoursResult.error) {
+    warnings.push({ message: 'Horario de atendimento parcialmente indisponivel.' });
+  }
+
   return {
     ...snapshot,
+    warnings,
     chat: {
       ...snapshot.chat,
       serviceHours,
@@ -883,10 +894,19 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
       getPatientFinanceM13(snapshot.selectedPatientId),
     ]);
 
+    const warnings: SafeServiceError[] = [...chatSnapshot.warnings];
+    if (financeResult.error) {
+      warnings.push({
+        message: 'Resumo financeiro parcialmente indisponivel no portal.',
+        code: financeResult.error.code,
+      });
+    }
+
     return {
       data: {
         ...chatSnapshot,
         paymentReceipts: financeResult.data?.paymentReceipts ?? [],
+        warnings,
       },
       error: null,
     };

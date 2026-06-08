@@ -40,8 +40,10 @@ function loadDotEnvFile(filePath) {
   }
 }
 
-for (const fileName of ['.env', '.env.local']) {
-  loadDotEnvFile(path.join(repoRoot, fileName));
+if (process.env.SLIMHIPER_SKIP_DOTENV !== '1') {
+  for (const fileName of ['.env', '.env.local']) {
+    loadDotEnvFile(path.join(repoRoot, fileName));
+  }
 }
 
 const placeholderValues = new Set([

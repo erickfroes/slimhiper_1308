@@ -82,16 +82,15 @@ export default function QuickActionsCard({ actions = defaultActions }: QuickActi
       <div className="grid grid-cols-2 gap-2">
         {actions.map((action) => {
           const Icon = action.icon;
+          const disabled = Boolean(action.disabledReason);
           const className = [
             'flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all duration-150',
-            action.disabledReason && !action.href
-              ? 'opacity-60 cursor-not-allowed'
-              : 'active:scale-95',
+            disabled ? 'opacity-60 cursor-not-allowed' : 'active:scale-95',
             action.color,
             action.bg,
           ].join(' ');
 
-          if (action.href) {
+          if (action.href && !disabled) {
             return (
               <Link key={action.key} href={action.href} className={className}>
                 <Icon size={14} />
@@ -104,8 +103,12 @@ export default function QuickActionsCard({ actions = defaultActions }: QuickActi
             <button
               key={action.key}
               type="button"
-              disabled
+              aria-disabled="true"
               title={action.disabledReason}
+              aria-label={
+                action.disabledReason ? `${action.label}: ${action.disabledReason}` : action.label
+              }
+              onClick={(event) => event.preventDefault()}
               className={className}
             >
               <Icon size={14} />

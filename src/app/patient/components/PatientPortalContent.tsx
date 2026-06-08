@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Activity,
+  AlertTriangle,
   Bell,
   CalendarDays,
   ChevronRight,
@@ -581,6 +582,25 @@ export default function PatientPortalContent() {
         {actionMessage ? (
           <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-primary">
             {actionMessage}
+          </div>
+        ) : null}
+
+        {snapshot.warnings.length > 0 ? (
+          <div
+            role="status"
+            className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="font-semibold">Alguns dados estao temporariamente parciais</p>
+                <ul className="mt-1 space-y-1">
+                  {snapshot.warnings.map((warning, index) => (
+                    <li key={`${warning.code ?? 'warning'}-${index}`}>{warning.message}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </div>
         ) : null}
 

@@ -164,6 +164,27 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  if (providerEventId) {
+    const existingProviderEvent = await supabase
+      .from('asaas_events')
+      .select('id')
+      .eq('asaas_event_id', providerEventId)
+      .maybeSingle();
+
+    if (existingProviderEvent.error) {
+      return internalError(context, 'provider_event_lookup_failed', { providerEventId });
+    }
+
+    if (existingProviderEvent.data?.id) {
+      await logEdgeEvent(context, 'webhook_duplicate', 'info', 'success', {
+        provider: 'asaas',
+        event_type: eventType,
+        dedupe: 'provider_event_id',
+      });
+      return json(200, { ok: true, idempotent: true }, observedEdgeHeaders(context));
+    }
+  }
+
   const existing = await supabase
     .from('billing_webhook_events')
     .select('id')

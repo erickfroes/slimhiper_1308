@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CalendarClock,
@@ -24,6 +24,7 @@ import {
   syncAsaasPayment,
 } from '@/services/billingApi';
 import type { ClinicFinanceDivergence } from '@/services/billingApi';
+import Dialog from '@/components/ui/Dialog';
 
 type FinanceOverviewResult = Awaited<ReturnType<typeof getClinicFinanceOverview>>['data'];
 type FinanceReconciliationResult = Awaited<
@@ -155,6 +156,13 @@ export default function ClinicFinanceiroContent() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [reviewDialog, setReviewDialog] = useState<{
+    receiptId: string;
+    decision: 'approve' | 'reject';
+  } | null>(null);
+  const [reviewReason, setReviewReason] = useState('');
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const reviewReasonRef = useRef<HTMLTextAreaElement>(null);
 
   const loadFinanceOverview = useCallback(async () => {
     setLoading(true);
@@ -201,25 +209,44 @@ export default function ClinicFinanceiroContent() {
     window.open(result.data.url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleReceiptReview = async (receiptId: string, decision: 'approve' | 'reject') => {
-    const reason =
-      decision === 'reject'
-        ? window.prompt('Informe o motivo da rejeicao do comprovante:')
-        : (window.prompt('Observacao da aprovacao, se houver:') ?? '');
-    if (decision === 'reject' && !reason?.trim()) return;
-
-    setActionLoading(`${decision}:${receiptId}`);
+  const handleReceiptReview = (receiptId: string, decision: 'approve' | 'reject') => {
+    setReviewDialog({ receiptId, decision });
+    setReviewReason('');
+    setReviewError(null);
     setActionMessage(null);
     setActionError(null);
-    const result = await reviewPaymentReceipt(receiptId, decision, reason?.trim() || undefined);
+  };
+
+  const submitReceiptReview = async () => {
+    if (!reviewDialog) return;
+    const reason = reviewReason.trim();
+    if (reviewDialog.decision === 'reject' && !reason) {
+      setReviewError('Informe o motivo da rejeicao antes de confirmar.');
+      reviewReasonRef.current?.focus();
+      return;
+    }
+
+    setActionLoading(`${reviewDialog.decision}:${reviewDialog.receiptId}`);
+    setActionMessage(null);
+    setActionError(null);
+    setReviewError(null);
+    const result = await reviewPaymentReceipt(
+      reviewDialog.receiptId,
+      reviewDialog.decision,
+      reason || undefined
+    );
     setActionLoading(null);
     if (result.error) {
-      setActionError(result.error.message);
+      setReviewError(result.error.message);
       return;
     }
     setActionMessage(
-      decision === 'approve' ? 'Comprovante aprovado e baixa registrada.' : 'Comprovante rejeitado.'
+      reviewDialog.decision === 'approve'
+        ? 'Comprovante aprovado e baixa registrada.'
+        : 'Comprovante rejeitado.'
     );
+    setReviewDialog(null);
+    setReviewReason('');
     await loadFinanceOverview();
   };
 
@@ -813,6 +840,72 @@ export default function ClinicFinanceiroContent() {
           </p>
         )}
       </section>
+
+      <Dialog
+        open={reviewDialog !== null}
+        title={reviewDialog?.decision === 'reject' ? 'Rejeitar comprovante' : 'Aprovar comprovante'}
+        description={
+          reviewDialog?.decision === 'reject'
+            ? 'Registre um motivo claro para auditoria e retorno ao paciente.'
+            : 'Adicione uma observacao opcional antes de registrar a baixa.'
+        }
+        onOpenChange={(open) => {
+          if (open) return;
+          setReviewDialog(null);
+          setReviewReason('');
+          setReviewError(null);
+        }}
+        initialFocusRef={reviewReasonRef}
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              className="btn-secondary justify-center"
+              disabled={actionLoading?.startsWith(`${reviewDialog?.decision}:`) ?? false}
+              onClick={() => {
+                setReviewDialog(null);
+                setReviewReason('');
+                setReviewError(null);
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="btn-primary justify-center disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={actionLoading?.startsWith(`${reviewDialog?.decision}:`) ?? false}
+              onClick={() => void submitReceiptReview()}
+            >
+              {actionLoading?.startsWith(`${reviewDialog?.decision}:`)
+                ? 'Registrando...'
+                : 'Confirmar'}
+            </button>
+          </div>
+        }
+      >
+        <label className="block text-sm font-medium text-foreground">
+          Observacao
+          <textarea
+            ref={reviewReasonRef}
+            value={reviewReason}
+            onChange={(event) => {
+              setReviewReason(event.target.value);
+              if (reviewError) setReviewError(null);
+            }}
+            rows={4}
+            maxLength={500}
+            placeholder={
+              reviewDialog?.decision === 'reject' ? 'Motivo da rejeicao' : 'Observacao opcional'
+            }
+            className="mt-2 w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+        </label>
+        {reviewError ? (
+          <p role="alert" className="mt-2 text-sm text-red-700">
+            {reviewError}
+          </p>
+        ) : null}
+      </Dialog>
     </div>
   );
 }

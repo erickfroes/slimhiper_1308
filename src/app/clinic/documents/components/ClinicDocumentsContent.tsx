@@ -1107,7 +1107,22 @@ export default function ClinicDocumentsContent() {
     );
   }
 
-  if (!workspace) return null;
+  if (!workspace) {
+    return (
+      <div className="space-y-6 p-4 lg:p-6">
+        <section className="rounded-lg border border-border bg-card p-5 lg:p-6">
+          <h1 className="text-2xl font-bold text-foreground">Documentos da Clinica</h1>
+        </section>
+        <DataState
+          kind="empty"
+          title="Workspace documental vazio"
+          description="O contrato de documentos nao retornou dados para o tenant ativo."
+          actionLabel="Tentar novamente"
+          onAction={() => void loadWorkspace()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 lg:p-6">
@@ -1165,6 +1180,25 @@ export default function ClinicDocumentsContent() {
           {actionError ?? actionMessage}
         </section>
       )}
+
+      {workspace.warnings.length > 0 ? (
+        <section
+          role="status"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="font-semibold">Dados parciais em documentos</p>
+              <ul className="mt-1 space-y-1">
+                {workspace.warnings.map((warning, index) => (
+                  <li key={`${warning.code ?? 'warning'}-${index}`}>{warning.message}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(320px,420px)_1fr]">
         <div className="space-y-4">

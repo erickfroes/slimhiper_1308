@@ -8,15 +8,61 @@ declare const Deno: {
 
 type Json = Record<string, unknown>;
 
-const corsHeaders = {
+const baseCorsHeaders = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+function configuredAllowedOrigins() {
+  return new Set(
+    [
+      ...(Deno.env.get('APP_ALLOWED_ORIGINS') ?? '').split(','),
+      Deno.env.get('SITE_URL') ?? '',
+      Deno.env.get('NEXT_PUBLIC_SITE_URL') ?? '',
+      'http://localhost:4028',
+      'http://127.0.0.1:4028',
+    ]
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  );
+}
+
+function isLocalOrigin(origin: string) {
+  try {
+    const url = new URL(origin);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function allowedCorsOrigin(req: Request) {
+  const origin = req.headers.get('Origin') ?? '';
+  if (!origin) return null;
+  const configured = configuredAllowedOrigins();
+  return configured.has(origin) || isLocalOrigin(origin) ? origin : null;
+}
+
+function defaultCorsOrigin() {
+  return configuredAllowedOrigins().values().next().value ?? null;
+}
+
+function corsHeaders(req?: Request) {
+  const headers: Record<string, string> = { ...baseCorsHeaders };
+  const origin = req ? allowedCorsOrigin(req) : defaultCorsOrigin();
+  if (origin) {
+    headers['Access-Control-Allow-Origin'] = origin;
+    headers.Vary = 'Origin';
+  }
+  return headers;
+}
+
 function jsonResponse(status: number, payload: Json) {
-  return new Response(JSON.stringify(payload), { status, headers: corsHeaders });
+  return new Response(JSON.stringify(payload), { status, headers: corsHeaders() });
 }
 
 function asString(value: unknown, fallback = ''): string {
@@ -173,7 +219,12 @@ async function resolvePatientTenant(params: {
 Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
 
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    if (req.headers.get('Origin') && !allowedCorsOrigin(req)) {
+      return new Response('forbidden', { status: 403, headers: corsHeaders(req) });
+    }
+    return new Response('ok', { headers: corsHeaders(req) });
+  }
 
   if (req.method !== 'POST') {
     return jsonResponse(405, {

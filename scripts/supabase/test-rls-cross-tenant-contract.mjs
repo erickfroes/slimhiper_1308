@@ -71,9 +71,7 @@ async function tableExists(tableName) {
 }
 
 async function columnExists(tableName, columnName) {
-  const { error } = await admin
-    .from(tableName)
-    .select(columnName, { count: 'exact', head: true });
+  const { error } = await admin.from(tableName).select(columnName, { count: 'exact', head: true });
   return !error;
 }
 
@@ -363,7 +361,12 @@ async function updateRows(client, table, filters, patch) {
 
   const selectColumn = table === 'patient_pii' ? 'patient_id' : 'id';
   const { data, error } = await query.select(selectColumn);
-  if (error) throw error;
+  if (error) {
+    if (error.code === '42501' || /permission denied/i.test(error.message ?? '')) {
+      return [];
+    }
+    throw error;
+  }
   return data ?? [];
 }
 

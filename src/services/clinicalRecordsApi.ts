@@ -127,7 +127,6 @@ interface SafeServiceError {
   details?: string;
 }
 
-const SAFE_AUDIT_METADATA_KEYS = new Set(['encounterId', 'labOrderId', 'source', 'status']);
 const PROGRESS_PHOTO_BUCKET = 'progress-photos';
 const PROGRESS_PHOTO_MAX_BYTES = 8 * 1024 * 1024;
 const PROGRESS_PHOTO_ACCEPTED_MIME_TYPES = new Set([
@@ -137,32 +136,6 @@ const PROGRESS_PHOTO_ACCEPTED_MIME_TYPES = new Set([
   'image/heic',
   'image/heif',
 ]);
-
-function sanitizeAuditMetadata(
-  metadata: Record<string, unknown> | undefined
-): Record<string, string | number | boolean> {
-  if (!metadata) return {};
-
-  const sanitized: Record<string, string | number | boolean> = {};
-  for (const [key, value] of Object.entries(metadata)) {
-    if (!SAFE_AUDIT_METADATA_KEYS.has(key)) continue;
-
-    if (typeof value === 'string') {
-      const normalized = value.trim();
-      if (normalized) sanitized[key] = normalized.slice(0, 120);
-      continue;
-    }
-
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      sanitized[key] = value;
-      continue;
-    }
-
-    if (typeof value === 'boolean') sanitized[key] = value;
-  }
-
-  return sanitized;
-}
 
 type MeasurementRow = {
   id: string;
@@ -497,63 +470,6 @@ function normalizeClinicalRecordsPayload(payload: unknown): ClinicalRecordsData 
   };
 }
 
-async function insertAuditLog(input: {
-  patientId: string;
-  tenantId: string;
-  userId: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  metadata?: Record<string, unknown>;
-}) {
-  const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.from('audit_logs').insert({
-    tenant_id: input.tenantId,
-    user_id: input.userId,
-    action: input.action,
-    entity_type: input.entityType,
-    entity_id: input.entityId,
-    metadata: {
-      patientId: input.patientId,
-      ...sanitizeAuditMetadata(input.metadata),
-    },
-  });
-
-  if (error) throw error;
-}
-
-async function insertClinicalTimelineEvent(input: {
-  patientId: string;
-  tenantId: string;
-  eventType: string;
-  title: string;
-  description: string;
-  entityId: string;
-  href?: string;
-  payload?: Record<string, unknown>;
-}) {
-  const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.from('patient_timeline_events').insert({
-    tenant_id: input.tenantId,
-    patient_id: input.patientId,
-    event_type: input.eventType,
-    category: 'clinical',
-    status: 'recorded',
-    title: input.title,
-    description: input.description,
-    actor_name: 'Equipe clinica',
-    status_label: 'Registrado',
-    details_href: input.href ?? `/clinic/patients/${input.patientId}/encounter`,
-    event_at: new Date().toISOString(),
-    payload: {
-      entityId: input.entityId,
-      ...input.payload,
-    },
-  });
-
-  if (error) throw error;
-}
-
 export async function getPatientClinicalRecords(
   patientId: string
 ): Promise<{ data: ClinicalRecordsData | null; error: SafeServiceError | null }> {
@@ -697,50 +613,28 @@ export async function createMeasurement(
   input: MeasurementInput
 ): Promise<{ data: { id: string } | null; error: SafeServiceError | null }> {
   try {
-    const { supabase, tenantId, userId, patientId } = await resolveTenantPatientContext(
-      input.patientId
-    );
-    const { data, error } = await supabase
-      .from('measurements')
-      .insert({
-        tenant_id: tenantId,
-        patient_id: patientId,
-        encounter_id: input.encounterId ?? null,
-        status: 'recorded',
-        measured_at: input.measuredAt ?? new Date().toISOString(),
-        height_cm: input.heightCm ?? null,
-        weight_kg: input.weightKg ?? null,
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('record_patient_measurement', {
+      p_payload: {
+        patientId: input.patientId,
+        encounterId: input.encounterId ?? null,
+        measuredAt: input.measuredAt ?? new Date().toISOString(),
+        heightCm: input.heightCm ?? null,
+        weightKg: input.weightKg ?? null,
         bmi: input.bmi ?? calculateBmi(input.weightKg, input.heightCm),
-        body_fat_pct: input.bodyFatPercent ?? null,
-        waist_cm: input.waistCm ?? null,
-        hip_cm: input.hipCm ?? null,
-        measured_by: userId,
+        bodyFatPercent: input.bodyFatPercent ?? null,
+        waistCm: input.waistCm ?? null,
+        hipCm: input.hipCm ?? null,
         notes: input.notes ?? null,
-      })
-      .select('id')
-      .single();
-
+      },
+    });
     if (error) throw error;
 
-    await insertAuditLog({
-      patientId,
-      tenantId,
-      userId,
-      action: 'measurement_created',
-      entityType: 'measurement',
-      entityId: data.id,
-    });
-    await insertClinicalTimelineEvent({
-      patientId,
-      tenantId,
-      eventType: 'medida_registrada',
-      title: 'Medidas registradas',
-      description: 'Novas medidas corporais foram registradas no atendimento.',
-      entityId: data.id,
-      payload: { encounterId: input.encounterId ?? null },
-    });
+    const record = asRecord(data);
+    const id = asString(record.id);
+    if (!id) throw new Error('invalid_measurement_contract');
 
-    return { data: { id: data.id }, error: null };
+    return { data: { id }, error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Unable to create measurement.') };
   }
@@ -751,39 +645,28 @@ export async function updateMeasurement(
   input: MeasurementInput
 ): Promise<{ data: { id: string } | null; error: SafeServiceError | null }> {
   try {
-    const { supabase, tenantId, userId, patientId } = await resolveTenantPatientContext(
-      input.patientId
-    );
-    const { data, error } = await supabase
-      .from('measurements')
-      .update({
-        measured_at: input.measuredAt,
-        height_cm: input.heightCm,
-        weight_kg: input.weightKg,
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('update_patient_measurement', {
+      p_measurement_id: measurementId,
+      p_payload: {
+        patientId: input.patientId,
+        measuredAt: input.measuredAt,
+        heightCm: input.heightCm ?? null,
+        weightKg: input.weightKg ?? null,
         bmi: input.bmi ?? calculateBmi(input.weightKg, input.heightCm),
-        body_fat_pct: input.bodyFatPercent,
-        waist_cm: input.waistCm,
-        hip_cm: input.hipCm,
-        notes: input.notes,
-      })
-      .eq('id', measurementId)
-      .eq('tenant_id', tenantId)
-      .eq('patient_id', patientId)
-      .select('id')
-      .single();
-
+        bodyFatPercent: input.bodyFatPercent ?? null,
+        waistCm: input.waistCm ?? null,
+        hipCm: input.hipCm ?? null,
+        notes: input.notes ?? null,
+      },
+    });
     if (error) throw error;
 
-    await insertAuditLog({
-      patientId,
-      tenantId,
-      userId,
-      action: 'measurement_updated',
-      entityType: 'measurement',
-      entityId: data.id,
-    });
+    const record = asRecord(data);
+    const id = asString(record.id);
+    if (!id) throw new Error('invalid_measurement_contract');
 
-    return { data: { id: data.id }, error: null };
+    return { data: { id }, error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Unable to update measurement.') };
   }
@@ -794,24 +677,12 @@ export async function deleteMeasurement(
   measurementId: string
 ): Promise<{ error: SafeServiceError | null }> {
   try {
-    const { supabase, tenantId, userId } = await resolveTenantPatientContext(patientId);
-    const { error } = await supabase
-      .from('measurements')
-      .delete()
-      .eq('id', measurementId)
-      .eq('tenant_id', tenantId)
-      .eq('patient_id', patientId);
-
-    if (error) throw error;
-
-    await insertAuditLog({
-      patientId,
-      tenantId,
-      userId,
-      action: 'measurement_deleted',
-      entityType: 'measurement',
-      entityId: measurementId,
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('delete_patient_measurement', {
+      p_patient_id: patientId,
+      p_measurement_id: measurementId,
     });
+    if (error) throw error;
 
     return { error: null };
   } catch (error) {
@@ -823,43 +694,23 @@ export async function createBioimpedanceResult(
   input: BioimpedanceInput
 ): Promise<{ data: { id: string } | null; error: SafeServiceError | null }> {
   try {
-    const { supabase, tenantId, userId, patientId } = await resolveTenantPatientContext(
-      input.patientId
-    );
-    const { data, error } = await supabase
-      .from('bioimpedance_results')
-      .insert({
-        tenant_id: tenantId,
-        patient_id: patientId,
-        encounter_id: input.encounterId ?? null,
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('record_patient_bioimpedance', {
+      p_payload: {
+        patientId: input.patientId,
+        encounterId: input.encounterId ?? null,
         status: input.status ?? 'final',
-        measured_at: input.measuredAt ?? new Date().toISOString(),
-        result_payload: input.payload,
-      })
-      .select('id')
-      .single();
-
+        measuredAt: input.measuredAt ?? new Date().toISOString(),
+        payload: input.payload,
+      },
+    });
     if (error) throw error;
 
-    await insertAuditLog({
-      patientId,
-      tenantId,
-      userId,
-      action: 'bioimpedance_created',
-      entityType: 'bioimpedance_result',
-      entityId: data.id,
-    });
-    await insertClinicalTimelineEvent({
-      patientId,
-      tenantId,
-      eventType: 'medida_registrada',
-      title: 'Bioimpedancia registrada',
-      description: 'Resultado de bioimpedancia registrado no atendimento.',
-      entityId: data.id,
-      payload: { encounterId: input.encounterId ?? null },
-    });
+    const record = asRecord(data);
+    const id = asString(record.id);
+    if (!id) throw new Error('invalid_bioimpedance_contract');
 
-    return { data: { id: data.id }, error: null };
+    return { data: { id }, error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Unable to create bioimpedance result.') };
   }
@@ -869,48 +720,24 @@ export async function createLabOrder(
   input: LabOrderInput
 ): Promise<{ data: { id: string } | null; error: SafeServiceError | null }> {
   try {
-    const { supabase, tenantId, userId, patientId } = await resolveTenantPatientContext(
-      input.patientId
-    );
-    const { data, error } = await supabase
-      .from('lab_orders')
-      .insert({
-        tenant_id: tenantId,
-        patient_id: patientId,
-        encounter_id: input.encounterId ?? null,
-        status: 'requested',
-        ordered_by: userId,
-        order_payload: {
-          panel_name: input.panelName,
-          tests: input.tests,
-          urgency: input.urgency ?? 'routine',
-          note: input.note ?? null,
-        },
-      })
-      .select('id')
-      .single();
-
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('create_patient_lab_order', {
+      p_payload: {
+        patientId: input.patientId,
+        encounterId: input.encounterId ?? null,
+        panelName: input.panelName,
+        tests: input.tests,
+        urgency: input.urgency ?? 'routine',
+        note: input.note ?? null,
+      },
+    });
     if (error) throw error;
 
-    await insertAuditLog({
-      patientId,
-      tenantId,
-      userId,
-      action: 'lab_order_created',
-      entityType: 'lab_order',
-      entityId: data.id,
-    });
-    await insertClinicalTimelineEvent({
-      patientId,
-      tenantId,
-      eventType: 'exame_solicitado',
-      title: 'Exames solicitados',
-      description: `Painel ${input.panelName} solicitado no atendimento.`,
-      entityId: data.id,
-      payload: { encounterId: input.encounterId ?? null, tests: input.tests },
-    });
+    const record = asRecord(data);
+    const id = asString(record.id);
+    if (!id) throw new Error('invalid_lab_order_contract');
 
-    return { data: { id: data.id }, error: null };
+    return { data: { id }, error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Unable to create lab order.') };
   }
@@ -920,46 +747,23 @@ export async function recordLabResult(
   input: LabResultInput
 ): Promise<{ data: { id: string } | null; error: SafeServiceError | null }> {
   try {
-    const { supabase, tenantId, userId, patientId } = await resolveTenantPatientContext(
-      input.patientId
-    );
-    const { data, error } = await supabase
-      .from('lab_results')
-      .insert({
-        tenant_id: tenantId,
-        patient_id: patientId,
-        lab_order_id: input.labOrderId ?? null,
-        status: 'received',
-        result_at: input.resultAt ?? new Date().toISOString(),
-        result_payload: {
-          ...input.values,
-          interpretation: input.interpretation ?? null,
-        },
-      })
-      .select('id')
-      .single();
-
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('record_patient_lab_result', {
+      p_payload: {
+        patientId: input.patientId,
+        labOrderId: input.labOrderId ?? null,
+        resultAt: input.resultAt ?? new Date().toISOString(),
+        values: input.values,
+        interpretation: input.interpretation ?? null,
+      },
+    });
     if (error) throw error;
 
-    await insertAuditLog({
-      patientId,
-      tenantId,
-      userId,
-      action: 'lab_result_recorded',
-      entityType: 'lab_result',
-      entityId: data.id,
-    });
-    await insertClinicalTimelineEvent({
-      patientId,
-      tenantId,
-      eventType: 'exame_resultado_recebido',
-      title: 'Resultado de exame recebido',
-      description: 'Resultado laboratorial registrado no prontuario.',
-      entityId: data.id,
-      payload: { labOrderId: input.labOrderId ?? null },
-    });
+    const record = asRecord(data);
+    const id = asString(record.id);
+    if (!id) throw new Error('invalid_lab_result_contract');
 
-    return { data: { id: data.id }, error: null };
+    return { data: { id }, error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Unable to record lab result.') };
   }

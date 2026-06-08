@@ -902,7 +902,8 @@ export async function createPatientSubscription(
     return {
       data: {
         id: `mock-sub-${Date.now()}`,
-        paymentLink: `https://mock.pay/sub/${patientId}`,
+        status: 'active',
+        paymentLink: null,
         invoiceUrl: null,
       },
       error: null as SafeServiceError | null,

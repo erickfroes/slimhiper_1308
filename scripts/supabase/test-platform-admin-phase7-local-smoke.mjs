@@ -160,16 +160,30 @@ async function run() {
     if (tenantsError) throw tenantsError;
     ok(Array.isArray(tenants), 'list_platform_tenants should return an array.');
     ok(tenants.length > 0, 'Expected at least one tenant.');
-    const tenant = tenants[0];
-    ok(tenant.id, 'Tenant row should include id.');
-    ok(!JSON.stringify(tenant).includes('service_role'), 'Tenant row must not expose secrets.');
+    let tenant = null;
+    let detail = null;
+    for (const candidateTenant of tenants) {
+      ok(candidateTenant.id, 'Tenant row should include id.');
+      ok(
+        !JSON.stringify(candidateTenant).includes('service_role'),
+        'Tenant row must not expose secrets.'
+      );
 
-    currentStep = 'fetching tenant detail';
-    const { data: detail, error: detailError } = await platformAdmin.rpc(
-      'get_platform_tenant_detail',
-      { p_tenant_id: tenant.id }
-    );
-    if (detailError) throw detailError;
+      currentStep = `fetching tenant detail ${candidateTenant.id}`;
+      const { data: candidateDetail, error: detailError } = await platformAdmin.rpc(
+        'get_platform_tenant_detail',
+        { p_tenant_id: candidateTenant.id }
+      );
+      if (detailError) throw detailError;
+      if (Array.isArray(candidateDetail.users) && candidateDetail.users.length > 0) {
+        tenant = candidateTenant;
+        detail = candidateDetail;
+        break;
+      }
+    }
+    ok(tenant && detail, 'Expected at least one tenant detail with users.');
+
+    currentStep = 'validating tenant detail';
     ok(Array.isArray(detail.users), 'Tenant detail should include users array.');
     ok(detail.users.length > 0, 'Tenant detail should include at least one user.');
     ok(Array.isArray(detail.auditLogs), 'Tenant detail should include audit logs array.');

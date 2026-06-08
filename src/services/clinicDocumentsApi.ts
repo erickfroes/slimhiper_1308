@@ -83,6 +83,7 @@ export interface ClinicDocumentsWorkspace {
   documents: ClinicDocumentRow[];
   monitorEvents: ClinicDocumentMonitorEvent[];
   auditEvents: ClinicDocumentAuditEvent[];
+  warnings: SafeServiceError[];
   metrics: {
     templates: number;
     generated: number;
@@ -451,6 +452,17 @@ export async function getClinicDocumentsWorkspace(): Promise<{
     if (documentsRes.error)
       return { data: null, error: safeError(documentsRes.error, 'Documentos indisponiveis.') };
 
+    const warnings: SafeServiceError[] = [];
+    if (patientsRes.error) {
+      warnings.push(safeError(patientsRes.error, 'Lista de pacientes indisponivel.'));
+    }
+    if (eventsRes.error) {
+      warnings.push(safeError(eventsRes.error, 'Monitor de assinatura indisponivel.'));
+    }
+    if (auditRes.error) {
+      warnings.push(safeError(auditRes.error, 'Auditoria documental indisponivel.'));
+    }
+
     const documentRows = (documentsRes.data ?? []) as GeneratedDocumentRow[];
     const patientRows = patientsRes.error ? [] : ((patientsRes.data ?? []) as PatientRow[]);
     const patientIds = [
@@ -462,10 +474,13 @@ export async function getClinicDocumentsWorkspace(): Promise<{
 
     let piiRows: PatientPiiRow[] = [];
     if (patientIds.length > 0) {
-      const { data: piiData } = await supabase
+      const { data: piiData, error: piiError } = await supabase
         .from('patient_pii')
         .select('patient_id,full_name')
         .in('patient_id', patientIds);
+      if (piiError) {
+        warnings.push(safeError(piiError, 'Identificacao completa de pacientes indisponivel.'));
+      }
       piiRows = (piiData ?? []) as PatientPiiRow[];
     }
 
@@ -538,6 +553,7 @@ export async function getClinicDocumentsWorkspace(): Promise<{
         documents,
         monitorEvents,
         auditEvents,
+        warnings,
         metrics: {
           templates: templates.filter((template) => template.status === 'active').length,
           generated: documents.length,

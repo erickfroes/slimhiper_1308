@@ -53,7 +53,6 @@ export interface ClinicReportRun {
   resultSummary: Record<string, unknown>;
   rows: Record<string, unknown>[];
   exportFormat?: 'csv' | 'pdf';
-  exportToken?: string;
   exportExpiresAt?: string;
   artifact?: ClinicReportArtifact | null;
   artifactId?: string;
@@ -226,7 +225,6 @@ function normalizeRun(item: unknown): ClinicReportRun | null {
     resultSummary: asRecord(record.resultSummary),
     rows,
     exportFormat: asString(record.exportFormat, 'csv') as ClinicReportRun['exportFormat'],
-    exportToken: asString(record.exportToken) || undefined,
     exportExpiresAt: asString(record.exportExpiresAt) || undefined,
     artifact,
     artifactId,
@@ -359,21 +357,11 @@ export async function getClinicReportRun(runId: string): Promise<{
   return { data: run, error: null };
 }
 
-export function getClinicReportExportUrl(run: ClinicReportRun): string | null {
-  const artifactId = run.artifactId ?? run.artifact?.id;
-  if (!artifactId && !run.exportToken) return null;
-
-  const params = new URLSearchParams({ run_id: run.id });
-  if (artifactId) params.set('artifact_id', artifactId);
-  if (run.exportToken) params.set('token', run.exportToken);
-  return `/functions/v1/clinic-report-export?${params.toString()}`;
-}
-
 export async function downloadClinicReportExport(run: ClinicReportRun): Promise<{
   data: { blob: Blob; filename: string } | null;
   error: SafeServiceError | null;
 }> {
-  if (!run.artifactId && !run.artifact?.id && !run.exportToken) {
+  if (!run.artifactId && !run.artifact?.id) {
     return { data: null, error: { message: 'Artefato de exportacao indisponivel.' } };
   }
 
@@ -402,7 +390,6 @@ export async function downloadClinicReportExport(run: ClinicReportRun): Promise<
       body: JSON.stringify({
         artifact_id: run.artifactId ?? run.artifact?.id,
         run_id: run.id,
-        token: run.exportToken,
       }),
     });
 

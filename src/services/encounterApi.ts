@@ -39,14 +39,6 @@ interface SafeServiceError {
   details?: string;
 }
 
-type EncounterRow = {
-  id: string;
-  tenant_id: string;
-  patient_id: string;
-  appointment_id: string | null;
-  status: string | null;
-};
-
 type SoapRow = {
   id: string;
   encounter_id: string | null;
@@ -232,54 +224,6 @@ export async function getEncounterContext(
   }
 }
 
-async function ensureEncounter(input: {
-  patientId: string;
-  encounterId?: string | null;
-  appointmentId?: string | null;
-  status: 'open' | 'closed';
-}) {
-  const { supabase, tenantId, userId, patientId } = await resolveTenantPatientContext(
-    input.patientId
-  );
-  const now = new Date().toISOString();
-
-  if (input.encounterId) {
-    const { data: encounter, error } = await supabase
-      .from('encounters')
-      .select('id,tenant_id,patient_id,appointment_id,status')
-      .eq('id', input.encounterId)
-      .eq('tenant_id', tenantId)
-      .eq('patient_id', patientId)
-      .single();
-
-    if (error) throw error;
-
-    const existingEncounter = encounter as EncounterRow;
-    if (input.status === 'open' && existingEncounter.status === 'closed') {
-      throw new Error('encounter_already_finalized');
-    }
-
-    return { supabase, tenantId, userId, patientId, encounter: existingEncounter };
-  }
-
-  const { data: encounter, error } = await supabase
-    .from('encounters')
-    .insert({
-      tenant_id: tenantId,
-      patient_id: patientId,
-      appointment_id: input.appointmentId ?? null,
-      status: input.status,
-      encounter_type: 'clinic_visit',
-      started_at: now,
-      created_by: userId,
-    })
-    .select('id,tenant_id,patient_id,appointment_id,status')
-    .single();
-
-  if (error) throw error;
-  return { supabase, tenantId, userId, patientId, encounter: encounter as EncounterRow };
-}
-
 async function persistSoap(
   input: PersistSoapInput,
   status: 'draft' | 'final'
@@ -298,138 +242,34 @@ async function persistSoap(
     return autosaveSoapDraft(input);
   }
 
-  const { supabase, tenantId, userId, patientId, encounter } = await ensureEncounter({
-    patientId: input.patientId,
-    encounterId: input.encounterId,
-    appointmentId: input.appointmentId,
-    status: status === 'final' ? 'closed' : 'open',
-  });
-  if (input.soapNoteId) {
-    const { data: existingSoap, error: existingSoapError } = await supabase
-      .from('soap_notes')
-      .select('id,encounter_id,status')
-      .eq('id', input.soapNoteId)
-      .eq('tenant_id', tenantId)
-      .eq('patient_id', patientId)
-      .single();
-
-    if (existingSoapError) throw existingSoapError;
-
-    const currentSoap = existingSoap as Pick<SoapRow, 'id' | 'encounter_id' | 'status'>;
-    if (currentSoap.status === 'final') {
-      throw new Error('soap_note_already_finalized');
-    }
-
-    if (currentSoap.encounter_id && currentSoap.encounter_id !== encounter.id) {
-      throw new Error('soap_note_encounter_mismatch');
-    }
-  }
-
-  const now = new Date().toISOString();
-  const soapPayload = {
-    tenant_id: tenantId,
-    patient_id: patientId,
-    encounter_id: encounter.id,
-    status,
-    subjective: input.subjective,
-    objective: input.objective,
-    assessment: input.assessment,
-    plan: input.plan,
-    authored_by: userId,
-    updated_at: now,
-  };
-
-  const soapResult = input.soapNoteId
-    ? await supabase
-        .from('soap_notes')
-        .update(soapPayload)
-        .eq('id', input.soapNoteId)
-        .eq('tenant_id', tenantId)
-        .eq('patient_id', patientId)
-        .select('id')
-        .single()
-    : await supabase
-        .from('soap_notes')
-        .insert({ ...soapPayload, created_at: now })
-        .select('id')
-        .single();
-
-  if (soapResult.error) throw soapResult.error;
-
-  if (status === 'final') {
-    const { error: encounterError } = await supabase
-      .from('encounters')
-      .update({
-        status: 'closed',
-        ended_at: now,
-        finalized_by: userId,
-        updated_at: now,
-      })
-      .eq('id', encounter.id)
-      .eq('tenant_id', tenantId);
-
-    if (encounterError) throw encounterError;
-
-    const { error: timelineError } = await supabase.from('patient_timeline_events').insert({
-      tenant_id: tenantId,
-      patient_id: patientId,
-      event_type: 'soap_atualizado',
-      category: 'clinical',
-      status: 'recorded',
-      title: 'SOAP finalizado',
-      description: 'Atendimento SOAP finalizado e registrado no prontuario.',
-      actor_name: 'Equipe clinica',
-      status_label: 'Finalizado',
-      action_label: 'Abrir SOAP',
-      details_href: `/clinic/patients/${patientId}/encounter`,
-      event_at: now,
-      payload: {
-        encounterId: encounter.id,
-        soapNoteId: soapResult.data.id,
-      },
-    });
-
-    if (timelineError) throw timelineError;
-
-    if (encounter.appointment_id) {
-      const { error: attendanceError } = await supabase.rpc('complete_attendance_encounter', {
-        p_encounter_id: encounter.id,
-        p_follow_up_due_date: null,
-        p_follow_up_reason: null,
-      });
-
-      if (attendanceError) throw attendanceError;
-    }
-  }
-
-  const { error: auditError } = await supabase.from('audit_logs').insert({
-    tenant_id: tenantId,
-    user_id: userId,
-    action: status === 'final' ? 'soap_finalized' : 'soap_draft_saved',
-    entity_type: 'soap_note',
-    entity_id: soapResult.data.id,
-    metadata: {
-      patientId,
-      encounterId: encounter.id,
-      status,
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc('finalize_encounter_soap', {
+    p_payload: {
+      patientId: input.patientId,
+      encounterId: input.encounterId ?? null,
+      appointmentId: input.appointmentId ?? null,
+      soapNoteId: input.soapNoteId ?? null,
+      subjective: input.subjective,
+      objective: input.objective,
+      assessment: input.assessment,
+      plan: input.plan,
     },
   });
 
-  if (auditError) throw auditError;
+  if (error) throw error;
 
-  if (status === 'final') {
-    const { error: noteError } = await supabase.rpc('create_note_from_encounter', {
-      p_encounter_id: encounter.id,
-      p_soap_note_id: soapResult.data.id,
-    });
+  const record = asRecord(data);
+  const encounterId = asString(record.encounterId);
+  const soapNoteId = asString(record.soapNoteId);
 
-    if (noteError) throw noteError;
+  if (!encounterId || !soapNoteId) {
+    throw new Error('invalid_finalize_encounter_soap_contract');
   }
 
   return {
-    encounterId: encounter.id,
-    soapNoteId: soapResult.data.id,
-    status,
+    encounterId,
+    soapNoteId,
+    status: 'final',
   };
 }
 

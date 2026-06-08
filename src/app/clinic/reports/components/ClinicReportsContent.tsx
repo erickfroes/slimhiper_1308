@@ -241,7 +241,7 @@ export default function ClinicReportsContent() {
   }
 
   async function handleDownload(run: ClinicReportRun) {
-    if (!run.artifactId && !run.artifact?.id && !run.exportToken) {
+    if (!run.artifactId && !run.artifact?.id) {
       setDownloadState('Exportacao indisponivel ou expirada para este run.');
       return;
     }
@@ -674,7 +674,7 @@ export default function ClinicReportsContent() {
                 disabled={
                   downloadingRunId === lastRun.id ||
                   getRunDisplayStatus(lastRun) !== 'ready' ||
-                  (!lastRun.artifactId && !lastRun.artifact?.id && !lastRun.exportToken)
+                  (!lastRun.artifactId && !lastRun.artifact?.id)
                 }
                 className="btn-secondary gap-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
