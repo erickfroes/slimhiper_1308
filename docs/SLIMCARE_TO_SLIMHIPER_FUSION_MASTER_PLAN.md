@@ -1230,6 +1230,9 @@ Estado SlimHiper:
 
 - `clinic-reports` e `clinic-report-export` existem.
 - Export atual pode ser blob/download, sem historico persistente forte.
+- Implementacao M15 adicionou `report_artifacts`, bucket privado
+  `report-exports`, historico filtravel em `/clinic/reports` e download via
+  signed URL curta emitida pela Edge Function apos RBAC por tipo de relatorio.
 
 Decisao de fusao:
 
@@ -1237,30 +1240,30 @@ Decisao de fusao:
 
 Checklist UI/mobile:
 
-- [ ] Lista de relatorios recentes.
-- [ ] Status: pendente, executando, pronto, falhou, expirado.
-- [ ] Download por signed URL.
-- [ ] Filtros por periodo e tipo.
-- [ ] Mobile com cards, nao tabela.
+- [x] Lista de relatorios recentes.
+- [x] Status: pendente, executando, pronto, falhou, expirado.
+- [x] Download por signed URL.
+- [x] Filtros por periodo e tipo.
+- [x] Mobile com cards, nao tabela.
 
 Checklist backend:
 
-- [ ] Tabela `report_runs` revisada.
-- [ ] Tabela `report_artifacts`.
-- [ ] Bucket privado `report-exports`.
-- [ ] Retencao e expiracao.
-- [ ] Permissao por tipo de relatorio.
+- [x] Tabela `report_runs` revisada.
+- [x] Tabela `report_artifacts`.
+- [x] Bucket privado `report-exports`.
+- [x] Retencao e expiracao.
+- [x] Permissao por tipo de relatorio.
 
 Checklist seguranca:
 
-- [ ] Relatorios com PII/financeiro exigem permissao especifica.
-- [ ] Signed URL curta.
-- [ ] Logs sem conteudo de relatorio.
+- [x] Relatorios com PII/financeiro exigem permissao especifica.
+- [x] Signed URL curta.
+- [x] Logs sem conteudo de relatorio.
 
 Aceite:
 
-- [ ] Relatorio executa, gera artefato e expira.
-- [ ] Usuario sem permissao nao baixa export.
+- [x] Relatorio executa, gera artefato e expira.
+- [x] Usuario sem permissao nao baixa export.
 
 ### M16 - Jobs, automacoes, cron e observabilidade
 

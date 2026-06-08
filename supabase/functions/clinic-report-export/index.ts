@@ -30,87 +30,19 @@ function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
-function csvEscape(value: unknown): string {
-  const text = value == null ? '' : String(value);
-  return `"${text.replace(/"/g, '""')}"`;
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function toCsv(rows: unknown[]): string {
-  const records = rows.map(asRecord);
-  const columns = Array.from(new Set(records.flatMap((row) => Object.keys(row))));
-  if (columns.length === 0) return 'sem_dados\n';
-  return [
-    columns.map(csvEscape).join(','),
-    ...records.map((row) => columns.map((column) => csvEscape(row[column])).join(',')),
-  ].join('\n');
-}
-
-function pdfEscape(value: unknown): string {
-  return String(value ?? '')
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)')
-    .slice(0, 110);
-}
-
-function toPdfDocument(payload: Record<string, unknown>): string {
-  const rows = Array.isArray(payload.rows) ? payload.rows.map(asRecord) : [];
-  const title = asString(payload.reportKey, 'relatorio-clinico');
-  const lines = [
-    `SlimHiper - ${title}`,
-    'Export seguro, minimizado e auditado.',
-    `Gerado em ${new Date().toISOString()}`,
-    '',
-    ...rows.slice(0, 24).map((row) =>
-      Object.entries(row)
-        .map(([key, value]) => `${key}: ${formatPdfValue(value)}`)
-        .join(' | ')
-    ),
-  ];
-
-  if (rows.length === 0) lines.push('Sem dados para os filtros selecionados.');
-  if (rows.length > 24)
-    lines.push(`Resultado truncado na previa PDF: ${rows.length} linhas no total.`);
-
-  const content = [
-    'BT',
-    '/F1 10 Tf',
-    '50 790 Td',
-    ...lines.flatMap((line, index) => {
-      const escaped = pdfEscape(line);
-      return index === 0 ? [`(${escaped}) Tj`] : ['0 -14 Td', `(${escaped}) Tj`];
-    }),
-    'ET',
-  ].join('\n');
-
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
-  ];
-
-  let pdf = '%PDF-1.4\n';
-  const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets.push(pdf.length);
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xrefOffset = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  pdf += offsets
-    .slice(1)
-    .map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`)
-    .join('');
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  return pdf;
-}
-
-function formatPdfValue(value: unknown): string {
-  if (value == null) return '';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
+function isValidReportExportPath(path: string, runId: string, artifactId: string) {
+  const parts = path.split('/');
+  return (
+    parts.length === 4 &&
+    isUuid(parts[0]) &&
+    parts[1] === runId &&
+    parts[2] === artifactId &&
+    /^[a-z0-9][a-z0-9._-]*\.(csv|pdf)$/.test(parts[3])
+  );
 }
 
 Deno.serve(async (req) => {
@@ -138,7 +70,8 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    if (!supabaseUrl || !anonKey) {
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       console.error('[clinic-report-export] missing environment configuration');
       return jsonResponse(500, {
         ok: false,
@@ -149,6 +82,9 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const {
@@ -168,47 +104,64 @@ Deno.serve(async (req) => {
         ? asRecord(await req.json().catch(() => ({})))
         : Object.fromEntries(new URL(req.url).searchParams.entries());
 
+    const artifactId = asString(body.artifact_id);
     const runId = asString(body.run_id);
     const exportToken = asString(body.token);
-    if (!runId || !exportToken) {
+    if (!artifactId && !runId) {
       return jsonResponse(400, {
         ok: false,
-        error: { code: 'invalid_export_request', message: 'Report run and token are required.' },
+        error: {
+          code: 'invalid_export_request',
+          message: 'Report artifact or run is required.',
+        },
         meta: { timestamp },
       });
     }
 
-    const { data, error } = await supabase.rpc('get_clinic_report_export', {
-      p_run_id: runId,
-      p_export_token: exportToken,
+    const { data, error } = await supabase.rpc('get_clinic_report_export_artifact', {
+      p_artifact_id: artifactId || null,
+      p_run_id: runId || null,
+      p_export_token: exportToken || null,
     });
     if (error) throw error;
 
     const payload = asRecord(data);
-    const rows = Array.isArray(payload.rows) ? payload.rows : [];
-    const format = asString(payload.format, 'csv');
-    const filename = asString(payload.filename, `relatorio.${format}`);
+    const resolvedArtifactId = asString(payload.artifactId);
+    const resolvedRunId = asString(payload.runId);
+    const bucket = asString(payload.bucket);
+    const path = asString(payload.path);
+    const filename = asString(payload.filename, 'relatorio.csv');
+    const expiresInSeconds = Number(payload.expiresInSeconds) || 300;
 
-    if (format === 'pdf') {
-      return new Response(toPdfDocument(payload), {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${filename}"`,
-          'Cache-Control': 'no-store',
-        },
+    if (
+      bucket !== 'report-exports' ||
+      !resolvedArtifactId ||
+      !resolvedRunId ||
+      !isValidReportExportPath(path, resolvedRunId, resolvedArtifactId)
+    ) {
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'invalid_storage_contract', message: 'Invalid storage contract.' },
+        meta: { timestamp },
       });
     }
 
-    return new Response(toCsv(rows), {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Cache-Control': 'no-store',
+    const { data: signed, error: signedError } = await admin.storage
+      .from(bucket)
+      .createSignedUrl(path, expiresInSeconds, { download: filename });
+    if (signedError) throw signedError;
+
+    return jsonResponse(200, {
+      ok: true,
+      data: {
+        url: signed.signedUrl,
+        filename,
+        expiresInSeconds,
+        artifactId: resolvedArtifactId,
+        runId: resolvedRunId,
+        artifactExpiresAt: payload.artifactExpiresAt,
       },
+      meta: { timestamp },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

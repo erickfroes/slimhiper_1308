@@ -36,9 +36,17 @@ export interface ClinicReportFilters {
   detail?: boolean;
 }
 
+export type ClinicReportRunStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'expired';
+
 export interface ClinicReportRun {
   id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: ClinicReportRunStatus;
   reportKey: string;
   scope: 'clinic' | 'patient';
   patientId?: string | null;
@@ -47,8 +55,46 @@ export interface ClinicReportRun {
   exportFormat?: 'csv' | 'pdf';
   exportToken?: string;
   exportExpiresAt?: string;
+  artifact?: ClinicReportArtifact | null;
+  artifactId?: string;
+  artifactStatus?: ClinicReportArtifactStatus | ClinicReportRunStatus;
+  artifactExpiresAt?: string;
   createdAt?: string;
   completedAt?: string;
+}
+
+export type ClinicReportArtifactStatus =
+  | 'pending'
+  | 'running'
+  | 'ready'
+  | 'failed'
+  | 'expired'
+  | 'deleted';
+
+export interface ClinicReportArtifact {
+  id: string;
+  reportRunId: string;
+  reportKey: string;
+  format: 'csv' | 'pdf';
+  status: ClinicReportArtifactStatus;
+  filename: string;
+  mimeType?: string;
+  sizeBytes?: number | null;
+  rowCount?: number;
+  downloadCount?: number;
+  expiresAt?: string;
+  retainedUntil?: string;
+  createdAt?: string;
+  generatedAt?: string;
+  lastDownloadedAt?: string;
+}
+
+export interface ClinicReportHistoryFilters {
+  reportKey?: string;
+  status?: ClinicReportArtifactStatus | ClinicReportRunStatus | '';
+  from?: string;
+  to?: string;
+  limit?: number;
 }
 
 type EdgeResponseEnvelope<T> = {
@@ -74,6 +120,10 @@ function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function asNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function unwrapEdgeResponse<T>(response: unknown): {
   data: T | null;
   error: SafeServiceError | null;
@@ -96,6 +146,35 @@ function unwrapEdgeResponse<T>(response: unknown): {
   }
 
   return { data: response as T, error: null };
+}
+
+function normalizeArtifact(item: unknown): ClinicReportArtifact | null {
+  const record = asRecord(item);
+  const id = asString(record.id);
+  const reportRunId = asString(record.reportRunId);
+  const reportKey = asString(record.reportKey);
+  const format = asString(record.format, 'csv');
+  const status = asString(record.status, 'pending');
+
+  if (!id || !reportRunId || !reportKey) return null;
+
+  return {
+    id,
+    reportRunId,
+    reportKey,
+    format: format === 'pdf' ? 'pdf' : 'csv',
+    status: status as ClinicReportArtifactStatus,
+    filename: asString(record.filename, `relatorio-${reportKey}.${format}`),
+    mimeType: asString(record.mimeType) || undefined,
+    sizeBytes: asNumber(record.sizeBytes) ?? null,
+    rowCount: asNumber(record.rowCount),
+    downloadCount: asNumber(record.downloadCount),
+    expiresAt: asString(record.expiresAt) || undefined,
+    retainedUntil: asString(record.retainedUntil) || undefined,
+    createdAt: asString(record.createdAt) || undefined,
+    generatedAt: asString(record.generatedAt) || undefined,
+    lastDownloadedAt: asString(record.lastDownloadedAt) || undefined,
+  };
 }
 
 function normalizeDefinition(item: unknown): ClinicReportDefinition | null {
@@ -133,6 +212,10 @@ function normalizeRun(item: unknown): ClinicReportRun | null {
   if (!id || !reportKey) return null;
 
   const rows = Array.isArray(record.rows) ? record.rows.map(asRecord) : [];
+  const artifact = normalizeArtifact(record.artifact);
+  const artifactId = asString(record.artifactId) || artifact?.id;
+  const artifactStatus = asString(record.artifactStatus) || artifact?.status;
+  const artifactExpiresAt = asString(record.artifactExpiresAt) || artifact?.expiresAt;
 
   return {
     id,
@@ -145,6 +228,10 @@ function normalizeRun(item: unknown): ClinicReportRun | null {
     exportFormat: asString(record.exportFormat, 'csv') as ClinicReportRun['exportFormat'],
     exportToken: asString(record.exportToken) || undefined,
     exportExpiresAt: asString(record.exportExpiresAt) || undefined,
+    artifact,
+    artifactId,
+    artifactStatus: artifactStatus as ClinicReportRun['artifactStatus'],
+    artifactExpiresAt,
     createdAt: asString(record.createdAt) || undefined,
     completedAt: asString(record.completedAt) || undefined,
   };
@@ -228,6 +315,32 @@ export async function createClinicReportRun(params: {
   return { data: run, error: null };
 }
 
+export async function listClinicReportRuns(
+  filters: ClinicReportHistoryFilters = {}
+): Promise<{ data: ClinicReportRun[]; error: SafeServiceError | null }> {
+  const { data, error } = await invokeClinicReports<unknown[]>({
+    action: 'history',
+    report_key: filters.reportKey || undefined,
+    status: filters.status || undefined,
+    from: filters.from || undefined,
+    to: filters.to || undefined,
+    limit: filters.limit ?? 20,
+  });
+  if (error) return { data: [], error };
+
+  if (!Array.isArray(data)) {
+    return {
+      data: [],
+      error: { message: 'Contrato invalido de historico de relatorios.', code: 'invalid_contract' },
+    };
+  }
+
+  return {
+    data: data.map(normalizeRun).filter((item): item is ClinicReportRun => Boolean(item)),
+    error: null,
+  };
+}
+
 export async function getClinicReportRun(runId: string): Promise<{
   data: ClinicReportRun | null;
   error: SafeServiceError | null;
@@ -247,9 +360,12 @@ export async function getClinicReportRun(runId: string): Promise<{
 }
 
 export function getClinicReportExportUrl(run: ClinicReportRun): string | null {
-  if (!run.exportToken) return null;
+  const artifactId = run.artifactId ?? run.artifact?.id;
+  if (!artifactId && !run.exportToken) return null;
 
-  const params = new URLSearchParams({ run_id: run.id, token: run.exportToken });
+  const params = new URLSearchParams({ run_id: run.id });
+  if (artifactId) params.set('artifact_id', artifactId);
+  if (run.exportToken) params.set('token', run.exportToken);
   return `/functions/v1/clinic-report-export?${params.toString()}`;
 }
 
@@ -257,8 +373,8 @@ export async function downloadClinicReportExport(run: ClinicReportRun): Promise<
   data: { blob: Blob; filename: string } | null;
   error: SafeServiceError | null;
 }> {
-  if (!run.exportToken) {
-    return { data: null, error: { message: 'Token de exportacao indisponivel.' } };
+  if (!run.artifactId && !run.artifact?.id && !run.exportToken) {
+    return { data: null, error: { message: 'Artefato de exportacao indisponivel.' } };
   }
 
   try {
@@ -283,7 +399,11 @@ export async function downloadClinicReportExport(run: ClinicReportRun): Promise<
         Authorization: `Bearer ${session.access_token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ run_id: run.id, token: run.exportToken }),
+      body: JSON.stringify({
+        artifact_id: run.artifactId ?? run.artifact?.id,
+        run_id: run.id,
+        token: run.exportToken,
+      }),
     });
 
     if (!response.ok) {
@@ -293,11 +413,35 @@ export async function downloadClinicReportExport(run: ClinicReportRun): Promise<
       };
     }
 
-    const disposition = response.headers.get('Content-Disposition') ?? '';
-    const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition);
-    const filename =
-      filenameMatch?.[1] ?? `relatorio-${run.reportKey}.${run.exportFormat ?? 'csv'}`;
-    return { data: { blob: await response.blob(), filename }, error: null };
+    const payload = unwrapEdgeResponse<unknown>(await response.json().catch(() => null));
+    if (payload.error) return { data: null, error: payload.error };
+
+    const signed = asRecord(payload.data);
+    const signedUrl = asString(signed.url);
+    const filename = asString(
+      signed.filename,
+      `relatorio-${run.reportKey}.${run.exportFormat ?? 'csv'}`
+    );
+
+    if (!signedUrl) {
+      return {
+        data: null,
+        error: { message: 'Contrato invalido de URL assinada.', code: 'invalid_contract' },
+      };
+    }
+
+    const signedResponse = await fetch(signedUrl, { method: 'GET' });
+    if (!signedResponse.ok) {
+      return {
+        data: null,
+        error: {
+          message: 'URL assinada expirada ou indisponivel.',
+          code: String(signedResponse.status),
+        },
+      };
+    }
+
+    return { data: { blob: await signedResponse.blob(), filename }, error: null };
   } catch (error) {
     return {
       data: null,

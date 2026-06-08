@@ -29,6 +29,8 @@ import {
   downloadClinicReportExport,
   getClinicReportRun,
   listClinicReportDefinitions,
+  listClinicReportRuns,
+  type ClinicReportArtifactStatus,
   type ClinicReportDefinition,
   type ClinicReportFilters,
   type ClinicReportRun,
@@ -77,6 +79,63 @@ function triggerBlobDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function formatDateTime(value?: string): string {
+  if (!value) return '---';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '---';
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function getRunDisplayStatus(
+  run: ClinicReportRun
+): ClinicReportArtifactStatus | ClinicReportRun['status'] {
+  const status = run.artifactStatus ?? run.artifact?.status ?? run.status;
+  const expiresAt = run.artifactExpiresAt ?? run.artifact?.expiresAt;
+
+  if (status === 'ready' && expiresAt && new Date(expiresAt).getTime() < Date.now()) {
+    return 'expired';
+  }
+
+  return status;
+}
+
+function statusLabel(status: ClinicReportArtifactStatus | ClinicReportRun['status']): string {
+  const labels: Record<string, string> = {
+    pending: 'Pendente',
+    running: 'Executando',
+    ready: 'Pronto',
+    completed: 'Concluido',
+    failed: 'Falhou',
+    cancelled: 'Cancelado',
+    expired: 'Expirado',
+    deleted: 'Removido',
+  };
+
+  return labels[status] ?? status;
+}
+
+function statusClass(status: ClinicReportArtifactStatus | ClinicReportRun['status']): string {
+  const classes: Record<string, string> = {
+    pending: 'bg-slate-100 text-slate-700',
+    running: 'bg-sky-100 text-sky-700',
+    ready: 'bg-emerald-100 text-emerald-700',
+    completed: 'bg-emerald-100 text-emerald-700',
+    failed: 'bg-red-100 text-red-700',
+    cancelled: 'bg-slate-100 text-slate-700',
+    expired: 'bg-amber-100 text-amber-700',
+    deleted: 'bg-slate-100 text-slate-600',
+  };
+
+  return classes[status] ?? 'bg-muted text-muted-foreground';
+}
+
 export default function ClinicReportsContent() {
   const [definitions, setDefinitions] = useState<ClinicReportDefinition[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>('');
@@ -91,6 +150,12 @@ export default function ClinicReportsContent() {
   const [runError, setRunError] = useState<string | null>(null);
   const [downloadState, setDownloadState] = useState<string | null>(null);
   const [statusRefreshing, setStatusRefreshing] = useState(false);
+  const [history, setHistory] = useState<ClinicReportRun[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyReportKey, setHistoryReportKey] = useState('');
+  const [historyStatus, setHistoryStatus] = useState('');
+  const [downloadingRunId, setDownloadingRunId] = useState<string | null>(null);
 
   const selectedDefinition = useMemo(
     () => definitions.find((definition) => definition.key === selectedKey) ?? null,
@@ -111,6 +176,27 @@ export default function ClinicReportsContent() {
   useEffect(() => {
     void loadDefinitions();
   }, [loadDefinitions]);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    const result = await listClinicReportRuns({
+      reportKey: historyReportKey || undefined,
+      status: historyStatus as ClinicReportArtifactStatus | undefined,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      limit: 18,
+    });
+
+    setHistory(result.data);
+    setHistoryError(result.error?.message ?? null);
+    setHistoryLoading(false);
+  }, [filters.from, filters.to, historyReportKey, historyStatus]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
 
   async function handleRun(format: 'csv' | 'pdf') {
     if (!selectedDefinition) return;
@@ -134,6 +220,7 @@ export default function ClinicReportsContent() {
     }
 
     setLastRun(result.data);
+    void loadHistory();
   }
 
   async function handleRefreshRun() {
@@ -150,25 +237,28 @@ export default function ClinicReportsContent() {
     }
 
     setLastRun(result.data);
+    void loadHistory();
   }
 
-  async function handleDownload() {
-    if (!lastRun?.exportToken) {
+  async function handleDownload(run: ClinicReportRun) {
+    if (!run.artifactId && !run.artifact?.id && !run.exportToken) {
       setDownloadState('Exportacao indisponivel ou expirada para este run.');
       return;
     }
 
+    setDownloadingRunId(run.id);
     setDownloadState('Preparando exportacao segura...');
-    const result = await downloadClinicReportExport(lastRun);
+    const result = await downloadClinicReportExport(run);
+    setDownloadingRunId(null);
+
     if (result.error || !result.data) {
       setDownloadState(result.error?.message ?? 'Nao foi possivel baixar a exportacao.');
       return;
     }
 
     triggerBlobDownload(result.data.blob, result.data.filename);
-    setDownloadState(
-      'Exportacao baixada; acesso auditado e URL curta invalidara em poucos minutos.'
-    );
+    setDownloadState('Exportacao baixada por URL assinada curta e acesso auditado.');
+    void loadHistory();
   }
 
   const resultColumns = lastRun?.rows.length
@@ -418,6 +508,148 @@ export default function ClinicReportsContent() {
         </aside>
       </section>
 
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Historico de exports</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Artefatos persistentes no bucket privado report-exports, com expiracao e signed URL.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(180px,1fr)_minmax(150px,0.7fr)_auto]">
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Tipo
+              <select
+                value={historyReportKey}
+                onChange={(event) => setHistoryReportKey(event.target.value)}
+                className="input-base text-sm"
+              >
+                <option value="">Todos</option>
+                {definitions.map((definition) => (
+                  <option key={definition.key} value={definition.key}>
+                    {definition.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-xs font-medium text-muted-foreground">
+              Status
+              <select
+                value={historyStatus}
+                onChange={(event) => setHistoryStatus(event.target.value)}
+                className="input-base text-sm"
+              >
+                <option value="">Todos</option>
+                <option value="pending">Pendente</option>
+                <option value="running">Executando</option>
+                <option value="ready">Pronto</option>
+                <option value="failed">Falhou</option>
+                <option value="expired">Expirado</option>
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => void loadHistory()}
+              className="btn-secondary mt-5 justify-center gap-2"
+            >
+              <RefreshCcw size={15} /> Atualizar
+            </button>
+          </div>
+        </div>
+
+        {historyLoading ? (
+          <div className="rounded-2xl border border-border p-5 text-sm text-muted-foreground">
+            Carregando historico de exports...
+          </div>
+        ) : historyError ? (
+          <div
+            role="alert"
+            className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold">Historico indisponivel</p>
+                <p className="mt-1">{historyError}</p>
+              </div>
+            </div>
+          </div>
+        ) : history.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="Nenhum export persistente"
+            description="Execute um relatorio com export habilitado para criar o primeiro artefato."
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {history.map((run) => {
+              const status = getRunDisplayStatus(run);
+              const artifact = run.artifact;
+              const canDownload = status === 'ready' && Boolean(run.artifactId ?? artifact?.id);
+
+              return (
+                <article key={run.id} className="rounded-2xl border border-border bg-card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {run.reportKey}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatDateTime(run.createdAt)} - {run.scope}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusClass(status)}`}
+                    >
+                      {statusLabel(status)}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Formato</p>
+                      <p className="mt-1 font-semibold uppercase text-foreground">
+                        {artifact?.format ?? run.exportFormat ?? 'csv'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Linhas</p>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {artifact?.rowCount ?? run.rows.length}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Expira</p>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {formatDateTime(run.artifactExpiresAt ?? artifact?.expiresAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-xs text-muted-foreground">
+                      {artifact?.filename ?? 'Artefato legado sem arquivo persistente'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleDownload(run)}
+                      disabled={!canDownload || downloadingRunId === run.id}
+                      className="btn-secondary shrink-0 gap-1.5 px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Download size={13} />
+                      {downloadingRunId === run.id ? 'Assinando...' : 'Baixar'}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       <section className="card-base p-5 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -438,11 +670,16 @@ export default function ClinicReportsContent() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleDownload()}
-                disabled={!lastRun.exportToken}
+                onClick={() => void handleDownload(lastRun)}
+                disabled={
+                  downloadingRunId === lastRun.id ||
+                  getRunDisplayStatus(lastRun) !== 'ready' ||
+                  (!lastRun.artifactId && !lastRun.artifact?.id && !lastRun.exportToken)
+                }
                 className="btn-secondary gap-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Download size={15} /> Baixar export seguro
+                <Download size={15} />
+                {downloadingRunId === lastRun.id ? 'Assinando...' : 'Baixar export seguro'}
               </button>
             </div>
           )}
@@ -459,7 +696,9 @@ export default function ClinicReportsContent() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-2xl border border-border p-3">
                 <p className="text-xs text-muted-foreground">Status</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{lastRun.status}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {statusLabel(getRunDisplayStatus(lastRun))}
+                </p>
               </div>
               <div className="rounded-2xl border border-border p-3">
                 <p className="text-xs text-muted-foreground">Linhas</p>
@@ -472,9 +711,7 @@ export default function ClinicReportsContent() {
               <div className="rounded-2xl border border-border p-3">
                 <p className="text-xs text-muted-foreground">Expira em</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
-                  {lastRun.exportExpiresAt
-                    ? new Date(lastRun.exportExpiresAt).toLocaleTimeString('pt-BR')
-                    : '—'}
+                  {formatDateTime(lastRun.artifactExpiresAt ?? lastRun.exportExpiresAt)}
                 </p>
               </div>
             </div>
