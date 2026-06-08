@@ -84,6 +84,55 @@ O painel e intencionalmente seguro: nao consulta providers, nao mostra payloads
 brutos, nao mostra PII/PHI e nao imprime secrets. Para producao, conecte as
 fontes reais do provedor de logs/APM mantendo este mesmo contrato visual.
 
+## M16 Jobs Operacionais
+
+A migration `20260607170000_370_operational_jobs_cron_observability.sql` define
+o catalogo versionado em `operational_job_definitions`, registra execucoes em
+`operational_job_runs` e agenda `pg_cron` quando a extensao esta disponivel no
+ambiente. Se `pg_cron` nao estiver instalado, o catalogo continua aplicado e o
+campo `metadata.cronInstallStatus` fica como `pg_cron_unavailable`.
+
+| Job                            | Schedule       | Limite padrao | Observacao                                                 |
+| ------------------------------ | -------------- | ------------: | ---------------------------------------------------------- |
+| `checkin.reminder`             | `*/30 * * * *` |           100 | Notificacoes in-app genericas para check-ins pendentes.    |
+| `medication.reminder`          | `*/30 * * * *` |           100 | Notificacoes in-app genericas para lembretes ativos.       |
+| `attendance.stuck`             | `*/15 * * * *` |           100 | Marca fila presa apos 45 min e audita contagem por tenant. |
+| `communications.expire`        | `15 * * * *`   |           250 | Arquiva comunicacoes vencidas por retencao.                |
+| `crm.retention`                | `35 2 * * *`   |           100 | Redacao de leads expirados via contrato service-role.      |
+| `inventory.notification`       | `20 7 * * *`   |           100 | Alertas de estoque minimo e validade critica.              |
+| `billing.asaas_reconciliation` | `*/30 * * * *` |           100 | Enfileira `billing_sync_jobs`; nao chama Asaas.            |
+| `webhook.reprocess`            | `*/10 * * * *` |            50 | Triagem fail-closed da fila; nao reexecuta payload bruto.  |
+| `compliance.readiness`         | `40 3 * * *`   |           100 | Reavalia lacunas de compliance por tenant.                 |
+| `provider.healthcheck`         | admin-only     |             1 | Health local de providers; sem chamadas externas.          |
+
+Execucao manual so e permitida com service role em backend/script trusted:
+
+```sql
+select public.run_operational_job('checkin.reminder', true, 100);  -- dry-run
+select public.run_operational_job('checkin.reminder', false, 100); -- executa
+```
+
+Ou pelo runner trusted:
+
+```bash
+node scripts/supabase/run-operational-job.mjs --job checkin.reminder --limit 100
+node scripts/supabase/run-operational-job.mjs --job checkin.reminder --limit 100 --execute
+```
+
+Todos os jobs devem manter:
+
+- `dry-run` como primeira execucao em homologacao ou incidente;
+- limite explicito por execucao, nunca lote aberto;
+- logs somente com contagens, status, codigos e resumo sanitizado;
+- service role restrito a backend, Edge Function trusted, script operacional
+  autorizado ou `pg_cron`;
+- one-shots (`permissions.seed`, `platform_settings.seed`,
+  `compliance.legacy_audit`) fora do cron e fora da UI comum.
+
+O dashboard `/admin/observability` consome `list_platform_operational_jobs` e
+mostra ultima execucao, status, atraso e falha sanitizada. Falhas de job sao
+capturadas em `operational_job_runs`; uma falha nao interrompe a aplicacao.
+
 ## Smoke read-only pos-deploy
 
 Com o app publicado, execute:

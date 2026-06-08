@@ -97,6 +97,50 @@ export interface AdminWebhookEventSummary {
   errorSummary: string | null;
 }
 
+export type AdminOperationalJobStatus = 'ok' | 'watch' | 'critical';
+
+export interface AdminOperationalJobRun {
+  id: string;
+  status: 'running' | 'succeeded' | 'failed' | 'skipped';
+  triggerSource: 'cron' | 'manual' | 'edge' | 'script' | 'migration' | 'admin';
+  dryRun: boolean;
+  requestedLimit: number;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  processedCount: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  summary: Record<string, unknown>;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
+export interface AdminOperationalJobSummary {
+  jobKey: string;
+  displayName: string;
+  category: string;
+  executionKind: 'recurring' | 'one_shot' | 'admin_check';
+  handlerName: string;
+  enabled: boolean;
+  cronEnabled: boolean;
+  scheduleCron: string | null;
+  timezone: string;
+  cronJobName: string | null;
+  defaultLimit: number;
+  maxLimit: number;
+  expectedMaxLagMinutes: number;
+  dryRunSupported: boolean;
+  serviceRoleOnly: boolean;
+  description: string;
+  runbookHref: string | null;
+  currentStatus: AdminOperationalJobStatus;
+  isStale: boolean;
+  evidence: string;
+  lastRun: AdminOperationalJobRun | null;
+}
+
 export interface AdminTenantWebhookError {
   id: string;
   event: string;
@@ -291,6 +335,13 @@ function normalizeWebhookStatus(
   return 'pending';
 }
 
+function normalizeOperationalJobStatus(value: unknown): AdminOperationalJobStatus {
+  const normalized = asString(value).toLowerCase();
+  if (normalized === 'critical') return 'critical';
+  if (normalized === 'watch') return 'watch';
+  return 'ok';
+}
+
 function normalizeSupportStatus(value: unknown): AdminSupportSession['status'] {
   const normalized = asString(value).toLowerCase();
   if (normalized === 'ended' || normalized === 'denied') return 'resolved';
@@ -413,6 +464,74 @@ function mapWebhook(value: unknown): AdminWebhookEventSummary {
     status: normalizeWebhookStatus(record.status, retryCount),
     retryCount,
     errorSummary: asNullableString(sanitizeOperationalText(record.errorSummary, '', 240)),
+  };
+}
+
+function mapOperationalJobRun(value: unknown): AdminOperationalJobRun | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+
+  const status = asString(record.status);
+  const triggerSource = asString(record.triggerSource);
+
+  return {
+    id,
+    status:
+      status === 'running' || status === 'failed' || status === 'skipped' ? status : 'succeeded',
+    triggerSource:
+      triggerSource === 'cron' ||
+      triggerSource === 'edge' ||
+      triggerSource === 'script' ||
+      triggerSource === 'migration' ||
+      triggerSource === 'admin'
+        ? triggerSource
+        : 'manual',
+    dryRun: asBoolean(record.dryRun, true),
+    requestedLimit: asNumber(record.requestedLimit),
+    startedAt: asString(record.startedAt),
+    finishedAt: asNullableString(record.finishedAt),
+    durationMs:
+      record.durationMs === null || record.durationMs === undefined
+        ? null
+        : asNumber(record.durationMs),
+    processedCount: asNumber(record.processedCount),
+    succeededCount: asNumber(record.succeededCount),
+    failedCount: asNumber(record.failedCount),
+    skippedCount: asNumber(record.skippedCount),
+    summary: asRecord(record.summary),
+    errorCode: asNullableString(record.errorCode),
+    errorMessage: asNullableString(sanitizeOperationalText(record.errorMessage, '', 500)),
+  };
+}
+
+function mapOperationalJob(value: unknown): AdminOperationalJobSummary {
+  const record = asRecord(value);
+  const executionKind = asString(record.executionKind);
+
+  return {
+    jobKey: asString(record.jobKey),
+    displayName: sanitizeOperationalText(record.displayName, 'Job operacional', 160),
+    category: sanitizeOperationalText(record.category, 'operational', 80),
+    executionKind:
+      executionKind === 'one_shot' || executionKind === 'admin_check' ? executionKind : 'recurring',
+    handlerName: sanitizeOperationalText(record.handlerName, '', 200),
+    enabled: asBoolean(record.enabled),
+    cronEnabled: asBoolean(record.cronEnabled),
+    scheduleCron: asNullableString(record.scheduleCron),
+    timezone: sanitizeOperationalText(record.timezone, 'America/Sao_Paulo', 80),
+    cronJobName: asNullableString(record.cronJobName),
+    defaultLimit: asNumber(record.defaultLimit),
+    maxLimit: asNumber(record.maxLimit),
+    expectedMaxLagMinutes: asNumber(record.expectedMaxLagMinutes),
+    dryRunSupported: asBoolean(record.dryRunSupported, true),
+    serviceRoleOnly: asBoolean(record.serviceRoleOnly, true),
+    description: sanitizeOperationalText(record.description, '', 320),
+    runbookHref: asNullableString(record.runbookHref),
+    currentStatus: normalizeOperationalJobStatus(record.currentStatus),
+    isStale: asBoolean(record.isStale),
+    evidence: sanitizeOperationalText(record.evidence, 'Sem evidencia recente.', 320),
+    lastRun: mapOperationalJobRun(record.lastRun),
   };
 }
 
@@ -560,6 +679,31 @@ export async function listWebhookSummaries(limit = 100): Promise<{
     return { data: asArray(data).map(mapWebhook), error: null };
   } catch (error) {
     return { data: [], error: asServiceError(error, 'Falha ao carregar webhooks.') };
+  }
+}
+
+export async function listOperationalJobs(limit = 100): Promise<{
+  data: AdminOperationalJobSummary[];
+  error: SafeServiceError | null;
+}> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('list_platform_operational_jobs', {
+      p_limit: limit,
+    });
+
+    if (error) {
+      return { data: [], error: asServiceError(error, 'Falha ao carregar jobs operacionais.') };
+    }
+
+    return {
+      data: asArray(data)
+        .map(mapOperationalJob)
+        .filter((job) => job.jobKey),
+      error: null,
+    };
+  } catch (error) {
+    return { data: [], error: asServiceError(error, 'Falha ao carregar jobs operacionais.') };
   }
 }
 

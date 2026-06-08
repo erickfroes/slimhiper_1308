@@ -1281,9 +1281,11 @@ Origem Slim Care:
 
 Estado SlimHiper:
 
-- Existem helpers e Edge Functions, mas `pg_cron`/cron versionado nao apareceu
-  como contrato fechado.
-- Admin observability existe.
+- Existem helpers e Edge Functions.
+- `pg_cron`/cron versionado agora esta fechado por
+  `20260607170000_370_operational_jobs_cron_observability.sql`, com fallback
+  documentado quando a extensao nao esta disponivel.
+- Admin observability existe e consome `list_platform_operational_jobs`.
 
 Decisao de fusao:
 
@@ -1293,30 +1295,30 @@ Decisao de fusao:
 
 Checklist jobs:
 
-- [ ] Job de lembrete de check-in.
-- [ ] Job de lembrete de medicacao se modulo entrar.
-- [ ] Job de atendimento preso.
-- [ ] Job de expiracao de comunicacoes.
-- [ ] Job de CRM expirado/retencao.
-- [ ] Job de estoque/notificacoes.
-- [ ] Job de conciliacao Asaas.
-- [ ] Job de reprocesso de webhook com limite.
-- [ ] Job de compliance readiness.
-- [ ] Healthcheck provider admin-only.
+- [x] Job de lembrete de check-in.
+- [x] Job de lembrete de medicacao se modulo entrar.
+- [x] Job de atendimento preso.
+- [x] Job de expiracao de comunicacoes.
+- [x] Job de CRM expirado/retencao.
+- [x] Job de estoque/notificacoes.
+- [x] Job de conciliacao Asaas.
+- [x] Job de reprocesso de webhook com limite.
+- [x] Job de compliance readiness.
+- [x] Healthcheck provider admin-only.
 
 Checklist seguranca:
 
-- [ ] Jobs rodam com service role somente no backend.
-- [ ] Cada job tem limite por execucao.
-- [ ] Cada job registra contagem e resumo, nao payload bruto.
-- [ ] Reprocesso exige idempotencia.
-- [ ] Backfills one-shot nao ficam expostos para UI comum.
+- [x] Jobs rodam com service role somente no backend.
+- [x] Cada job tem limite por execucao.
+- [x] Cada job registra contagem e resumo, nao payload bruto.
+- [x] Reprocesso exige idempotencia.
+- [x] Backfills one-shot nao ficam expostos para UI comum.
 
 Aceite:
 
-- [ ] Cron documentado e versionado.
-- [ ] Observability mostra ultima execucao, status e falha.
-- [ ] Falha de job nao derruba app.
+- [x] Cron documentado e versionado.
+- [x] Observability mostra ultima execucao, status e falha.
+- [x] Falha de job nao derruba app.
 
 ## 7. Matriz pagina a pagina
 

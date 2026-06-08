@@ -10,12 +10,18 @@ import {
   Database,
   FileText,
   HardDrive,
+  ListChecks,
   ServerCog,
   ShieldAlert,
   Webhook,
 } from 'lucide-react';
 import AdminShell from '@/app/admin/components/AdminShell';
-import { listWebhookSummaries, type AdminWebhookEventSummary } from '@/services/adminApi';
+import {
+  listOperationalJobs,
+  listWebhookSummaries,
+  type AdminOperationalJobSummary,
+  type AdminWebhookEventSummary,
+} from '@/services/adminApi';
 
 type MonitorStatus = 'ok' | 'watch' | 'critical';
 type HealthStatus = 'ok' | 'warn' | 'fail' | 'unknown';
@@ -121,6 +127,18 @@ function mapWebhookStatus(events: AdminWebhookEventSummary[]): MonitorStatus {
   return 'ok';
 }
 
+function mapJobsStatus(jobs: AdminOperationalJobSummary[]): MonitorStatus {
+  if (jobs.some((job) => job.currentStatus === 'critical')) return 'critical';
+  if (jobs.length === 0 || jobs.some((job) => job.currentStatus === 'watch')) return 'watch';
+  return 'ok';
+}
+
+function formatJobKind(job: AdminOperationalJobSummary) {
+  if (job.executionKind === 'one_shot') return 'One-shot';
+  if (job.executionKind === 'admin_check') return 'Admin check';
+  return job.cronEnabled ? (job.scheduleCron ?? 'Cron') : 'Recorrente';
+}
+
 function StatusBadge({ status }: { status: MonitorStatus }) {
   const config = statusConfig[status];
   return (
@@ -145,6 +163,7 @@ function SourceBadge({ source }: { source: MonitorCard['source'] }) {
 export default function ObservabilityDashboardContent() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [webhooks, setWebhooks] = useState<AdminWebhookEventSummary[]>([]);
+  const [jobs, setJobs] = useState<AdminOperationalJobSummary[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const loadSequenceRef = useRef(0);
@@ -162,9 +181,11 @@ export default function ObservabilityDashboardContent() {
         return body;
       }),
       listWebhookSummaries(50),
+      listOperationalJobs(100),
     ])
-      .then(([healthResult, webhookResult]) => {
+      .then(([healthResult, webhookResult, jobsResult]) => {
         if (loadSequenceRef.current !== sequence) return;
+        const errors: string[] = [];
 
         if (healthResult.status === 'fulfilled') {
           setHealth(healthResult.value);
@@ -174,11 +195,21 @@ export default function ObservabilityDashboardContent() {
 
         if (webhookResult.status === 'fulfilled') {
           setWebhooks(webhookResult.value.data);
-          setLoadError(webhookResult.value.error?.message ?? null);
+          if (webhookResult.value.error?.message) errors.push(webhookResult.value.error.message);
         } else {
           setWebhooks([]);
-          setLoadError('Falha ao carregar sinais de webhook.');
+          errors.push('Falha ao carregar sinais de webhook.');
         }
+
+        if (jobsResult.status === 'fulfilled') {
+          setJobs(jobsResult.value.data);
+          if (jobsResult.value.error?.message) errors.push(jobsResult.value.error.message);
+        } else {
+          setJobs([]);
+          errors.push('Falha ao carregar sinais de jobs.');
+        }
+
+        setLoadError(errors[0] ?? null);
       })
       .finally(() => {
         if (loadSequenceRef.current === sequence) setIsLoading(false);
@@ -193,6 +224,8 @@ export default function ObservabilityDashboardContent() {
     const failedWebhooks = webhooks.filter((event) =>
       ['failed', 'dead_letter', 'retrying'].includes(event.status)
     );
+    const criticalJobs = jobs.filter((job) => job.currentStatus === 'critical');
+    const watchJobs = jobs.filter((job) => job.currentStatus === 'watch');
 
     return [
       {
@@ -217,6 +250,16 @@ export default function ObservabilityDashboardContent() {
         evidence: `${webhooks.length} eventos recentes via RPC; ${failedWebhooks.length} requerem atencao.`,
         icon: Webhook,
       },
+      {
+        title: 'Jobs operacionais M16',
+        status: mapJobsStatus(jobs),
+        owner: 'Operations on-call',
+        target: 'Cron versionado, service role, dry-run e auditoria',
+        signal: 'ultima execucao, falha, atraso, limite e modo dry-run',
+        source: 'live',
+        evidence: `${jobs.length} jobs catalogados; ${criticalJobs.length} criticos; ${watchJobs.length} em atencao.`,
+        icon: ListChecks,
+      },
       ...staticMonitorTemplates.map((monitor) => ({
         ...monitor,
         source: 'static' as const,
@@ -224,7 +267,7 @@ export default function ObservabilityDashboardContent() {
           'Monitor catalogado no runbook; conectar metricas externas/APM para trocar para sinal real.',
       })),
     ];
-  }, [health, webhooks]);
+  }, [health, jobs, webhooks]);
 
   const healthComponents = Object.entries(health?.components ?? {});
 
@@ -372,6 +415,85 @@ export default function ObservabilityDashboardContent() {
                 ))
               )}
             </div>
+          </div>
+        </div>
+
+        <div className="card-base overflow-hidden">
+          <div className="border-b border-border px-5 py-4">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
+              <ListChecks size={16} className="text-blue-600" /> Jobs operacionais M16
+            </h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="border-b border-border bg-muted/40 text-muted-foreground">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">
+                    Job
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">
+                    Agenda
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">
+                    Ultima execucao
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">
+                    Resultado
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">
+                    Evidencia
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-5 text-muted-foreground">
+                      {isLoading
+                        ? 'Carregando jobs operacionais.'
+                        : 'Nenhum job retornado pelo RPC.'}
+                    </td>
+                  </tr>
+                ) : (
+                  jobs.slice(0, 10).map((job) => (
+                    <tr key={job.jobKey} className="border-b border-border last:border-0">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-foreground">{job.displayName}</p>
+                        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                          {job.jobKey}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        <p>{formatJobKind(job)}</p>
+                        <p className="mt-1 text-muted-foreground">limite {job.defaultLimit}</p>
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        {job.lastRun ? (
+                          <>
+                            <p>{formatDate(job.lastRun.finishedAt ?? job.lastRun.startedAt)}</p>
+                            <p className="mt-1 text-muted-foreground">
+                              {job.lastRun.triggerSource}
+                              {job.lastRun.dryRun ? ' / dry-run' : ''}
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">Sem execucao</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={job.currentStatus} />
+                        {job.lastRun && (
+                          <p className="mt-2 text-muted-foreground">
+                            {job.lastRun.succeededCount}/{job.lastRun.processedCount} processados
+                          </p>
+                        )}
+                      </td>
+                      <td className="max-w-[22rem] px-4 py-3 text-foreground">{job.evidence}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
