@@ -1,5 +1,5 @@
-import AdminContent from '../components/AdminContent';
+import AdminOperationsContent from '../components/AdminOperationsContent';
 
 export default function IntegrationsPage() {
-  return <AdminContent initialSection="integrations" />;
+  return <AdminOperationsContent section="integrations" />;
 }

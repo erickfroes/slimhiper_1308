@@ -1,5 +1,5 @@
-import AdminContent from '../components/AdminContent';
+import AdminOperationsContent from '../components/AdminOperationsContent';
 
 export default function UsagePage() {
-  return <AdminContent initialSection="usage" />;
+  return <AdminOperationsContent section="usage" />;
 }

@@ -1,5 +1,5 @@
-import AdminContent from '../components/AdminContent';
+import AdminOperationsContent from '../components/AdminOperationsContent';
 
 export default function SupportPage() {
-  return <AdminContent initialSection="support" />;
+  return <AdminOperationsContent section="support" />;
 }

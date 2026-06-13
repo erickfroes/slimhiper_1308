@@ -1,5 +1,5 @@
-import AdminContent from '../components/AdminContent';
+import AdminOperationsContent from '../components/AdminOperationsContent';
 
 export default function SecurityPage() {
-  return <AdminContent initialSection="security" />;
+  return <AdminOperationsContent section="security" />;
 }

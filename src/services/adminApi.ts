@@ -79,6 +79,8 @@ export interface AdminAuditEntry {
   admin: string;
   timestamp: string;
   category: 'billing' | 'security' | 'config' | 'support' | 'integration';
+  tenantId?: string;
+  tenantName?: string;
 }
 
 export interface AdminWebhookEventSummary {
@@ -173,6 +175,29 @@ export interface AdminBreakGlassRequest {
   scope: string;
 }
 
+export interface PlatformAdminBreakGlassSummary extends AdminBreakGlassRequest {
+  tenantId: string;
+  tenantName: string;
+}
+
+export interface PlatformPrivilegedUserSummary extends AdminTenantUser {
+  tenantId: string;
+  tenantName: string;
+}
+
+export interface AdminWebhookReprocessJob {
+  id: string;
+  tenantId: string | null;
+  provider: 'asaas' | 'd4sign';
+  eventId: string;
+  status: 'queued' | 'processing' | 'processed' | 'failed' | 'not_reprocessable';
+  reason: string;
+  requestedBy: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  processedAt: string | null;
+}
+
 export interface AdminTenantDetail {
   tenant: AdminTenantRow;
   users: AdminTenantUser[];
@@ -209,6 +234,9 @@ export interface PlatformAdminSnapshot {
   webhooks: AdminWebhookEventSummary[];
   audit: AdminAuditEntry[];
   support: PlatformAdminSupportSummary[];
+  breakGlass: PlatformAdminBreakGlassSummary[];
+  privilegedUsers: PlatformPrivilegedUserSummary[];
+  reprocessJobs: AdminWebhookReprocessJob[];
   complianceGaps: PlatformComplianceGap[];
   warnings: string[];
 }
@@ -248,6 +276,30 @@ export interface CreateTenantResult {
   ownerInviteDelivery: 'existing_auth_user' | 'supabase_invite_sent';
   subscriptionStatus: string;
   trialEndsAt: string | null;
+}
+
+export interface UpdateTenantConfigInput {
+  tenantId: string;
+  status?: AdminTenantStatus;
+  planCode?: string;
+  usage?: {
+    usersLimit?: number;
+    storageCapacityGb?: number;
+    apiLimitMonthly?: number;
+  };
+  featureFlags?: Record<string, boolean>;
+  reason: string;
+}
+
+export interface UpsertTenantUnitInput {
+  tenantId: string;
+  unitId?: string | null;
+  name: string;
+  code?: string;
+  city?: string;
+  state?: string;
+  status?: AdminTenantUnit['status'];
+  reason: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -572,6 +624,30 @@ function mapOperationalJob(value: unknown): AdminOperationalJobSummary {
   };
 }
 
+function mapWebhookReprocessJob(value: unknown): AdminWebhookReprocessJob {
+  const record = asRecord(value);
+  const provider = asString(record.provider).toLowerCase();
+  const status = asString(record.status).toLowerCase();
+  return {
+    id: asString(record.id),
+    tenantId: asNullableString(record.tenant_id),
+    provider: provider === 'd4sign' ? 'd4sign' : 'asaas',
+    eventId: asString(record.event_id),
+    status:
+      status === 'processing' ||
+      status === 'processed' ||
+      status === 'failed' ||
+      status === 'not_reprocessable'
+        ? status
+        : 'queued',
+    reason: sanitizeOperationalText(record.reason, '', 500),
+    requestedBy: asNullableString(record.requested_by),
+    errorMessage: asNullableString(sanitizeOperationalText(record.error_message, '', 500)),
+    createdAt: asString(record.created_at),
+    processedAt: asNullableString(record.processed_at),
+  };
+}
+
 function mapTenantWebhookError(value: unknown): AdminTenantWebhookError {
   const record = asRecord(value);
   const severity = asString(record.severity);
@@ -830,6 +906,93 @@ export async function listTenants(): Promise<{
   }
 }
 
+export async function updatePlatformTenantConfig(input: UpdateTenantConfigInput) {
+  const tenantId = input.tenantId.trim();
+  const reason = normalizeText(input.reason, 500);
+
+  if (!isUuid(tenantId)) return serviceValidationError('Tenant invalido.');
+  if (reason.length < 16) {
+    return serviceValidationError('Informe um motivo auditavel com pelo menos 16 caracteres.');
+  }
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${tenantId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: input.status,
+        planCode: input.planCode ? normalizeText(input.planCode, 80).toLowerCase() : undefined,
+        usage: input.usage,
+        featureFlags: input.featureFlags,
+        reason,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as {
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        error: {
+          message: payload?.error?.message ?? 'Falha ao atualizar tenant.',
+        } satisfies SafeServiceError,
+      };
+    }
+
+    return { error: null as SafeServiceError | null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Falha ao atualizar tenant.') };
+  }
+}
+
+export async function upsertPlatformTenantUnit(input: UpsertTenantUnitInput) {
+  const tenantId = input.tenantId.trim();
+  const unitId = input.unitId?.trim() || null;
+  const name = normalizeText(input.name, 120);
+  const code = normalizeText(input.code ?? '', 80);
+  const reason = normalizeText(input.reason, 500);
+
+  if (!isUuid(tenantId)) return serviceValidationError('Tenant invalido.');
+  if (unitId && !isUuid(unitId)) return serviceValidationError('Unidade invalida.');
+  if (!name) return serviceValidationError('Informe o nome da unidade.');
+  if (reason.length < 16) {
+    return serviceValidationError('Informe um motivo auditavel com pelo menos 16 caracteres.');
+  }
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${tenantId}/units`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        unitId,
+        name,
+        code,
+        city: normalizeText(input.city ?? '', 120),
+        state: normalizeText(input.state ?? '', 2).toUpperCase(),
+        status: input.status,
+        reason,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as {
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        error: {
+          message: payload?.error?.message ?? 'Falha ao salvar unidade.',
+        } satisfies SafeServiceError,
+      };
+    }
+
+    return { error: null as SafeServiceError | null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Falha ao salvar unidade.') };
+  }
+}
+
 export async function getTenantDetail(tenantId: string): Promise<{
   data: AdminTenantDetail | null;
   error: SafeServiceError | null;
@@ -867,6 +1030,33 @@ export async function listWebhookSummaries(limit = 100): Promise<{
     return { data: asArray(data).map(mapWebhook), error: null };
   } catch (error) {
     return { data: [], error: asServiceError(error, 'Falha ao carregar webhooks.') };
+  }
+}
+
+export async function listWebhookReprocessJobs(limit = 100): Promise<{
+  data: AdminWebhookReprocessJob[];
+  error: SafeServiceError | null;
+}> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase
+      .from('webhook_reprocess_jobs')
+      .select(
+        'id,tenant_id,provider,event_id,status,reason,requested_by,error_message,created_at,processed_at'
+      )
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      return {
+        data: [],
+        error: asServiceError(error, 'Falha ao carregar jobs de reprocesso.'),
+      };
+    }
+
+    return { data: asArray(data).map(mapWebhookReprocessJob), error: null };
+  } catch (error) {
+    return { data: [], error: asServiceError(error, 'Falha ao carregar jobs de reprocesso.') };
   }
 }
 
@@ -924,10 +1114,11 @@ export async function getPlatformAdminSnapshot(): Promise<{
   data: PlatformAdminSnapshot | null;
   error: SafeServiceError | null;
 }> {
-  const [tenantsResult, webhooksResult, complianceResult] = await Promise.all([
+  const [tenantsResult, webhooksResult, complianceResult, reprocessJobsResult] = await Promise.all([
     listTenants(),
     listWebhookSummaries(25),
     listPlatformComplianceGaps(60),
+    listWebhookReprocessJobs(50),
   ]);
 
   const firstError = tenantsResult.error ?? webhooksResult.error;
@@ -959,11 +1150,22 @@ export async function getPlatformAdminSnapshot(): Promise<{
   if (complianceResult.error) {
     warnings.push('Lacunas de compliance indisponiveis no snapshot administrativo.');
   }
+  if (reprocessJobsResult.error) {
+    warnings.push('Jobs de reprocesso indisponiveis no snapshot administrativo.');
+  }
 
   const tenantDetails = detailResults.flatMap(({ result }) => (result.data ? [result.data] : []));
 
+  const privilegedRoles = new Set(['tenant_owner', 'clinic_admin']);
+
   const audit = tenantDetails
-    .flatMap((detail) => detail.auditLogs)
+    .flatMap((detail) =>
+      detail.auditLogs.map((entry) => ({
+        ...entry,
+        tenantId: detail.tenant.id,
+        tenantName: detail.tenant.clinicName,
+      }))
+    )
     .filter((entry) => entry.id && entry.timestamp)
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
     .slice(0, 20);
@@ -980,12 +1182,42 @@ export async function getPlatformAdminSnapshot(): Promise<{
     .sort((a, b) => b.lastActivity.localeCompare(a.lastActivity))
     .slice(0, 20);
 
+  const breakGlass = tenantDetails
+    .flatMap((detail) =>
+      detail.breakGlassRequests.map((request) => ({
+        ...request,
+        tenantId: detail.tenant.id,
+        tenantName: detail.tenant.clinicName,
+      }))
+    )
+    .filter((request) => request.id && request.requestedAt)
+    .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))
+    .slice(0, 30);
+
+  const privilegedUsers = tenantDetails
+    .flatMap((detail) =>
+      detail.users
+        .filter((user) => privilegedRoles.has(user.role))
+        .map((user) => ({
+          ...user,
+          tenantId: detail.tenant.id,
+          tenantName: detail.tenant.clinicName,
+        }))
+    )
+    .sort((a, b) =>
+      (b.lastLogin ?? b.createdAt ?? '').localeCompare(a.lastLogin ?? a.createdAt ?? '')
+    )
+    .slice(0, 40);
+
   return {
     data: {
       tenants: tenantsResult.data,
       webhooks: webhooksResult.data,
       audit,
       support,
+      breakGlass,
+      privilegedUsers,
+      reprocessJobs: reprocessJobsResult.data,
       complianceGaps: complianceResult.data,
       warnings,
     },
@@ -1219,9 +1451,11 @@ export async function requestWebhookReprocess(input: {
   provider: AdminWebhookEventSummary['provider'] | 'asaas' | 'd4sign';
   eventId: string;
   reason: string;
+  scope: string;
 }) {
   const eventId = input.eventId.trim();
   const reason = normalizeText(input.reason, 500);
+  const scope = normalizeText(input.scope, 240);
   const provider = input.provider.toLowerCase() === 'asaas' ? 'asaas' : 'd4sign';
 
   if (!isUuid(eventId)) {
@@ -1238,18 +1472,42 @@ export async function requestWebhookReprocess(input: {
       } satisfies SafeServiceError,
     };
   }
+  if (scope.length < 8) {
+    return {
+      data: null,
+      error: {
+        message: 'Informe um escopo operacional com pelo menos 8 caracteres.',
+      } satisfies SafeServiceError,
+    };
+  }
 
   try {
-    const supabase = createBrowserSupabaseClient();
-    const { data, error } = await supabase.rpc('request_webhook_reprocess', {
-      p_provider: provider,
-      p_event_id: eventId,
-      p_reason: reason,
+    const response = await fetch('/api/admin/webhooks/reprocess', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider,
+        eventId,
+        reason,
+        scope,
+      }),
     });
 
-    if (error)
-      return { data: null, error: asServiceError(error, 'Falha ao solicitar reprocesso.') };
-    const record = asRecord(data);
+    const payload = (await response.json().catch(() => null)) as {
+      data?: unknown;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null,
+        error: {
+          message: payload?.error?.message ?? 'Falha ao solicitar reprocesso.',
+        } satisfies SafeServiceError,
+      };
+    }
+
+    const record = asRecord(payload?.data);
     return {
       data: {
         id: asString(record.id),

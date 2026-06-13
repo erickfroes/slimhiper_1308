@@ -26,15 +26,20 @@ import {
   Webhook,
 } from 'lucide-react';
 import AdminShell from '@/app/admin/components/AdminShell';
+import { useAdminPermissions } from '@/app/admin/components/adminPermissions';
 import {
   decidePlatformBreakGlass,
   endPlatformSupportSession,
   getTenantDetail,
   invitePlatformTenantUser,
+  listPlatformPlans,
   requestPlatformBreakGlass,
   requestPlatformSupportSession,
   revokePlatformBreakGlass,
+  updatePlatformTenantConfig,
   updatePlatformTenantMembership,
+  upsertPlatformTenantUnit,
+  type AdminPlatformPlan,
   type AdminBreakGlassRequest,
   type AdminSupportSession,
   type AdminTenantDetail,
@@ -162,7 +167,170 @@ function SectionCard({
   );
 }
 
-function OverviewTab({ detail }: { detail: AdminTenantDetail }) {
+function TenantConfigPanel({
+  detail,
+  onReload,
+}: {
+  detail: AdminTenantDetail;
+  onReload: () => void;
+}) {
+  const adminPermissions = useAdminPermissions();
+  const tenant = detail.tenant;
+  const [plans, setPlans] = useState<AdminPlatformPlan[]>([]);
+  const [status, setStatus] = useState<'active' | 'suspended' | 'cancelled'>(
+    tenant.status === 'trial' ? 'active' : tenant.status
+  );
+  const [planCode, setPlanCode] = useState(tenant.plan);
+  const [usersLimit, setUsersLimit] = useState(String(tenant.usersLimit));
+  const [storageCapacityGb, setStorageCapacityGb] = useState(String(tenant.storageCapacityGb));
+  const [apiLimitMonthly, setApiLimitMonthly] = useState(String(tenant.apiLimitMonthly));
+  const [featureFlagKey, setFeatureFlagKey] = useState('');
+  const [featureFlagEnabled, setFeatureFlagEnabled] = useState(true);
+  const [reason, setReason] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    listPlatformPlans().then(({ data }) => setPlans(data));
+  }, []);
+
+  const saveConfig = async () => {
+    setIsSaving(true);
+    const { error } = await updatePlatformTenantConfig({
+      tenantId: tenant.id,
+      status,
+      planCode,
+      usage: {
+        usersLimit: Number(usersLimit),
+        storageCapacityGb: Number(storageCapacityGb),
+        apiLimitMonthly: Number(apiLimitMonthly),
+      },
+      featureFlags: featureFlagKey.trim() ? { [featureFlagKey.trim()]: featureFlagEnabled } : {},
+      reason,
+    });
+    setIsSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Tenant atualizado com auditoria.');
+    setReason('');
+    setFeatureFlagKey('');
+    onReload();
+  };
+
+  return (
+    <SectionCard title="Configuracao auditada" icon={Shield}>
+      <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+        Alteracoes sao locais e auditadas. Esta tela nao chama Asaas ou D4Sign.
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <label>
+          <span className="text-xs font-semibold text-foreground">Status tenant</span>
+          <select
+            value={status}
+            onChange={(event) =>
+              setStatus(event.target.value as 'active' | 'suspended' | 'cancelled')
+            }
+            className="input-base mt-1 text-sm"
+          >
+            <option value="active">Ativo</option>
+            <option value="suspended">Suspenso</option>
+            <option value="cancelled">Cancelado</option>
+          </select>
+        </label>
+        <label>
+          <span className="text-xs font-semibold text-foreground">Plano local</span>
+          <select
+            value={planCode}
+            onChange={(event) => setPlanCode(event.target.value as AdminTenantRow['plan'])}
+            className="input-base mt-1 text-sm"
+          >
+            {plans.length === 0 ? <option value={tenant.plan}>{tenant.plan}</option> : null}
+            {plans.map((plan) => (
+              <option key={plan.id} value={plan.code}>
+                {plan.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="text-xs font-semibold text-foreground">Limite usuarios</span>
+          <input
+            type="number"
+            min={1}
+            value={usersLimit}
+            onChange={(event) => setUsersLimit(event.target.value)}
+            className="input-base mt-1 text-sm"
+          />
+        </label>
+        <label>
+          <span className="text-xs font-semibold text-foreground">Storage GB</span>
+          <input
+            type="number"
+            min={1}
+            value={storageCapacityGb}
+            onChange={(event) => setStorageCapacityGb(event.target.value)}
+            className="input-base mt-1 text-sm"
+          />
+        </label>
+        <label>
+          <span className="text-xs font-semibold text-foreground">API mensal</span>
+          <input
+            type="number"
+            min={1}
+            value={apiLimitMonthly}
+            onChange={(event) => setApiLimitMonthly(event.target.value)}
+            className="input-base mt-1 text-sm"
+          />
+        </label>
+        <label>
+          <span className="text-xs font-semibold text-foreground">Feature flag opcional</span>
+          <div className="mt-1 flex gap-2">
+            <input
+              value={featureFlagKey}
+              onChange={(event) => setFeatureFlagKey(event.target.value)}
+              placeholder="ex: billing.reconciliation"
+              className="input-base text-sm"
+            />
+            <label className="flex items-center gap-1 rounded-lg border border-border px-2 text-xs">
+              <input
+                type="checkbox"
+                checked={featureFlagEnabled}
+                onChange={(event) => setFeatureFlagEnabled(event.target.checked)}
+              />
+              on
+            </label>
+          </div>
+        </label>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+        <input
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Motivo auditavel. Minimo de 16 caracteres."
+          className="input-base text-sm"
+        />
+        <button
+          type="button"
+          onClick={saveConfig}
+          disabled={
+            !adminPermissions.canManageTenantConfig || isSaving || reason.trim().length < 16
+          }
+          className="btn-primary text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          title={
+            adminPermissions.canManageTenantConfig
+              ? undefined
+              : 'Apenas owner/admin podem alterar configuracao.'
+          }
+        >
+          Salvar configuracao
+        </button>
+      </div>
+    </SectionCard>
+  );
+}
+
+function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
   const tenant = detail.tenant;
   return (
     <div className="space-y-5">
@@ -258,11 +426,14 @@ function OverviewTab({ detail }: { detail: AdminTenantDetail }) {
           </div>
         </div>
       </SectionCard>
+
+      <TenantConfigPanel detail={detail} onReload={onReload} />
     </div>
   );
 }
 
 function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
+  const adminPermissions = useAdminPermissions();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [roleCode, setRoleCode] = useState('');
   const [status, setStatus] = useState('');
@@ -409,11 +580,17 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
             type="button"
             onClick={sendInvite}
             disabled={
+              !adminPermissions.canManageTenantUsers ||
               isInviting ||
               inviteReason.trim().length < 16 ||
               !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())
             }
             className="btn-primary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            title={
+              adminPermissions.canManageTenantUsers
+                ? undefined
+                : 'Apenas owner/admin podem convidar usuarios.'
+            }
           >
             Enviar convite
           </button>
@@ -524,8 +701,17 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
                             <button
                               type="button"
                               onClick={saveEdit}
-                              disabled={isSaving || reason.trim().length < 16}
+                              disabled={
+                                !adminPermissions.canManageTenantUsers ||
+                                isSaving ||
+                                reason.trim().length < 16
+                              }
                               className="btn-primary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                              title={
+                                adminPermissions.canManageTenantUsers
+                                  ? undefined
+                                  : 'Apenas owner/admin podem editar usuarios.'
+                              }
                             >
                               Salvar
                             </button>
@@ -551,13 +737,142 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
   );
 }
 
-function UnitsTab({ detail }: { detail: AdminTenantDetail }) {
+function UnitsTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
+  const adminPermissions = useAdminPermissions();
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [status, setStatus] = useState<AdminTenantDetail['units'][number]['status']>('active');
+  const [reason, setReason] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const startUnitEdit = (unit: AdminTenantDetail['units'][number]) => {
+    setEditingUnitId(unit.id);
+    setName(unit.name);
+    setCode('');
+    setCity(unit.city);
+    setState(unit.state);
+    setStatus(unit.status);
+    setReason('');
+  };
+
+  const resetUnitDraft = () => {
+    setEditingUnitId(null);
+    setName('');
+    setCode('');
+    setCity('');
+    setState('');
+    setStatus('active');
+    setReason('');
+  };
+
+  const saveUnit = async () => {
+    setIsSaving(true);
+    const { error } = await upsertPlatformTenantUnit({
+      tenantId: detail.tenant.id,
+      unitId: editingUnitId,
+      name,
+      code,
+      city,
+      state,
+      status,
+      reason,
+    });
+    setIsSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(
+      editingUnitId ? 'Unidade atualizada com auditoria.' : 'Unidade criada com auditoria.'
+    );
+    resetUnitDraft();
+    onReload();
+  };
+
   return (
     <SectionCard
       title="Unidades"
       icon={MapPin}
       action={<span className="text-xs text-muted-foreground">{detail.units.length} unidades</span>}
     >
+      <div className="mb-4 rounded-xl border border-border bg-muted/20 p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_140px_1fr_80px_140px]">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Nome da unidade"
+            className="input-base text-xs"
+          />
+          <input
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            placeholder={editingUnitId ? 'Codigo atual' : 'codigo'}
+            className="input-base text-xs"
+          />
+          <input
+            value={city}
+            onChange={(event) => setCity(event.target.value)}
+            placeholder="Cidade"
+            className="input-base text-xs"
+          />
+          <input
+            value={state}
+            onChange={(event) => setState(event.target.value.toUpperCase().slice(0, 2))}
+            placeholder="UF"
+            className="input-base text-xs"
+          />
+          <select
+            value={status}
+            onChange={(event) =>
+              setStatus(event.target.value as AdminTenantDetail['units'][number]['status'])
+            }
+            className="input-base text-xs"
+          >
+            <option value="active">Ativa</option>
+            <option value="inactive">Inativa</option>
+            <option value="archived">Arquivada</option>
+          </select>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto]">
+          <input
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Motivo auditavel. Minimo de 16 caracteres."
+            className="input-base text-xs"
+          />
+          <button
+            type="button"
+            onClick={saveUnit}
+            disabled={
+              !adminPermissions.canManageTenantConfig ||
+              isSaving ||
+              !name.trim() ||
+              reason.trim().length < 16
+            }
+            className="btn-primary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            title={
+              adminPermissions.canManageTenantConfig
+                ? undefined
+                : 'Apenas owner/admin podem alterar unidades.'
+            }
+          >
+            {editingUnitId ? 'Salvar unidade' : 'Criar unidade'}
+          </button>
+          {editingUnitId ? (
+            <button
+              type="button"
+              onClick={resetUnitDraft}
+              className="btn-ghost px-3 py-1.5 text-xs"
+            >
+              Cancelar
+            </button>
+          ) : null}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {detail.units.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
@@ -585,6 +900,13 @@ function UnitsTab({ detail }: { detail: AdminTenantDetail }) {
                   <Activity size={11} /> {unit.patients} pacientes
                 </span>
               </div>
+              <button
+                type="button"
+                onClick={() => startUnitEdit(unit)}
+                className="btn-ghost mt-3 px-3 py-1.5 text-xs"
+              >
+                Editar
+              </button>
             </div>
           ))
         )}
@@ -685,6 +1007,7 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
 }
 
 function SupportTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
+  const adminPermissions = useAdminPermissions();
   const [subject, setSubject] = useState('');
   const [reason, setReason] = useState('');
   const [priority, setPriority] = useState<AdminSupportSession['priority']>('medio');
@@ -752,8 +1075,13 @@ function SupportTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
         <button
           type="button"
           onClick={submit}
-          disabled={isSubmitting || reason.trim().length < 16}
+          disabled={!adminPermissions.canManageSupport || isSubmitting || reason.trim().length < 16}
           className="btn-primary mt-3 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          title={
+            adminPermissions.canManageSupport
+              ? undefined
+              : 'Apenas owner/admin podem registrar suporte.'
+          }
         >
           Registrar suporte
         </button>
@@ -785,8 +1113,13 @@ function SupportTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
                     <button
                       type="button"
                       onClick={() => endSession(session)}
-                      disabled={endingId === session.id}
+                      disabled={!adminPermissions.canManageSupport || endingId === session.id}
                       className="btn-ghost px-3 py-1.5 text-xs text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      title={
+                        adminPermissions.canManageSupport
+                          ? undefined
+                          : 'Apenas owner/admin podem encerrar suporte.'
+                      }
                     >
                       Encerrar suporte
                     </button>
@@ -802,6 +1135,7 @@ function SupportTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
 }
 
 function BreakGlassTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
+  const adminPermissions = useAdminPermissions();
   const [reason, setReason] = useState('');
   const [scope, setScope] = useState('Leitura de configuracoes e logs operacionais');
   const [durationMinutes, setDurationMinutes] = useState(120);
@@ -895,8 +1229,18 @@ function BreakGlassTab({ detail, onReload }: { detail: AdminTenantDetail; onRelo
         <button
           type="button"
           onClick={submit}
-          disabled={isSubmitting || reason.trim().length < 24 || scope.trim().length < 8}
+          disabled={
+            !adminPermissions.canManageBreakGlass ||
+            isSubmitting ||
+            reason.trim().length < 24 ||
+            scope.trim().length < 8
+          }
           className="btn-primary mt-3 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          title={
+            adminPermissions.canManageBreakGlass
+              ? undefined
+              : 'Apenas owner/admin podem operar break-glass.'
+          }
         >
           Solicitar break-glass
         </button>
@@ -968,16 +1312,26 @@ function BreakGlassTab({ detail, onReload }: { detail: AdminTenantDetail; onRelo
                     <button
                       type="button"
                       onClick={() => decide(request, 'approved')}
-                      disabled={decidingId === request.id}
+                      disabled={!adminPermissions.canManageBreakGlass || decidingId === request.id}
                       className="btn-primary px-3 py-1.5 text-xs"
+                      title={
+                        adminPermissions.canManageBreakGlass
+                          ? undefined
+                          : 'Apenas owner/admin podem aprovar break-glass.'
+                      }
                     >
                       Aprovar
                     </button>
                     <button
                       type="button"
                       onClick={() => decide(request, 'denied')}
-                      disabled={decidingId === request.id}
+                      disabled={!adminPermissions.canManageBreakGlass || decidingId === request.id}
                       className="btn-ghost px-3 py-1.5 text-xs text-red-600"
+                      title={
+                        adminPermissions.canManageBreakGlass
+                          ? undefined
+                          : 'Apenas owner/admin podem negar break-glass.'
+                      }
                     >
                       Negar
                     </button>
@@ -999,10 +1353,16 @@ function BreakGlassTab({ detail, onReload }: { detail: AdminTenantDetail; onRelo
                       type="button"
                       onClick={() => revoke(request)}
                       disabled={
+                        !adminPermissions.canManageBreakGlass ||
                         revokingId === request.id ||
                         (revocationReasons[request.id]?.trim().length ?? 0) < 12
                       }
                       className="btn-ghost px-3 py-1.5 text-xs text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      title={
+                        adminPermissions.canManageBreakGlass
+                          ? undefined
+                          : 'Apenas owner/admin podem revogar break-glass.'
+                      }
                     >
                       Revogar acesso
                     </button>
@@ -1026,9 +1386,9 @@ function TabContent({
   detail: AdminTenantDetail;
   onReload: () => void;
 }) {
-  if (activeTab === 'overview') return <OverviewTab detail={detail} />;
+  if (activeTab === 'overview') return <OverviewTab detail={detail} onReload={onReload} />;
   if (activeTab === 'users') return <UsersTab detail={detail} onReload={onReload} />;
-  if (activeTab === 'units') return <UnitsTab detail={detail} />;
+  if (activeTab === 'units') return <UnitsTab detail={detail} onReload={onReload} />;
   if (activeTab === 'audit') return <AuditTab detail={detail} />;
   if (activeTab === 'webhooks') return <WebhooksTab detail={detail} />;
   if (activeTab === 'support') return <SupportTab detail={detail} onReload={onReload} />;

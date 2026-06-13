@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
 import { redirectToLogin, signOutFromApp } from '@/lib/auth/clientLogout';
+import { useAdminPermissions } from './adminPermissions';
 
 export type AdminShellSection =
   | 'overview'
@@ -195,6 +196,7 @@ export default function AdminShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const adminPermissions = useAdminPermissions();
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -262,6 +264,24 @@ export default function AdminShell({
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
+            <span
+              className={[
+                'hidden rounded-full border px-2.5 py-1 text-xs font-semibold sm:inline-flex',
+                adminPermissions.roleKind === 'support'
+                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  : adminPermissions.canMutatePlatform
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-slate-200 bg-slate-100 text-slate-600',
+              ].join(' ')}
+              title={
+                adminPermissions.error ??
+                (adminPermissions.canMutatePlatform
+                  ? 'Acoes administrativas liberadas para este papel.'
+                  : 'Acoes sensiveis ficam bloqueadas para este papel.')
+              }
+            >
+              {adminPermissions.isLoading ? 'Validando papel' : adminPermissions.roleLabel}
+            </span>
             {onRefresh ? (
               <button
                 type="button"

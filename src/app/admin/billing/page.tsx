@@ -1,5 +1,5 @@
-import AdminContent from '../components/AdminContent';
+import AdminOperationsContent from '../components/AdminOperationsContent';
 
 export default function BillingPage() {
-  return <AdminContent initialSection="financial" />;
+  return <AdminOperationsContent section="billing" />;
 }

@@ -9,6 +9,7 @@ import {
   Clock,
   Database,
   FileText,
+  Filter,
   HardDrive,
   ListChecks,
   ServerCog,
@@ -164,6 +165,10 @@ export default function ObservabilityDashboardContent() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [webhooks, setWebhooks] = useState<AdminWebhookEventSummary[]>([]);
   const [jobs, setJobs] = useState<AdminOperationalJobSummary[]>([]);
+  const [monitorFilter, setMonitorFilter] = useState<'all' | MonitorStatus>('all');
+  const [jobStatusFilter, setJobStatusFilter] = useState<'all' | MonitorStatus>('all');
+  const [jobQuery, setJobQuery] = useState('');
+  const [acknowledgedMonitors, setAcknowledgedMonitors] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const loadSequenceRef = useRef(0);
@@ -270,6 +275,20 @@ export default function ObservabilityDashboardContent() {
   }, [health, jobs, webhooks]);
 
   const healthComponents = Object.entries(health?.components ?? {});
+  const visibleMonitors = monitors.filter(
+    (monitor) => monitorFilter === 'all' || monitor.status === monitorFilter
+  );
+  const visibleJobs = jobs
+    .filter((job) => jobStatusFilter === 'all' || job.currentStatus === jobStatusFilter)
+    .filter((job) => {
+      const query = jobQuery.trim().toLowerCase();
+      if (!query) return true;
+      return [job.jobKey, job.displayName, job.category, job.evidence]
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+    });
+  const openAcknowledgements = Object.keys(acknowledgedMonitors).length;
 
   return (
     <AdminShell
@@ -279,6 +298,41 @@ export default function ObservabilityDashboardContent() {
       onRefresh={loadSignals}
     >
       <div className="space-y-6">
+        <div className="card-base p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Filter size={14} className="text-muted-foreground" />
+            <select
+              value={monitorFilter}
+              onChange={(event) => setMonitorFilter(event.target.value as typeof monitorFilter)}
+              className="input-base w-auto text-xs"
+            >
+              <option value="all">Todos monitores</option>
+              <option value="ok">OK</option>
+              <option value="watch">Atencao</option>
+              <option value="critical">Critico</option>
+            </select>
+            <select
+              value={jobStatusFilter}
+              onChange={(event) => setJobStatusFilter(event.target.value as typeof jobStatusFilter)}
+              className="input-base w-auto text-xs"
+            >
+              <option value="all">Todos jobs</option>
+              <option value="ok">Jobs OK</option>
+              <option value="watch">Jobs em atencao</option>
+              <option value="critical">Jobs criticos</option>
+            </select>
+            <input
+              value={jobQuery}
+              onChange={(event) => setJobQuery(event.target.value)}
+              placeholder="Buscar job, categoria ou evidencia"
+              className="input-base min-w-[220px] flex-1 text-xs"
+            />
+            <span className="ml-auto rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+              {openAcknowledgements} ack local
+            </span>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="card-base p-5">
             <div className="mb-3 flex items-center gap-2 text-sm font-bold text-foreground">
@@ -320,8 +374,9 @@ export default function ObservabilityDashboardContent() {
         )}
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {monitors.map((monitor) => {
+          {visibleMonitors.map((monitor) => {
             const Icon = monitor.icon;
+            const acknowledgedAt = acknowledgedMonitors[monitor.title];
             return (
               <div key={monitor.title} className="card-base p-5">
                 <div className="mb-4 flex items-start justify-between gap-3">
@@ -353,6 +408,25 @@ export default function ObservabilityDashboardContent() {
                     <dd className="mt-1 text-foreground">{monitor.evidence}</dd>
                   </div>
                 </dl>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+                  <span className="text-xs text-muted-foreground">
+                    {acknowledgedAt
+                      ? `Ack local em ${formatDate(acknowledgedAt)}`
+                      : 'Sem ack local nesta sessao.'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAcknowledgedMonitors((current) => ({
+                        ...current,
+                        [monitor.title]: new Date().toISOString(),
+                      }))
+                    }
+                    className="btn-secondary px-3 py-1.5 text-xs"
+                  >
+                    Registrar ack local
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -443,19 +517,22 @@ export default function ObservabilityDashboardContent() {
                   <th scope="col" className="px-4 py-3 text-left font-semibold">
                     Evidencia
                   </th>
+                  <th scope="col" className="px-4 py-3 text-left font-semibold">
+                    Acao
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {jobs.length === 0 ? (
+                {visibleJobs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-5 text-muted-foreground">
+                    <td colSpan={6} className="px-4 py-5 text-muted-foreground">
                       {isLoading
                         ? 'Carregando jobs operacionais.'
-                        : 'Nenhum job retornado pelo RPC.'}
+                        : 'Nenhum job retornado pelo filtro atual.'}
                     </td>
                   </tr>
                 ) : (
-                  jobs.slice(0, 10).map((job) => (
+                  visibleJobs.slice(0, 10).map((job) => (
                     <tr key={job.jobKey} className="border-b border-border last:border-0">
                       <td className="px-4 py-3">
                         <p className="font-semibold text-foreground">{job.displayName}</p>
@@ -489,6 +566,16 @@ export default function ObservabilityDashboardContent() {
                         )}
                       </td>
                       <td className="max-w-[22rem] px-4 py-3 text-foreground">{job.evidence}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          disabled
+                          className="btn-ghost px-3 py-1.5 text-xs"
+                          title="Sem contrato backend auditado para execucao manual deste job."
+                        >
+                          Dry-run indisponivel
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}

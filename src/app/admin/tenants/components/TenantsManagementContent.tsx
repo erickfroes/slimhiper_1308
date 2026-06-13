@@ -25,6 +25,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import AdminShell from '@/app/admin/components/AdminShell';
+import { useAdminPermissions } from '@/app/admin/components/adminPermissions';
 import {
   createTenant,
   listPlatformPlans,
@@ -659,6 +660,7 @@ function CreateTenantModal({
 
 export default function TenantsManagementContent() {
   const router = useRouter();
+  const adminPermissions = useAdminPermissions();
   const [search, setSearch] = useState('');
   const [tenantRows, setTenantRows] = useState<AdminTenantRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -753,13 +755,26 @@ export default function TenantsManagementContent() {
       <div className="mb-4 flex justify-end">
         <button
           type="button"
-          onClick={() => setCreateModalOpen(true)}
+          onClick={() => {
+            if (adminPermissions.canCreateTenant) setCreateModalOpen(true);
+          }}
+          disabled={!adminPermissions.canCreateTenant}
+          title={
+            adminPermissions.canCreateTenant ? undefined : 'Apenas owner/admin podem criar tenants.'
+          }
           className="btn-primary px-3 py-2 text-xs"
         >
           <Plus size={14} />
           Novo tenant
         </button>
       </div>
+
+      {!adminPermissions.canCreateTenant ? (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          {adminPermissions.roleLabel} possui acesso de leitura para tenants. A criacao permanece
+          bloqueada no frontend e no endpoint server-side.
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="card-base mb-4 p-4 text-sm text-muted-foreground">
