@@ -69,6 +69,73 @@ export const PLAN_MODULE_CATALOG: PlanModuleDefinition[] = [
     ],
   },
   {
+    key: 'patient_portal',
+    label: 'Portal do paciente',
+    description: 'Portal /patient usado por pacientes e responsaveis vinculados.',
+    routePrefixes: ['/patient'],
+    permissions: ['patient_portal.access'],
+    badges: ['sensitive'],
+    parts: [
+      {
+        key: 'patient_portal.daily',
+        label: 'Diario do paciente',
+        description: 'Rotina diaria, habitos e acoes do dia no portal.',
+        featureFlagKey: 'patient_portal.daily',
+      },
+      {
+        key: 'patient_portal.journey',
+        label: 'Jornada e onboarding',
+        description: 'Onboarding, etapas da jornada e revisoes pelo paciente.',
+        featureFlagKey: 'patient_portal.journey',
+      },
+      {
+        key: 'patient_portal.commercial',
+        label: 'Beneficios e pacotes',
+        description: 'Catalogo comercial e solicitacoes feitas pelo portal.',
+        featureFlagKey: 'patient_portal.commercial',
+      },
+      {
+        key: 'patient_portal.community',
+        label: 'Comunidade',
+        description: 'Conteudos e grupos visiveis para o paciente.',
+        featureFlagKey: 'patient_portal.community',
+        badges: ['beta'],
+      },
+      {
+        key: 'patient_portal.documents',
+        label: 'Documentos',
+        description: 'Documentos liberados e links temporarios no portal.',
+        featureFlagKey: 'patient_portal.documents',
+        badges: ['sensitive'],
+      },
+      {
+        key: 'patient_portal.financial',
+        label: 'Financeiro',
+        description: 'Cobrancas, faturas e comprovantes no portal.',
+        featureFlagKey: 'patient_portal.financial',
+        badges: ['sensitive'],
+      },
+      {
+        key: 'patient_portal.chat',
+        label: 'Chat',
+        description: 'Mensagens do paciente para a equipe pelo portal.',
+        featureFlagKey: 'patient_portal.chat',
+      },
+      {
+        key: 'patient_portal.notifications',
+        label: 'Notificacoes',
+        description: 'Avisos e notificacoes exibidos no portal.',
+        featureFlagKey: 'patient_portal.notifications',
+      },
+      {
+        key: 'patient_portal.checkins',
+        label: 'Check-ins',
+        description: 'Check-ins e respostas estruturadas do paciente.',
+        featureFlagKey: 'patient_portal.checkins',
+      },
+    ],
+  },
+  {
     key: 'clinical_records',
     label: 'Prontuario e atendimento',
     description: 'Consultas, SOAP, nutricao, prescricoes e evolucao clinica.',
@@ -549,7 +616,7 @@ export function getEntitlementFeatureFlags(entitlements: PlanEntitlements) {
   return flags;
 }
 
-export function getClinicModuleForPath(pathname: string) {
+export function getPlanModuleForPath(pathname: string) {
   const normalizedPathname = pathname.split('?')[0] || '/';
   return (
     PLAN_MODULE_CATALOG.filter((planModule) => planModule.routePrefixes.length > 0)
@@ -567,12 +634,16 @@ export function getClinicModuleForPath(pathname: string) {
   );
 }
 
-export function isClinicPathAllowed(
+export function getClinicModuleForPath(pathname: string) {
+  return getPlanModuleForPath(pathname);
+}
+
+export function isPlanPathAllowed(
   pathname: string,
   entitlements: PlanEntitlements,
   permissions: readonly string[] = []
 ) {
-  const planModule = getClinicModuleForPath(pathname);
+  const planModule = getPlanModuleForPath(pathname);
   if (!planModule) return true;
 
   const normalized = normalizePlanEntitlements(entitlements);
@@ -583,6 +654,14 @@ export function isClinicPathAllowed(
 
   const permissionSet = new Set(permissions);
   return planModule.permissions.some((permission) => permissionSet.has(permission));
+}
+
+export function isClinicPathAllowed(
+  pathname: string,
+  entitlements: PlanEntitlements,
+  permissions: readonly string[] = []
+) {
+  return isPlanPathAllowed(pathname, entitlements, permissions);
 }
 
 export function isPlanModuleEnabled(entitlements: PlanEntitlements, moduleKey: string) {

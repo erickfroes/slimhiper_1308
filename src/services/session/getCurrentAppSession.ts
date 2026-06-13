@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import {
   getEntitlementFeatureFlags,
+  isPlanPathAllowed,
   normalizePlanEntitlements,
   type PlanEntitlements,
 } from '@/services/planEntitlements';
@@ -223,6 +224,7 @@ export async function getCurrentAppSession(
   const canViewRxByRole = ['physician', 'clinic_admin', 'tenant_owner'].includes(
     normalizedActiveRole
   );
+  const canOpenPatientPortalByPlan = isPlanPathAllowed('/patient', planEntitlements, permissions);
 
   const session: AppSession = {
     userId: user.id,
@@ -254,6 +256,7 @@ export async function getCurrentAppSession(
     canAccessPatientPortal: () =>
       activeMembership?.status === 'active' &&
       ['patient', 'guardian'].includes(normalizedActiveRole) &&
+      canOpenPatientPortalByPlan &&
       hasAnyPermission(permissionSet, PERMISSIONS.PATIENT_PORTAL_ACCESS),
   };
 

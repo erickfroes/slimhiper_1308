@@ -80,8 +80,32 @@ const tabs: Array<{ id: PortalTab; label: string; shortLabel: string; icon: Luci
   { id: 'checkins', label: 'Check-ins', shortLabel: 'Check', icon: ClipboardCheck },
 ];
 
+const tabFeatureFlags: Partial<Record<PortalTab, string>> = {
+  diario: 'patient_portal.daily',
+  jornada: 'patient_portal.journey',
+  beneficios: 'patient_portal.commercial',
+  comunidade: 'patient_portal.community',
+  documentos: 'patient_portal.documents',
+  financeiro: 'patient_portal.financial',
+  chat: 'patient_portal.chat',
+  notificacoes: 'patient_portal.notifications',
+  checkins: 'patient_portal.checkins',
+};
+
+type AppSessionAccessResponse = {
+  featureFlags?: unknown;
+};
+
 function isPortalTab(value: string | null): value is PortalTab {
   return typeof value === 'string' && tabs.some((tab) => tab.id === value);
+}
+
+function isPortalFeatureEnabled(featureFlags: Set<string> | null, featureFlag?: string) {
+  return !featureFlag || featureFlags === null || featureFlags.has(featureFlag);
+}
+
+function isTabEnabled(tab: PortalTab, featureFlags: Set<string> | null) {
+  return isPortalFeatureEnabled(featureFlags, tabFeatureFlags[tab]);
 }
 
 function formatCurrency(cents: number) {
@@ -112,6 +136,11 @@ export default function PatientPortalContent() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [portalFeatureFlags, setPortalFeatureFlags] = useState<Set<string> | null>(null);
+  const availableTabs = useMemo(
+    () => tabs.filter((tab) => isTabEnabled(tab.id, portalFeatureFlags)),
+    [portalFeatureFlags]
+  );
 
   async function loadJourney(patientId = selectedPatientId) {
     if (!patientId) {
@@ -167,15 +196,45 @@ export default function PatientPortalContent() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadPortalFeatureFlags() {
+      try {
+        const response = await fetch('/api/auth/app-session', { credentials: 'same-origin' });
+        if (!response.ok) return;
+        const payload = (await response.json()) as AppSessionAccessResponse;
+        const flags = Array.isArray(payload.featureFlags)
+          ? payload.featureFlags.filter((flag): flag is string => typeof flag === 'string')
+          : [];
+        if (!cancelled) setPortalFeatureFlags(new Set(flags));
+      } catch {
+        if (!cancelled) setPortalFeatureFlags(null);
+      }
+    }
+
+    void loadPortalFeatureFlags();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const tab = searchParams.get('tab');
     const action = searchParams.get('action');
 
-    if (isPortalTab(tab)) setActiveTab(tab);
+    if (isPortalTab(tab) && isTabEnabled(tab, portalFeatureFlags)) setActiveTab(tab);
     if (isPatientDailyAction(action)) {
-      setActiveTab('diario');
+      if (isTabEnabled('diario', portalFeatureFlags)) setActiveTab('diario');
       setDailyInitialAction(action);
     }
-  }, [searchParams]);
+  }, [portalFeatureFlags, searchParams]);
+
+  useEffect(() => {
+    if (!availableTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab('resumo');
+    }
+  }, [activeTab, availableTabs]);
 
   const unreadNotifications = useMemo(
     () =>
@@ -187,12 +246,21 @@ export default function PatientPortalContent() {
   const portalCockpit = useMemo(() => {
     if (!snapshot) return null;
 
-    const pendingCheckins = snapshot.checkins
-      .filter((checkin) => checkin.status !== 'completed' && checkin.status !== 'canceled')
-      .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
-    const openInvoices = snapshot.invoices
-      .filter((invoice) => !['paid', 'pago', 'CONFIRMED', 'RECEIVED'].includes(invoice.status))
-      .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
+    const journeyEnabled = isTabEnabled('jornada', portalFeatureFlags);
+    const checkinsEnabled = isTabEnabled('checkins', portalFeatureFlags);
+    const financialEnabled = isTabEnabled('financeiro', portalFeatureFlags);
+    const notificationsEnabled = isTabEnabled('notificacoes', portalFeatureFlags);
+    const chatEnabled = isTabEnabled('chat', portalFeatureFlags);
+    const pendingCheckins = checkinsEnabled
+      ? snapshot.checkins
+          .filter((checkin) => checkin.status !== 'completed' && checkin.status !== 'canceled')
+          .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
+      : [];
+    const openInvoices = financialEnabled
+      ? snapshot.invoices
+          .filter((invoice) => !['paid', 'pago', 'CONFIRMED', 'RECEIVED'].includes(invoice.status))
+          .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
+      : [];
     const completedCheckins = snapshot.checkins.filter(
       (checkin) => checkin.status === 'completed'
     ).length;
@@ -202,11 +270,11 @@ export default function PatientPortalContent() {
         : snapshot.documents.length > 0 || snapshot.invoices.length > 0
           ? 25
           : 0;
-    const firstUnreadNotification = snapshot.notifications.find(
-      (notification) => notification.status === 'unread'
-    );
+    const firstUnreadNotification = notificationsEnabled
+      ? snapshot.notifications.find((notification) => notification.status === 'unread')
+      : undefined;
 
-    if (journey && journey.onboarding.status !== 'completed') {
+    if (journeyEnabled && journey && journey.onboarding.status !== 'completed') {
       return {
         progress: journey.onboarding.progressPercent,
         pendingCheckins,
@@ -266,14 +334,21 @@ export default function PatientPortalContent() {
       progress,
       pendingCheckins,
       openInvoices,
-      nextAction: {
-        tab: 'chat' as PortalTab,
-        title: 'Falar com a equipe',
-        detail: 'Envie uma mensagem quando precisar.',
-        icon: MessageSquare,
-      },
+      nextAction: chatEnabled
+        ? {
+            tab: 'chat' as PortalTab,
+            title: 'Falar com a equipe',
+            detail: 'Envie uma mensagem quando precisar.',
+            icon: MessageSquare,
+          }
+        : {
+            tab: 'resumo' as PortalTab,
+            title: 'Ver resumo',
+            detail: 'Acompanhe os dados liberados para o seu vinculo.',
+            icon: Home,
+          },
     };
-  }, [journey, snapshot]);
+  }, [journey, portalFeatureFlags, snapshot]);
 
   async function handlePatientChange(patientId: string) {
     setSelectedPatientId(patientId);
@@ -445,7 +520,7 @@ export default function PatientPortalContent() {
 
   const nextAction = portalCockpit?.nextAction;
   const NextActionIcon = nextAction?.icon ?? MessageSquare;
-  const tabItems = tabs.map((tab) => ({
+  const tabItems = availableTabs.map((tab) => ({
     id: tab.id,
     label: tab.label,
     badge:
@@ -602,29 +677,37 @@ export default function PatientPortalContent() {
         ) : null}
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard
-            icon={FileText}
-            label="Documentos"
-            value={String(snapshot.documents.length)}
-          />
-          <MetricCard
-            icon={CreditCard}
-            label="Cobrancas"
-            value={String(snapshot.invoices.length)}
-            tone={portalCockpit?.openInvoices.length ? 'warning' : 'default'}
-          />
-          <MetricCard
-            icon={ClipboardCheck}
-            label="Check-ins pendentes"
-            value={String(portalCockpit?.pendingCheckins.length ?? 0)}
-            tone={portalCockpit?.pendingCheckins.length ? 'success' : 'default'}
-          />
-          <MetricCard
-            icon={Bell}
-            label="Notificacoes nao lidas"
-            value={String(unreadNotifications)}
-            tone={unreadNotifications ? 'info' : 'default'}
-          />
+          {isTabEnabled('documentos', portalFeatureFlags) ? (
+            <MetricCard
+              icon={FileText}
+              label="Documentos"
+              value={String(snapshot.documents.length)}
+            />
+          ) : null}
+          {isTabEnabled('financeiro', portalFeatureFlags) ? (
+            <MetricCard
+              icon={CreditCard}
+              label="Cobrancas"
+              value={String(snapshot.invoices.length)}
+              tone={portalCockpit?.openInvoices.length ? 'warning' : 'default'}
+            />
+          ) : null}
+          {isTabEnabled('checkins', portalFeatureFlags) ? (
+            <MetricCard
+              icon={ClipboardCheck}
+              label="Check-ins pendentes"
+              value={String(portalCockpit?.pendingCheckins.length ?? 0)}
+              tone={portalCockpit?.pendingCheckins.length ? 'success' : 'default'}
+            />
+          ) : null}
+          {isTabEnabled('notificacoes', portalFeatureFlags) ? (
+            <MetricCard
+              icon={Bell}
+              label="Notificacoes nao lidas"
+              value={String(unreadNotifications)}
+              tone={unreadNotifications ? 'info' : 'default'}
+            />
+          ) : null}
         </section>
 
         <Tabs
@@ -717,7 +800,7 @@ export default function PatientPortalContent() {
         aria-label="Navegacao do portal"
       >
         <div className="mx-auto grid max-w-xl grid-cols-5 gap-1">
-          {tabs.map((tab) => {
+          {availableTabs.map((tab) => {
             const TabIcon = tab.icon;
             const active = activeTab === tab.id;
             return (

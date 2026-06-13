@@ -59,26 +59,39 @@ export async function applyTenantEntitlements(params: {
     if (error) throw error;
   }
 
-  const allowedPermissionIds = permissions
-    .filter((permission) => allowedPermissionCodes.has(permission.code))
-    .map((permission) => permission.id);
-  if (allowedPermissionIds.length === 0) return;
+  const allowedPermissions = permissions.filter((permission) =>
+    allowedPermissionCodes.has(permission.code)
+  );
+  if (allowedPermissions.length === 0) return;
+
+  const allowedPermissionIds = allowedPermissions.map((permission) => permission.id);
+  const patientPortalPermission = allowedPermissions.find(
+    (permission) => permission.code === 'patient_portal.access'
+  );
 
   const { data: roleRows, error: rolesError } = await admin
     .from('roles')
     .select('id,name')
     .eq('tenant_id', tenantId)
-    .in('name', ['tenant_owner', 'clinic_admin']);
+    .in('name', ['tenant_owner', 'clinic_admin', 'patient', 'guardian']);
   if (rolesError) throw rolesError;
 
   const roles = (roleRows ?? []) as Array<{ id: string; name: string }>;
-  const rolePermissionRows = roles.flatMap((role) =>
-    allowedPermissionIds.map((permissionId) => ({
+  const adminRoleNames = new Set(['tenant_owner', 'clinic_admin']);
+  const patientPortalRoleNames = new Set(['patient', 'guardian']);
+  const rolePermissionRows = roles.flatMap((role) => {
+    const permissionIds = adminRoleNames.has(role.name)
+      ? allowedPermissionIds
+      : patientPortalRoleNames.has(role.name) && patientPortalPermission
+        ? [patientPortalPermission.id]
+        : [];
+
+    return permissionIds.map((permissionId) => ({
       tenant_id: tenantId,
       role_id: role.id,
       permission_id: permissionId,
-    }))
-  );
+    }));
+  });
 
   if (rolePermissionRows.length > 0) {
     const { error } = await admin
