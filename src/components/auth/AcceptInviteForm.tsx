@@ -11,10 +11,23 @@ type AppSessionResponse = {
 
 type InviteState = 'checking' | 'ready' | 'saving' | 'error';
 
+type InviteOtpType = 'invite' | 'recovery';
+
 function authHashError() {
   if (typeof window === 'undefined') return '';
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  return hash.get('error_description') ?? hash.get('error') ?? '';
+  const search = new URLSearchParams(window.location.search);
+  return (
+    hash.get('error_description') ??
+    hash.get('error') ??
+    search.get('error_description') ??
+    search.get('error') ??
+    ''
+  );
+}
+
+function getInviteOtpType(value: string | null): InviteOtpType {
+  return value === 'recovery' ? 'recovery' : 'invite';
 }
 
 export default function AcceptInviteForm() {
@@ -46,10 +59,36 @@ export default function AcceptInviteForm() {
 
       const url = new URL(window.location.href);
       const code = url.searchParams.get('code');
+      const tokenHash = url.searchParams.get('token_hash');
       const inviteTenantId = url.searchParams.get('tenantId') ?? '';
+      const otpType = getInviteOtpType(url.searchParams.get('type'));
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+
       if (code) {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError) {
+          setError('Nao foi possivel validar o convite. Solicite um novo link.');
+          setState('error');
+          return;
+        }
+      } else if (tokenHash) {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: otpType,
+        });
+        if (verifyError) {
+          setError('Nao foi possivel validar o convite. Solicite um novo link.');
+          setState('error');
+          return;
+        }
+      } else if (accessToken && refreshToken) {
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (setSessionError) {
           setError('Nao foi possivel validar o convite. Solicite um novo link.');
           setState('error');
           return;
