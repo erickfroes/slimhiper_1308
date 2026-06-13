@@ -45,6 +45,7 @@ import {
   resendPlatformTenantInvite,
   revokePlatformBreakGlass,
   saveTenantEntitlements,
+  updatePlatformTenantIntegrationState,
   updatePlatformTenantConfig,
   updatePlatformTenantMembership,
   upsertPlatformTenantUnit,
@@ -54,6 +55,8 @@ import {
   type AdminTenantDetail,
   type AdminTenantEntitlementsState,
   type AdminTenantRow,
+  type AdminIntegrationOperationalState,
+  type AdminIntegrationProvider,
   type AdminWebhookEventSummary,
   type AdminWebhookReprocessJob,
 } from '@/services/adminApi';
@@ -215,6 +218,14 @@ function membershipStatusTone(status: string): 'emerald' | 'blue' | 'amber' | 'r
   if (status === 'suspended') return 'amber';
   if (status === 'revoked') return 'red';
   return 'slate';
+}
+
+function integrationStateTone(
+  state: AdminIntegrationOperationalState
+): 'emerald' | 'blue' | 'amber' | 'red' | 'slate' {
+  if (state === 'investigating') return 'amber';
+  if (state === 'resolved') return 'blue';
+  return 'emerald';
 }
 
 function SectionCard({
@@ -968,12 +979,50 @@ function BillingTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
   );
 }
 
-function IntegrationsTab({ detail }: { detail: AdminTenantDetail }) {
+function IntegrationsTab({
+  detail,
+  onReload,
+}: {
+  detail: AdminTenantDetail;
+  onReload: () => void;
+}) {
+  const adminPermissions = useAdminPermissions();
   const tenant = detail.tenant;
   const openWebhooks = detail.webhookErrors.filter((webhook) => webhook.status !== 'resolved');
   const integrationAudit = detail.auditLogs.filter(
     (entry) => entry.category === 'integration' || entry.action.includes('webhook')
   );
+  const [actionTarget, setActionTarget] = useState<{
+    provider: AdminIntegrationProvider;
+    state: AdminIntegrationOperationalState;
+  } | null>(null);
+  const [reason, setReason] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const closeActionDialog = () => {
+    if (isSaving) return;
+    setActionTarget(null);
+    setReason('');
+  };
+
+  const submitIntegrationAction = async () => {
+    if (!actionTarget) return;
+    setIsSaving(true);
+    const { error } = await updatePlatformTenantIntegrationState({
+      tenantId: tenant.id,
+      provider: actionTarget.provider,
+      state: actionTarget.state,
+      reason,
+    });
+    setIsSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Estado local da integracao atualizado com auditoria.');
+    closeActionDialog();
+    onReload();
+  };
 
   return (
     <div className="space-y-5">
@@ -986,11 +1035,34 @@ function IntegrationsTab({ detail }: { detail: AdminTenantDetail }) {
                 {tenant.asaasSubaccountStatus}
               </StateBadge>
             </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Operacao admin</span>
+              <StateBadge tone={integrationStateTone(tenant.integrationOperations.asaas.state)}>
+                {tenant.integrationOperations.asaas.state}
+              </StateBadge>
+            </div>
             <div>
               <p className="text-muted-foreground">Conta redigida</p>
               <p className="mt-1 break-all font-mono text-foreground">
                 {tenant.asaasAccountId || 'N/D'}
               </p>
+            </div>
+            <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+              {(['investigating', 'resolved', 'normal'] as const).map((state) => (
+                <button
+                  key={`asaas-${state}`}
+                  type="button"
+                  onClick={() => setActionTarget({ provider: 'asaas', state })}
+                  disabled={!adminPermissions.canManageTenantConfig || isSaving}
+                  className="btn-ghost px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {state === 'investigating'
+                    ? 'Investigar'
+                    : state === 'resolved'
+                      ? 'Resolver localmente'
+                      : 'Normalizar'}
+                </button>
+              ))}
             </div>
           </div>
         </SectionCard>
@@ -1004,12 +1076,35 @@ function IntegrationsTab({ detail }: { detail: AdminTenantDetail }) {
               </StateBadge>
             </div>
             <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Operacao admin</span>
+              <StateBadge tone={integrationStateTone(tenant.integrationOperations.d4sign.state)}>
+                {tenant.integrationOperations.d4sign.state}
+              </StateBadge>
+            </div>
+            <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Docs processados</span>
               <span className="font-semibold text-foreground">{tenant.d4signDocsUsed}</span>
             </div>
             <p className="rounded-lg border border-border bg-muted/30 p-3 text-muted-foreground">
               Provider-related: exibicao sanitizada, sem chamada real a D4Sign pela UI.
             </p>
+            <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+              {(['investigating', 'resolved', 'normal'] as const).map((state) => (
+                <button
+                  key={`d4sign-${state}`}
+                  type="button"
+                  onClick={() => setActionTarget({ provider: 'd4sign', state })}
+                  disabled={!adminPermissions.canManageTenantConfig || isSaving}
+                  className="btn-ghost px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {state === 'investigating'
+                    ? 'Investigar'
+                    : state === 'resolved'
+                      ? 'Resolver localmente'
+                      : 'Normalizar'}
+                </button>
+              ))}
+            </div>
           </div>
         </SectionCard>
 
@@ -1054,6 +1149,58 @@ function IntegrationsTab({ detail }: { detail: AdminTenantDetail }) {
           </div>
         )}
       </SectionCard>
+      {actionTarget ? (
+        <Dialog
+          open
+          title="Atualizar integracao local"
+          description="Registra apenas estado operacional local. Nenhuma chamada sera enviada para Asaas ou D4Sign."
+          onOpenChange={(open) => {
+            if (!open) closeActionDialog();
+          }}
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeActionDialog}
+                disabled={isSaving}
+                className="btn-ghost px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submitIntegrationAction}
+                disabled={
+                  !adminPermissions.canManageTenantConfig || isSaving || reason.trim().length < 16
+                }
+                className="btn-primary px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSaving ? 'Salvando...' : 'Salvar estado local'}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs">
+              <p className="font-semibold text-foreground">
+                {actionTarget.provider.toUpperCase()} {'>'} {actionTarget.state}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                Estado local auditado para acompanhamento operacional.
+              </p>
+            </div>
+            <label className="block">
+              <span className="text-xs font-semibold text-foreground">Motivo auditavel</span>
+              <textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Explique a mudanca local de estado. Minimo de 16 caracteres."
+                className="input-base mt-1 min-h-24 text-sm"
+              />
+            </label>
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
@@ -1753,6 +1900,7 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reprocessTarget, setReprocessTarget] = useState<AdminWebhookEventSummary | null>(null);
+  const [detailTarget, setDetailTarget] = useState<AdminWebhookEventSummary | null>(null);
   const [reason, setReason] = useState('');
   const [scope, setScope] = useState(
     `Tenant ${detail.tenant.clinicName}: reprocessar evento sanitizado pelo monitor admin`
@@ -1793,6 +1941,12 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
     }
     return acc;
   }, {});
+
+  const jobsForDetail = detailTarget
+    ? jobs
+        .filter((job) => job.eventId === detailTarget.id)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    : [];
 
   const submitReprocess = async () => {
     if (!reprocessTarget) return;
@@ -1910,7 +2064,7 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
                   'Job local',
                   'Erro sanitizado',
                   'Recebido',
-                  'Acao',
+                  'Acoes',
                 ].map((header) => (
                   <th
                     key={header}
@@ -1972,21 +2126,30 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
                       {formatDate(webhook.receivedAt)}
                     </td>
                     <td className="px-3 py-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setReprocessTarget(webhook)}
-                        disabled={!adminPermissions.canReprocessWebhooks || !eligible}
-                        className="btn-ghost px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                        title={
-                          !adminPermissions.canReprocessWebhooks
-                            ? 'Apenas owner/admin podem solicitar reprocesso.'
-                            : !eligible
-                              ? 'Evento nao elegivel para reprocesso.'
-                              : undefined
-                        }
-                      >
-                        Reprocessar
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDetailTarget(webhook)}
+                          className="btn-secondary px-3 py-1.5 text-xs"
+                        >
+                          Detalhes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReprocessTarget(webhook)}
+                          disabled={!adminPermissions.canReprocessWebhooks || !eligible}
+                          className="btn-ghost px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                          title={
+                            !adminPermissions.canReprocessWebhooks
+                              ? 'Apenas owner/admin podem solicitar reprocesso.'
+                              : !eligible
+                                ? 'Evento nao elegivel para reprocesso.'
+                                : undefined
+                          }
+                        >
+                          Reprocessar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1995,6 +2158,92 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
           </table>
         </div>
       )}
+
+      {detailTarget ? (
+        <Dialog
+          open
+          title="Detalhe do webhook"
+          description="Resumo sanitizado. Payload bruto, headers, secrets e URLs assinadas ficam ocultos."
+          onOpenChange={(open) => {
+            if (!open) setDetailTarget(null);
+          }}
+          placement="right"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <StateBadge tone={webhookStatusTone(detailTarget.status)}>
+                  {detailTarget.status}
+                </StateBadge>
+                <StateBadge tone="blue">{detailTarget.provider}</StateBadge>
+              </div>
+              <p className="font-mono font-semibold text-foreground">{detailTarget.eventType}</p>
+              <p className="mt-1 text-muted-foreground">
+                Recebido {formatDate(detailTarget.receivedAt)}; processado{' '}
+                {formatDate(detailTarget.processedAt)}.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              {[
+                ['Tenant', detailTarget.tenant],
+                ['Paciente ref', detailTarget.patientRef ?? 'N/D'],
+                ['External ID redigido', detailTarget.externalId],
+                ['Idempotency key redigida', detailTarget.idempotencyKey],
+                ['Tentativas', String(detailTarget.retryCount)],
+                ['Erro sanitizado', detailTarget.errorSummary ?? 'Sem erro detalhado'],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-border p-3">
+                  <p className="text-muted-foreground">{label}</p>
+                  <p className="mt-1 break-words font-medium text-foreground">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">
+              Payload bruto indisponivel nesta UI por seguranca. Use apenas o resumo sanitizado e os
+              jobs locais auditados para operacao.
+            </div>
+
+            <div>
+              <h4 className="mb-2 text-xs font-bold text-foreground">Timeline de jobs locais</h4>
+              {jobsForDetail.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border p-4 text-muted-foreground">
+                  Nenhum job local registrado para este evento.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {jobsForDetail.map((job) => (
+                    <div key={job.id} className="rounded-xl border border-border p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <StateBadge
+                          tone={
+                            job.status === 'processed'
+                              ? 'emerald'
+                              : job.status === 'failed' || job.status === 'not_reprocessable'
+                                ? 'red'
+                                : 'amber'
+                          }
+                        >
+                          {job.status}
+                        </StateBadge>
+                        <span className="text-muted-foreground">{formatDate(job.createdAt)}</span>
+                      </div>
+                      <p className="mt-2 text-muted-foreground">Motivo: {job.reason}</p>
+                      {job.errorMessage ? (
+                        <p className="mt-1 text-red-700">Erro sanitizado: {job.errorMessage}</p>
+                      ) : null}
+                      <p className="mt-1 text-muted-foreground">
+                        Processado: {formatDate(job.processedAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
 
       {reprocessTarget ? (
         <Dialog
@@ -2446,7 +2695,7 @@ function TabContent({
   if (activeTab === 'users') return <UsersTab detail={detail} onReload={onReload} />;
   if (activeTab === 'units') return <UnitsTab detail={detail} onReload={onReload} />;
   if (activeTab === 'billing') return <BillingTab detail={detail} onReload={onReload} />;
-  if (activeTab === 'integrations') return <IntegrationsTab detail={detail} />;
+  if (activeTab === 'integrations') return <IntegrationsTab detail={detail} onReload={onReload} />;
   if (activeTab === 'audit') return <AuditTab detail={detail} />;
   if (activeTab === 'webhooks') return <WebhooksTab detail={detail} />;
   if (activeTab === 'support') return <SupportTab detail={detail} onReload={onReload} />;

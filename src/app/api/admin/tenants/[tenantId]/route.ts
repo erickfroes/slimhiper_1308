@@ -34,6 +34,20 @@ function readDoctorsLimit(settings: unknown) {
   return normalizePositiveNumber(usage.doctorsLimit ?? usage.doctors_limit, 10000) ?? 1;
 }
 
+function readIntegrationOperations(settings: unknown) {
+  const integrations = asRecord(asRecord(settings).integrations);
+  return {
+    asaas: {
+      state: normalizeText(asRecord(integrations.asaas).operationalStatus, 40) || 'normal',
+      updatedAt: normalizeText(asRecord(integrations.asaas).operationalUpdatedAt, 80) || null,
+    },
+    d4sign: {
+      state: normalizeText(asRecord(integrations.d4sign).operationalStatus, 40) || 'normal',
+      updatedAt: normalizeText(asRecord(integrations.d4sign).operationalUpdatedAt, 80) || null,
+    },
+  };
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ tenantId: string }> }) {
   const session = await getCurrentAppSession();
   if (!session) return jsonError('Sessao obrigatoria para carregar tenant.', 401);
@@ -61,6 +75,7 @@ export async function GET(_request: Request, context: { params: Promise<{ tenant
     data: {
       tenantId,
       doctorsLimit: readDoctorsLimit(tenant.settings),
+      integrationOperations: readIntegrationOperations(tenant.settings),
     },
     error: null,
   });

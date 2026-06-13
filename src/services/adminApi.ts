@@ -16,6 +16,13 @@ export type AdminProviderStatus =
   | 'quota_exceeded'
   | 'error'
   | 'not_configured';
+export type AdminIntegrationProvider = 'asaas' | 'd4sign';
+export type AdminIntegrationOperationalState = 'normal' | 'investigating' | 'resolved';
+
+export interface AdminIntegrationOperationState {
+  state: AdminIntegrationOperationalState;
+  updatedAt: string | null;
+}
 
 export interface AdminTenantRow {
   id: string;
@@ -45,6 +52,7 @@ export interface AdminTenantRow {
   d4signDocsLimit: number;
   usersLimit: number;
   doctorsLimit: number;
+  integrationOperations: Record<AdminIntegrationProvider, AdminIntegrationOperationState>;
   appointmentsThisMonth: number;
   featureFlags: Record<string, boolean>;
   openSupportSessions: number;
@@ -515,6 +523,10 @@ function mapTenantRow(value: unknown): AdminTenantRow {
     d4signDocsLimit: asNumber(record.d4signDocsLimit, 100),
     usersLimit: asNumber(record.usersLimit, 10),
     doctorsLimit: asNumber(record.doctorsLimit, asNumber(record.usersLimit, 1)),
+    integrationOperations: {
+      asaas: mapIntegrationOperationState(asRecord(record.integrationOperations).asaas),
+      d4sign: mapIntegrationOperationState(asRecord(record.integrationOperations).d4sign),
+    },
     appointmentsThisMonth: asNumber(record.appointmentsThisMonth),
     featureFlags: flags,
     openSupportSessions: asNumber(record.openSupportSessions),
@@ -780,8 +792,25 @@ function mapTenantDetail(value: unknown): AdminTenantDetail {
 
 function mapTenantConfigSummary(value: unknown) {
   const record = asRecord(value);
+  const integrationOperations = asRecord(record.integrationOperations);
   return {
     doctorsLimit: asNumber(record.doctorsLimit, 1),
+    integrationOperations: {
+      asaas: mapIntegrationOperationState(integrationOperations.asaas),
+      d4sign: mapIntegrationOperationState(integrationOperations.d4sign),
+    },
+  };
+}
+
+function mapIntegrationOperationState(value: unknown): AdminIntegrationOperationState {
+  const record = asRecord(value);
+  const state = asString(record.state);
+  return {
+    state:
+      state === 'investigating' || state === 'resolved'
+        ? state
+        : ('normal' as AdminIntegrationOperationalState),
+    updatedAt: asNullableString(record.updatedAt),
   };
 }
 
@@ -1096,7 +1125,10 @@ export async function updatePlatformTenantConfig(input: UpdateTenantConfigInput)
 }
 
 export async function getPlatformTenantConfig(tenantId: string): Promise<{
-  data: { doctorsLimit: number } | null;
+  data: {
+    doctorsLimit: number;
+    integrationOperations: Record<AdminIntegrationProvider, AdminIntegrationOperationState>;
+  } | null;
   error: SafeServiceError | null;
 }> {
   const normalizedTenantId = tenantId.trim();
@@ -1282,11 +1314,73 @@ export async function getTenantDetail(tenantId: string): Promise<{
     const configResult = await getPlatformTenantConfig(tenantId);
     if (configResult.data) {
       detail.tenant.doctorsLimit = configResult.data.doctorsLimit;
+      detail.tenant.integrationOperations = configResult.data.integrationOperations;
     }
 
     return { data: detail, error: null };
   } catch (error) {
     return { data: null, error: asServiceError(error, 'Falha ao carregar tenant.') };
+  }
+}
+
+export async function updatePlatformTenantIntegrationState(input: {
+  tenantId: string;
+  provider: AdminIntegrationProvider;
+  state: AdminIntegrationOperationalState;
+  reason: string;
+}): Promise<{
+  data: {
+    provider: AdminIntegrationProvider;
+    state: AdminIntegrationOperationalState;
+    updatedAt: string;
+  } | null;
+  error: SafeServiceError | null;
+}> {
+  const tenantId = input.tenantId.trim();
+  const reason = normalizeText(input.reason, 500);
+  const provider = input.provider === 'asaas' ? 'asaas' : 'd4sign';
+  const state =
+    input.state === 'investigating' || input.state === 'resolved' ? input.state : 'normal';
+
+  if (!isUuid(tenantId)) return { data: null, error: { message: 'Tenant invalido.' } };
+  if (reason.length < 16) {
+    return {
+      data: null,
+      error: { message: 'Informe um motivo auditavel com pelo menos 16 caracteres.' },
+    };
+  }
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${tenantId}/integrations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, state, reason }),
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      data?: unknown;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null,
+        error: {
+          message: payload?.error?.message ?? 'Falha ao atualizar integracao local.',
+        },
+      };
+    }
+
+    const record = asRecord(payload?.data);
+    return {
+      data: {
+        provider,
+        state,
+        updatedAt: asString(record.updatedAt),
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao atualizar integracao local.') };
   }
 }
 
