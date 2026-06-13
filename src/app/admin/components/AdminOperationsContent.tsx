@@ -17,6 +17,8 @@ import {
   Headphones,
   Key,
   Link2,
+  Pencil,
+  Plus,
   Search,
   Shield,
   Users,
@@ -30,12 +32,16 @@ import MetricCard from '@/components/ui/MetricCard';
 import {
   endPlatformSupportSession,
   getPlatformAdminSnapshot,
+  listPlatformPlans,
   requestPlatformSupportSession,
+  savePlatformPlan,
   type AdminAuditEntry,
+  type AdminPlatformPlan,
   type AdminProviderStatus,
   type AdminSupportSession,
   type AdminTenantRow,
   type PlatformAdminSnapshot,
+  type SavePlatformPlanInput,
 } from '@/services/adminApi';
 
 type AdminOperationsSection =
@@ -103,6 +109,13 @@ function currency(value: number) {
   }).format(value);
 }
 
+function formatPlanPrice(plan: Pick<AdminPlatformPlan, 'amountCents' | 'currency'>) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: plan.currency || 'BRL',
+  }).format(plan.amountCents / 100);
+}
+
 function compact(value: number) {
   return new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(
     value
@@ -162,6 +175,347 @@ function UsageBar({ used, limit, label }: { used: number; limit: number; label?:
 
 function ProviderStatus({ status }: { status: AdminProviderStatus }) {
   return <StatusPill tone={statusTone(status)}>{status}</StatusPill>;
+}
+
+type PlanDraft = SavePlatformPlanInput;
+
+function getPlanFeatureNumber(plan: AdminPlatformPlan, snakeKey: string, camelKey: string) {
+  const value = Number(plan.features[snakeKey] ?? plan.features[camelKey]);
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+function createEmptyPlanDraft(): PlanDraft {
+  return {
+    code: '',
+    name: '',
+    billingCycle: 'monthly',
+    amountCents: 0,
+    currency: 'BRL',
+    active: true,
+    features: {
+      usersLimit: 8,
+      storageGb: 20,
+      apiLimitMonthly: 30000,
+      d4signDocsLimit: 100,
+    },
+    reason: '',
+  };
+}
+
+function draftFromPlan(plan: AdminPlatformPlan): PlanDraft {
+  return {
+    id: plan.id,
+    code: plan.code,
+    name: plan.name,
+    billingCycle:
+      plan.billingCycle === 'quarterly' || plan.billingCycle === 'yearly'
+        ? plan.billingCycle
+        : 'monthly',
+    amountCents: plan.amountCents,
+    currency: plan.currency || 'BRL',
+    active: plan.active,
+    features: {
+      usersLimit: getPlanFeatureNumber(plan, 'users_limit', 'usersLimit'),
+      storageGb: getPlanFeatureNumber(plan, 'storage_gb', 'storageGb'),
+      apiLimitMonthly: getPlanFeatureNumber(plan, 'api_limit_monthly', 'apiLimitMonthly'),
+      d4signDocsLimit: getPlanFeatureNumber(plan, 'd4sign_docs_limit', 'd4signDocsLimit'),
+    },
+    reason: '',
+  };
+}
+
+function PlatformPlansPanel() {
+  const permissions = useAdminPermissions();
+  const [plans, setPlans] = useState<AdminPlatformPlan[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<PlanDraft | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const loadPlans = useCallback(() => {
+    setIsLoading(true);
+    setLoadError(null);
+    listPlatformPlans({ includeInactive: true }).then(({ data, error }) => {
+      setPlans(data);
+      setLoadError(error?.message ?? null);
+      setIsLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    loadPlans();
+  }, [loadPlans]);
+
+  const updateDraft = <Key extends keyof PlanDraft>(key: Key, value: PlanDraft[Key]) => {
+    setDraft((current) => (current ? { ...current, [key]: value } : current));
+  };
+
+  const updateFeature = (key: keyof PlanDraft['features'], value: number) => {
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            features: {
+              ...current.features,
+              [key]: value,
+            },
+          }
+        : current
+    );
+  };
+
+  const submit = async () => {
+    if (!draft) return;
+    setIsSaving(true);
+    setNotice(null);
+    setFormError(null);
+    const { error } = await savePlatformPlan(draft);
+    setIsSaving(false);
+    if (error) {
+      setFormError(error.message);
+      return;
+    }
+    setNotice(draft.id ? 'Plano atualizado com auditoria.' : 'Plano criado com auditoria.');
+    setDraft(null);
+    loadPlans();
+  };
+
+  return (
+    <div className="card-base overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+        <div>
+          <h2 className="text-sm font-bold text-foreground">Planos da plataforma</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Catalogo local usado na criacao/alteracao de tenants. Nenhuma chamada Asaas e executada.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setDraft(createEmptyPlanDraft())}
+          disabled={!permissions.canManageTenantConfig}
+          className="btn-primary text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          title={
+            permissions.canManageTenantConfig ? undefined : 'Apenas owner/admin podem criar planos.'
+          }
+        >
+          <Plus size={13} />
+          Novo plano
+        </button>
+      </div>
+
+      {notice ? (
+        <div className="border-b border-emerald-200 bg-emerald-50 px-5 py-3 text-sm text-emerald-700">
+          {notice}
+        </div>
+      ) : null}
+      {loadError ? (
+        <div className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">
+          {loadError}
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[920px] text-xs">
+          <thead className="border-b border-border bg-muted/40 text-muted-foreground">
+            <tr>
+              {['Plano', 'Preco', 'Ciclo', 'Limites', 'Status', 'Acoes'].map((header) => (
+                <th key={header} scope="col" className="px-4 py-3 text-left font-semibold">
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {isLoading ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  Carregando planos da plataforma...
+                </td>
+              </tr>
+            ) : plans.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  Nenhum plano configurado. Crie um plano antes de criar tenants.
+                </td>
+              </tr>
+            ) : (
+              plans.map((plan) => (
+                <tr key={plan.id} className="hover:bg-muted/30">
+                  <td className="px-4 py-3">
+                    <p className="font-semibold text-foreground">{plan.name}</p>
+                    <p className="font-mono text-[11px] text-muted-foreground">{plan.code}</p>
+                  </td>
+                  <td className="px-4 py-3 font-semibold tabular-nums text-foreground">
+                    {formatPlanPrice(plan)}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{plan.billingCycle}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {getPlanFeatureNumber(plan, 'users_limit', 'usersLimit')} usuarios /{' '}
+                    {getPlanFeatureNumber(plan, 'storage_gb', 'storageGb')} GB /{' '}
+                    {compact(getPlanFeatureNumber(plan, 'api_limit_monthly', 'apiLimitMonthly'))}{' '}
+                    API
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusPill tone={plan.active ? 'emerald' : 'slate'}>
+                      {plan.active ? 'ativo' : 'inativo'}
+                    </StatusPill>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setDraft(draftFromPlan(plan))}
+                      disabled={!permissions.canManageTenantConfig}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Pencil size={13} />
+                      Editar
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {draft ? (
+        <Dialog
+          open
+          title={draft.id ? 'Editar plano' : 'Criar plano'}
+          description="Mudanca local auditada; o codigo fica imutavel apos criacao."
+          onOpenChange={(open) => {
+            if (!open) {
+              setDraft(null);
+              setFormError(null);
+            }
+          }}
+          footer={
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDraft(null)}
+                className="btn-ghost px-4 py-2 text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={isSaving || draft.reason.trim().length < 16}
+                className="btn-primary px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Salvar plano
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4 text-sm">
+            {formError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {formError}
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label>
+                <span className="text-xs font-semibold text-foreground">Codigo</span>
+                <input
+                  value={draft.code}
+                  onChange={(event) => updateDraft('code', event.target.value.toLowerCase())}
+                  disabled={Boolean(draft.id)}
+                  placeholder="ex: scale"
+                  className="input-base mt-1 text-sm disabled:bg-muted"
+                />
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-foreground">Nome</span>
+                <input
+                  value={draft.name}
+                  onChange={(event) => updateDraft('name', event.target.value)}
+                  placeholder="Plano Scale"
+                  className="input-base mt-1 text-sm"
+                />
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-foreground">Preco em centavos</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={draft.amountCents}
+                  onChange={(event) => updateDraft('amountCents', Number(event.target.value))}
+                  className="input-base mt-1 text-sm"
+                />
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-foreground">Ciclo</span>
+                <select
+                  value={draft.billingCycle}
+                  onChange={(event) =>
+                    updateDraft('billingCycle', event.target.value as PlanDraft['billingCycle'])
+                  }
+                  className="input-base mt-1 text-sm"
+                >
+                  <option value="monthly">Mensal</option>
+                  <option value="quarterly">Trimestral</option>
+                  <option value="yearly">Anual</option>
+                </select>
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-foreground">Moeda</span>
+                <input
+                  value={draft.currency}
+                  onChange={(event) => updateDraft('currency', event.target.value.toUpperCase())}
+                  className="input-base mt-1 text-sm"
+                />
+              </label>
+              <label className="flex items-center gap-2 pt-6 text-xs font-semibold text-foreground">
+                <input
+                  type="checkbox"
+                  checked={draft.active}
+                  onChange={(event) => updateDraft('active', event.target.checked)}
+                />
+                Plano ativo para novos tenants
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {[
+                ['usersLimit', 'Limite usuarios'],
+                ['storageGb', 'Storage GB'],
+                ['apiLimitMonthly', 'API mensal'],
+                ['d4signDocsLimit', 'Documentos D4Sign'],
+              ].map(([key, label]) => (
+                <label key={key}>
+                  <span className="text-xs font-semibold text-foreground">{label}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={draft.features[key as keyof PlanDraft['features']]}
+                    onChange={(event) =>
+                      updateFeature(key as keyof PlanDraft['features'], Number(event.target.value))
+                    }
+                    className="input-base mt-1 text-sm"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <label className="block">
+              <span className="text-xs font-semibold text-foreground">Motivo auditavel</span>
+              <textarea
+                value={draft.reason}
+                onChange={(event) => updateDraft('reason', event.target.value)}
+                placeholder="Explique a criacao ou alteracao do plano."
+                className="input-base mt-1 min-h-24 text-sm"
+              />
+            </label>
+          </div>
+        </Dialog>
+      ) : null}
+    </div>
+  );
 }
 
 function matchesTenantSearch(tenant: AdminTenantRow, search: string) {
@@ -276,6 +630,8 @@ function BillingSection({ snapshot, search }: { snapshot: PlatformAdminSnapshot;
           tone={pastDue.length || suspended.length || asaasIssues.length ? 'warning' : 'default'}
         />
       </div>
+
+      <PlatformPlansPanel />
 
       <div className="card-base overflow-hidden">
         <div className="border-b border-border px-5 py-4">

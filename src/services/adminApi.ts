@@ -1,7 +1,7 @@
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { SafeServiceError } from '@/services/billingApi';
 
-export type AdminPlan = 'starter' | 'professional' | 'enterprise';
+export type AdminPlan = 'starter' | 'professional' | 'enterprise' | (string & {});
 export type AdminTenantStatus = 'active' | 'trial' | 'suspended' | 'cancelled';
 export type AdminSubscriptionStatus = 'active' | 'trial' | 'past_due' | 'cancelled' | 'paused';
 export type AdminProviderStatus =
@@ -302,6 +302,23 @@ export interface UpsertTenantUnitInput {
   reason: string;
 }
 
+export interface SavePlatformPlanInput {
+  id?: string | null;
+  code: string;
+  name: string;
+  billingCycle: 'monthly' | 'quarterly' | 'yearly';
+  amountCents: number;
+  currency: string;
+  active: boolean;
+  features: {
+    usersLimit: number;
+    storageGb: number;
+    apiLimitMonthly: number;
+    d4signDocsLimit: number;
+  };
+  reason: string;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -376,9 +393,11 @@ function asServiceError(error: unknown, fallback: string): SafeServiceError {
 
 function normalizePlan(value: unknown): AdminPlan {
   const normalized = asString(value).toLowerCase();
+  if (!normalized) return 'starter';
   if (normalized === 'enterprise') return 'enterprise';
   if (normalized === 'professional' || normalized === 'pro') return 'professional';
-  return 'starter';
+  if (normalized === 'starter') return 'starter';
+  return normalized;
 }
 
 function normalizeSubscription(value: unknown): AdminSubscriptionStatus {
@@ -772,17 +791,22 @@ function mapCreateTenantResult(value: unknown): CreateTenantResult | null {
   };
 }
 
-export async function listPlatformPlans(): Promise<{
+export async function listPlatformPlans(options?: { includeInactive?: boolean }): Promise<{
   data: AdminPlatformPlan[];
   error: SafeServiceError | null;
 }> {
   try {
     const supabase = createBrowserSupabaseClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('platform_plans')
       .select('id,code,name,billing_cycle,amount_cents,currency,active,metadata')
-      .eq('active', true)
       .order('amount_cents', { ascending: true });
+
+    if (!options?.includeInactive) {
+      query = query.eq('active', true);
+    }
+
+    const { data, error } = await query;
 
     if (error) return { data: [], error: asServiceError(error, 'Falha ao carregar planos.') };
 
@@ -794,6 +818,82 @@ export async function listPlatformPlans(): Promise<{
     };
   } catch (error) {
     return { data: [], error: asServiceError(error, 'Falha ao carregar planos.') };
+  }
+}
+
+export async function savePlatformPlan(input: SavePlatformPlanInput): Promise<{
+  data: AdminPlatformPlan | null;
+  error: SafeServiceError | null;
+}> {
+  const code = normalizeText(input.code, 80).toLowerCase();
+  const name = normalizeText(input.name, 120);
+  const currency = normalizeText(input.currency, 3).toUpperCase() || 'BRL';
+  const reason = normalizeText(input.reason, 500);
+  const amountCents = Math.trunc(Number(input.amountCents));
+  const features = {
+    usersLimit: Math.trunc(Number(input.features.usersLimit)),
+    storageGb: Math.trunc(Number(input.features.storageGb)),
+    apiLimitMonthly: Math.trunc(Number(input.features.apiLimitMonthly)),
+    d4signDocsLimit: Math.trunc(Number(input.features.d4signDocsLimit)),
+  };
+
+  if (!/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/.test(code)) {
+    return { data: null, error: { message: 'Codigo do plano invalido.' } };
+  }
+  if (name.length < 3) return { data: null, error: { message: 'Informe o nome do plano.' } };
+  if (!['monthly', 'quarterly', 'yearly'].includes(input.billingCycle)) {
+    return { data: null, error: { message: 'Ciclo de cobranca invalido.' } };
+  }
+  if (!Number.isFinite(amountCents) || amountCents < 0) {
+    return { data: null, error: { message: 'Valor do plano invalido.' } };
+  }
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    return { data: null, error: { message: 'Moeda invalida.' } };
+  }
+  if (Object.values(features).some((value) => !Number.isFinite(value) || value <= 0)) {
+    return { data: null, error: { message: 'Limites do plano devem ser maiores que zero.' } };
+  }
+  if (reason.length < 16) {
+    return {
+      data: null,
+      error: { message: 'Informe um motivo auditavel com pelo menos 16 caracteres.' },
+    };
+  }
+
+  try {
+    const response = await fetch('/api/admin/platform-plans', {
+      method: input.id ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: input.id,
+        code,
+        name,
+        billingCycle: input.billingCycle,
+        amountCents,
+        currency,
+        active: input.active,
+        features,
+        reason,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as {
+      data?: unknown;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null,
+        error: {
+          message: payload?.error?.message ?? 'Falha ao salvar plano.',
+        },
+      };
+    }
+
+    return { data: mapPlatformPlan(payload?.data), error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao salvar plano.') };
   }
 }
 

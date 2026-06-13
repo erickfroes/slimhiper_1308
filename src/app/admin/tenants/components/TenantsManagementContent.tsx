@@ -83,13 +83,17 @@ function TenantStatusBadge({ status }: { status: AdminTenantRow['status'] }) {
 }
 
 function PlanBadge({ plan }: { plan: AdminTenantRow['plan'] }) {
-  const config = {
+  const config: Record<string, string> = {
     starter: 'border-slate-200 bg-slate-100 text-slate-600',
     professional: 'border-violet-200 bg-violet-50 text-violet-700',
     enterprise: 'border-amber-200 bg-amber-50 text-amber-700',
   };
   return (
-    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${config[plan]}`}>
+    <span
+      className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+        config[plan] ?? 'border-blue-200 bg-blue-50 text-blue-700'
+      }`}
+    >
       {plan}
     </span>
   );
@@ -666,7 +670,7 @@ export default function TenantsManagementContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | AdminTenantRow['status']>('all');
-  const [planFilter, setPlanFilter] = useState<'all' | AdminTenantRow['plan']>('all');
+  const [planFilter, setPlanFilter] = useState<string>('all');
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [plans, setPlans] = useState<AdminPlatformPlan[]>([]);
   const [plansLoading, setPlansLoading] = useState(false);
@@ -877,13 +881,15 @@ export default function TenantsManagementContent() {
             </select>
             <select
               value={planFilter}
-              onChange={(event) => setPlanFilter(event.target.value as typeof planFilter)}
+              onChange={(event) => setPlanFilter(event.target.value)}
               className="input-base text-xs"
             >
               <option value="all">Todos os planos</option>
-              <option value="starter">Starter</option>
-              <option value="professional">Professional</option>
-              <option value="enterprise">Enterprise</option>
+              {plans.map((plan) => (
+                <option key={plan.id} value={plan.code}>
+                  {plan.name}
+                </option>
+              ))}
             </select>
           </div>
           <span className="ml-auto text-xs text-muted-foreground">
