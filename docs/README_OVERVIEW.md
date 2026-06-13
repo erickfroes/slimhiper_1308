@@ -125,6 +125,18 @@ Use `docs/operations/ENVIRONMENT_MATRIX.md`,
 `docs/operations/RELEASE_PROCESS.md` before promoting preview, staging, or
 production environments.
 
+Use `docs/Production_Readiness_Execution_Plan.md` as the entrypoint and
+`docs/operations/PRODUCTION_READINESS_EXECUTION_PLAN.md` as the operational
+checklist for moving each component from local evidence to staging and
+production readiness. Use `docs/operations/PRODUCTION_READINESS_STAGE_TRACKER.md`
+to track stage/component status and
+`docs/operations/STAGING_GO_LIVE_EVIDENCE_TEMPLATE.md` to record redacted
+release-candidate evidence and owner go/no-go. The read-only local audit is:
+
+```bash
+node scripts/operations/check-production-readiness.mjs
+```
+
 ## Deployment
 
 Build the application for production:

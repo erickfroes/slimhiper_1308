@@ -4,6 +4,7 @@ import {
   getCurrentAppSession,
 } from '@/services/session/getCurrentAppSession';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
+import { createClient } from '@/lib/supabase/server';
 import {
   createObservabilityContext,
   logObservedEvent,
@@ -61,6 +62,32 @@ export async function GET(request: Request) {
       targetRoute,
       requestId: context.requestId,
     },
+    { headers: observedHeaders(context) }
+  );
+}
+
+export async function DELETE(request: Request) {
+  const context = createObservabilityContext('api.auth.app-session.logout', request);
+  const supabase = await createClient();
+
+  if (!supabase) {
+    logObservedEvent(context, 'auth_session_logout', 'warn', 'success', {
+      auth_state: 'supabase_unconfigured',
+    });
+
+    return NextResponse.json(
+      { ok: true, requestId: context.requestId },
+      { headers: observedHeaders(context) }
+    );
+  }
+
+  const { error } = await supabase.auth.signOut();
+  logObservedEvent(context, 'auth_session_logout', error ? 'warn' : 'info', 'success', {
+    auth_state: error ? 'logout_error_redacted' : 'signed_out',
+  });
+
+  return NextResponse.json(
+    { ok: true, requestId: context.requestId },
     { headers: observedHeaders(context) }
   );
 }

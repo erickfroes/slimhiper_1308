@@ -2,22 +2,37 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import {
   Activity,
   Ban,
   Building2,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle,
   Clock,
   CreditCard,
   Filter,
   HardDrive,
+  Loader2,
+  Mail,
+  MapPin,
+  Plus,
   Search,
   Users,
   X,
   XCircle,
 } from 'lucide-react';
 import AdminShell from '@/app/admin/components/AdminShell';
-import { listTenants, type AdminTenantRow } from '@/services/adminApi';
+import {
+  createTenant,
+  listPlatformPlans,
+  listTenants,
+  type AdminPlatformPlan,
+  type AdminTenantRow,
+  type CreateTenantInput,
+} from '@/services/adminApi';
 
 function currency(value: number) {
   return new Intl.NumberFormat('pt-BR', {
@@ -114,13 +129,546 @@ function UsageBar({ used, limit }: { used: number; limit: number }) {
   );
 }
 
+type CreateTenantStep = 'clinic' | 'owner' | 'plan';
+type TenantDraftErrors = Partial<Record<keyof CreateTenantInput | 'plans', string>>;
+
+const CREATE_TENANT_STEPS: Array<{
+  key: CreateTenantStep;
+  label: string;
+  icon: React.ElementType;
+}> = [
+  { key: 'clinic', label: 'Clinica', icon: Building2 },
+  { key: 'owner', label: 'Owner', icon: Mail },
+  { key: 'plan', label: 'Plano', icon: MapPin },
+];
+
+function createEmptyTenantDraft(): CreateTenantInput {
+  return {
+    clinicName: '',
+    slug: '',
+    cnpj: '',
+    phone: '',
+    website: '',
+    ownerName: '',
+    ownerEmail: '',
+    reason: '',
+    planCode: '',
+    unitName: 'Matriz',
+    unitCode: 'matriz',
+    city: '',
+    state: '',
+  };
+}
+
+function slugifyTenant(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-')
+    .slice(0, 60);
+}
+
+function isSafeSlug(value: string) {
+  return /^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/.test(value);
+}
+
+function isEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function formatPlanPrice(plan: AdminPlatformPlan) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: plan.currency || 'BRL',
+    maximumFractionDigits: 0,
+  }).format(plan.amountCents / 100);
+}
+
+function planFeatureText(plan: AdminPlatformPlan) {
+  const usersLimit = Number(plan.features.users_limit ?? plan.features.usersLimit);
+  const storageGb = Number(plan.features.storage_gb ?? plan.features.storageGb);
+  const parts = [
+    Number.isFinite(usersLimit) && usersLimit > 0 ? `${usersLimit} usuarios` : null,
+    Number.isFinite(storageGb) && storageGb > 0 ? `${storageGb} GB` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' / ') : 'Limites padrao do plano';
+}
+
+function validateTenantDraft(
+  draft: CreateTenantInput,
+  step: CreateTenantStep,
+  plans: AdminPlatformPlan[]
+): TenantDraftErrors {
+  const errors: TenantDraftErrors = {};
+
+  if (step === 'clinic') {
+    if (draft.clinicName.trim().length < 3) errors.clinicName = 'Informe a clinica.';
+    if (!isSafeSlug(draft.slug.trim())) errors.slug = 'Use 3 a 60 caracteres, letras, numeros e -.';
+  }
+
+  if (step === 'owner') {
+    if (!draft.ownerName.trim()) errors.ownerName = 'Informe o owner.';
+    if (!isEmail(draft.ownerEmail)) errors.ownerEmail = 'Informe um e-mail valido.';
+    if (draft.reason.trim().length < 16) {
+      errors.reason = 'Motivo auditavel deve ter pelo menos 16 caracteres.';
+    }
+  }
+
+  if (step === 'plan') {
+    if (plans.length === 0) errors.plans = 'Nenhum plano ativo configurado.';
+    if (!draft.planCode || !plans.some((plan) => plan.code === draft.planCode)) {
+      errors.planCode = 'Selecione um plano ativo.';
+    }
+    if (!draft.unitName.trim()) errors.unitName = 'Informe a unidade padrao.';
+    if (draft.unitCode && !isSafeSlug(draft.unitCode.trim())) {
+      errors.unitCode = 'Use letras, numeros e - no codigo.';
+    }
+    const uf = (draft.state ?? '').trim();
+    if (uf && !/^[A-Za-z]{2}$/.test(uf)) errors.state = 'UF deve ter 2 letras.';
+  }
+
+  return errors;
+}
+
+function getAllTenantDraftErrors(
+  draft: CreateTenantInput,
+  plans: AdminPlatformPlan[]
+): TenantDraftErrors {
+  return {
+    ...validateTenantDraft(draft, 'clinic', plans),
+    ...validateTenantDraft(draft, 'owner', plans),
+    ...validateTenantDraft(draft, 'plan', plans),
+  };
+}
+
+function FieldError({ message }: { message?: string }) {
+  return message ? <p className="mt-1 text-xs font-medium text-red-600">{message}</p> : null;
+}
+
+function CreateTenantModal({
+  open,
+  plans,
+  plansLoading,
+  plansError,
+  onClose,
+  onRetryPlans,
+  onCreated,
+}: {
+  open: boolean;
+  plans: AdminPlatformPlan[];
+  plansLoading: boolean;
+  plansError: string | null;
+  onClose: () => void;
+  onRetryPlans: () => void;
+  onCreated: (tenantId: string) => void;
+}) {
+  const [activeStep, setActiveStep] = useState<CreateTenantStep>('clinic');
+  const [draft, setDraft] = useState<CreateTenantInput>(() => createEmptyTenantDraft());
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setActiveStep('clinic');
+    setDraft(createEmptyTenantDraft());
+    setSlugTouched(false);
+    setShowErrors(false);
+    setSubmitError(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || draft.planCode || plans.length === 0) return;
+    setDraft((current) => ({ ...current, planCode: plans[0].code }));
+  }, [draft.planCode, open, plans]);
+
+  const stepIndex = CREATE_TENANT_STEPS.findIndex((step) => step.key === activeStep);
+  const currentErrors = useMemo(
+    () => validateTenantDraft(draft, activeStep, plans),
+    [activeStep, draft, plans]
+  );
+  const visibleErrors = showErrors ? currentErrors : {};
+
+  const updateDraft = useCallback(
+    (field: keyof CreateTenantInput, value: string) => {
+      setDraft((current) => {
+        const next = { ...current, [field]: value };
+        if (field === 'clinicName' && !slugTouched) next.slug = slugifyTenant(value);
+        if (field === 'slug') next.slug = slugifyTenant(value);
+        if (field === 'unitCode') next.unitCode = slugifyTenant(value);
+        if (field === 'state') next.state = value.toUpperCase().slice(0, 2);
+        return next;
+      });
+    },
+    [slugTouched]
+  );
+
+  const moveStep = (direction: 1 | -1) => {
+    if (direction === 1 && Object.keys(currentErrors).length > 0) {
+      setShowErrors(true);
+      return;
+    }
+
+    setShowErrors(false);
+    setSubmitError(null);
+    const nextStep = CREATE_TENANT_STEPS[stepIndex + direction]?.key;
+    if (nextStep) setActiveStep(nextStep);
+  };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSubmitError(null);
+
+    if (activeStep !== 'plan') {
+      moveStep(1);
+      return;
+    }
+
+    const allErrors = getAllTenantDraftErrors(draft, plans);
+    if (Object.keys(allErrors).length > 0) {
+      setShowErrors(true);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const { data, error } = await createTenant(draft);
+    setIsSubmitting(false);
+
+    if (error || !data) {
+      setSubmitError(error?.message ?? 'Falha ao criar tenant.');
+      toast.error(error?.message ?? 'Falha ao criar tenant.');
+      return;
+    }
+
+    toast.success('Tenant criado e owner convidado.');
+    onCreated(data.tenantId);
+  };
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 px-4 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-tenant-title"
+    >
+      <form
+        onSubmit={submit}
+        className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+          <div>
+            <h2 id="create-tenant-title" className="text-base font-bold text-foreground">
+              Novo tenant
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Criacao operacional com RBAC, plano local e owner ativo.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="btn-ghost h-8 w-8 justify-center p-0 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Fechar cadastro de tenant"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="border-b border-border px-5 py-3">
+          <div className="flex gap-2 overflow-x-auto scrollbar-thin">
+            {CREATE_TENANT_STEPS.map((step, index) => {
+              const StepIcon = step.icon;
+              const isActive = step.key === activeStep;
+              const isDone = index < stepIndex;
+              return (
+                <button
+                  key={step.key}
+                  type="button"
+                  onClick={() => {
+                    if (index <= stepIndex) {
+                      setActiveStep(step.key);
+                      setShowErrors(false);
+                    }
+                  }}
+                  className={`flex min-w-[120px] items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                    isActive
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : isDone
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-border bg-muted/30 text-muted-foreground'
+                  }`}
+                  aria-current={isActive ? 'step' : undefined}
+                >
+                  <StepIcon size={13} />
+                  {step.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 scrollbar-thin">
+          {submitError ? (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {submitError}
+            </div>
+          ) : null}
+
+          {activeStep === 'clinic' ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="md:col-span-2">
+                <span className="text-xs font-semibold text-foreground">Nome da clinica</span>
+                <input
+                  value={draft.clinicName}
+                  onChange={(event) => updateDraft('clinicName', event.target.value)}
+                  className="input-base mt-1 w-full text-sm"
+                  maxLength={160}
+                  autoFocus
+                />
+                <FieldError message={visibleErrors.clinicName} />
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-foreground">Slug</span>
+                <input
+                  value={draft.slug}
+                  onChange={(event) => {
+                    setSlugTouched(true);
+                    updateDraft('slug', event.target.value);
+                  }}
+                  className="input-base mt-1 w-full font-mono text-sm"
+                  maxLength={60}
+                />
+                <FieldError message={visibleErrors.slug} />
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-foreground">CNPJ</span>
+                <input
+                  value={draft.cnpj}
+                  onChange={(event) => updateDraft('cnpj', event.target.value)}
+                  className="input-base mt-1 w-full text-sm"
+                  maxLength={32}
+                />
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-foreground">Telefone</span>
+                <input
+                  value={draft.phone}
+                  onChange={(event) => updateDraft('phone', event.target.value)}
+                  className="input-base mt-1 w-full text-sm"
+                  maxLength={32}
+                />
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-foreground">Site</span>
+                <input
+                  value={draft.website}
+                  onChange={(event) => updateDraft('website', event.target.value)}
+                  className="input-base mt-1 w-full text-sm"
+                  maxLength={160}
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {activeStep === 'owner' ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <label>
+                <span className="text-xs font-semibold text-foreground">Nome do owner</span>
+                <input
+                  value={draft.ownerName}
+                  onChange={(event) => updateDraft('ownerName', event.target.value)}
+                  className="input-base mt-1 w-full text-sm"
+                  maxLength={160}
+                  autoFocus
+                />
+                <FieldError message={visibleErrors.ownerName} />
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-foreground">E-mail do owner</span>
+                <input
+                  value={draft.ownerEmail}
+                  onChange={(event) => updateDraft('ownerEmail', event.target.value)}
+                  className="input-base mt-1 w-full text-sm"
+                  maxLength={254}
+                  inputMode="email"
+                />
+                <FieldError message={visibleErrors.ownerEmail} />
+              </label>
+              <label className="md:col-span-2">
+                <span className="text-xs font-semibold text-foreground">Motivo auditavel</span>
+                <textarea
+                  value={draft.reason}
+                  onChange={(event) => updateDraft('reason', event.target.value)}
+                  className="input-base mt-1 min-h-24 w-full text-sm"
+                  maxLength={500}
+                />
+                <FieldError message={visibleErrors.reason} />
+              </label>
+            </div>
+          ) : null}
+
+          {activeStep === 'plan' ? (
+            <div className="space-y-5">
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold text-foreground">Plano</span>
+                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                    Trial 14 dias
+                  </span>
+                </div>
+
+                {plansLoading ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
+                    <Loader2 size={15} className="animate-spin" />
+                    Carregando planos...
+                  </div>
+                ) : plansError ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+                    <p>{plansError}</p>
+                    <button
+                      type="button"
+                      onClick={onRetryPlans}
+                      className="mt-2 text-xs font-semibold text-red-700 underline"
+                    >
+                      Tentar novamente
+                    </button>
+                  </div>
+                ) : plans.length === 0 ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                    Nenhum plano ativo configurado.
+                  </div>
+                ) : (
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {plans.map((plan) => (
+                      <label
+                        key={plan.id}
+                        className={`cursor-pointer rounded-lg border px-3 py-3 transition-colors ${
+                          draft.planCode === plan.code
+                            ? 'border-primary bg-primary/10'
+                            : 'border-border bg-background hover:bg-muted/40'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="planCode"
+                          value={plan.code}
+                          checked={draft.planCode === plan.code}
+                          onChange={(event) => updateDraft('planCode', event.target.value)}
+                          className="sr-only"
+                        />
+                        <span className="block text-sm font-bold text-foreground">{plan.name}</span>
+                        <span className="mt-1 block text-xs font-semibold text-primary">
+                          {formatPlanPrice(plan)}
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {planFeatureText(plan)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <FieldError message={visibleErrors.plans ?? visibleErrors.planCode} />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label>
+                  <span className="text-xs font-semibold text-foreground">Unidade padrao</span>
+                  <input
+                    value={draft.unitName}
+                    onChange={(event) => updateDraft('unitName', event.target.value)}
+                    className="input-base mt-1 w-full text-sm"
+                    maxLength={120}
+                  />
+                  <FieldError message={visibleErrors.unitName} />
+                </label>
+                <label>
+                  <span className="text-xs font-semibold text-foreground">Codigo da unidade</span>
+                  <input
+                    value={draft.unitCode}
+                    onChange={(event) => updateDraft('unitCode', event.target.value)}
+                    className="input-base mt-1 w-full font-mono text-sm"
+                    maxLength={60}
+                  />
+                  <FieldError message={visibleErrors.unitCode} />
+                </label>
+                <label>
+                  <span className="text-xs font-semibold text-foreground">Cidade</span>
+                  <input
+                    value={draft.city}
+                    onChange={(event) => updateDraft('city', event.target.value)}
+                    className="input-base mt-1 w-full text-sm"
+                    maxLength={120}
+                  />
+                </label>
+                <label>
+                  <span className="text-xs font-semibold text-foreground">UF</span>
+                  <input
+                    value={draft.state}
+                    onChange={(event) => updateDraft('state', event.target.value)}
+                    className="input-base mt-1 w-full text-sm"
+                    maxLength={2}
+                  />
+                  <FieldError message={visibleErrors.state} />
+                </label>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-4">
+          <button
+            type="button"
+            onClick={() => moveStep(-1)}
+            disabled={stepIndex === 0 || isSubmitting}
+            className="btn-ghost px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronLeft size={13} />
+            Voltar
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="btn-ghost px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || (activeStep === 'plan' && plansLoading)}
+              className="btn-primary px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSubmitting ? <Loader2 size={13} className="animate-spin" /> : null}
+              {activeStep === 'plan' ? 'Criar tenant' : 'Continuar'}
+              {activeStep !== 'plan' ? <ChevronRight size={13} /> : null}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function TenantsManagementContent() {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [tenantRows, setTenantRows] = useState<AdminTenantRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | AdminTenantRow['status']>('all');
   const [planFilter, setPlanFilter] = useState<'all' | AdminTenantRow['plan']>('all');
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [plans, setPlans] = useState<AdminPlatformPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+  const [plansError, setPlansError] = useState<string | null>(null);
 
   const loadRows = useCallback(() => {
     setIsLoading(true);
@@ -135,6 +683,29 @@ export default function TenantsManagementContent() {
   useEffect(() => {
     loadRows();
   }, [loadRows]);
+
+  const loadPlans = useCallback(() => {
+    setPlansLoading(true);
+    setPlansError(null);
+    listPlatformPlans().then(({ data, error }) => {
+      setPlans(data);
+      setPlansError(error?.message ?? null);
+      setPlansLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (createModalOpen) loadPlans();
+  }, [createModalOpen, loadPlans]);
+
+  const handleTenantCreated = useCallback(
+    (tenantId: string) => {
+      setCreateModalOpen(false);
+      loadRows();
+      router.push(`/admin/tenants/${tenantId}`);
+    },
+    [loadRows, router]
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -169,6 +740,27 @@ export default function TenantsManagementContent() {
       description="Dados reais via RPC sanitizada de plataforma. Payloads e identificadores sensiveis ficam redigidos."
       onRefresh={loadRows}
     >
+      <CreateTenantModal
+        open={createModalOpen}
+        plans={plans}
+        plansLoading={plansLoading}
+        plansError={plansError}
+        onClose={() => setCreateModalOpen(false)}
+        onRetryPlans={loadPlans}
+        onCreated={handleTenantCreated}
+      />
+
+      <div className="mb-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setCreateModalOpen(true)}
+          className="btn-primary px-3 py-2 text-xs"
+        >
+          <Plus size={14} />
+          Novo tenant
+        </button>
+      </div>
+
       {isLoading ? (
         <div className="card-base mb-4 p-4 text-sm text-muted-foreground">
           Carregando tenants...

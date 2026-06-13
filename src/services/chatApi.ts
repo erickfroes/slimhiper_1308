@@ -5,6 +5,7 @@ import type {
   PatientChatSummary,
   PatientChatThread,
 } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 export interface SafeServiceError {
@@ -75,7 +76,7 @@ type PreparedAttachment = {
   sizeBytes: number;
 };
 
-const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+const isMockEnabled = () => isMockDataEnabled();
 const getSupabaseClient = () => createBrowserSupabaseClient();
 
 async function getMockPatient360(patientId: string) {

@@ -13,6 +13,7 @@ import type {
   ProgramStatus,
   ProgramType,
 } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { SafeServiceError } from '@/services/billingApi';
 
@@ -58,7 +59,7 @@ export const BUILDER_STEPS: BuilderStep[] = [
 ];
 
 function isMockEnabled() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  return isMockDataEnabled();
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

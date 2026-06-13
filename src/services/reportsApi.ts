@@ -1,4 +1,5 @@
 import type { PatientReportDefinition } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 interface SafeServiceError {
@@ -17,7 +18,7 @@ type EdgeResponseEnvelope<T> = {
 };
 
 function isMockEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  return isMockDataEnabled();
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

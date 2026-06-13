@@ -4,7 +4,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppLogo from '@/components/ui/AppLogo';
-import { createClient } from '@/lib/supabase/client';
+import { redirectToLogin, signOutFromApp } from '@/lib/auth/clientLogout';
 import {
   LayoutDashboard,
   Users,
@@ -228,11 +228,8 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   };
 
   async function handleLogout() {
-    const supabase = createClient();
-    await supabase?.auth?.signOut();
-
-    router.push('/auth/login');
-    router.refresh();
+    await signOutFromApp();
+    redirectToLogin();
   }
 
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
@@ -417,8 +414,15 @@ export default function DashboardShell({ children }: DashboardShellProps) {
               onChange={(event) => setPatientSearch(event.target.value)}
               placeholder="Buscar pacientes..."
               aria-label="Buscar pacientes"
-              className="input-base pl-9 py-1.5 text-sm"
+              className="input-base py-1.5 pl-9 pr-10 text-sm"
             />
+            <button
+              type="submit"
+              className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Executar busca de pacientes"
+            >
+              <Search size={14} aria-hidden="true" />
+            </button>
           </form>
 
           <div className="ml-auto flex items-center gap-2" ref={topbarMenuRef}>

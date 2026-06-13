@@ -2067,32 +2067,39 @@ export default function ClinicSettingsContent() {
   const [unitFormOpen, setUnitFormOpen] = useState(false);
 
   const applySnapshot = useCallback((next: ClinicSettingsSnapshot) => {
+    const integrations = Array.isArray(next.integrations) ? next.integrations : [];
+
     setSnapshot(next);
     setProfileDraft({ name: next.tenant.name, ...next.profile });
     setBrandingDraft(next.branding);
     setPortalDraft(next.portal);
     setFinanceDraft(next.finance);
     setLegalDraft(next.legal);
-    setChatHoursDraft(next.chatServiceHours);
+    setChatHoursDraft(Array.isArray(next.chatServiceHours) ? next.chatServiceHours : []);
     setIntegrationDraft(
-      Object.fromEntries(
-        next.integrations.map((integration) => [integration.id, integration.enabled])
-      )
+      Object.fromEntries(integrations.map((integration) => [integration.id, integration.enabled]))
     );
-    setSelectedProgramIds(next.defaultProgramIds);
+    setSelectedProgramIds(Array.isArray(next.defaultProgramIds) ? next.defaultProgramIds : []);
   }, []);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const result = await getClinicSettings();
-    if (result.error || !result.data) {
-      setLoadError(result.error?.message ?? 'Nao foi possivel carregar configuracoes.');
-      setSnapshot(null);
-    } else {
+    try {
+      const result = await getClinicSettings();
+      if (result.error || !result.data) {
+        setLoadError(result.error?.message ?? 'Nao foi possivel carregar configuracoes.');
+        setSnapshot(null);
+        return;
+      }
+
       applySnapshot(result.data);
+    } catch {
+      setLoadError('Nao foi possivel carregar configuracoes.');
+      setSnapshot(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [applySnapshot]);
 
   useEffect(() => {

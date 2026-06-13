@@ -1,3 +1,4 @@
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 export type CommunityModerationStatus =
@@ -123,7 +124,7 @@ const DEFAULT_GUIDELINES = [
 ];
 
 function isMockEnabled() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  return isMockDataEnabled();
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

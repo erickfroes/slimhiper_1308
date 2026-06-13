@@ -1,4 +1,5 @@
 import type { PatientPrescriptionSummary } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 export interface SafeServiceError {
@@ -55,7 +56,7 @@ export type PrescriptionPdfResult = {
 };
 
 function isMockEnabled() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  return isMockDataEnabled();
 }
 
 function safeError(error: unknown, fallback: string): SafeServiceError {

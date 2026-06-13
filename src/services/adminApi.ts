@@ -213,6 +213,43 @@ export interface PlatformAdminSnapshot {
   warnings: string[];
 }
 
+export interface AdminPlatformPlan {
+  id: string;
+  code: string;
+  name: string;
+  billingCycle: string;
+  amountCents: number;
+  currency: string;
+  active: boolean;
+  features: Record<string, unknown>;
+}
+
+export interface CreateTenantInput {
+  clinicName: string;
+  slug: string;
+  cnpj?: string;
+  phone?: string;
+  website?: string;
+  ownerName: string;
+  ownerEmail: string;
+  reason: string;
+  planCode: string;
+  unitName: string;
+  unitCode?: string;
+  city?: string;
+  state?: string;
+}
+
+export interface CreateTenantResult {
+  tenantId: string;
+  tenantSlug: string;
+  unitId: string;
+  ownerMembershipId: string;
+  ownerInviteDelivery: 'existing_auth_user' | 'supabase_invite_sent';
+  subscriptionStatus: string;
+  trialEndsAt: string | null;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -624,6 +661,157 @@ function mapTenantDetail(value: unknown): AdminTenantDetail {
     supportSessions: asArray(record.supportSessions).map(mapSupport),
     breakGlassRequests: asArray(record.breakGlassRequests).map(mapBreakGlass),
   };
+}
+
+function mapPlatformPlan(value: unknown): AdminPlatformPlan {
+  const record = asRecord(value);
+  const metadata = asRecord(record.metadata);
+  return {
+    id: asString(record.id),
+    code: asString(record.code),
+    name: asString(record.name, asString(record.code, 'Plano')),
+    billingCycle: asString(record.billing_cycle, 'monthly'),
+    amountCents: asNumber(record.amount_cents),
+    currency: asString(record.currency, 'BRL'),
+    active: asBoolean(record.active, true),
+    features: asRecord(metadata.features),
+  };
+}
+
+function mapCreateTenantResult(value: unknown): CreateTenantResult | null {
+  const record = asRecord(value);
+  const tenantId = asString(record.tenantId);
+  if (!tenantId) return null;
+
+  const inviteDelivery = asString(record.ownerInviteDelivery);
+  return {
+    tenantId,
+    tenantSlug: asString(record.tenantSlug),
+    unitId: asString(record.unitId),
+    ownerMembershipId: asString(record.ownerMembershipId),
+    ownerInviteDelivery:
+      inviteDelivery === 'supabase_invite_sent' ? 'supabase_invite_sent' : 'existing_auth_user',
+    subscriptionStatus: asString(record.subscriptionStatus, 'trialing'),
+    trialEndsAt: asNullableString(record.trialEndsAt),
+  };
+}
+
+export async function listPlatformPlans(): Promise<{
+  data: AdminPlatformPlan[];
+  error: SafeServiceError | null;
+}> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase
+      .from('platform_plans')
+      .select('id,code,name,billing_cycle,amount_cents,currency,active,metadata')
+      .eq('active', true)
+      .order('amount_cents', { ascending: true });
+
+    if (error) return { data: [], error: asServiceError(error, 'Falha ao carregar planos.') };
+
+    return {
+      data: asArray(data)
+        .map(mapPlatformPlan)
+        .filter((plan) => plan.id && plan.code),
+      error: null,
+    };
+  } catch (error) {
+    return { data: [], error: asServiceError(error, 'Falha ao carregar planos.') };
+  }
+}
+
+export async function createTenant(input: CreateTenantInput): Promise<{
+  data: CreateTenantResult | null;
+  error: SafeServiceError | null;
+}> {
+  const clinicName = normalizeText(input.clinicName, 160);
+  const slug = normalizeText(input.slug, 80).toLowerCase();
+  const ownerName = normalizeText(input.ownerName, 160);
+  const ownerEmail = normalizeText(input.ownerEmail, 254).toLowerCase();
+  const reason = normalizeText(input.reason, 500);
+  const planCode = normalizeText(input.planCode, 80).toLowerCase();
+  const unitName = normalizeText(input.unitName, 120);
+  const unitCode = normalizeText(input.unitCode ?? 'matriz', 80).toLowerCase();
+
+  if (clinicName.length < 3) {
+    const { error } = serviceValidationError('Informe o nome da clinica.');
+    return { data: null, error };
+  }
+  if (!/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/.test(slug)) {
+    const { error } = serviceValidationError('Slug do tenant invalido.');
+    return { data: null, error };
+  }
+  if (!ownerName) {
+    const { error } = serviceValidationError('Informe o nome do owner.');
+    return { data: null, error };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) {
+    const { error } = serviceValidationError('E-mail do owner invalido.');
+    return { data: null, error };
+  }
+  if (!planCode) {
+    const { error } = serviceValidationError('Selecione um plano ativo.');
+    return { data: null, error };
+  }
+  if (!unitName) {
+    const { error } = serviceValidationError('Informe a unidade padrao.');
+    return { data: null, error };
+  }
+  if (reason.length < 16) {
+    const { error } = serviceValidationError(
+      'Informe um motivo auditavel com pelo menos 16 caracteres.'
+    );
+    return { data: null, error };
+  }
+
+  try {
+    const response = await fetch('/api/admin/tenants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clinicName,
+        slug,
+        cnpj: normalizeText(input.cnpj ?? '', 32),
+        phone: normalizeText(input.phone ?? '', 32),
+        website: normalizeText(input.website ?? '', 160),
+        ownerName,
+        ownerEmail,
+        reason,
+        planCode,
+        unitName,
+        unitCode,
+        city: normalizeText(input.city ?? '', 120),
+        state: normalizeText(input.state ?? '', 2).toUpperCase(),
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as {
+      data?: unknown;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null,
+        error: {
+          message: payload?.error?.message ?? 'Falha ao criar tenant.',
+        } satisfies SafeServiceError,
+      };
+    }
+
+    const result = mapCreateTenantResult(payload?.data);
+    if (!result) {
+      return {
+        data: null,
+        error: { message: 'Resposta invalida ao criar tenant.' } satisfies SafeServiceError,
+      };
+    }
+
+    return { data: result, error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao criar tenant.') };
+  }
 }
 
 export async function listTenants(): Promise<{

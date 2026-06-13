@@ -1,4 +1,5 @@
 import type { PatientDocument360Item, PatientDocumentSignatureStatus } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 interface SafeServiceError {
@@ -36,7 +37,7 @@ export interface ActiveDocumentTemplate {
   allowedVariables: string[];
 }
 
-const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+const isMockEnabled = () => isMockDataEnabled();
 const getSupabaseClient = () => createBrowserSupabaseClient();
 const safeError = (error: unknown, fallback: string): SafeServiceError =>
   error instanceof Error ? { message: error.message || fallback } : { message: fallback };

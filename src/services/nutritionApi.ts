@@ -7,6 +7,7 @@ import type {
   NutritionTeamNote,
   PatientNutritionPlanSummary,
 } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 interface SafeServiceError {
@@ -24,7 +25,7 @@ type EdgeResponseEnvelope<T> = {
   };
 };
 
-const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+const isMockEnabled = () => isMockDataEnabled();
 const getSupabaseClient = () => createBrowserSupabaseClient();
 
 async function getMockPatient360(patientId: string) {

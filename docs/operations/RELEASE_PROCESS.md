@@ -20,6 +20,9 @@ aprovada e rollback documentado.
    planejado e so serao aplicadas em janela autorizada.
 5. Confirmar que callbacks reais D4Sign/Asaas permanecem congelados ou apontam
    para sandbox/dummy ate o go/no-go humano.
+6. Executar a auditoria read-only de readiness e anexar o resumo na evidencia:
+   `node scripts/operations/check-production-readiness.mjs`. Use `--strict`
+   quando a release candidate exigir que qualquer aviso bloqueie a promocao.
 
 ## Gates obrigatorios de CI
 
@@ -71,6 +74,16 @@ ambiente apropriado.
 
 Executar com dados dummy/anonimizados e evidencias redigidas:
 
+- `node scripts/observability/post-deploy-smoke.mjs --base-url <staging-url>`
+  para health/login e redirects fail-closed.
+- `node scripts/observability/staging-authenticated-browser-smoke.mjs --base-url
+  <staging-url>` com usuarios dummy clinic/admin/patient para login real via UI,
+  rotas criticas, busca, portal paciente, overlay, console e responsividade.
+- `node scripts/operations/run-local-restore-drill.mjs` antes da promocao para
+  provar restore schema-only local sem dados reais.
+- `node scripts/operations/run-local-alert-rollback-drill.mjs --base-url
+  <staging-url>` em staging para ensaiar alerta controlado e rollback/tabletop
+  sem mutacao Git/deploy.
 - `/auth/login` responde 200 e fluxo anonimo nao revela dados.
 - Rotas clinicas principais redirecionam/403 sem sessao e carregam com usuario
   dummy autorizado.
@@ -112,6 +125,8 @@ Para cada release, anexar internamente:
 - ambiente, SHA, tag e owner;
 - checklist de variaveis revisado sem valores;
 - smoke pos-deploy redigido;
+- template `docs/operations/STAGING_GO_LIVE_EVIDENCE_TEMPLATE.md` preenchido
+  com evidencias staging e screenshots redigidas;
 - decisao go/no-go;
 - riscos residuais aceitos e prazo de mitigacao.
 

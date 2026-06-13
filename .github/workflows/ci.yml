@@ -65,6 +65,12 @@ jobs:
       - name: Env hygiene check
         run: node scripts/security/check-env-hygiene.mjs
 
+      - name: Production readiness audit
+        run: node scripts/operations/check-production-readiness.mjs
+
+      - name: Supabase static contract audit
+        run: node scripts/operations/check-supabase-contracts.mjs --strict
+
       - name: Type check
         run: npm run type-check
 

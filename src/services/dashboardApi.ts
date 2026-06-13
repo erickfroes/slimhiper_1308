@@ -24,6 +24,7 @@ import type {
   PatientReviewItem,
   WaitingQueueEntry,
 } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 export interface DashboardProvider {
@@ -54,7 +55,7 @@ const priorityRank: Record<DashboardActionPriority, number> = {
 };
 
 function isMockExplicitlyEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  return isMockDataEnabled();
 }
 
 export function canUseMockDashboardProvider(): boolean {

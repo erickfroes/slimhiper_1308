@@ -6,6 +6,7 @@ import type {
   TimelineEventCategory,
   TimelineEventType,
 } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import {
   Stethoscope,
   Apple,
@@ -448,7 +449,7 @@ interface TabTimelineProps {
   events: PatientTimelineEvent[];
   patientId: string;
 }
-const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+const isMockMode = isMockDataEnabled();
 
 export default function TabTimeline({ events, patientId }: TabTimelineProps) {
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');

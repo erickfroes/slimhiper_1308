@@ -52,6 +52,18 @@ webhook, rotacao de chaves ou acesso a dados reais fora de janela aprovada.
 Use este roteiro para teste periodico ou restore emergencial em projeto limpo. Em
 producao, execute apenas apos autorizacao explicita e janela aprovada.
 
+Para exercicio local schema-only, sem dados reais e sem persistir dump, use:
+
+```bash
+node scripts/operations/run-local-restore-drill.mjs
+```
+
+O drill cria um banco temporario dentro do container Supabase local, restaura
+schemas `auth`, `public`, `security` e `storage`, valida contagens agregadas de
+tabelas, policies e funcoes, e remove o banco temporario ao final. Ele nao
+substitui restore de snapshot/PITR em staging/ambiente isolado com owner humano,
+mas prova que o schema versionado restaura sem depender de dados reais.
+
 1. **Abrir controle de mudanca**
    - Definir ambiente alvo isolado, owner, janela, criterio de abortar, RPO/RTO
      esperado e plano de comunicacao.

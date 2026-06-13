@@ -51,6 +51,9 @@ Notes:
 - Environment hygiene: [docs/security/ENV_HYGIENE.md](docs/security/ENV_HYGIENE.md)
 - Contract and smoke checks: [docs/testing/CONTRACT_TESTS.md](docs/testing/CONTRACT_TESTS.md)
 - Project completion checkpoints: [docs/PROJECT_COMPLETION_CHECKPOINTS.md](docs/PROJECT_COMPLETION_CHECKPOINTS.md)
+- Production readiness execution: [docs/Production_Readiness_Execution_Plan.md](docs/Production_Readiness_Execution_Plan.md)
+- Production readiness tracker: [docs/operations/PRODUCTION_READINESS_STAGE_TRACKER.md](docs/operations/PRODUCTION_READINESS_STAGE_TRACKER.md)
+- Staging evidence/go-live template: [docs/operations/STAGING_GO_LIVE_EVIDENCE_TEMPLATE.md](docs/operations/STAGING_GO_LIVE_EVIDENCE_TEMPLATE.md)
 - Codex agent operating rules: [AGENTS.md](AGENTS.md)
 
 ## Secrets And Safety

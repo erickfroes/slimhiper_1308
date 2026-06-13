@@ -4,6 +4,7 @@ import {
   logObservedEvent,
   observedHeaders,
 } from '@/lib/observability/server';
+import { getMockDataPolicy, getRuntimeEnvironment } from '@/lib/mockMode';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,21 +43,12 @@ function hasSupabasePublicConfig() {
   );
 }
 
-function currentEnvironment() {
-  return (
-    process.env.SLIMHIPER_ENVIRONMENT ||
-    process.env.NEXT_PUBLIC_APP_ENV ||
-    process.env.VERCEL_ENV ||
-    process.env.NODE_ENV ||
-    'unknown'
-  );
-}
-
 export async function GET(request: Request) {
   const context = createObservabilityContext('api.health', request);
-  const environment = currentEnvironment();
-  const mockEnabled = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
-  const productionLike = ['staging', 'production'].includes(environment);
+  const environment = getRuntimeEnvironment();
+  const mockPolicy = getMockDataPolicy(environment);
+  const mockEnabled = mockPolicy.enabled;
+  const productionLike = mockPolicy.productionLike;
   const supabasePublicConfigReady = hasSupabasePublicConfig();
   const releaseMetadataReady = hasEnv('NEXT_PUBLIC_APP_VERSION') || hasEnv('VERCEL_GIT_COMMIT_SHA');
 
@@ -74,15 +66,14 @@ export async function GET(request: Request) {
             status: 'warn',
             detail: 'Variaveis publicas Supabase URL/chave publicavel ausentes neste ambiente.',
           },
-    mockDataPolicy:
-      productionLike && mockEnabled
-        ? { status: 'fail', detail: 'Mocks nao podem estar habilitados em staging/producao.' }
-        : {
-            status: 'ok',
-            detail: mockEnabled
-              ? 'Mocks habilitados apenas para ambiente descartavel.'
-              : 'Mocks desabilitados.',
-          },
+    mockDataPolicy: mockPolicy.blockedByEnvironment
+      ? { status: 'fail', detail: 'Mocks nao podem estar habilitados em staging/producao.' }
+      : {
+          status: 'ok',
+          detail: mockEnabled
+            ? 'Mocks habilitados apenas para ambiente descartavel.'
+            : 'Mocks desabilitados.',
+        },
     releaseMetadata: releaseMetadataReady
       ? { status: 'ok', detail: 'Metadados de release disponiveis.' }
       : productionLike

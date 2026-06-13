@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import {
   Activity,
   AlertTriangle,
@@ -21,7 +21,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
-import { createClient } from '@/lib/supabase/client';
+import { redirectToLogin, signOutFromApp } from '@/lib/auth/clientLogout';
 import DataState from '@/components/ui/DataState';
 import MetricCard from '@/components/ui/MetricCard';
 import SectionPanel from '@/components/ui/SectionPanel';
@@ -96,7 +96,6 @@ function formatDate(value?: string | null) {
 }
 
 export default function PatientPortalContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [snapshot, setSnapshot] = useState<PatientPortalSnapshot | null>(null);
   const [journey, setJourney] = useState<PatientJourneySnapshot | null>(null);
@@ -158,10 +157,8 @@ export default function PatientPortalContent() {
 
   async function handleLogout() {
     setLoggingOut(true);
-    const supabase = createClient();
-    await supabase?.auth?.signOut();
-    router.push('/auth/login');
-    router.refresh();
+    await signOutFromApp();
+    redirectToLogin();
   }
 
   useEffect(() => {

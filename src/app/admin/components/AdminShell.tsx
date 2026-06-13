@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   Activity,
   Building2,
@@ -22,7 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import AppLogo from '@/components/ui/AppLogo';
-import { createClient } from '@/lib/supabase/client';
+import { redirectToLogin, signOutFromApp } from '@/lib/auth/clientLogout';
 
 export type AdminShellSection =
   | 'overview'
@@ -193,17 +192,14 @@ export default function AdminShell({
   children: React.ReactNode;
   mainClassName?: string;
 }) {
-  const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function handleLogout() {
     setLoggingOut(true);
-    const supabase = createClient();
-    await supabase?.auth?.signOut();
-    router.push('/auth/login');
-    router.refresh();
+    await signOutFromApp();
+    redirectToLogin();
   }
 
   useEffect(() => {

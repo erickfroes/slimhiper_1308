@@ -1,3 +1,4 @@
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 
 export interface SafeServiceError {
@@ -85,7 +86,7 @@ export interface ClinicInboxFilters {
   limit?: number;
 }
 
-const isMockEnabled = () => process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+const isMockEnabled = () => isMockDataEnabled();
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)

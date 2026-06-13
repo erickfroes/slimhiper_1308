@@ -141,18 +141,91 @@ Com o app publicado, execute:
 node scripts/observability/post-deploy-smoke.mjs --base-url https://app.example.com
 ```
 
-Sem `SLIMHIPER_SMOKE_COOKIE`, o smoke valida:
+Sem cookies de smoke, o script valida:
 
 - `/api/health` com `x-request-id`;
 - `/auth/login` retornando 200;
-- `/clinic/dashboard`, `/admin` e `/patient` redirecionando anonimos para
-  `/auth/login`.
+- rotas clinicas criticas (`/clinic/dashboard`, `/clinic/patients`,
+  Paciente 360, encounter, agenda, documentos, financeiro, programas,
+  relatorios e settings), admin (`/admin`, `/admin/tenants`, `/admin/webhooks`)
+  e `/patient` redirecionando anonimos para `/auth/login`.
 
-Com `SLIMHIPER_SMOKE_COOKIE` de uma sessao dummy autorizada em staging, o smoke
-continua read-only e aceita 200/redirect/403 esperados sem imprimir o cookie.
-Nao use cookie real de paciente, provider ou producao fora de janela aprovada.
+Para staging, gere cookies curtos de sessoes dummy autorizadas e injete somente
+via gerenciador de secrets ou shell local sem imprimir valores:
+
+```bash
+SLIMHIPER_SMOKE_BASE_URL=https://staging.example.com \
+SLIMHIPER_CLINIC_SMOKE_COOKIE="<cookie-redigido>" \
+SLIMHIPER_ADMIN_SMOKE_COOKIE="<cookie-redigido>" \
+SLIMHIPER_PATIENT_SMOKE_COOKIE="<cookie-redigido>" \
+SLIMHIPER_REQUIRE_AUTHENTICATED_SMOKE=true \
+node scripts/observability/post-deploy-smoke.mjs
+```
+
+Com cookies por perfil, o smoke continua read-only e exige HTTP 200 nas rotas
+permitidas para cada perfil:
+
+- `SLIMHIPER_CLINIC_SMOKE_COOKIE`: rotas clinicas criticas, incluindo inbox.
+- `SLIMHIPER_ADMIN_SMOKE_COOKIE`: `/admin`, `/admin/tenants` e
+  `/admin/webhooks`.
+- `SLIMHIPER_PATIENT_SMOKE_COOKIE`: `/patient`.
+
+`SLIMHIPER_SMOKE_COOKIE` permanece como compatibilidade para uma sessao dummy
+generica; ele prova que o cookie nao redireciona para `/auth/login`, mas nao
+substitui os cookies por perfil no gate de staging. Nao use cookie real de
+paciente, provider ou producao fora de janela aprovada.
+
+Quando o objetivo for gerar a propria sessao via UI, use o smoke browser
+autenticado com usuarios dummy e credenciais injetadas por secret manager ou
+shell local sem imprimir valores:
+
+```bash
+SLIMHIPER_SMOKE_BASE_URL=https://staging.example.com \
+SLIMHIPER_CLINIC_SMOKE_EMAIL="<email-dummy-clinica>" \
+SLIMHIPER_CLINIC_SMOKE_PASSWORD="<senha-redigida>" \
+SLIMHIPER_ADMIN_SMOKE_EMAIL="<email-dummy-admin>" \
+SLIMHIPER_ADMIN_SMOKE_PASSWORD="<senha-redigida>" \
+SLIMHIPER_PATIENT_SMOKE_EMAIL="<email-dummy-paciente>" \
+SLIMHIPER_PATIENT_SMOKE_PASSWORD="<senha-redigida>" \
+SLIMHIPER_SMOKE_PATIENT_ID="<patient-id-dummy>" \
+node scripts/observability/staging-authenticated-browser-smoke.mjs
+```
+
+O script abre contextos isolados por perfil, faz login em `/auth/login`, valida
+rotas clinic/admin/patient, exercita busca de paciente e aba mobile de
+documentos do portal, verifica tela nao vazia, overlay de framework, console
+errors e overflow horizontal. As screenshots sao salvas fora do repo por padrao
+em um diretorio temporario; para CI/staging use `SLIMHIPER_SMOKE_SCREENSHOT_DIR`
+apontando para um artefato seguro e redigido. O runner precisa ter o pacote
+`playwright` e o browser Chromium instalados; se nao tiver, o script falha antes
+de tentar login.
+
+Variaveis opcionais:
+
+- `SLIMHIPER_SMOKE_PROFILES=clinic,admin,patient` para limitar perfis.
+- `SLIMHIPER_SMOKE_SCREENSHOTS=false` ou `--no-screenshots` para nao capturar
+  imagens.
+- `SLIMHIPER_SMOKE_HEADLESS=false` ou `--headed` para depuracao visual local.
+- `SLIMHIPER_FAIL_ON_CONSOLE_WARNING=true` ou `--fail-on-console-warning` para
+  transformar console warnings em gate bloqueante.
+
+Nao registre e-mails, senhas, cookies, storage state, screenshots com dados
+reais ou URLs assinadas em logs publicos. Para producao, esse smoke so pode
+usar usuarios sinteticos, escopo minimo e janela aprovada.
 
 ## Teste de alerta controlado
+
+Para exercicio local read-only de alerta e rollback/tabletop:
+
+```bash
+node scripts/operations/run-local-alert-rollback-drill.mjs --base-url http://localhost:4028
+```
+
+O drill chama `/api/health` com `x-request-id`/`x-correlation-id` controlados,
+valida status seguro, registra um evento S4 sintetico em stdout e captura estado
+Git suficiente para ensaio de rollback sem executar revert, reset, push ou
+deploy. Em staging/producao, continue exigindo sink de alerta real, ack humano e
+registro em sistema interno.
 
 1. Em staging, gere um `x-request-id` dummy e chame `/api/health`.
 2. Confirme que o evento `health_check` chegou ao sink configurado com

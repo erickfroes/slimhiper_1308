@@ -160,8 +160,19 @@ async function run() {
     if (tenantsError) throw tenantsError;
     ok(Array.isArray(tenants), 'list_platform_tenants should return an array.');
     ok(tenants.length > 0, 'Expected at least one tenant.');
+    const mutableRoles = new Set([
+      'tenant_owner',
+      'clinic_admin',
+      'receptionist',
+      'physician',
+      'nutritionist',
+      'fitness_professional',
+      'financial_user',
+      'external_professional',
+    ]);
     let tenant = null;
     let detail = null;
+    let membership = null;
     for (const candidateTenant of tenants) {
       ok(candidateTenant.id, 'Tenant row should include id.');
       ok(
@@ -175,13 +186,19 @@ async function run() {
         { p_tenant_id: candidateTenant.id }
       );
       if (detailError) throw detailError;
-      if (Array.isArray(candidateDetail.users) && candidateDetail.users.length > 0) {
+      const candidateMembership = Array.isArray(candidateDetail.users)
+        ? (candidateDetail.users.find(
+            (user) => user.role !== 'tenant_owner' && mutableRoles.has(user.role)
+          ) ?? candidateDetail.users.find((user) => mutableRoles.has(user.role)))
+        : null;
+      if (candidateMembership) {
         tenant = candidateTenant;
         detail = candidateDetail;
+        membership = candidateMembership;
         break;
       }
     }
-    ok(tenant && detail, 'Expected at least one tenant detail with users.');
+    ok(tenant && detail && membership, 'Expected at least one tenant detail with mutable staff.');
 
     currentStep = 'validating tenant detail';
     ok(Array.isArray(detail.users), 'Tenant detail should include users array.');
@@ -189,20 +206,6 @@ async function run() {
     ok(Array.isArray(detail.auditLogs), 'Tenant detail should include audit logs array.');
 
     currentStep = 'updating tenant membership role through audited RPC';
-    const mutableRoles = new Set([
-      'tenant_owner',
-      'clinic_admin',
-      'receptionist',
-      'physician',
-      'nutritionist',
-      'fitness_professional',
-      'financial_user',
-      'external_professional',
-    ]);
-    const membership =
-      detail.users.find((user) => user.role !== 'tenant_owner' && mutableRoles.has(user.role)) ??
-      detail.users.find((user) => mutableRoles.has(user.role));
-    ok(membership, 'Tenant detail should include at least one mutable staff membership.');
     const nextRole = membership.role === 'receptionist' ? 'clinic_admin' : 'receptionist';
     createdIds.membershipId = membership.id;
     createdIds.originalMembership = {

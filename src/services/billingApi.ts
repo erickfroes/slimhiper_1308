@@ -4,6 +4,7 @@ import type {
   PatientFinancialSummary,
   PatientPaymentReceipt,
 } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
 
@@ -173,7 +174,7 @@ export const PAYMENT_RECEIPT_ACCEPTED_MIME_TYPES = [
 export const PAYMENT_RECEIPT_MAX_BYTES = 10 * 1024 * 1024;
 
 function isMockEnabled() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  return isMockDataEnabled();
 }
 
 async function getMockPatient360(patientId: string) {

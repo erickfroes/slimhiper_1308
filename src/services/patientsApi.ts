@@ -9,8 +9,8 @@ import type {
   PatientWalletSnapshot,
   ProgramType,
 } from '@/domain/types';
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
-import { getPatientList as getMockPatientList } from '@/services/mockApi';
 
 type SafeServiceError = {
   message: string;
@@ -135,7 +135,12 @@ const PRIORITY_BAND_LABEL: Record<PatientPriorityBand, string> = {
 };
 
 function isMockExplicitlyEnabled() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  return isMockDataEnabled();
+}
+
+async function getMockPatientListRows() {
+  const { getPatientList } = await import('@/services/mockApi');
+  return getPatientList();
 }
 
 function asServiceError(error: unknown, fallback: string): SafeServiceError {
@@ -847,7 +852,7 @@ export async function getPatientListPage(
 
   if (isMockExplicitlyEnabled()) {
     const search = sanitizePatientSearchQuery(params.search).toLocaleLowerCase('pt-BR');
-    const rows = (await getMockPatientList()).filter((row) => {
+    const rows = (await getMockPatientListRows()).filter((row) => {
       const matchesStatus = params.status ? row.status === params.status : true;
       const matchesSearch = search
         ? [row.name, row.phone, row.activePackage].some((value) =>
@@ -884,7 +889,7 @@ export async function getPatientWalletSnapshot(
 
   if (isMockExplicitlyEnabled()) {
     const search = sanitizePatientSearchQuery(params.search).toLocaleLowerCase('pt-BR');
-    const allRows = (await getMockPatientList()).map(mockWalletRow);
+    const allRows = (await getMockPatientListRows()).map(mockWalletRow);
     const rows = allRows.filter((row) => {
       const matchesStatus = params.status ? row.status === params.status : true;
       const matchesSearch = search
@@ -958,7 +963,7 @@ export async function auditPatientWalletContextOpen(
 }
 
 export async function getPatientList(): Promise<PatientListRow[]> {
-  if (isMockExplicitlyEnabled()) return getMockPatientList();
+  if (isMockExplicitlyEnabled()) return getMockPatientListRows();
 
   const result = await getPatientListPage({ page: 1, pageSize: 100 });
   if (result.error || !result.data) {

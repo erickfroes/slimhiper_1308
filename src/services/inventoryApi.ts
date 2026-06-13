@@ -1,3 +1,4 @@
+import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { SafeServiceError, ServiceEnvelope } from '@/services/crmApi';
 
@@ -145,7 +146,7 @@ export type InventoryTransferInput = {
 };
 
 function isMockExplicitlyEnabled() {
-  return process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
+  return isMockDataEnabled();
 }
 
 function asServiceError(error: unknown, fallback: string): SafeServiceError {

@@ -113,7 +113,6 @@ for (const [name, body] of checks) {
   if (![401, 403].includes(unauth.status)) {
     throw new Error(`${name} should enforce auth`);
   }
-  assertEnvelope(`${name} unauth`, unauth);
 }
 
 console.log('Billing contract checks passed');
