@@ -20,7 +20,9 @@ import {
   createInventoryMovement,
   emitInventoryNotifications,
   getInventorySnapshot,
+  saveInventoryCategory,
   saveInventoryItem,
+  saveInventoryLocation,
   transferInventoryStock,
   type InventoryItem,
   type InventoryItemStatus,
@@ -38,6 +40,22 @@ const movementOptions: Array<{ value: MovementMode; label: string; direction: 'i
   { value: 'transfer', label: 'Transferência', direction: 'out' },
 ];
 
+const unitOptions = [
+  { value: 'unidade', label: 'Unidade' },
+  { value: 'caixa', label: 'Caixa' },
+  { value: 'pacote', label: 'Pacote' },
+  { value: 'frasco', label: 'Frasco' },
+  { value: 'ampola', label: 'Ampola' },
+  { value: 'comprimido', label: 'Comprimido' },
+  { value: 'capsula', label: 'Capsula' },
+  { value: 'ml', label: 'mL' },
+  { value: 'l', label: 'L' },
+  { value: 'g', label: 'g' },
+  { value: 'kg', label: 'kg' },
+  { value: 'dose', label: 'Dose' },
+  { value: 'sessao', label: 'Sessao' },
+];
+
 const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const numberFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 
@@ -50,6 +68,10 @@ const emptyItemForm: {
   status: InventoryItemStatus;
   minimumQuantity: string;
   defaultUnitCost: string;
+  initialQuantity: string;
+  initialLocationId: string;
+  initialLotCode: string;
+  initialExpiresAt: string;
 } = {
   id: '',
   sku: '',
@@ -59,6 +81,19 @@ const emptyItemForm: {
   status: 'active',
   minimumQuantity: '0',
   defaultUnitCost: '',
+  initialQuantity: '',
+  initialLocationId: '',
+  initialLotCode: '',
+  initialExpiresAt: '',
+};
+
+const emptyCategoryForm = {
+  name: '',
+};
+
+const emptyLocationForm = {
+  code: '',
+  name: '',
 };
 
 const emptyMovementForm = {
@@ -88,6 +123,29 @@ function formatDate(value?: string | null) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return 'Sem validade';
   return date.toLocaleDateString('pt-BR');
+}
+
+function inventoryActionErrorMessage(message: string | undefined, action: 'read' | 'write') {
+  const fallback =
+    action === 'read'
+      ? 'Nao foi possivel carregar o estoque.'
+      : 'Nao foi possivel salvar no estoque.';
+  const normalized = (message ?? '').toLowerCase();
+  if (normalized.includes('forbidden') || normalized.includes('42501')) {
+    return action === 'read'
+      ? 'Seu usuario precisa da permissao inventory.read.'
+      : 'Seu usuario precisa de permissao de estoque para gravar, ajustar ou transferir.';
+  }
+  if (normalized.includes('inventory_location_not_found')) {
+    return 'Selecione um local de estoque existente ou cadastre um novo local.';
+  }
+  if (normalized.includes('inventory_lot_not_found')) {
+    return 'Selecione um lote compativel com o item e o local de origem.';
+  }
+  if (normalized.includes('negative_stock_blocked')) {
+    return 'A movimentacao foi bloqueada porque deixaria o saldo negativo.';
+  }
+  return message || fallback;
 }
 
 function getAlertTone(severity: string) {
@@ -127,6 +185,8 @@ export default function InventoryOperationsContent() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [locationFilter, setLocationFilter] = useState('all');
   const [itemForm, setItemForm] = useState(emptyItemForm);
+  const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
+  const [locationForm, setLocationForm] = useState(emptyLocationForm);
   const [movementForm, setMovementForm] = useState(emptyMovementForm);
 
   async function loadInventory() {
@@ -134,7 +194,7 @@ export default function InventoryOperationsContent() {
     setError(null);
     const result = await getInventorySnapshot({ includeCost: true, daysToExpiry: 30 });
     if (result.error) {
-      setError(result.error.message);
+      setError(inventoryActionErrorMessage(result.error.message, 'read'));
       setSnapshot(null);
     } else {
       setSnapshot(result.data);
@@ -157,11 +217,15 @@ export default function InventoryOperationsContent() {
 
   const filteredLots = useMemo(() => {
     return (snapshot?.lots ?? []).filter((lot) => {
-      const matchesLocation = locationFilter === 'all' || lot.locationId === locationFilter;
+      const activeLocationFilter = movementForm.locationId || locationFilter;
+      const matchesLocation =
+        activeLocationFilter === 'all' ||
+        !activeLocationFilter ||
+        lot.locationId === activeLocationFilter;
       const matchesItem = !movementForm.itemId || lot.itemId === movementForm.itemId;
       return matchesLocation && matchesItem;
     });
-  }, [locationFilter, movementForm.itemId, snapshot?.lots]);
+  }, [locationFilter, movementForm.itemId, movementForm.locationId, snapshot?.lots]);
 
   const selectedItem = useMemo(
     () => snapshot?.items.find((item) => item.id === movementForm.itemId) ?? null,
@@ -188,6 +252,10 @@ export default function InventoryOperationsContent() {
       minimumQuantity: String(item.minimumQuantity),
       defaultUnitCost:
         item.defaultUnitCostCents == null ? '' : String(item.defaultUnitCostCents / 100),
+      initialQuantity: '',
+      initialLocationId: '',
+      initialLotCode: '',
+      initialExpiresAt: '',
     });
   }
 
@@ -197,6 +265,7 @@ export default function InventoryOperationsContent() {
     setError(null);
     setNotice(null);
     let minimumQuantity = 0;
+    let initialQuantity = 0;
     let defaultUnitCostCents: number | undefined;
     try {
       if (!itemForm.name.trim()) {
@@ -206,6 +275,9 @@ export default function InventoryOperationsContent() {
         throw new Error('Informe a unidade do item.');
       }
       minimumQuantity = parseNonNegativeNumber(itemForm.minimumQuantity, 'Estoque minimo');
+      initialQuantity = itemForm.id
+        ? 0
+        : parseNonNegativeNumber(itemForm.initialQuantity, 'Quantidade inicial');
       defaultUnitCostCents = toOptionalCents(itemForm.defaultUnitCost);
     } catch (validationError) {
       setError(validationError instanceof Error ? validationError.message : 'Dados invalidos.');
@@ -224,10 +296,123 @@ export default function InventoryOperationsContent() {
       defaultUnitCostCents,
     });
     if (result.error) {
-      setError(result.error.message);
+      setError(inventoryActionErrorMessage(result.error.message, 'write'));
     } else {
-      setNotice(itemForm.id ? 'Item atualizado com auditoria.' : 'Item cadastrado com auditoria.');
+      const itemId = result.data?.id ?? itemForm.id;
+      if (!itemForm.id && initialQuantity > 0 && itemId) {
+        let lotId: string | undefined;
+        if (itemForm.initialLotCode.trim() || itemForm.initialExpiresAt) {
+          const lotResult = await createInventoryLot({
+            itemId,
+            locationId: itemForm.initialLocationId || undefined,
+            lotCode: itemForm.initialLotCode.trim() || undefined,
+            expiresAt: itemForm.initialExpiresAt || undefined,
+            unitCostCents: defaultUnitCostCents,
+          });
+          if (lotResult.error || !lotResult.data) {
+            setError(
+              inventoryActionErrorMessage(
+                lotResult.error?.message ?? 'Nao foi possivel cadastrar o lote inicial.',
+                'write'
+              )
+            );
+            setSaving(false);
+            return;
+          }
+          lotId = lotResult.data.id;
+        }
+
+        const movementResult = await createInventoryMovement({
+          itemId,
+          lotId,
+          locationId: itemForm.initialLocationId || undefined,
+          direction: 'in',
+          reason: 'receipt',
+          quantity: initialQuantity,
+          unitCostCents: defaultUnitCostCents,
+          reasonNote: 'Saldo inicial informado no cadastro do item.',
+        });
+        if (movementResult.error) {
+          setError(inventoryActionErrorMessage(movementResult.error.message, 'write'));
+          setSaving(false);
+          return;
+        }
+      }
+
+      setNotice(
+        itemForm.id
+          ? 'Item atualizado com auditoria.'
+          : initialQuantity > 0
+            ? 'Item cadastrado e saldo inicial registrado no ledger.'
+            : 'Item cadastrado com auditoria.'
+      );
       setItemForm(emptyItemForm);
+      await loadInventory();
+    }
+    setSaving(false);
+  }
+
+  async function handleSaveCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+
+    const name = categoryForm.name.trim();
+    if (!name) {
+      setError('Informe o nome da categoria.');
+      setSaving(false);
+      return;
+    }
+
+    const result = await saveInventoryCategory({ name });
+    if (result.error || !result.data) {
+      setError(
+        inventoryActionErrorMessage(
+          result.error?.message ?? 'Nao foi possivel salvar a categoria.',
+          'write'
+        )
+      );
+    } else {
+      setNotice('Categoria salva e disponivel no cadastro de item.');
+      setCategoryForm(emptyCategoryForm);
+      setItemForm((current) => ({ ...current, categoryId: result.data?.id ?? current.categoryId }));
+      await loadInventory();
+    }
+    setSaving(false);
+  }
+
+  async function handleSaveLocation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+
+    const name = locationForm.name.trim();
+    if (!name) {
+      setError('Informe o nome do local.');
+      setSaving(false);
+      return;
+    }
+
+    const result = await saveInventoryLocation({
+      name,
+      code: locationForm.code.trim() || undefined,
+    });
+    if (result.error || !result.data) {
+      setError(
+        inventoryActionErrorMessage(
+          result.error?.message ?? 'Nao foi possivel salvar o local.',
+          'write'
+        )
+      );
+    } else {
+      setNotice('Local salvo e disponivel nas movimentacoes.');
+      setLocationForm(emptyLocationForm);
+      setMovementForm((current) => ({
+        ...current,
+        locationId: current.locationId || result.data?.id || '',
+      }));
       await loadInventory();
     }
     setSaving(false);
@@ -272,7 +457,12 @@ export default function InventoryOperationsContent() {
         unitCostCents,
       });
       if (lotResult.error || !lotResult.data) {
-        setError(lotResult.error?.message ?? 'Nao foi possivel cadastrar o lote.');
+        setError(
+          inventoryActionErrorMessage(
+            lotResult.error?.message ?? 'Nao foi possivel cadastrar o lote.',
+            'write'
+          )
+        );
         setSaving(false);
         return;
       }
@@ -301,7 +491,7 @@ export default function InventoryOperationsContent() {
           });
 
     if (result.error) {
-      setError(result.error.message);
+      setError(inventoryActionErrorMessage(result.error.message, 'write'));
     } else {
       setNotice('Movimentacao imutavel registrada no ledger.');
       setMovementForm(emptyMovementForm);
@@ -314,7 +504,7 @@ export default function InventoryOperationsContent() {
     setSaving(true);
     setError(null);
     const result = await emitInventoryNotifications();
-    if (result.error) setError(result.error.message);
+    if (result.error) setError(inventoryActionErrorMessage(result.error.message, 'write'));
     else setNotice(`${result.data?.inserted ?? 0} notificacoes operacionais emitidas.`);
     setSaving(false);
   }
@@ -571,54 +761,125 @@ export default function InventoryOperationsContent() {
 
         <aside className="space-y-4">
           <form
+            onSubmit={handleSaveCategory}
+            className="rounded-2xl border border-border bg-card p-4 space-y-3"
+          >
+            <div className="font-semibold">Categorias</div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+              <input
+                value={categoryForm.name}
+                onChange={(event) => setCategoryForm({ name: event.target.value })}
+                placeholder="Nova categoria"
+                className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              />
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-semibold disabled:opacity-60"
+              >
+                <PackagePlus className="h-4 w-4" /> Adicionar
+              </button>
+            </div>
+          </form>
+
+          <form
+            onSubmit={handleSaveLocation}
+            className="rounded-2xl border border-border bg-card p-4 space-y-3"
+          >
+            <div className="font-semibold">Locais de estoque</div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[0.7fr_1fr_auto]">
+              <input
+                value={locationForm.code}
+                onChange={(event) =>
+                  setLocationForm((current) => ({ ...current, code: event.target.value }))
+                }
+                placeholder="Codigo"
+                className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              />
+              <input
+                value={locationForm.name}
+                onChange={(event) =>
+                  setLocationForm((current) => ({ ...current, name: event.target.value }))
+                }
+                placeholder="Nome do local"
+                className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              />
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-semibold disabled:opacity-60"
+              >
+                <Save className="h-4 w-4" /> Salvar
+              </button>
+            </div>
+          </form>
+
+          <form
             onSubmit={handleSaveItem}
             className="rounded-2xl border border-border bg-card p-4 space-y-3"
           >
             <div className="flex items-center gap-2 font-semibold">
               <PackagePlus className="h-5 w-5" /> Cadastro/edição de item
             </div>
-            <input
-              required
-              value={itemForm.name}
-              onChange={(event) =>
-                setItemForm((current) => ({ ...current, name: event.target.value }))
-              }
-              placeholder="Nome do item"
-              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                value={itemForm.sku}
-                onChange={(event) =>
-                  setItemForm((current) => ({ ...current, sku: event.target.value }))
-                }
-                placeholder="SKU"
-                className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
-              />
+            <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+              Nome do item
               <input
                 required
-                value={itemForm.unit}
+                value={itemForm.name}
                 onChange={(event) =>
-                  setItemForm((current) => ({ ...current, unit: event.target.value }))
+                  setItemForm((current) => ({ ...current, name: event.target.value }))
                 }
-                placeholder="Unidade"
-                className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                placeholder="Ex.: Luva nitrilica P"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
               />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                Codigo interno
+                <input
+                  value={itemForm.sku}
+                  onChange={(event) =>
+                    setItemForm((current) => ({ ...current, sku: event.target.value }))
+                  }
+                  placeholder="Ex.: LUVA-P"
+                  className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                Unidade/volume
+                <select
+                  required
+                  value={itemForm.unit}
+                  onChange={(event) =>
+                    setItemForm((current) => ({ ...current, unit: event.target.value }))
+                  }
+                  className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                >
+                  {unitOptions.map((unit) => (
+                    <option key={unit.value} value={unit.value}>
+                      {unit.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-            <select
-              value={itemForm.categoryId}
-              onChange={(event) =>
-                setItemForm((current) => ({ ...current, categoryId: event.target.value }))
-              }
-              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Sem categoria</option>
-              {snapshot?.categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+              Categoria
+              <select
+                value={itemForm.categoryId}
+                onChange={(event) =>
+                  setItemForm((current) => ({ ...current, categoryId: event.target.value }))
+                }
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Sem categoria</option>
+                {snapshot?.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="grid grid-cols-2 gap-2">
               <input
                 type="number"
@@ -643,6 +904,80 @@ export default function InventoryOperationsContent() {
                 className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
               />
             </div>
+            {!itemForm.id ? (
+              <div className="rounded-xl border border-dashed border-border bg-muted/20 p-3 space-y-2">
+                <div className="text-xs font-semibold text-foreground">Saldo inicial</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                    Quantidade inicial
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      value={itemForm.initialQuantity}
+                      onChange={(event) =>
+                        setItemForm((current) => ({
+                          ...current,
+                          initialQuantity: event.target.value,
+                        }))
+                      }
+                      placeholder="0"
+                      className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                    Local inicial
+                    <select
+                      value={itemForm.initialLocationId}
+                      onChange={(event) =>
+                        setItemForm((current) => ({
+                          ...current,
+                          initialLocationId: event.target.value,
+                        }))
+                      }
+                      className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Sem local</option>
+                      {snapshot?.locations.map((location) => (
+                        <option key={location.id} value={location.id}>
+                          {location.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                    Lote inicial
+                    <input
+                      value={itemForm.initialLotCode}
+                      onChange={(event) =>
+                        setItemForm((current) => ({
+                          ...current,
+                          initialLotCode: event.target.value,
+                        }))
+                      }
+                      placeholder="Opcional"
+                      className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                    Validade
+                    <input
+                      type="date"
+                      value={itemForm.initialExpiresAt}
+                      onChange={(event) =>
+                        setItemForm((current) => ({
+                          ...current,
+                          initialExpiresAt: event.target.value,
+                        }))
+                      }
+                      className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+              </div>
+            ) : null}
             <select
               value={itemForm.status}
               onChange={(event) =>
@@ -674,6 +1009,11 @@ export default function InventoryOperationsContent() {
             <div className="flex items-center gap-2 font-semibold">
               <ArrowRightLeft className="h-5 w-5" /> Movimentação imutável
             </div>
+            {(snapshot?.locations ?? []).length === 0 ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Cadastre um local de estoque para popular origem e destino.
+              </div>
+            ) : null}
             <select
               value={movementForm.mode}
               onChange={(event) =>
@@ -769,6 +1109,25 @@ export default function InventoryOperationsContent() {
                 </select>
               )}
             </div>
+            {movementForm.mode === 'transfer' ? (
+              <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
+                Lote da origem
+                <select
+                  value={movementForm.lotId}
+                  onChange={(event) =>
+                    setMovementForm((current) => ({ ...current, lotId: event.target.value }))
+                  }
+                  className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Sem lote</option>
+                  {filteredLots.map((lot) => (
+                    <option key={lot.id} value={lot.id}>
+                      {lot.lotCode || lot.id.slice(0, 8)} - {formatDate(lot.expiresAt)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             {movementForm.mode === 'receipt' ? (
               <div className="grid grid-cols-2 gap-2">
                 <input

@@ -100,6 +100,12 @@ export type PatientMutationInput = {
   status?: PatientStatus;
   tags?: string[];
   unitId?: string | null;
+  mainComplaint?: string | null;
+  careObjective?: string | null;
+  originChannel?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  internalNotes?: string | null;
 };
 
 export type PatientFormSnapshot = {
@@ -114,6 +120,12 @@ export type PatientFormSnapshot = {
   status: PatientStatus;
   tags: string[];
   unitId: string;
+  mainComplaint: string;
+  careObjective: string;
+  originChannel: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  internalNotes: string;
 };
 
 const DEFAULT_PROGRAM_TYPE: ProgramType = 'emagrecimento';
@@ -167,6 +179,58 @@ function maskPhone(phone: string | null | undefined) {
 function normalizeOptionalText(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function metadataText(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function buildPatientMetadata(input: PatientMutationInput) {
+  return Object.fromEntries(
+    Object.entries({
+      main_unit_id: normalizeOptionalText(input.unitId),
+      main_complaint: normalizeOptionalText(input.mainComplaint),
+      care_objective: normalizeOptionalText(input.careObjective),
+      origin_channel: normalizeOptionalText(input.originChannel),
+      emergency_contact_name: normalizeOptionalText(input.emergencyContactName),
+      emergency_contact_phone: normalizeOptionalText(input.emergencyContactPhone),
+      internal_notes: normalizeOptionalText(input.internalNotes),
+    }).filter(([, value]) => value !== null)
+  );
+}
+
+const PATIENT_FORM_METADATA_KEYS = [
+  'main_unit_id',
+  'main_complaint',
+  'care_objective',
+  'origin_channel',
+  'emergency_contact_name',
+  'emergency_contact_phone',
+  'internal_notes',
+];
+
+async function buildMergedPatientMetadata(
+  patientId: string,
+  input: PatientMutationInput
+): Promise<Record<string, unknown>> {
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase
+    .from('patients')
+    .select('metadata')
+    .eq('id', patientId)
+    .single();
+  if (error) throw error;
+
+  const existing = asRecord(data?.metadata);
+  for (const key of PATIENT_FORM_METADATA_KEYS) {
+    delete existing[key];
+  }
+
+  return {
+    ...existing,
+    ...buildPatientMetadata(input),
+  };
 }
 
 function sanitizePatientSearchQuery(value: string | null | undefined) {
@@ -1013,6 +1077,12 @@ export async function getPatientFormSnapshot(
         status: mapPatientStatus(patient.status),
         tags: patient.tags ?? [],
         unitId: typeof metadata.main_unit_id === 'string' ? metadata.main_unit_id : '',
+        mainComplaint: metadataText(metadata, 'main_complaint'),
+        careObjective: metadataText(metadata, 'care_objective'),
+        originChannel: metadataText(metadata, 'origin_channel'),
+        emergencyContactName: metadataText(metadata, 'emergency_contact_name'),
+        emergencyContactPhone: metadataText(metadata, 'emergency_contact_phone'),
+        internalNotes: metadataText(metadata, 'internal_notes'),
       },
       error: null,
     };
@@ -1028,7 +1098,7 @@ export async function createPatient(
     validatePatientInput(input);
 
     const supabase = createBrowserSupabaseClient();
-    const metadata = input.unitId ? { main_unit_id: input.unitId } : {};
+    const metadata = buildPatientMetadata(input);
     const { data, error } = await supabase.rpc('upsert_patient_with_pii', {
       p_patient_id: null,
       p_payload: {
@@ -1064,7 +1134,7 @@ export async function updatePatient(
     validatePatientInput(input);
 
     const supabase = createBrowserSupabaseClient();
-    const metadata = input.unitId ? { main_unit_id: input.unitId } : {};
+    const metadata = await buildMergedPatientMetadata(patientId, input);
     const { data, error } = await supabase.rpc('upsert_patient_with_pii', {
       p_patient_id: patientId,
       p_payload: {

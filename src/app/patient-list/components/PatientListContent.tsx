@@ -364,6 +364,13 @@ type PatientFormState = {
   birthDate: string;
   sexGender: string;
   status: PatientStatus;
+  tagsText: string;
+  mainComplaint: string;
+  careObjective: string;
+  originChannel: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  internalNotes: string;
 };
 
 function emptyPatientForm(): PatientFormState {
@@ -376,10 +383,22 @@ function emptyPatientForm(): PatientFormState {
     birthDate: '',
     sexGender: '',
     status: 'ativo',
+    tagsText: '',
+    mainComplaint: '',
+    careObjective: '',
+    originChannel: '',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    internalNotes: '',
   };
 }
 
 function toPatientMutationInput(form: PatientFormState): PatientMutationInput {
+  const tags = form.tagsText
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
   return {
     fullName: form.fullName,
     preferredName: form.preferredName,
@@ -389,6 +408,13 @@ function toPatientMutationInput(form: PatientFormState): PatientMutationInput {
     birthDate: form.birthDate,
     sexGender: form.sexGender,
     status: form.status,
+    tags,
+    mainComplaint: form.mainComplaint,
+    careObjective: form.careObjective,
+    originChannel: form.originChannel,
+    emergencyContactName: form.emergencyContactName,
+    emergencyContactPhone: form.emergencyContactPhone,
+    internalNotes: form.internalNotes,
   };
 }
 
@@ -492,11 +518,17 @@ function PatientFormModal({
                 </label>
                 <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
                   Genero/sexo
-                  <input
+                  <select
                     value={form.sexGender}
                     onChange={(event) => onChange({ sexGender: event.target.value })}
                     className="input-base text-sm"
-                  />
+                  >
+                    <option value="">Nao informado</option>
+                    <option value="feminino">Feminino</option>
+                    <option value="masculino">Masculino</option>
+                    <option value="nao_binario">Nao binario</option>
+                    <option value="outro">Outro</option>
+                  </select>
                 </label>
                 <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
                   Status
@@ -511,6 +543,79 @@ function PatientFormModal({
                     <option value="concluido">Concluido</option>
                     <option value="cancelado">Cancelado</option>
                   </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 border-t border-border pt-4 md:grid-cols-2">
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Queixa principal
+                  <textarea
+                    value={form.mainComplaint}
+                    onChange={(event) => onChange({ mainComplaint: event.target.value })}
+                    className="input-base min-h-20 resize-y text-sm"
+                    placeholder="Ex.: emagrecimento, dor, retorno, avaliacao inicial"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Objetivo do cuidado
+                  <textarea
+                    value={form.careObjective}
+                    onChange={(event) => onChange({ careObjective: event.target.value })}
+                    className="input-base min-h-20 resize-y text-sm"
+                    placeholder="Meta clinica ou expectativa do paciente"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Origem/canal
+                  <select
+                    value={form.originChannel}
+                    onChange={(event) => onChange({ originChannel: event.target.value })}
+                    className="input-base text-sm"
+                  >
+                    <option value="">Nao informado</option>
+                    <option value="indicacao">Indicacao</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="google">Google</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="retorno">Retorno</option>
+                    <option value="campanha">Campanha</option>
+                    <option value="outro">Outro</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Tags
+                  <input
+                    value={form.tagsText}
+                    onChange={(event) => onChange({ tagsText: event.target.value })}
+                    className="input-base text-sm"
+                    placeholder="Separadas por virgula"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Contato de emergencia
+                  <input
+                    value={form.emergencyContactName}
+                    onChange={(event) => onChange({ emergencyContactName: event.target.value })}
+                    className="input-base text-sm"
+                    placeholder="Nome"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Telefone de emergencia
+                  <input
+                    value={form.emergencyContactPhone}
+                    onChange={(event) => onChange({ emergencyContactPhone: event.target.value })}
+                    className="input-base text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
+                  Observacoes internas
+                  <textarea
+                    value={form.internalNotes}
+                    onChange={(event) => onChange({ internalNotes: event.target.value })}
+                    className="input-base min-h-20 resize-y text-sm"
+                    placeholder="Restrito a equipe: preferencias, restricoes ou contexto inicial"
+                  />
                 </label>
               </div>
 
@@ -777,6 +882,13 @@ export default function PatientListContent() {
       birthDate: result.data.birthDate,
       sexGender: result.data.sexGender,
       status: result.data.status,
+      tagsText: result.data.tags.join(', '),
+      mainComplaint: result.data.mainComplaint,
+      careObjective: result.data.careObjective,
+      originChannel: result.data.originChannel,
+      emergencyContactName: result.data.emergencyContactName,
+      emergencyContactPhone: result.data.emergencyContactPhone,
+      internalNotes: result.data.internalNotes,
     });
   };
 

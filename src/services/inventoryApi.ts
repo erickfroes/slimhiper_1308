@@ -115,6 +115,19 @@ export type InventoryItemInput = {
   defaultUnitCostCents?: number;
 };
 
+export type InventoryCategoryInput = {
+  id?: string;
+  name: string;
+  status?: InventoryItemStatus;
+};
+
+export type InventoryLocationInput = {
+  id?: string;
+  code?: string;
+  name: string;
+  status?: InventoryItemStatus;
+};
+
 export type InventoryLotInput = {
   itemId: string;
   locationId?: string;
@@ -311,6 +324,56 @@ export async function saveInventoryItem(
     return { data: data as { id: string }, error: null };
   } catch (error) {
     return { data: null, error: asServiceError(error, 'Nao foi possivel salvar o item.') };
+  }
+}
+
+export async function saveInventoryCategory(
+  input: InventoryCategoryInput
+): ServiceEnvelope<InventoryCategory> {
+  if (isMockExplicitlyEnabled()) {
+    return {
+      data: { id: input.id ?? `mock-cat-${Date.now()}`, name: input.name, status: 'active' },
+      error: null,
+    };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('upsert_inventory_category', {
+      p_payload: input,
+    });
+    if (error) throw error;
+    return { data: data as InventoryCategory, error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Nao foi possivel salvar a categoria.') };
+  }
+}
+
+export async function saveInventoryLocation(
+  input: InventoryLocationInput
+): ServiceEnvelope<InventoryLocation> {
+  if (isMockExplicitlyEnabled()) {
+    return {
+      data: {
+        id: input.id ?? `mock-location-${Date.now()}`,
+        unitId: null,
+        code: input.code ?? 'LOCAL',
+        name: input.name,
+        status: 'active',
+      },
+      error: null,
+    };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('upsert_inventory_location', {
+      p_payload: input,
+    });
+    if (error) throw error;
+    return { data: data as InventoryLocation, error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Nao foi possivel salvar o local.') };
   }
 }
 

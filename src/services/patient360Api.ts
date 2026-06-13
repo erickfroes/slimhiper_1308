@@ -520,7 +520,7 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       preferredName:
         typeof rawProfile?.preferredName === 'string' ? rawProfile.preferredName : undefined,
       age: asNumber(rawProfile?.age),
-      birthDate: '',
+      birthDate: asString(rawProfile?.birthDate),
       cpfMasked: maskCpf(rawProfile?.cpfMasked),
       phone: maskPhone(rawProfile?.phone),
       email: maskEmail(rawProfile?.email),
@@ -702,6 +702,182 @@ function getSupabaseClient() {
   return createBrowserSupabaseClient();
 }
 
+function mapSummaryPatientStatus(value: unknown): Patient360Summary['profile']['status'] {
+  const normalized = asString(value).toLowerCase();
+  if (normalized === 'inactive' || normalized === 'inativo') return 'inativo';
+  if (normalized === 'paused' || normalized === 'pausado') return 'pausado';
+  if (normalized === 'completed' || normalized === 'concluido') return 'concluido';
+  if (normalized === 'cancelled' || normalized === 'canceled' || normalized === 'cancelado') {
+    return 'cancelado';
+  }
+  return 'ativo';
+}
+
+function calculateAgeFromBirthDate(value: unknown): number {
+  const birthDate = asString(value);
+  if (!birthDate) return 0;
+  const date = new Date(`${birthDate}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return 0;
+  const today = new Date();
+  let age = today.getFullYear() - date.getFullYear();
+  const monthDelta = today.getMonth() - date.getMonth();
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < date.getDate())) age -= 1;
+  return Math.max(0, age);
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function fallbackTimelineEvent(
+  patientId: string,
+  createdAt: string,
+  metadata: Record<string, unknown>
+): PatientTimelineEvent {
+  const mainComplaint = asString(metadata.main_complaint);
+  const description = mainComplaint
+    ? `Cadastro inicial: ${mainComplaint}`
+    : 'Cadastro inicial do paciente.';
+
+  return {
+    id: `patient-created-${patientId}`,
+    patientId,
+    type: 'paciente_cadastrado',
+    title: 'Paciente cadastrado',
+    description,
+    date: createdAt || new Date().toISOString(),
+    category: 'commercial',
+    statusLabel: 'Cadastro',
+    metadata: {
+      source: 'patient360_fallback',
+      hasMainComplaint: Boolean(mainComplaint),
+    },
+  };
+}
+
+function buildFallbackSummary(
+  patient: Record<string, unknown>,
+  pii: Record<string, unknown> | null,
+  appointments: unknown[]
+): Patient360Summary {
+  const patientId = asString(patient.id);
+  const tenantId = asString(patient.tenant_id);
+  const metadata = asRecord(patient.metadata) ?? {};
+  const createdAt = asString(patient.created_at, new Date().toISOString());
+  const upcomingAppointments = appointments
+    .map((appointment) => {
+      const row = asRecord(appointment);
+      if (!row) return null;
+      return {
+        id: asString(row.id),
+        patientId,
+        patientName: asString(pii?.full_name, 'Paciente'),
+        type: asString(row.type, 'consulta_medica'),
+        status: asString(row.status, 'agendado'),
+        scheduledAt: asString(row.scheduled_at),
+        durationMinutes: asNumber(row.duration_minutes, 30),
+        professionalName: '',
+        professionalRole: '',
+        roomName: asString(row.location) || undefined,
+        notes: asString(row.notes) || undefined,
+        attendanceLink: `/clinic/patients/${patientId}/encounter`,
+      };
+    })
+    .filter(Boolean);
+
+  return normalizeSummary({
+    profile: {
+      id: patientId,
+      tenantId,
+      name: asString(pii?.full_name, 'Paciente sem nome'),
+      preferredName: asString(patient.preferred_name) || undefined,
+      age: calculateAgeFromBirthDate(pii?.birth_date),
+      birthDate: asString(pii?.birth_date),
+      cpfMasked: asString(pii?.cpf_masked),
+      phone: asString(pii?.phone),
+      email: asString(pii?.email),
+      status: mapSummaryPatientStatus(patient.status),
+      careTeam: [],
+      createdAt,
+      tags: asStringArray(patient.tags),
+    },
+    activePackage: {
+      patientId,
+      programName: 'Sem programa ativo',
+      programType: 'emagrecimento',
+      status: 'aguardando',
+    },
+    clinicalStatus: {
+      adherenceLevel: 'regular',
+    },
+    financial: {
+      status: 'em_dia',
+    },
+    alerts: [],
+    tasks: [],
+    upcomingAppointments,
+    recentTimeline: [fallbackTimelineEvent(patientId, createdAt, metadata)],
+    documents: [],
+    prescriptions: [],
+    nutritionPlan: {
+      patientId,
+    },
+    chat: {
+      patientId,
+    },
+    mainUnit: asString(metadata.main_unit_id) || undefined,
+    clinicalRisk: 'baixo',
+    lastUpdate: new Date().toISOString(),
+  });
+}
+
+async function getPatient360SummaryFallback(
+  patientId: string
+): Promise<{ data: Patient360Summary | null; error: SafeServiceError | null }> {
+  try {
+    const supabase = await getSupabaseClient();
+    const [patientResult, piiResult, appointmentsResult] = await Promise.all([
+      supabase
+        .from('patients')
+        .select('id,tenant_id,status,preferred_name,tags,metadata,created_at')
+        .eq('id', patientId)
+        .maybeSingle(),
+      supabase
+        .from('patient_pii')
+        .select('patient_id,full_name,email,phone,cpf_masked,birth_date,sex_gender')
+        .eq('patient_id', patientId)
+        .maybeSingle(),
+      supabase
+        .from('appointments')
+        .select('id,type,status,scheduled_at,duration_minutes,location,notes')
+        .eq('patient_id', patientId)
+        .gte('scheduled_at', new Date().toISOString())
+        .order('scheduled_at', { ascending: true })
+        .limit(5),
+    ]);
+
+    if (patientResult.error) throw patientResult.error;
+    if (!patientResult.data) {
+      return { data: null, error: { message: 'Paciente nao encontrado ou sem permissao.' } };
+    }
+    if (piiResult.error && piiResult.error.code !== 'PGRST116') throw piiResult.error;
+    if (appointmentsResult.error) throw appointmentsResult.error;
+
+    return {
+      data: buildFallbackSummary(
+        patientResult.data as Record<string, unknown>,
+        (piiResult.data as Record<string, unknown> | null) ?? null,
+        appointmentsResult.data ?? []
+      ),
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Unable to load patient summary fallback.') };
+  }
+}
+
 function applyTimelineFilters(
   events: PatientTimelineEvent[],
   filters?: PatientTimelineFilters
@@ -733,20 +909,28 @@ export async function getPatient360Summary(
     });
 
     if (error) {
+      const fallback = await getPatient360SummaryFallback(patientId);
+      if (fallback.data) {
+        return fallback;
+      }
       return {
         data: null,
         error: {
-          message: 'Failed to fetch patient summary.',
-          code: error.name,
-          details: error.message,
+          message: fallback.error?.message ?? 'Failed to fetch patient summary.',
+          code: fallback.error?.code ?? error.name,
+          details: fallback.error?.details ?? error.message,
         },
       };
     }
 
     const unwrapped = unwrapEdgeResponse<unknown>(data);
-    if (unwrapped.error) return { data: null, error: unwrapped.error };
+    if (unwrapped.error) {
+      const fallback = await getPatient360SummaryFallback(patientId);
+      return fallback.data ? fallback : { data: null, error: unwrapped.error };
+    }
     if (!hasPatientSummaryIdentity(unwrapped.data)) {
-      return { data: null, error: patientSummaryContractError() };
+      const fallback = await getPatient360SummaryFallback(patientId);
+      return fallback.data ? fallback : { data: null, error: patientSummaryContractError() };
     }
 
     return { data: normalizeSummary(unwrapped.data), error: null };
