@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import AuthInviteHashRedirect from '@/components/auth/AuthInviteHashRedirect';
 import MarketingHome from '@/components/marketing/MarketingHome';
 
 export const metadata: Metadata = {
@@ -8,5 +9,10 @@ export const metadata: Metadata = {
 };
 
 export default function RootPage() {
-  return <MarketingHome />;
+  return (
+    <>
+      <AuthInviteHashRedirect />
+      <MarketingHome />
+    </>
+  );
 }

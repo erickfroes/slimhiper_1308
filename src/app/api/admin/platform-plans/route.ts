@@ -41,6 +41,13 @@ function normalizeNonNegativeInteger(value: unknown, max = 1_000_000_000) {
   return rounded >= 0 && rounded <= max ? rounded : null;
 }
 
+function normalizeMoneyToCents(value: unknown, maxReais = 1_000_000) {
+  const parsed = typeof value === 'string' ? Number(value.trim().replace(',', '.')) : Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  const cents = Math.round(parsed * 100);
+  return cents >= 0 && cents <= maxReais * 100 ? cents : null;
+}
+
 function normalizePositiveInteger(value: unknown, max = 1_000_000_000) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
@@ -56,22 +63,13 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function buildFeatures(value: unknown) {
   const input = asRecord(value);
-  const usersLimit = normalizePositiveInteger(input.usersLimit ?? input.users_limit, 10000);
-  const storageGb = normalizePositiveInteger(input.storageGb ?? input.storage_gb, 100000);
-  const apiLimitMonthly = normalizePositiveInteger(
-    input.apiLimitMonthly ?? input.api_limit_monthly,
-    100000000
-  );
-  const d4signDocsLimit = normalizePositiveInteger(
-    input.d4signDocsLimit ?? input.d4sign_docs_limit,
-    1000000
+  const doctorsLimit = normalizePositiveInteger(
+    input.doctorsLimit ?? input.doctors_limit ?? input.physiciansLimit ?? input.physicians_limit,
+    10000
   );
 
   return {
-    users_limit: usersLimit ?? 1,
-    storage_gb: storageGb ?? 1,
-    api_limit_monthly: apiLimitMonthly ?? 1,
-    d4sign_docs_limit: d4signDocsLimit ?? 1,
+    doctors_limit: doctorsLimit ?? 1,
   };
 }
 
@@ -104,7 +102,10 @@ export async function POST(request: Request) {
   const code = normalizeCode(body.code);
   const name = normalizeText(body.name, 120);
   const billingCycle = normalizeText(body.billingCycle, 24).toLowerCase();
-  const amountCents = normalizeNonNegativeInteger(body.amountCents, 100000000);
+  const amountCents =
+    body.amountCents === undefined
+      ? normalizeMoneyToCents(body.amountReais, 1000000)
+      : normalizeNonNegativeInteger(body.amountCents, 100000000);
   const currency = normalizeText(body.currency, 3).toUpperCase() || 'BRL';
   const active = body.active !== false;
   const reason = normalizeText(body.reason, 500);
@@ -187,7 +188,10 @@ export async function PATCH(request: Request) {
   const id = normalizeText(body.id, 80);
   const name = normalizeText(body.name, 120);
   const billingCycle = normalizeText(body.billingCycle, 24).toLowerCase();
-  const amountCents = normalizeNonNegativeInteger(body.amountCents, 100000000);
+  const amountCents =
+    body.amountCents === undefined
+      ? normalizeMoneyToCents(body.amountReais, 1000000)
+      : normalizeNonNegativeInteger(body.amountCents, 100000000);
   const currency = normalizeText(body.currency, 3).toUpperCase() || 'BRL';
   const active = body.active !== false;
   const reason = normalizeText(body.reason, 500);

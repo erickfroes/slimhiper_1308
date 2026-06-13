@@ -191,6 +191,10 @@ function getPlanFeatureNumber(plan: AdminPlatformPlan, snakeKey: string, camelKe
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
+function getPlanDoctorsLimit(plan: AdminPlatformPlan) {
+  return getPlanFeatureNumber(plan, 'doctors_limit', 'doctorsLimit');
+}
+
 function badgeLabel(badge: string) {
   const labels: Record<string, string> = {
     required: 'obrigatorio',
@@ -206,14 +210,11 @@ function createEmptyPlanDraft(): PlanDraft {
     code: '',
     name: '',
     billingCycle: 'monthly',
-    amountCents: 0,
+    amountReais: 0,
     currency: 'BRL',
     active: true,
     features: {
-      usersLimit: 8,
-      storageGb: 20,
-      apiLimitMonthly: 30000,
-      d4signDocsLimit: 100,
+      doctorsLimit: 1,
     },
     entitlements: createDefaultPlanEntitlements(),
     reason: '',
@@ -229,14 +230,11 @@ function draftFromPlan(plan: AdminPlatformPlan): PlanDraft {
       plan.billingCycle === 'quarterly' || plan.billingCycle === 'yearly'
         ? plan.billingCycle
         : 'monthly',
-    amountCents: plan.amountCents,
+    amountReais: plan.amountCents / 100,
     currency: plan.currency || 'BRL',
     active: plan.active,
     features: {
-      usersLimit: getPlanFeatureNumber(plan, 'users_limit', 'usersLimit'),
-      storageGb: getPlanFeatureNumber(plan, 'storage_gb', 'storageGb'),
-      apiLimitMonthly: getPlanFeatureNumber(plan, 'api_limit_monthly', 'apiLimitMonthly'),
-      d4signDocsLimit: getPlanFeatureNumber(plan, 'd4sign_docs_limit', 'd4signDocsLimit'),
+      doctorsLimit: getPlanDoctorsLimit(plan),
     },
     entitlements: plan.entitlements,
     reason: '',
@@ -371,7 +369,7 @@ function PlatformPlansPanel() {
         <table className="w-full min-w-[920px] text-xs">
           <thead className="border-b border-border bg-muted/40 text-muted-foreground">
             <tr>
-              {['Plano', 'Preco', 'Ciclo', 'Limites', 'Modulos', 'Status', 'Acoes'].map(
+              {['Plano', 'Preco', 'Ciclo', 'Medicos', 'Modulos', 'Status', 'Acoes'].map(
                 (header) => (
                   <th key={header} scope="col" className="px-4 py-3 text-left font-semibold">
                     {header}
@@ -405,10 +403,7 @@ function PlatformPlansPanel() {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{plan.billingCycle}</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {getPlanFeatureNumber(plan, 'users_limit', 'usersLimit')} usuarios /{' '}
-                    {getPlanFeatureNumber(plan, 'storage_gb', 'storageGb')} GB /{' '}
-                    {compact(getPlanFeatureNumber(plan, 'api_limit_monthly', 'apiLimitMonthly'))}{' '}
-                    API
+                    {getPlanDoctorsLimit(plan)} medicos
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {countPlanEntitlements(plan.entitlements).enabledModules}/
@@ -496,12 +491,13 @@ function PlatformPlansPanel() {
                 />
               </label>
               <label>
-                <span className="text-xs font-semibold text-foreground">Preco em centavos</span>
+                <span className="text-xs font-semibold text-foreground">Preco em Reais</span>
                 <input
                   type="number"
                   min={0}
-                  value={draft.amountCents}
-                  onChange={(event) => updateDraft('amountCents', Number(event.target.value))}
+                  step="0.01"
+                  value={draft.amountReais}
+                  onChange={(event) => updateDraft('amountReais', Number(event.target.value))}
                   className="input-base mt-1 text-sm"
                 />
               </label>
@@ -538,25 +534,16 @@ function PlatformPlansPanel() {
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {[
-                ['usersLimit', 'Limite usuarios'],
-                ['storageGb', 'Storage GB'],
-                ['apiLimitMonthly', 'API mensal'],
-                ['d4signDocsLimit', 'Documentos D4Sign'],
-              ].map(([key, label]) => (
-                <label key={key}>
-                  <span className="text-xs font-semibold text-foreground">{label}</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={draft.features[key as keyof PlanDraft['features']]}
-                    onChange={(event) =>
-                      updateFeature(key as keyof PlanDraft['features'], Number(event.target.value))
-                    }
-                    className="input-base mt-1 text-sm"
-                  />
-                </label>
-              ))}
+              <label>
+                <span className="text-xs font-semibold text-foreground">Limite de medicos</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.features.doctorsLimit}
+                  onChange={(event) => updateFeature('doctorsLimit', Number(event.target.value))}
+                  className="input-base mt-1 text-sm"
+                />
+              </label>
             </div>
 
             <div className="rounded-xl border border-border">

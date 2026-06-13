@@ -313,14 +313,11 @@ export interface SavePlatformPlanInput {
   code: string;
   name: string;
   billingCycle: 'monthly' | 'quarterly' | 'yearly';
-  amountCents: number;
+  amountReais: number;
   currency: string;
   active: boolean;
   features: {
-    usersLimit: number;
-    storageGb: number;
-    apiLimitMonthly: number;
-    d4signDocsLimit: number;
+    doctorsLimit: number;
   };
   entitlements: PlanEntitlements;
   reason: string;
@@ -871,12 +868,10 @@ export async function savePlatformPlan(input: SavePlatformPlanInput): Promise<{
   const name = normalizeText(input.name, 120);
   const currency = normalizeText(input.currency, 3).toUpperCase() || 'BRL';
   const reason = normalizeText(input.reason, 500);
-  const amountCents = Math.trunc(Number(input.amountCents));
+  const amountReais = Number(input.amountReais);
+  const amountCents = Math.round(amountReais * 100);
   const features = {
-    usersLimit: Math.trunc(Number(input.features.usersLimit)),
-    storageGb: Math.trunc(Number(input.features.storageGb)),
-    apiLimitMonthly: Math.trunc(Number(input.features.apiLimitMonthly)),
-    d4signDocsLimit: Math.trunc(Number(input.features.d4signDocsLimit)),
+    doctorsLimit: Math.trunc(Number(input.features.doctorsLimit)),
   };
   const entitlementErrors = validatePlanEntitlementsInput(input.entitlements);
 
@@ -893,8 +888,8 @@ export async function savePlatformPlan(input: SavePlatformPlanInput): Promise<{
   if (!/^[A-Z]{3}$/.test(currency)) {
     return { data: null, error: { message: 'Moeda invalida.' } };
   }
-  if (Object.values(features).some((value) => !Number.isFinite(value) || value <= 0)) {
-    return { data: null, error: { message: 'Limites do plano devem ser maiores que zero.' } };
+  if (!Number.isFinite(features.doctorsLimit) || features.doctorsLimit <= 0) {
+    return { data: null, error: { message: 'Limite de medicos deve ser maior que zero.' } };
   }
   if (entitlementErrors.length > 0) {
     return { data: null, error: { message: entitlementErrors[0] } };
@@ -915,7 +910,7 @@ export async function savePlatformPlan(input: SavePlatformPlanInput): Promise<{
         code,
         name,
         billingCycle: input.billingCycle,
-        amountCents,
+        amountReais,
         currency,
         active: input.active,
         features,

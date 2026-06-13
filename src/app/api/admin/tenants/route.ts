@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { getInviteRedirectTo } from '@/lib/auth/inviteRedirect';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { applyTenantEntitlements } from '@/services/adminTenantEntitlements';
 import { normalizePlanEntitlements } from '@/services/planEntitlements';
@@ -8,13 +9,12 @@ import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/rol
 
 const TRIAL_DAYS = 14;
 const DEFAULT_UNIT_CODE = 'matriz';
-const DEFAULT_USAGE_BY_PLAN: Record<
-  string,
-  { usersLimit: number; storageCapacityGb: number; apiLimitMonthly: number }
-> = {
-  starter: { usersLimit: 8, storageCapacityGb: 20, apiLimitMonthly: 30000 },
-  professional: { usersLimit: 25, storageCapacityGb: 80, apiLimitMonthly: 120000 },
-  enterprise: { usersLimit: 80, storageCapacityGb: 250, apiLimitMonthly: 500000 },
+const DEFAULT_TECHNICAL_LIMITS = {
+  usersLimit: 10000,
+  storageCapacityGb: 100000,
+  apiLimitMonthly: 100000000,
+  d4signDocsLimit: 1000000,
+  doctorsLimit: 1,
 };
 
 type SupabaseAdmin = NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
@@ -103,26 +103,21 @@ function mapProfileSnapshot(value: unknown): ProfileSnapshot | null {
   };
 }
 
-function planUsageDefaults(code: string, metadata: unknown) {
+function planUsageDefaults(metadata: unknown) {
   const features = asRecord(asRecord(metadata).features);
-  const defaults = DEFAULT_USAGE_BY_PLAN[code] ?? DEFAULT_USAGE_BY_PLAN.starter;
-  const usersLimit = Number(features.users_limit ?? features.usersLimit);
-  const storageCapacityGb = Number(features.storage_gb ?? features.storageGb);
-  const apiLimitMonthly = Number(features.api_limit_monthly ?? features.apiLimitMonthly);
-  const d4signDocsLimit = Number(features.d4sign_docs_limit ?? features.d4signDocsLimit);
+  const doctorsLimit = Number(
+    features.doctors_limit ??
+      features.doctorsLimit ??
+      features.physicians_limit ??
+      features.physiciansLimit
+  );
 
   return {
-    usersLimit: Number.isFinite(usersLimit) && usersLimit > 0 ? usersLimit : defaults.usersLimit,
-    storageCapacityGb:
-      Number.isFinite(storageCapacityGb) && storageCapacityGb > 0
-        ? storageCapacityGb
-        : defaults.storageCapacityGb,
-    apiLimitMonthly:
-      Number.isFinite(apiLimitMonthly) && apiLimitMonthly > 0
-        ? apiLimitMonthly
-        : defaults.apiLimitMonthly,
-    d4signDocsLimit:
-      Number.isFinite(d4signDocsLimit) && d4signDocsLimit > 0 ? d4signDocsLimit : 100,
+    ...DEFAULT_TECHNICAL_LIMITS,
+    doctorsLimit:
+      Number.isFinite(doctorsLimit) && doctorsLimit > 0
+        ? Math.trunc(doctorsLimit)
+        : DEFAULT_TECHNICAL_LIMITS.doctorsLimit,
   };
 }
 
@@ -259,7 +254,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const usage = planUsageDefaults(planCode, plan.metadata);
+    const usage = planUsageDefaults(plan.metadata);
     const planEntitlements = normalizePlanEntitlements(asRecord(plan.metadata).entitlements);
     const nowIso = new Date().toISOString();
     const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
@@ -288,6 +283,7 @@ export async function POST(request: Request) {
             storageCapacityGb: usage.storageCapacityGb,
             apiLimitMonthly: usage.apiLimitMonthly,
             usersLimit: usage.usersLimit,
+            doctorsLimit: usage.doctorsLimit,
           },
           integrations: {
             asaas: { status: 'not_configured' },
@@ -364,6 +360,7 @@ export async function POST(request: Request) {
       const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
         ownerEmail,
         {
+          redirectTo: getInviteRedirectTo(request),
           data: {
             full_name: ownerName,
             tenant_id: tenantId,

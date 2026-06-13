@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
+import { getInviteRedirectTo } from '@/lib/auth/inviteRedirect';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { canInvitePhysicianWithinLimit } from '@/lib/tenant/doctorLimits';
 import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
 
 const INVITABLE_ROLES = new Set([
@@ -148,10 +150,25 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
     let authUser = await findAuthUserByEmail(admin, email);
     let inviteDelivery: 'existing_auth_user' | 'supabase_invite_sent' = 'existing_auth_user';
 
+    if (roleCode === 'physician') {
+      const limitCheck = await canInvitePhysicianWithinLimit({
+        admin,
+        tenantId,
+        targetUserId: authUser?.id,
+      });
+      if (!limitCheck.allowed) {
+        return jsonError(
+          `Limite de medicos do plano atingido (${limitCheck.current}/${limitCheck.limit}).`,
+          409
+        );
+      }
+    }
+
     if (!authUser) {
       const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
         email,
         {
+          redirectTo: getInviteRedirectTo(request),
           data: {
             full_name: fullName || undefined,
             tenant_id: tenantId,
