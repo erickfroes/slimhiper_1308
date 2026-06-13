@@ -23,7 +23,7 @@ import {
   Webhook,
 } from 'lucide-react';
 import AdminShell, { type AdminShellSection } from './AdminShell';
-import { useAdminPermissions } from './adminPermissions';
+import { useAdminPermissions, type AdminPermissions } from './adminPermissions';
 import Dialog from '@/components/ui/Dialog';
 import DataState from '@/components/ui/DataState';
 import MetricCard from '@/components/ui/MetricCard';
@@ -177,7 +177,31 @@ function WarningPanel({ warnings }: { warnings: string[] }) {
   if (!warnings.length) return null;
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-      Snapshot parcialmente degradado: {warnings.join(' ')}
+      <div className="flex items-start gap-2">
+        <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="font-semibold">Snapshot parcialmente degradado</p>
+          <p className="mt-1">{warnings.join(' ')}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PermissionModeBanner({ permissions }: { permissions: AdminPermissions }) {
+  if (permissions.canMutatePlatform) return null;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+      <div className="flex items-start gap-2">
+        <Shield size={15} className="mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="font-semibold">{permissions.roleLabel}</p>
+          <p className="mt-1">
+            Esta sessao pode consultar snapshots sanitizados. Acoes sensiveis ficam bloqueadas na UI
+            e continuam negadas pelas rotas/RPCs.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1210,12 +1234,21 @@ function SectionContent({
 
 export default function AdminOperationsContent({ section }: { section: AdminOperationsSection }) {
   const config = sectionConfig[section];
+  const permissions = useAdminPermissions();
   const [snapshot, setSnapshot] = useState<PlatformAdminSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   const loadSnapshot = useCallback(() => {
+    if (permissions.isLoading) return;
+    if (!permissions.canAccessAdmin) {
+      setSnapshot(null);
+      setIsLoading(false);
+      setLoadError(null);
+      return;
+    }
+
     setIsLoading(true);
     setLoadError(null);
     getPlatformAdminSnapshot().then(({ data, error }) => {
@@ -1223,7 +1256,7 @@ export default function AdminOperationsContent({ section }: { section: AdminOper
       setLoadError(error?.message ?? null);
       setIsLoading(false);
     });
-  }, []);
+  }, [permissions.canAccessAdmin, permissions.isLoading]);
 
   useEffect(() => {
     loadSnapshot();
@@ -1237,35 +1270,61 @@ export default function AdminOperationsContent({ section }: { section: AdminOper
       onRefresh={loadSnapshot}
     >
       <div className="space-y-5">
-        {section !== 'support' && section !== 'security' && (
-          <Toolbar search={search} onSearch={setSearch} />
-        )}
-
-        {isLoading ? (
+        {permissions.isLoading ? (
           <DataState
             kind="loading"
-            title="Carregando operacao administrativa"
-            description="Buscando snapshot sanitizado e contratos relacionados."
+            title="Confirmando permissoes administrativas"
+            description="Validando sessao e papel antes de carregar dados operacionais."
           />
-        ) : loadError ? (
+        ) : permissions.error ? (
           <DataState
             kind="error"
-            title="Nao foi possivel carregar a operacao"
-            description={loadError}
+            title="Nao foi possivel confirmar a sessao"
+            description={permissions.error}
             actionLabel="Tentar novamente"
-            onAction={loadSnapshot}
+            onAction={permissions.reload}
           />
-        ) : snapshot ? (
+        ) : !permissions.canAccessAdmin ? (
+          <DataState
+            kind="forbidden"
+            title="Acesso admin indisponivel"
+            description="Esta conta nao possui permissao para consultar o console operacional."
+          />
+        ) : (
           <>
-            <WarningPanel warnings={snapshot.warnings} />
-            <SectionContent
-              section={section}
-              snapshot={snapshot}
-              search={search}
-              reload={loadSnapshot}
-            />
+            <PermissionModeBanner permissions={permissions} />
+
+            {section !== 'support' && section !== 'security' && (
+              <Toolbar search={search} onSearch={setSearch} />
+            )}
+
+            {isLoading ? (
+              <DataState
+                kind="loading"
+                title="Carregando operacao administrativa"
+                description="Buscando snapshot sanitizado e contratos relacionados."
+              />
+            ) : loadError ? (
+              <DataState
+                kind="error"
+                title="Nao foi possivel carregar a operacao"
+                description={loadError}
+                actionLabel="Tentar novamente"
+                onAction={loadSnapshot}
+              />
+            ) : snapshot ? (
+              <>
+                <WarningPanel warnings={snapshot.warnings} />
+                <SectionContent
+                  section={section}
+                  snapshot={snapshot}
+                  search={search}
+                  reload={loadSnapshot}
+                />
+              </>
+            ) : null}
           </>
-        ) : null}
+        )}
       </div>
     </AdminShell>
   );

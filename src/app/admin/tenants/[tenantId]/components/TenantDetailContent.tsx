@@ -27,14 +27,19 @@ import {
 } from 'lucide-react';
 import AdminShell from '@/app/admin/components/AdminShell';
 import { useAdminPermissions } from '@/app/admin/components/adminPermissions';
+import Dialog from '@/components/ui/Dialog';
+import DataState from '@/components/ui/DataState';
 import {
   decidePlatformBreakGlass,
   endPlatformSupportSession,
   getTenantDetail,
   invitePlatformTenantUser,
+  listWebhookReprocessJobs,
+  listWebhookSummaries,
   listPlatformPlans,
   requestPlatformBreakGlass,
   requestPlatformSupportSession,
+  requestWebhookReprocess,
   revokePlatformBreakGlass,
   updatePlatformTenantConfig,
   updatePlatformTenantMembership,
@@ -44,9 +49,20 @@ import {
   type AdminSupportSession,
   type AdminTenantDetail,
   type AdminTenantRow,
+  type AdminWebhookEventSummary,
+  type AdminWebhookReprocessJob,
 } from '@/services/adminApi';
 
-type TenantTab = 'overview' | 'users' | 'units' | 'audit' | 'webhooks' | 'support' | 'breakglass';
+type TenantTab =
+  | 'overview'
+  | 'users'
+  | 'units'
+  | 'billing'
+  | 'integrations'
+  | 'audit'
+  | 'webhooks'
+  | 'support'
+  | 'breakglass';
 
 const ADMIN_MUTABLE_ROLES = [
   'tenant_owner',
@@ -139,6 +155,21 @@ function UsageBar({ used, limit, unit = '' }: { used: number; limit: number; uni
       </div>
       <span className="text-xs text-muted-foreground">{pct.toFixed(0)}% utilizado</span>
     </div>
+  );
+}
+
+function webhookStatusTone(
+  status: AdminWebhookEventSummary['status']
+): 'emerald' | 'blue' | 'amber' | 'red' | 'slate' {
+  if (status === 'processed') return 'emerald';
+  if (status === 'dead_letter' || status === 'failed') return 'red';
+  if (status === 'retrying') return 'amber';
+  return 'blue';
+}
+
+function isWebhookReprocessable(status: AdminWebhookEventSummary['status']) {
+  return (
+    status === 'failed' || status === 'dead_letter' || status === 'retrying' || status === 'pending'
   );
 }
 
@@ -428,6 +459,185 @@ function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload
       </SectionCard>
 
       <TenantConfigPanel detail={detail} onReload={onReload} />
+    </div>
+  );
+}
+
+function BillingTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
+  const tenant = detail.tenant;
+  const billingAudit = detail.auditLogs.filter(
+    (entry) =>
+      entry.category === 'billing' ||
+      entry.action.includes('billing') ||
+      entry.action.includes('subscription') ||
+      entry.action.includes('plan')
+  );
+  const asaasWebhookErrors = detail.webhookErrors.filter((webhook) =>
+    webhook.event.toLowerCase().includes('asaas')
+  );
+  const hasBillingRisk =
+    tenant.saasSubscriptionStatus === 'past_due' ||
+    tenant.status === 'suspended' ||
+    tenant.asaasSubaccountStatus === 'error' ||
+    asaasWebhookErrors.length > 0;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <SectionCard title="Assinatura local" icon={CreditCard}>
+          <div className="space-y-3 text-xs">
+            {[
+              ['Plano', tenant.plan],
+              ['Status assinatura', tenant.saasSubscriptionStatus],
+              ['MRR', currency(tenant.mrr)],
+              ['Proxima cobranca', formatDate(tenant.nextBillingDate)],
+              ['Metodo', tenant.paymentMethod || 'not_configured'],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">{label}</span>
+                <span className="font-semibold text-foreground">{value}</span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Divergencias e conciliacao" icon={AlertTriangle}>
+          <div className="space-y-3 text-xs">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Risco financeiro</span>
+              <StateBadge tone={hasBillingRisk ? 'amber' : 'emerald'}>
+                {hasBillingRisk ? 'Atencao' : 'OK'}
+              </StateBadge>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Asaas local</span>
+              <StateBadge tone={tenant.asaasSubaccountStatus === 'active' ? 'emerald' : 'amber'}>
+                {tenant.asaasSubaccountStatus}
+              </StateBadge>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Webhooks Asaas com erro</span>
+              <span className="font-semibold text-foreground">{asaasWebhookErrors.length}</span>
+            </div>
+            <a href="#configuracao-auditada" className="btn-secondary mt-2 text-xs">
+              Ajustar plano/status local
+            </a>
+          </div>
+        </SectionCard>
+      </div>
+
+      <div id="configuracao-auditada">
+        <TenantConfigPanel detail={detail} onReload={onReload} />
+      </div>
+
+      <SectionCard title="Historico financeiro auditado" icon={ClipboardList}>
+        {billingAudit.length === 0 ? (
+          <DataState
+            kind="empty"
+            title="Sem eventos financeiros auditados"
+            description="Alteracoes de plano, status ou billing local aparecerao aqui."
+            className="min-h-40 border-0 bg-transparent"
+          />
+        ) : (
+          <div className="space-y-2">
+            {billingAudit.slice(0, 12).map((entry) => (
+              <div key={entry.id} className="rounded-xl border border-border p-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono font-semibold text-foreground">{entry.action}</span>
+                  <span className="text-muted-foreground">{formatDate(entry.timestamp)}</span>
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  {entry.description} por {entry.admin}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
+function IntegrationsTab({ detail }: { detail: AdminTenantDetail }) {
+  const tenant = detail.tenant;
+  const openWebhooks = detail.webhookErrors.filter((webhook) => webhook.status !== 'resolved');
+  const integrationAudit = detail.auditLogs.filter(
+    (entry) => entry.category === 'integration' || entry.action.includes('webhook')
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <SectionCard title="Asaas" icon={CreditCard}>
+          <div className="space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Status local</span>
+              <StateBadge tone={tenant.asaasSubaccountStatus === 'active' ? 'emerald' : 'amber'}>
+                {tenant.asaasSubaccountStatus}
+              </StateBadge>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Conta redigida</p>
+              <p className="mt-1 break-all font-mono text-foreground">
+                {tenant.asaasAccountId || 'N/D'}
+              </p>
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="D4Sign" icon={Link2}>
+          <div className="space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Status local</span>
+              <StateBadge tone={tenant.d4signStatus === 'active' ? 'emerald' : 'amber'}>
+                {tenant.d4signStatus}
+              </StateBadge>
+            </div>
+            <UsageBar used={tenant.d4signDocsUsed} limit={tenant.d4signDocsLimit} unit=" docs" />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Operacoes locais" icon={Webhook}>
+          <div className="space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Webhooks abertos</span>
+              <StateBadge tone={openWebhooks.length ? 'amber' : 'emerald'}>
+                {openWebhooks.length}
+              </StateBadge>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/admin/webhooks" className="btn-secondary px-3 py-1.5 text-xs">
+                Monitor global
+              </Link>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
+
+      <SectionCard title="Auditoria de integracoes" icon={ClipboardList}>
+        {integrationAudit.length === 0 ? (
+          <DataState
+            kind="empty"
+            title="Sem eventos de integracao auditados"
+            description="Reprocessos e alteracoes locais de integracao aparecerao aqui."
+            className="min-h-40 border-0 bg-transparent"
+          />
+        ) : (
+          <div className="space-y-2">
+            {integrationAudit.slice(0, 12).map((entry) => (
+              <div key={entry.id} className="rounded-xl border border-border p-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono font-semibold text-foreground">{entry.action}</span>
+                  <span className="text-muted-foreground">{formatDate(entry.timestamp)}</span>
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  {entry.description} por {entry.admin}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }
@@ -947,61 +1157,323 @@ function AuditTab({ detail }: { detail: AdminTenantDetail }) {
 }
 
 function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
+  const adminPermissions = useAdminPermissions();
+  const [events, setEvents] = useState<AdminWebhookEventSummary[]>([]);
+  const [jobs, setJobs] = useState<AdminWebhookReprocessJob[]>([]);
+  const [providerFilter, setProviderFilter] = useState<
+    'all' | AdminWebhookEventSummary['provider']
+  >('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | AdminWebhookEventSummary['status']>(
+    'all'
+  );
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [reprocessTarget, setReprocessTarget] = useState<AdminWebhookEventSummary | null>(null);
+  const [reason, setReason] = useState('');
+  const [scope, setScope] = useState(
+    `Tenant ${detail.tenant.clinicName}: reprocessar evento sanitizado pelo monitor admin`
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const loadTenantWebhookOps = useCallback(() => {
+    setIsLoading(true);
+    setLoadError(null);
+    Promise.all([listWebhookSummaries(200), listWebhookReprocessJobs(100)])
+      .then(([eventsResult, jobsResult]) => {
+        setEvents(eventsResult.data.filter((event) => event.tenantId === detail.tenant.id));
+        setJobs(jobsResult.data.filter((job) => job.tenantId === detail.tenant.id));
+        setLoadError(eventsResult.error?.message ?? jobsResult.error?.message ?? null);
+      })
+      .catch(() => {
+        setEvents([]);
+        setJobs([]);
+        setLoadError('Falha ao carregar eventos e jobs de webhook do tenant.');
+      })
+      .finally(() => setIsLoading(false));
+  }, [detail.tenant.id]);
+
+  useEffect(() => {
+    loadTenantWebhookOps();
+  }, [loadTenantWebhookOps]);
+
+  const visibleEvents = events.filter((event) => {
+    const matchProvider = providerFilter === 'all' || event.provider === providerFilter;
+    const matchStatus = statusFilter === 'all' || event.status === statusFilter;
+    return matchProvider && matchStatus;
+  });
+
+  const latestJobByEvent = jobs.reduce<Record<string, AdminWebhookReprocessJob>>((acc, job) => {
+    const current = acc[job.eventId];
+    if (!current || new Date(job.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+      acc[job.eventId] = job;
+    }
+    return acc;
+  }, {});
+
+  const submitReprocess = async () => {
+    if (!reprocessTarget) return;
+    setIsSubmitting(true);
+    const { error } = await requestWebhookReprocess({
+      provider: reprocessTarget.provider,
+      eventId: reprocessTarget.id,
+      reason,
+      scope,
+    });
+    setIsSubmitting(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Job de reprocesso registrado com auditoria.');
+    setReprocessTarget(null);
+    setReason('');
+    setScope(
+      `Tenant ${detail.tenant.clinicName}: reprocessar evento sanitizado pelo monitor admin`
+    );
+    loadTenantWebhookOps();
+  };
+
   return (
     <SectionCard title="Erros de Webhook" icon={Webhook}>
-      {detail.webhookErrors.length === 0 ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">
-          Nenhum erro de webhook registrado.
+      <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+        Reprocessos criam jobs locais auditados. Esta tela nao executa replay direto nem chama Asaas
+        ou D4Sign.
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <select
+          value={providerFilter}
+          onChange={(event) =>
+            setProviderFilter(event.target.value as 'all' | AdminWebhookEventSummary['provider'])
+          }
+          className="input-base w-auto text-xs"
+        >
+          <option value="all">Todos providers</option>
+          <option value="Asaas">Asaas</option>
+          <option value="D4Sign">D4Sign</option>
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(event) =>
+            setStatusFilter(event.target.value as 'all' | AdminWebhookEventSummary['status'])
+          }
+          className="input-base w-auto text-xs"
+        >
+          <option value="all">Todos status</option>
+          <option value="pending">Pendentes</option>
+          <option value="retrying">Retrying</option>
+          <option value="failed">Falhos</option>
+          <option value="dead_letter">Dead-letter</option>
+          <option value="processed">Processados</option>
+        </select>
+        <button type="button" onClick={loadTenantWebhookOps} className="btn-secondary text-xs">
+          Atualizar eventos
+        </button>
+      </div>
+
+      {isLoading ? (
+        <DataState
+          kind="loading"
+          title="Carregando webhooks do tenant"
+          description="Buscando eventos sanitizados e jobs de reprocesso."
+          className="min-h-40"
+        />
+      ) : loadError && events.length === 0 && detail.webhookErrors.length === 0 ? (
+        <DataState
+          kind="error"
+          title="Webhooks indisponiveis"
+          description={loadError}
+          actionLabel="Tentar novamente"
+          onAction={loadTenantWebhookOps}
+          className="min-h-40"
+        />
+      ) : visibleEvents.length === 0 ? (
+        <div className="space-y-3">
+          {loadError ? (
+            <DataState
+              kind="degraded"
+              title="Snapshot de webhooks degradado"
+              description={loadError}
+              actionLabel="Tentar novamente"
+              onAction={loadTenantWebhookOps}
+              className="min-h-40"
+            />
+          ) : (
+            <DataState
+              kind="empty"
+              title="Nenhum webhook encontrado"
+              description="Nao ha eventos no filtro atual para este tenant."
+              className="min-h-40"
+            />
+          )}
+          {detail.webhookErrors.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              O detalhe legado ainda reporta {detail.webhookErrors.length} erro(s), mas sem provider
+              suficiente para reprocesso direto. Use o monitor global se precisar investigar.
+            </p>
+          ) : null}
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full min-w-[980px] text-xs">
             <thead>
               <tr className="border-b border-border">
-                {['Evento', 'Erro', 'Severidade', 'Tentativas', 'Status', 'Timestamp'].map(
-                  (header) => (
-                    <th
-                      key={header}
-                      scope="col"
-                      className="px-3 py-2 text-left font-medium text-muted-foreground"
-                    >
-                      {header}
-                    </th>
-                  )
-                )}
+                {[
+                  'Provider',
+                  'Evento',
+                  'Status',
+                  'Tentativas',
+                  'Job local',
+                  'Erro sanitizado',
+                  'Recebido',
+                  'Acao',
+                ].map((header) => (
+                  <th
+                    key={header}
+                    scope="col"
+                    className="px-3 py-2 text-left font-medium text-muted-foreground"
+                  >
+                    {header}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {detail.webhookErrors.map((webhook) => (
-                <tr key={webhook.id} className="hover:bg-muted/40">
-                  <td className="px-3 py-2.5 font-mono font-medium text-foreground">
-                    {webhook.event}
-                  </td>
-                  <td className="max-w-[260px] truncate px-3 py-2.5 text-muted-foreground">
-                    {webhook.error || 'Sem erro detalhado'}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StateBadge tone={webhook.severity === 'critico' ? 'red' : 'amber'}>
-                      {webhook.severity}
-                    </StateBadge>
-                  </td>
-                  <td className="px-3 py-2.5 text-center font-medium text-foreground">
-                    {webhook.retries}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StateBadge tone={webhook.status === 'resolved' ? 'emerald' : 'amber'}>
-                      {webhook.status}
-                    </StateBadge>
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {formatDate(webhook.timestamp)}
-                  </td>
-                </tr>
-              ))}
+              {visibleEvents.map((webhook) => {
+                const job = latestJobByEvent[webhook.id];
+                const eligible = isWebhookReprocessable(webhook.status);
+                return (
+                  <tr key={webhook.id} className="hover:bg-muted/40">
+                    <td className="px-3 py-2.5 font-semibold text-foreground">
+                      {webhook.provider}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <p className="font-mono font-medium text-foreground">{webhook.eventType}</p>
+                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                        {webhook.externalId} / {webhook.idempotencyKey}
+                      </p>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <StateBadge tone={webhookStatusTone(webhook.status)}>
+                        {webhook.status}
+                      </StateBadge>
+                    </td>
+                    <td className="px-3 py-2.5 text-center font-medium text-foreground">
+                      {webhook.retryCount}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {job ? (
+                        <div>
+                          <StateBadge
+                            tone={
+                              job.status === 'processed'
+                                ? 'emerald'
+                                : job.status === 'failed' || job.status === 'not_reprocessable'
+                                  ? 'red'
+                                  : 'amber'
+                            }
+                          >
+                            {job.status}
+                          </StateBadge>
+                          <p className="mt-1 text-muted-foreground">{formatDate(job.createdAt)}</p>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">Sem job</span>
+                      )}
+                    </td>
+                    <td className="max-w-[260px] truncate px-3 py-2.5 text-muted-foreground">
+                      {webhook.errorSummary || 'Sem erro detalhado'}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {formatDate(webhook.receivedAt)}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setReprocessTarget(webhook)}
+                        disabled={!adminPermissions.canReprocessWebhooks || !eligible}
+                        className="btn-ghost px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                        title={
+                          !adminPermissions.canReprocessWebhooks
+                            ? 'Apenas owner/admin podem solicitar reprocesso.'
+                            : !eligible
+                              ? 'Evento nao elegivel para reprocesso.'
+                              : undefined
+                        }
+                      >
+                        Reprocessar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      {reprocessTarget ? (
+        <Dialog
+          open
+          title="Solicitar reprocesso"
+          description="Cria job local auditado sem executar provider call"
+          onOpenChange={(open) => {
+            if (!open) setReprocessTarget(null);
+          }}
+          footer={
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReprocessTarget(null)}
+                className="btn-ghost px-4 py-2 text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submitReprocess}
+                disabled={
+                  isSubmitting ||
+                  reason.trim().length < 12 ||
+                  scope.trim().length < 8 ||
+                  !adminPermissions.canReprocessWebhooks
+                }
+                className="btn-primary px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Registrar job
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4 text-sm">
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs">
+              <p className="font-semibold text-foreground">
+                {reprocessTarget.provider} - {reprocessTarget.eventType}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                Status {reprocessTarget.status}; recebido {formatDate(reprocessTarget.receivedAt)}.
+              </p>
+            </div>
+            <label className="block">
+              <span className="text-xs font-semibold text-foreground">Escopo operacional</span>
+              <input
+                value={scope}
+                onChange={(event) => setScope(event.target.value)}
+                className="input-base mt-1 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-foreground">Motivo auditavel</span>
+              <textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Explique por que este evento deve entrar na fila local de reprocesso."
+                className="input-base mt-1 min-h-24 text-sm"
+              />
+            </label>
+          </div>
+        </Dialog>
+      ) : null}
     </SectionCard>
   );
 }
@@ -1389,6 +1861,8 @@ function TabContent({
   if (activeTab === 'overview') return <OverviewTab detail={detail} onReload={onReload} />;
   if (activeTab === 'users') return <UsersTab detail={detail} onReload={onReload} />;
   if (activeTab === 'units') return <UnitsTab detail={detail} onReload={onReload} />;
+  if (activeTab === 'billing') return <BillingTab detail={detail} onReload={onReload} />;
+  if (activeTab === 'integrations') return <IntegrationsTab detail={detail} />;
   if (activeTab === 'audit') return <AuditTab detail={detail} />;
   if (activeTab === 'webhooks') return <WebhooksTab detail={detail} />;
   if (activeTab === 'support') return <SupportTab detail={detail} onReload={onReload} />;
@@ -1425,6 +1899,20 @@ export default function TenantDetailContent() {
             { key: 'overview', label: 'Visao Geral', icon: Activity },
             { key: 'users', label: 'Usuarios', icon: Users, count: detail.users.length },
             { key: 'units', label: 'Unidades', icon: MapPin, count: detail.units.length },
+            {
+              key: 'billing',
+              label: 'Billing',
+              icon: CreditCard,
+              count: detail.auditLogs.filter(
+                (entry) => entry.category === 'billing' || entry.action.includes('billing')
+              ).length,
+            },
+            {
+              key: 'integrations',
+              label: 'Integracoes',
+              icon: Link2,
+              count: detail.webhookErrors.filter((item) => item.status !== 'resolved').length,
+            },
             {
               key: 'audit',
               label: 'Auditoria',

@@ -1,8 +1,8 @@
 import React from 'react';
-import { AlertTriangle, Inbox, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Inbox, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import { cx } from './utils';
 
-type DataStateKind = 'loading' | 'empty' | 'error';
+type DataStateKind = 'loading' | 'empty' | 'error' | 'forbidden' | 'degraded';
 
 interface DataStateProps {
   kind: DataStateKind;
@@ -17,6 +17,8 @@ const iconByKind = {
   loading: Loader2,
   empty: Inbox,
   error: AlertTriangle,
+  forbidden: ShieldAlert,
+  degraded: AlertTriangle,
 };
 
 export default function DataState({
@@ -40,7 +42,13 @@ export default function DataState({
       <div
         className={cx(
           'mb-3 flex h-10 w-10 items-center justify-center rounded-lg',
-          kind === 'error' ? 'bg-red-50 text-red-600' : 'bg-primary/10 text-primary'
+          kind === 'error'
+            ? 'bg-red-50 text-red-600'
+            : kind === 'forbidden'
+              ? 'bg-slate-100 text-slate-600'
+              : kind === 'degraded'
+                ? 'bg-amber-50 text-amber-600'
+                : 'bg-primary/10 text-primary'
         )}
       >
         <Icon className={cx('h-5 w-5', kind === 'loading' && 'animate-spin')} aria-hidden="true" />

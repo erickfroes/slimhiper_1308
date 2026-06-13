@@ -289,6 +289,12 @@ export default function ObservabilityDashboardContent() {
         .includes(query);
     });
   const openAcknowledgements = Object.keys(acknowledgedMonitors).length;
+  const liveMonitorCount = monitors.filter((monitor) => monitor.source === 'live').length;
+  const staticMonitorCount = monitors.length - liveMonitorCount;
+  const degradedSignals = [
+    loadError,
+    health?.status === 'unknown' ? 'Healthcheck indisponivel.' : null,
+  ].filter((message): message is string => Boolean(message));
 
   return (
     <AdminShell
@@ -330,6 +336,38 @@ export default function ObservabilityDashboardContent() {
             <span className="ml-auto rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
               {openAcknowledgements} ack local
             </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="card-base p-5">
+            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
+              <Activity size={16} className="text-emerald-600" /> Sinais reais
+            </div>
+            <p className="text-2xl font-bold tabular-nums text-foreground">{liveMonitorCount}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Health, webhooks e jobs carregados por API/RPC sanitizados.
+            </p>
+          </div>
+          <div className="card-base p-5">
+            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
+              <FileText size={16} className="text-primary" /> Catalogo pendente
+            </div>
+            <p className="text-2xl font-bold tabular-nums text-foreground">{staticMonitorCount}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Monitores documentados aguardando contrato de metrica real.
+            </p>
+          </div>
+          <div className="card-base p-5">
+            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
+              <AlertTriangle size={16} className="text-amber-600" /> Estado degradado
+            </div>
+            <p className="text-2xl font-bold tabular-nums text-foreground">
+              {degradedSignals.length}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {degradedSignals[0] ?? 'Nenhuma falha parcial detectada no carregamento atual.'}
+            </p>
           </div>
         </div>
 
