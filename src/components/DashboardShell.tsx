@@ -34,12 +34,22 @@ import {
   markThreadRead,
   type CommunicationsSummary,
 } from '@/services/notificationsApi';
+import {
+  isClinicPathAllowed,
+  normalizePlanEntitlements,
+  type PlanEntitlements,
+} from '@/services/planEntitlements';
 
 interface NavItem {
   key: string;
   label: string;
   href: string;
   icon: React.ElementType;
+}
+
+interface AppSessionAccessPayload {
+  permissions?: string[];
+  planEntitlements?: PlanEntitlements;
 }
 
 const clinicNavItems: NavItem[] = [
@@ -111,6 +121,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   const [summary, setSummary] = useState<CommunicationsSummary | null>(null);
   const [communicationsLoading, setCommunicationsLoading] = useState(true);
   const [communicationsError, setCommunicationsError] = useState<string | null>(null);
+  const [sessionAccess, setSessionAccess] = useState<AppSessionAccessPayload | null>(null);
   const [openMenu, setOpenMenu] = useState<'messages' | 'notifications' | null>(null);
   const topbarMenuRef = useRef<HTMLDivElement | null>(null);
   const messagesButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -130,6 +141,33 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   const formattedUnreadNotifications = formatBadgeCount(totalUnreadNotifications);
   const topMessages = useMemo(() => summary?.messages ?? [], [summary]);
   const topNotifications = useMemo(() => summary?.notifications ?? [], [summary]);
+  const visibleNavItems = useMemo(() => {
+    if (!sessionAccess) return clinicNavItems;
+    const entitlements = normalizePlanEntitlements(sessionAccess.planEntitlements);
+    return clinicNavItems.filter((item) =>
+      isClinicPathAllowed(item.href, entitlements, sessionAccess.permissions ?? [])
+    );
+  }, [sessionAccess]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadSessionAccess() {
+      try {
+        const response = await fetch('/api/auth/app-session');
+        const payload = (await response.json().catch(() => null)) as AppSessionAccessPayload | null;
+        if (mounted && response.ok) setSessionAccess(payload);
+      } catch {
+        if (mounted) setSessionAccess(null);
+      }
+    }
+
+    void loadSessionAccess();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -313,7 +351,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
 
         {/* Nav items */}
         <nav className="flex-1 overflow-y-auto scrollbar-thin py-3 px-2 space-y-0.5">
-          {clinicNavItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (

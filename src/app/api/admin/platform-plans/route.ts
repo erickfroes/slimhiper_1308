@@ -3,6 +3,11 @@ import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformA
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
+import {
+  arePlanEntitlementsEqual,
+  normalizePlanEntitlements,
+  validatePlanEntitlementsInput,
+} from '@/services/planEntitlements';
 
 const BILLING_CYCLES = new Set(['monthly', 'quarterly', 'yearly']);
 
@@ -103,6 +108,7 @@ export async function POST(request: Request) {
   const currency = normalizeText(body.currency, 3).toUpperCase() || 'BRL';
   const active = body.active !== false;
   const reason = normalizeText(body.reason, 500);
+  const entitlementErrors = validatePlanEntitlementsInput(body.entitlements);
 
   if (!/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/.test(code)) {
     return jsonError('Codigo do plano invalido.', 400);
@@ -114,8 +120,10 @@ export async function POST(request: Request) {
   if (reason.length < 16) {
     return jsonError('Informe um motivo auditavel com pelo menos 16 caracteres.', 400);
   }
+  if (entitlementErrors.length > 0) return jsonError(entitlementErrors[0], 400);
 
   const features = buildFeatures(body.features);
+  const entitlements = normalizePlanEntitlements(body.entitlements);
   const { data: plan, error } = await admin
     .from('platform_plans')
     .insert({
@@ -127,6 +135,7 @@ export async function POST(request: Request) {
       active,
       metadata: {
         features,
+        entitlements,
         source: 'platform_admin_console',
       },
     })
@@ -153,6 +162,7 @@ export async function POST(request: Request) {
       currency,
       active,
       features,
+      entitlements,
       source: 'platform_admin_console',
     },
   });
@@ -181,6 +191,7 @@ export async function PATCH(request: Request) {
   const currency = normalizeText(body.currency, 3).toUpperCase() || 'BRL';
   const active = body.active !== false;
   const reason = normalizeText(body.reason, 500);
+  const entitlementErrors = validatePlanEntitlementsInput(body.entitlements);
 
   if (!isUuid(id)) return jsonError('Plano invalido.', 400);
   if (name.length < 3) return jsonError('Informe o nome do plano.', 400);
@@ -190,6 +201,7 @@ export async function PATCH(request: Request) {
   if (reason.length < 16) {
     return jsonError('Informe um motivo auditavel com pelo menos 16 caracteres.', 400);
   }
+  if (entitlementErrors.length > 0) return jsonError(entitlementErrors[0], 400);
 
   const { data: current, error: currentError } = await admin
     .from('platform_plans')
@@ -200,9 +212,13 @@ export async function PATCH(request: Request) {
   if (!current) return jsonError('Plano nao encontrado.', 404);
 
   const features = buildFeatures(body.features);
+  const entitlements = normalizePlanEntitlements(body.entitlements);
+  const currentEntitlements = normalizePlanEntitlements(asRecord(current.metadata).entitlements);
+  const entitlementsChanged = !arePlanEntitlementsEqual(currentEntitlements, entitlements);
   const metadata = {
     ...asRecord(current.metadata),
     features,
+    entitlements,
     source: 'platform_admin_console',
   };
 
@@ -222,26 +238,54 @@ export async function PATCH(request: Request) {
 
   if (error) return jsonError('Falha ao atualizar plano.', 500);
 
-  const { error: auditError } = await admin.from('audit_logs').insert({
-    tenant_id: null,
-    user_id: session.userId,
-    action: 'platform_plan.updated',
-    entity_type: 'platform_plan',
-    entity_id: id,
-    metadata: {
-      reason,
-      code: current.code,
-      changes: {
-        name,
-        billingCycle,
-        amountCents,
-        currency,
-        active,
-        features,
+  const auditRows: Array<{
+    tenant_id: null;
+    user_id: string;
+    action: string;
+    entity_type: string;
+    entity_id: string;
+    metadata: Record<string, unknown>;
+  }> = [
+    {
+      tenant_id: null,
+      user_id: session.userId,
+      action: 'platform_plan.updated',
+      entity_type: 'platform_plan',
+      entity_id: id,
+      metadata: {
+        reason,
+        code: current.code,
+        changes: {
+          name,
+          billingCycle,
+          amountCents,
+          currency,
+          active,
+          features,
+          entitlements,
+        },
+        source: 'platform_admin_console',
       },
-      source: 'platform_admin_console',
     },
-  });
+  ];
+  if (entitlementsChanged) {
+    auditRows.push({
+      tenant_id: null,
+      user_id: session.userId,
+      action: 'platform_plan.entitlements_updated',
+      entity_type: 'platform_plan',
+      entity_id: id,
+      metadata: {
+        reason,
+        code: current.code,
+        previousEntitlements: currentEntitlements,
+        entitlements,
+        source: 'platform_admin_console',
+      },
+    });
+  }
+
+  const { error: auditError } = await admin.from('audit_logs').insert(auditRows);
   if (auditError) {
     await admin
       .from('platform_plans')

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Activity,
@@ -43,6 +43,13 @@ import {
   type PlatformAdminSnapshot,
   type SavePlatformPlanInput,
 } from '@/services/adminApi';
+import {
+  PLAN_MODULE_CATALOG,
+  countPlanEntitlements,
+  createDefaultPlanEntitlements,
+  setPlanModuleEnabled,
+  setPlanPartEnabled,
+} from '@/services/planEntitlements';
 
 type AdminOperationsSection =
   | 'billing'
@@ -184,6 +191,16 @@ function getPlanFeatureNumber(plan: AdminPlatformPlan, snakeKey: string, camelKe
   return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
+function badgeLabel(badge: string) {
+  const labels: Record<string, string> = {
+    required: 'obrigatorio',
+    sensitive: 'sensivel',
+    provider: 'provider',
+    beta: 'beta',
+  };
+  return labels[badge] ?? badge;
+}
+
 function createEmptyPlanDraft(): PlanDraft {
   return {
     code: '',
@@ -198,6 +215,7 @@ function createEmptyPlanDraft(): PlanDraft {
       apiLimitMonthly: 30000,
       d4signDocsLimit: 100,
     },
+    entitlements: createDefaultPlanEntitlements(),
     reason: '',
   };
 }
@@ -220,6 +238,7 @@ function draftFromPlan(plan: AdminPlatformPlan): PlanDraft {
       apiLimitMonthly: getPlanFeatureNumber(plan, 'api_limit_monthly', 'apiLimitMonthly'),
       d4signDocsLimit: getPlanFeatureNumber(plan, 'd4sign_docs_limit', 'd4signDocsLimit'),
     },
+    entitlements: plan.entitlements,
     reason: '',
   };
 }
@@ -233,6 +252,7 @@ function PlatformPlansPanel() {
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedModuleKey, setSelectedModuleKey] = useState(PLAN_MODULE_CATALOG[1].key);
 
   const loadPlans = useCallback(() => {
     setIsLoading(true);
@@ -266,6 +286,28 @@ function PlatformPlansPanel() {
     );
   };
 
+  const updateModule = (moduleKey: string, enabled: boolean) => {
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            entitlements: setPlanModuleEnabled(current.entitlements, moduleKey, enabled),
+          }
+        : current
+    );
+  };
+
+  const updatePart = (moduleKey: string, partKey: string, enabled: boolean) => {
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            entitlements: setPlanPartEnabled(current.entitlements, moduleKey, partKey, enabled),
+          }
+        : current
+    );
+  };
+
   const submit = async () => {
     if (!draft) return;
     setIsSaving(true);
@@ -281,6 +323,15 @@ function PlatformPlansPanel() {
     setDraft(null);
     loadPlans();
   };
+
+  const selectedModule =
+    PLAN_MODULE_CATALOG.find((module) => module.key === selectedModuleKey) ??
+    PLAN_MODULE_CATALOG[0];
+  const draftModuleState = draft?.entitlements.modules[selectedModule.key];
+  const entitlementSummary = useMemo(
+    () => (draft ? countPlanEntitlements(draft.entitlements) : null),
+    [draft]
+  );
 
   return (
     <div className="card-base overflow-hidden">
@@ -320,23 +371,25 @@ function PlatformPlansPanel() {
         <table className="w-full min-w-[920px] text-xs">
           <thead className="border-b border-border bg-muted/40 text-muted-foreground">
             <tr>
-              {['Plano', 'Preco', 'Ciclo', 'Limites', 'Status', 'Acoes'].map((header) => (
-                <th key={header} scope="col" className="px-4 py-3 text-left font-semibold">
-                  {header}
-                </th>
-              ))}
+              {['Plano', 'Preco', 'Ciclo', 'Limites', 'Modulos', 'Status', 'Acoes'].map(
+                (header) => (
+                  <th key={header} scope="col" className="px-4 py-3 text-left font-semibold">
+                    {header}
+                  </th>
+                )
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {isLoading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   Carregando planos da plataforma...
                 </td>
               </tr>
             ) : plans.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   Nenhum plano configurado. Crie um plano antes de criar tenants.
                 </td>
               </tr>
@@ -356,6 +409,10 @@ function PlatformPlansPanel() {
                     {getPlanFeatureNumber(plan, 'storage_gb', 'storageGb')} GB /{' '}
                     {compact(getPlanFeatureNumber(plan, 'api_limit_monthly', 'apiLimitMonthly'))}{' '}
                     API
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {countPlanEntitlements(plan.entitlements).enabledModules}/
+                    {countPlanEntitlements(plan.entitlements).totalModules} modulos
                   </td>
                   <td className="px-4 py-3">
                     <StatusPill tone={plan.active ? 'emerald' : 'slate'}>
@@ -500,6 +557,177 @@ function PlatformPlansPanel() {
                   />
                 </label>
               ))}
+            </div>
+
+            <div className="rounded-xl border border-border">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Modulos do plano</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Define navegacao, permissao RBAC e feature flags aplicadas ao tenant.
+                  </p>
+                </div>
+                {entitlementSummary ? (
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <StatusPill tone="blue">
+                      {entitlementSummary.enabledModules}/{entitlementSummary.totalModules} modulos
+                    </StatusPill>
+                    <StatusPill tone="emerald">{entitlementSummary.enabledParts} partes</StatusPill>
+                    {entitlementSummary.providerParts > 0 ? (
+                      <StatusPill tone="amber">
+                        {entitlementSummary.providerParts} provider
+                      </StatusPill>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-[15rem_1fr]">
+                <div className="border-b border-border md:border-b-0 md:border-r">
+                  <div className="max-h-72 overflow-y-auto p-2">
+                    {PLAN_MODULE_CATALOG.map((module) => {
+                      const moduleState = draft.entitlements.modules[module.key];
+                      return (
+                        <button
+                          key={module.key}
+                          type="button"
+                          onClick={() => setSelectedModuleKey(module.key)}
+                          className={[
+                            'mb-1 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs transition',
+                            selectedModule.key === module.key
+                              ? 'bg-primary/10 text-primary'
+                              : 'hover:bg-muted text-muted-foreground',
+                          ].join(' ')}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold">{module.label}</span>
+                            <span className="block truncate text-[11px] opacity-80">
+                              {module.required
+                                ? 'core'
+                                : moduleState?.enabled
+                                  ? 'ativo'
+                                  : 'bloqueado'}
+                            </span>
+                          </span>
+                          <span
+                            className={[
+                              'h-2.5 w-2.5 rounded-full',
+                              moduleState?.enabled ? 'bg-emerald-500' : 'bg-slate-300',
+                            ].join(' ')}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-bold text-foreground">
+                          {selectedModule.label}
+                        </h3>
+                        {selectedModule.badges?.map((badge) => (
+                          <StatusPill
+                            key={badge}
+                            tone={
+                              badge === 'provider'
+                                ? 'amber'
+                                : badge === 'required'
+                                  ? 'blue'
+                                  : badge === 'sensitive'
+                                    ? 'red'
+                                    : 'slate'
+                            }
+                          >
+                            {badgeLabel(badge)}
+                          </StatusPill>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {selectedModule.description}
+                      </p>
+                    </div>
+                    <label className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={draftModuleState?.enabled === true}
+                        disabled={selectedModule.required}
+                        onChange={(event) => updateModule(selectedModule.key, event.target.checked)}
+                      />
+                      Modulo ativo
+                    </label>
+                  </div>
+
+                  {selectedModule.permissions.length > 0 ? (
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs">
+                      <p className="font-semibold text-foreground">Permissoes RBAC afetadas</p>
+                      <p className="mt-1 break-words font-mono text-muted-foreground">
+                        {selectedModule.permissions.join(', ')}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-2">
+                    {selectedModule.parts.length === 0 ? (
+                      <DataState
+                        kind="empty"
+                        title="Sem partes configuraveis"
+                        description="Este modulo e parte do core operacional."
+                        className="min-h-32 border-0 bg-muted/20"
+                      />
+                    ) : (
+                      selectedModule.parts.map((part) => {
+                        const checked = draftModuleState?.parts?.[part.key] === true;
+                        return (
+                          <label
+                            key={part.key}
+                            className="flex items-start gap-3 rounded-lg border border-border p-3"
+                          >
+                            <input
+                              type="checkbox"
+                              className="mt-1"
+                              checked={checked}
+                              disabled={!draftModuleState?.enabled}
+                              onChange={(event) =>
+                                updatePart(selectedModule.key, part.key, event.target.checked)
+                              }
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-semibold text-foreground">
+                                  {part.label}
+                                </span>
+                                {part.badges?.map((badge) => (
+                                  <StatusPill
+                                    key={badge}
+                                    tone={
+                                      badge === 'provider'
+                                        ? 'amber'
+                                        : badge === 'sensitive'
+                                          ? 'red'
+                                          : 'slate'
+                                    }
+                                  >
+                                    {badgeLabel(badge)}
+                                  </StatusPill>
+                                ))}
+                              </span>
+                              <span className="mt-1 block text-xs text-muted-foreground">
+                                {part.description}
+                              </span>
+                              <span className="mt-1 block font-mono text-[11px] text-muted-foreground">
+                                {part.featureFlagKey ?? part.key}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <label className="block">

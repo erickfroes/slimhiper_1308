@@ -160,9 +160,11 @@ export default function ClinicFinanceiroContent() {
     receiptId: string;
     decision: 'approve' | 'reject';
   } | null>(null);
+  const [featureFlags, setFeatureFlags] = useState<Set<string>>(() => new Set());
   const [reviewReason, setReviewReason] = useState('');
   const [reviewError, setReviewError] = useState<string | null>(null);
   const reviewReasonRef = useRef<HTMLTextAreaElement>(null);
+  const canUseAsaas = featureFlags.has('financial.asaas');
 
   const loadFinanceOverview = useCallback(async () => {
     setLoading(true);
@@ -196,6 +198,28 @@ export default function ClinicFinanceiroContent() {
   useEffect(() => {
     void loadFinanceOverview();
   }, [loadFinanceOverview]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadFeatureFlags() {
+      try {
+        const response = await fetch('/api/auth/app-session');
+        const payload = (await response.json().catch(() => null)) as {
+          featureFlags?: string[];
+        } | null;
+        if (mounted && response.ok) setFeatureFlags(new Set(payload?.featureFlags ?? []));
+      } catch {
+        if (mounted) setFeatureFlags(new Set());
+      }
+    }
+
+    void loadFeatureFlags();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const openPaymentReceipt = async (receiptId: string) => {
     setActionLoading(`open:${receiptId}`);
@@ -252,6 +276,10 @@ export default function ClinicFinanceiroContent() {
 
   const handleSyncInvoice = async (invoiceId: string | null) => {
     if (!invoiceId) return;
+    if (!canUseAsaas) {
+      setActionError('Operacoes Asaas indisponiveis no plano deste tenant.');
+      return;
+    }
     setActionLoading(`sync:${invoiceId}`);
     setActionMessage(null);
     setActionError(null);
@@ -682,6 +710,11 @@ export default function ClinicFinanceiroContent() {
               mutaveis exigem paciente validado, ambiente sandbox explicitamente autorizado e Edge
               Functions com idempotencia.
             </p>
+            {!canUseAsaas ? (
+              <p className="mt-2 text-xs font-semibold text-amber-700">
+                Subparte financial.asaas indisponivel no plano deste tenant.
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2" aria-label="Acoes Asaas bloqueadas">
             {['Criar customer', 'Gerar cobranca', 'Criar assinatura'].map((label) => (
@@ -766,7 +799,14 @@ export default function ClinicFinanceiroContent() {
                             <button
                               type="button"
                               className="inline-flex w-fit items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={actionLoading === `sync:${divergence.invoiceId}`}
+                              disabled={
+                                !canUseAsaas || actionLoading === `sync:${divergence.invoiceId}`
+                              }
+                              title={
+                                canUseAsaas
+                                  ? undefined
+                                  : 'Operacoes Asaas indisponiveis no plano deste tenant'
+                              }
                               onClick={() => void handleSyncInvoice(divergence.invoiceId)}
                             >
                               {actionLoading === `sync:${divergence.invoiceId}` ? (

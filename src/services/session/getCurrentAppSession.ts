@@ -1,4 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
+import {
+  getEntitlementFeatureFlags,
+  normalizePlanEntitlements,
+  type PlanEntitlements,
+} from '@/services/planEntitlements';
 import { PERMISSIONS, hasAnyPermission } from './permissions';
 import {
   isPatientRole,
@@ -31,6 +36,7 @@ export interface AppSession {
   activeTenantRole: string | null;
   featureFlags: string[];
   permissions: string[];
+  planEntitlements: PlanEntitlements;
   isPlatformAdmin: () => boolean;
   isPlatformSupport: () => boolean;
   isClinicUser: () => boolean;
@@ -179,21 +185,35 @@ export async function getCurrentAppSession(
     if (permissions.length > 0) break;
   }
 
-  const { data: featureFlagRows } = activeTenantId
-    ? await supabase.from('feature_flags').select('*').eq('tenant_id', activeTenantId)
-    : { data: [] };
+  const [featureFlagsResult, tenantSettingsResult] = activeTenantId
+    ? await Promise.all([
+        supabase.from('feature_flags').select('*').eq('tenant_id', activeTenantId),
+        supabase.from('tenants').select('settings').eq('id', activeTenantId).maybeSingle(),
+      ])
+    : [{ data: [] }, { data: null }];
 
-  const featureFlags = Array.from(
-    new Set(
-      (featureFlagRows ?? [])
-        .map((row: unknown) => {
-          const raw = asRecord(row);
-          if (raw.enabled === false) return null;
-          return normalizeString(raw.key) ?? normalizeString(raw.code) ?? normalizeString(raw.slug);
-        })
-        .filter((flag): flag is string => Boolean(flag))
-    )
+  const tenantSettings = asRecord(asRecord(tenantSettingsResult.data).settings);
+  const planEntitlements = normalizePlanEntitlements(tenantSettings.planEntitlements);
+  const entitlementFeatureFlags = getEntitlementFeatureFlags(planEntitlements);
+  const persistedFeatureFlags = new Map<string, boolean>();
+  for (const row of featureFlagsResult.data ?? []) {
+    const raw = asRecord(row);
+    const key = normalizeString(raw.key) ?? normalizeString(raw.code) ?? normalizeString(raw.slug);
+    if (key) persistedFeatureFlags.set(key, raw.enabled !== false);
+  }
+  const featureFlags = Object.entries(entitlementFeatureFlags).reduce<string[]>(
+    (acc, [key, enabledByEntitlement]) => {
+      const enabled = persistedFeatureFlags.has(key)
+        ? persistedFeatureFlags.get(key) === true
+        : enabledByEntitlement;
+      if (enabled) acc.push(key);
+      return acc;
+    },
+    []
   );
+  for (const [key, enabled] of persistedFeatureFlags.entries()) {
+    if (enabled && !featureFlags.includes(key)) featureFlags.push(key);
+  }
 
   const permissionSet = new Set(permissions);
   const normalizedActiveRole = (activeTenantRole ?? '').toLowerCase();
@@ -214,6 +234,7 @@ export async function getCurrentAppSession(
     activeTenantRole,
     featureFlags,
     permissions,
+    planEntitlements,
     isPlatformAdmin: () => isPlatformAdminRole(platformRole),
     isPlatformSupport: () => isPlatformSupportRole(platformRole),
     isClinicUser: () => tenantMemberships.length > 0,

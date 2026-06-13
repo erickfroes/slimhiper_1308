@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { getCurrentAppSession, type AppSession } from '@/services/session/getCurrentAppSession';
+import { isClinicPathAllowed } from '@/services/planEntitlements';
 
 export type ClinicAccessState =
   | { status: 'ok'; session: AppSession }
@@ -29,6 +31,18 @@ export async function getClinicAccessState(): Promise<ClinicAccessState> {
         status: 'forbidden',
         session,
         reason: 'active_membership_without_clinic_workspace_access',
+      };
+    }
+
+    const requestPathname = (await headers()).get('x-pathname') ?? '';
+    if (
+      requestPathname.startsWith('/clinic') &&
+      !isClinicPathAllowed(requestPathname, session.planEntitlements, session.permissions)
+    ) {
+      return {
+        status: 'forbidden',
+        session,
+        reason: 'plan_module_disabled',
       };
     }
 

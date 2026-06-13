@@ -1,5 +1,10 @@
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { SafeServiceError } from '@/services/billingApi';
+import {
+  normalizePlanEntitlements,
+  validatePlanEntitlementsInput,
+  type PlanEntitlements,
+} from '@/services/planEntitlements';
 
 export type AdminPlan = 'starter' | 'professional' | 'enterprise' | (string & {});
 export type AdminTenantStatus = 'active' | 'trial' | 'suspended' | 'cancelled';
@@ -250,6 +255,7 @@ export interface AdminPlatformPlan {
   currency: string;
   active: boolean;
   features: Record<string, unknown>;
+  entitlements: PlanEntitlements;
 }
 
 export interface CreateTenantInput {
@@ -316,7 +322,24 @@ export interface SavePlatformPlanInput {
     apiLimitMonthly: number;
     d4signDocsLimit: number;
   };
+  entitlements: PlanEntitlements;
   reason: string;
+}
+
+export interface AdminTenantEntitlementsState {
+  tenantId: string;
+  planCode: string;
+  source: 'plan_snapshot' | 'tenant_override';
+  isOutOfSync: boolean;
+  currentEntitlements: PlanEntitlements;
+  planEntitlements: PlanEntitlements;
+  syncedAt: string | null;
+}
+
+export interface SaveTenantEntitlementsInput {
+  tenantId: string;
+  reason: string;
+  entitlements?: PlanEntitlements;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -770,6 +793,25 @@ function mapPlatformPlan(value: unknown): AdminPlatformPlan {
     currency: asString(record.currency, 'BRL'),
     active: asBoolean(record.active, true),
     features: asRecord(metadata.features),
+    entitlements: normalizePlanEntitlements(metadata.entitlements),
+  };
+}
+
+function mapTenantEntitlementsState(value: unknown): AdminTenantEntitlementsState | null {
+  const record = asRecord(value);
+  const tenantId = asString(record.tenantId);
+  if (!tenantId) return null;
+  const source =
+    asString(record.source) === 'tenant_override' ? 'tenant_override' : 'plan_snapshot';
+
+  return {
+    tenantId,
+    planCode: asString(record.planCode, 'starter'),
+    source,
+    isOutOfSync: asBoolean(record.isOutOfSync),
+    currentEntitlements: normalizePlanEntitlements(record.currentEntitlements),
+    planEntitlements: normalizePlanEntitlements(record.planEntitlements),
+    syncedAt: asNullableString(record.syncedAt),
   };
 }
 
@@ -836,6 +878,7 @@ export async function savePlatformPlan(input: SavePlatformPlanInput): Promise<{
     apiLimitMonthly: Math.trunc(Number(input.features.apiLimitMonthly)),
     d4signDocsLimit: Math.trunc(Number(input.features.d4signDocsLimit)),
   };
+  const entitlementErrors = validatePlanEntitlementsInput(input.entitlements);
 
   if (!/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/.test(code)) {
     return { data: null, error: { message: 'Codigo do plano invalido.' } };
@@ -852,6 +895,9 @@ export async function savePlatformPlan(input: SavePlatformPlanInput): Promise<{
   }
   if (Object.values(features).some((value) => !Number.isFinite(value) || value <= 0)) {
     return { data: null, error: { message: 'Limites do plano devem ser maiores que zero.' } };
+  }
+  if (entitlementErrors.length > 0) {
+    return { data: null, error: { message: entitlementErrors[0] } };
   }
   if (reason.length < 16) {
     return {
@@ -873,6 +919,7 @@ export async function savePlatformPlan(input: SavePlatformPlanInput): Promise<{
         currency,
         active: input.active,
         features,
+        entitlements: normalizePlanEntitlements(input.entitlements),
         reason,
       }),
     });
@@ -1043,6 +1090,93 @@ export async function updatePlatformTenantConfig(input: UpdateTenantConfigInput)
     return { error: null as SafeServiceError | null };
   } catch (error) {
     return { error: asServiceError(error, 'Falha ao atualizar tenant.') };
+  }
+}
+
+export async function getTenantEntitlements(tenantId: string): Promise<{
+  data: AdminTenantEntitlementsState | null;
+  error: SafeServiceError | null;
+}> {
+  const normalizedTenantId = tenantId.trim();
+  if (!isUuid(normalizedTenantId)) {
+    return { data: null, error: { message: 'Tenant invalido.' } };
+  }
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${normalizedTenantId}/entitlements`);
+    const payload = (await response.json().catch(() => null)) as {
+      data?: unknown;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null,
+        error: {
+          message: payload?.error?.message ?? 'Falha ao carregar modulos do tenant.',
+        },
+      };
+    }
+
+    const mapped = mapTenantEntitlementsState(payload?.data);
+    if (!mapped) {
+      return { data: null, error: { message: 'Resposta invalida dos modulos do tenant.' } };
+    }
+
+    return { data: mapped, error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao carregar modulos do tenant.') };
+  }
+}
+
+export async function saveTenantEntitlements(input: SaveTenantEntitlementsInput): Promise<{
+  data: AdminTenantEntitlementsState | null;
+  error: SafeServiceError | null;
+}> {
+  const tenantId = input.tenantId.trim();
+  const reason = normalizeText(input.reason, 500);
+  if (!isUuid(tenantId)) return { data: null, error: { message: 'Tenant invalido.' } };
+  if (reason.length < 16) {
+    return {
+      data: null,
+      error: { message: 'Informe um motivo auditavel com pelo menos 16 caracteres.' },
+    };
+  }
+
+  const entitlementErrors = validatePlanEntitlementsInput(input.entitlements);
+  if (entitlementErrors.length > 0) {
+    return { data: null, error: { message: entitlementErrors[0] } };
+  }
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${tenantId}/entitlements`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reason,
+        entitlements: input.entitlements
+          ? normalizePlanEntitlements(input.entitlements)
+          : undefined,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as {
+      data?: unknown;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null,
+        error: {
+          message: payload?.error?.message ?? 'Falha ao salvar modulos do tenant.',
+        },
+      };
+    }
+
+    return { data: mapTenantEntitlementsState(payload?.data), error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao salvar modulos do tenant.') };
   }
 }
 

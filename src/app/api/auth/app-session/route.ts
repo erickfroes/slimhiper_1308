@@ -55,6 +55,8 @@ export async function GET(request: Request) {
       authenticated: true,
       platformRole: session.platformRole,
       permissions: session.permissions,
+      featureFlags: session.featureFlags,
+      planEntitlements: session.planEntitlements,
       canAccessPlatformAdmin,
       canAccessClinicWorkspace,
       hasActiveTenantMembership,

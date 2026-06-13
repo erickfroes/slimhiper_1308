@@ -2,6 +2,8 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export function updateSession(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-pathname', request.nextUrl.pathname);
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -12,12 +14,12 @@ export function updateSession(request: NextRequest) {
     // no authenticated user will be found.
     return {
       supabase: null,
-      response: NextResponse.next({ request }),
+      response: NextResponse.next({ request: { headers: requestHeaders } }),
     };
   }
 
   let response = NextResponse.next({
-    request,
+    request: { headers: requestHeaders },
   });
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
@@ -30,7 +32,7 @@ export function updateSession(request: NextRequest) {
           request.cookies.set(name, value);
         });
         response = NextResponse.next({
-          request,
+          request: { headers: requestHeaders },
         });
         cookiesToSet.forEach(({ name, value, options }) => {
           response.cookies.set(name, value, options);

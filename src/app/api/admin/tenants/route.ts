@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
+import { applyTenantEntitlements } from '@/services/adminTenantEntitlements';
+import { normalizePlanEntitlements } from '@/services/planEntitlements';
 import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
 
 const TRIAL_DAYS = 14;
@@ -107,6 +109,7 @@ function planUsageDefaults(code: string, metadata: unknown) {
   const usersLimit = Number(features.users_limit ?? features.usersLimit);
   const storageCapacityGb = Number(features.storage_gb ?? features.storageGb);
   const apiLimitMonthly = Number(features.api_limit_monthly ?? features.apiLimitMonthly);
+  const d4signDocsLimit = Number(features.d4sign_docs_limit ?? features.d4signDocsLimit);
 
   return {
     usersLimit: Number.isFinite(usersLimit) && usersLimit > 0 ? usersLimit : defaults.usersLimit,
@@ -118,6 +121,8 @@ function planUsageDefaults(code: string, metadata: unknown) {
       Number.isFinite(apiLimitMonthly) && apiLimitMonthly > 0
         ? apiLimitMonthly
         : defaults.apiLimitMonthly,
+    d4signDocsLimit:
+      Number.isFinite(d4signDocsLimit) && d4signDocsLimit > 0 ? d4signDocsLimit : 100,
   };
 }
 
@@ -255,6 +260,7 @@ export async function POST(request: Request) {
     }
 
     const usage = planUsageDefaults(planCode, plan.metadata);
+    const planEntitlements = normalizePlanEntitlements(asRecord(plan.metadata).entitlements);
     const nowIso = new Date().toISOString();
     const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
@@ -273,6 +279,10 @@ export async function POST(request: Request) {
             cnpj,
           },
           plan: planCode,
+          planEntitlements,
+          planEntitlementsSource: 'plan_snapshot',
+          planEntitlementsSyncedAt: nowIso,
+          planEntitlementsSyncedBy: session.userId,
           usage: {
             storageUsedGb: 0,
             storageCapacityGb: usage.storageCapacityGb,
@@ -281,7 +291,7 @@ export async function POST(request: Request) {
           },
           integrations: {
             asaas: { status: 'not_configured' },
-            d4sign: { status: 'not_configured', docsLimit: 100 },
+            d4sign: { status: 'not_configured', docsLimit: usage.d4signDocsLimit },
           },
           onboarding: {
             source: 'platform_admin',
@@ -340,6 +350,12 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (ownerRoleError) throw ownerRoleError;
     if (!ownerRole) throw new Error('tenant_owner_role_not_seeded');
+
+    await applyTenantEntitlements({
+      admin,
+      tenantId: tenant.id,
+      entitlements: planEntitlements,
+    });
 
     let authUser = existingAuthUser;
     let inviteDelivery: 'existing_auth_user' | 'supabase_invite_sent' = 'existing_auth_user';

@@ -15,6 +15,7 @@ import {
   CreditCard,
   Headphones,
   Key,
+  Layers,
   Link2,
   Mail,
   MapPin,
@@ -33,6 +34,7 @@ import {
   decidePlatformBreakGlass,
   endPlatformSupportSession,
   getTenantDetail,
+  getTenantEntitlements,
   invitePlatformTenantUser,
   listWebhookReprocessJobs,
   listWebhookSummaries,
@@ -41,6 +43,7 @@ import {
   requestPlatformSupportSession,
   requestWebhookReprocess,
   revokePlatformBreakGlass,
+  saveTenantEntitlements,
   updatePlatformTenantConfig,
   updatePlatformTenantMembership,
   upsertPlatformTenantUnit,
@@ -48,10 +51,18 @@ import {
   type AdminBreakGlassRequest,
   type AdminSupportSession,
   type AdminTenantDetail,
+  type AdminTenantEntitlementsState,
   type AdminTenantRow,
   type AdminWebhookEventSummary,
   type AdminWebhookReprocessJob,
 } from '@/services/adminApi';
+import {
+  PLAN_MODULE_CATALOG,
+  countPlanEntitlements,
+  setPlanModuleEnabled,
+  setPlanPartEnabled,
+  type PlanEntitlements,
+} from '@/services/planEntitlements';
 
 type TenantTab =
   | 'overview'
@@ -133,6 +144,16 @@ function StateBadge({
       {children}
     </span>
   );
+}
+
+function badgeLabel(badge: string) {
+  const labels: Record<string, string> = {
+    required: 'obrigatorio',
+    sensitive: 'sensivel',
+    provider: 'provider',
+    beta: 'beta',
+  };
+  return labels[badge] ?? badge;
 }
 
 function UsageBar({ used, limit, unit = '' }: { used: number; limit: number; unit?: string }) {
@@ -361,6 +382,353 @@ function TenantConfigPanel({
   );
 }
 
+function TenantEntitlementsPanel({
+  tenantId,
+  onReload,
+}: {
+  tenantId: string;
+  onReload: () => void;
+}) {
+  const adminPermissions = useAdminPermissions();
+  const [state, setState] = useState<AdminTenantEntitlementsState | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [dialogMode, setDialogMode] = useState<'sync' | 'override' | null>(null);
+  const [draft, setDraft] = useState<PlanEntitlements | null>(null);
+  const [selectedModuleKey, setSelectedModuleKey] = useState(PLAN_MODULE_CATALOG[1].key);
+  const [reason, setReason] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const loadEntitlements = useCallback(() => {
+    setIsLoading(true);
+    setLoadError(null);
+    getTenantEntitlements(tenantId).then(({ data, error }) => {
+      setState(data);
+      setLoadError(error?.message ?? null);
+      setIsLoading(false);
+    });
+  }, [tenantId]);
+
+  useEffect(() => {
+    loadEntitlements();
+  }, [loadEntitlements]);
+
+  const currentSummary = state ? countPlanEntitlements(state.currentEntitlements) : null;
+  const planSummary = state ? countPlanEntitlements(state.planEntitlements) : null;
+  const selectedModule =
+    PLAN_MODULE_CATALOG.find((module) => module.key === selectedModuleKey) ??
+    PLAN_MODULE_CATALOG[0];
+  const draftModuleState = draft?.modules[selectedModule.key];
+
+  const closeDialog = () => {
+    setDialogMode(null);
+    setDraft(null);
+    setReason('');
+  };
+
+  const submit = async () => {
+    if (!dialogMode) return;
+    setIsSaving(true);
+    const { data, error } = await saveTenantEntitlements({
+      tenantId,
+      reason,
+      entitlements: dialogMode === 'override' ? (draft ?? undefined) : undefined,
+    });
+    setIsSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    if (data) setState(data);
+    toast.success(
+      dialogMode === 'override'
+        ? 'Override de modulos salvo com auditoria.'
+        : 'Modulos sincronizados com o plano.'
+    );
+    closeDialog();
+    onReload();
+    loadEntitlements();
+  };
+
+  const updateDraftModule = (moduleKey: string, enabled: boolean) => {
+    setDraft((current) => (current ? setPlanModuleEnabled(current, moduleKey, enabled) : current));
+  };
+
+  const updateDraftPart = (moduleKey: string, partKey: string, enabled: boolean) => {
+    setDraft((current) =>
+      current ? setPlanPartEnabled(current, moduleKey, partKey, enabled) : current
+    );
+  };
+
+  return (
+    <SectionCard
+      title="Modulos e entitlements"
+      icon={Layers}
+      action={
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setDialogMode('sync');
+              setReason('');
+            }}
+            disabled={!adminPermissions.canManageTenantConfig || isLoading || !state}
+            className="btn-secondary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Sincronizar com plano
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!state) return;
+              setDraft(state.currentEntitlements);
+              setDialogMode('override');
+              setReason('');
+            }}
+            disabled={!adminPermissions.canManageTenantConfig || isLoading || !state}
+            className="btn-primary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Override do tenant
+          </button>
+        </div>
+      }
+    >
+      {isLoading ? (
+        <DataState
+          kind="loading"
+          title="Carregando modulos"
+          description="Buscando snapshot aplicado e plano atual."
+          className="min-h-40 border-0 bg-transparent"
+        />
+      ) : loadError ? (
+        <DataState
+          kind="degraded"
+          title="Snapshot de modulos indisponivel"
+          description={loadError}
+          className="min-h-40 border-0 bg-transparent"
+        />
+      ) : state && currentSummary && planSummary ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">Origem</p>
+              <p className="mt-1 text-sm font-bold text-foreground">
+                {state.source === 'tenant_override' ? 'Override do tenant' : 'Snapshot do plano'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">Plano</p>
+              <p className="mt-1 text-sm font-bold text-foreground">{state.planCode}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">Modulos ativos</p>
+              <p className="mt-1 text-sm font-bold text-foreground">
+                {currentSummary.enabledModules}/{currentSummary.totalModules}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">Status</p>
+              <div className="mt-1">
+                <StateBadge tone={state.isOutOfSync ? 'amber' : 'emerald'}>
+                  {state.isOutOfSync ? 'fora de sync' : 'em sync'}
+                </StateBadge>
+              </div>
+            </div>
+          </div>
+
+          {state.isOutOfSync ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              Este tenant nao muda automaticamente quando o plano e editado. Use sincronizacao
+              manual para aplicar o plano atual com auditoria.
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {PLAN_MODULE_CATALOG.map((module) => {
+              const moduleState = state.currentEntitlements.modules[module.key];
+              const enabledParts = module.parts.filter((part) => moduleState?.parts?.[part.key]);
+              return (
+                <div key={module.key} className="rounded-xl border border-border p-3 text-xs">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="font-semibold text-foreground">{module.label}</span>
+                    <StateBadge tone={moduleState?.enabled ? 'emerald' : 'slate'}>
+                      {moduleState?.enabled ? 'ativo' : 'bloqueado'}
+                    </StateBadge>
+                  </div>
+                  <p className="line-clamp-2 text-muted-foreground">{module.description}</p>
+                  <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+                    {enabledParts.length}/{module.parts.length} partes
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <DataState
+          kind="empty"
+          title="Sem snapshot modular"
+          description="Ainda nao ha entitlements aplicados para este tenant."
+          className="min-h-40 border-0 bg-transparent"
+        />
+      )}
+
+      {dialogMode ? (
+        <Dialog
+          open
+          title={dialogMode === 'override' ? 'Override de modulos' : 'Sincronizar com plano'}
+          description={
+            dialogMode === 'override'
+              ? 'Salva um snapshot especifico para este tenant, sem alterar o plano global.'
+              : 'Aplica manualmente os modulos do plano atual neste tenant.'
+          }
+          onOpenChange={(open) => {
+            if (!open) closeDialog();
+          }}
+          footer={
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={closeDialog} className="btn-ghost px-4 py-2 text-xs">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={isSaving || reason.trim().length < 16}
+                className="btn-primary px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Confirmar
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            {dialogMode === 'sync' ? (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                A sincronizacao atualiza `tenants.settings`, `feature_flags` e permissões RBAC
+                gerenciadas pelo catalogo. Nenhum provider externo sera chamado.
+              </div>
+            ) : draft ? (
+              <div className="rounded-xl border border-border">
+                <div className="grid grid-cols-1 md:grid-cols-[14rem_1fr]">
+                  <div className="border-b border-border p-2 md:border-b-0 md:border-r">
+                    {PLAN_MODULE_CATALOG.map((module) => {
+                      const moduleState = draft.modules[module.key];
+                      return (
+                        <button
+                          key={module.key}
+                          type="button"
+                          onClick={() => setSelectedModuleKey(module.key)}
+                          className={[
+                            'mb-1 flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs',
+                            selectedModule.key === module.key
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-muted',
+                          ].join(' ')}
+                        >
+                          <span className="truncate font-semibold">{module.label}</span>
+                          <span
+                            className={[
+                              'h-2.5 w-2.5 rounded-full',
+                              moduleState?.enabled ? 'bg-emerald-500' : 'bg-slate-300',
+                            ].join(' ')}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="space-y-3 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="text-sm font-bold text-foreground">
+                            {selectedModule.label}
+                          </h4>
+                          {selectedModule.badges?.map((badge) => (
+                            <StateBadge
+                              key={badge}
+                              tone={
+                                badge === 'provider'
+                                  ? 'amber'
+                                  : badge === 'required'
+                                    ? 'blue'
+                                    : badge === 'sensitive'
+                                      ? 'red'
+                                      : 'slate'
+                              }
+                            >
+                              {badgeLabel(badge)}
+                            </StateBadge>
+                          ))}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {selectedModule.description}
+                        </p>
+                      </div>
+                      <label className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold">
+                        <input
+                          type="checkbox"
+                          checked={draftModuleState?.enabled === true}
+                          disabled={selectedModule.required}
+                          onChange={(event) =>
+                            updateDraftModule(selectedModule.key, event.target.checked)
+                          }
+                        />
+                        Ativo
+                      </label>
+                    </div>
+
+                    <div className="space-y-2">
+                      {selectedModule.parts.map((part) => (
+                        <label
+                          key={part.key}
+                          className="flex items-start gap-3 rounded-lg border border-border p-3"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={draftModuleState?.parts?.[part.key] === true}
+                            disabled={!draftModuleState?.enabled}
+                            onChange={(event) =>
+                              updateDraftPart(selectedModule.key, part.key, event.target.checked)
+                            }
+                          />
+                          <span className="min-w-0">
+                            <span className="text-xs font-semibold text-foreground">
+                              {part.label}
+                            </span>
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              {part.description}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                      {selectedModule.parts.length === 0 ? (
+                        <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                          Modulo core sem partes configuraveis.
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <label className="block">
+              <span className="text-xs font-semibold text-foreground">Motivo auditavel</span>
+              <textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Explique a sincronizacao ou override. Minimo de 16 caracteres."
+                className="input-base mt-1 min-h-24 text-sm"
+              />
+            </label>
+          </div>
+        </Dialog>
+      ) : null}
+    </SectionCard>
+  );
+}
+
 function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
   const tenant = detail.tenant;
   return (
@@ -459,6 +827,7 @@ function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload
       </SectionCard>
 
       <TenantConfigPanel detail={detail} onReload={onReload} />
+      <TenantEntitlementsPanel tenantId={tenant.id} onReload={onReload} />
     </div>
   );
 }
@@ -529,6 +898,8 @@ function BillingTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
       <div id="configuracao-auditada">
         <TenantConfigPanel detail={detail} onReload={onReload} />
       </div>
+
+      <TenantEntitlementsPanel tenantId={tenant.id} onReload={onReload} />
 
       <SectionCard title="Historico financeiro auditado" icon={ClipboardList}>
         {billingAudit.length === 0 ? (

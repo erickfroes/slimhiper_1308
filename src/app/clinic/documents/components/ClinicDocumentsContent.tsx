@@ -370,6 +370,8 @@ function DocumentActions({
   onDownload,
   onSetRelease,
   onSignature,
+  canCreateSignedUrls,
+  canRequestD4Sign,
 }: {
   document: ClinicDocumentRow;
   busyAction: string | null;
@@ -379,6 +381,8 @@ function DocumentActions({
   onDownload: (document: ClinicDocumentRow) => void;
   onSetRelease: (document: ClinicDocumentRow, released: boolean) => void;
   onSignature: (document: ClinicDocumentRow) => void;
+  canCreateSignedUrls: boolean;
+  canRequestD4Sign: boolean;
 }) {
   return (
     <div className={`flex flex-wrap gap-2 ${compact ? '' : 'justify-start'}`}>
@@ -391,7 +395,8 @@ function DocumentActions({
       <button
         type="button"
         onClick={() => onDownload(document)}
-        disabled={busyAction === `download-${document.id}`}
+        disabled={!canCreateSignedUrls || busyAction === `download-${document.id}`}
+        title={canCreateSignedUrls ? undefined : 'Signed URLs indisponiveis no plano deste tenant'}
         className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
       >
         <Download size={13} aria-hidden="true" />
@@ -413,13 +418,17 @@ function DocumentActions({
       <button
         type="button"
         onClick={() => onSignature(document)}
-        disabled={!document.canRequestSignature || busyAction === `sign-${document.id}`}
+        disabled={
+          !canRequestD4Sign || !document.canRequestSignature || busyAction === `sign-${document.id}`
+        }
         title={
-          document.canRequestSignature
-            ? undefined
-            : document.signatureEnabled
-              ? 'Assinatura indisponivel neste status'
-              : 'Template sem assinatura digital'
+          !canRequestD4Sign
+            ? 'Envio D4Sign indisponivel no plano deste tenant'
+            : document.canRequestSignature
+              ? undefined
+              : document.signatureEnabled
+                ? 'Assinatura indisponivel neste status'
+                : 'Template sem assinatura digital'
         }
         className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
       >
@@ -438,6 +447,8 @@ function DocumentDrawer({
   onDownload,
   onSetRelease,
   onSignature,
+  canCreateSignedUrls,
+  canRequestD4Sign,
 }: {
   document: ClinicDocumentRow;
   auditEvents: ClinicDocumentAuditEvent[];
@@ -446,6 +457,8 @@ function DocumentDrawer({
   onDownload: (document: ClinicDocumentRow) => void;
   onSetRelease: (document: ClinicDocumentRow, released: boolean) => void;
   onSignature: (document: ClinicDocumentRow) => void;
+  canCreateSignedUrls: boolean;
+  canRequestD4Sign: boolean;
 }) {
   const relatedAudit = auditEvents.filter(
     (event) => event.documentId === document.id || event.templateId === document.templateId
@@ -471,6 +484,8 @@ function DocumentDrawer({
           onDownload={onDownload}
           onSetRelease={onSetRelease}
           onSignature={onSignature}
+          canCreateSignedUrls={canCreateSignedUrls}
+          canRequestD4Sign={canRequestD4Sign}
         />
       }
     >
@@ -572,6 +587,7 @@ function DocumentWizard({
   onGenerate,
   onSetRelease,
   onSignature,
+  canRequestD4Sign,
 }: {
   open: boolean;
   workspace: ClinicDocumentsWorkspace;
@@ -591,6 +607,7 @@ function DocumentWizard({
   onGenerate: () => void;
   onSetRelease: (document: ClinicDocumentRow, released: boolean) => void;
   onSignature: (document: ClinicDocumentRow) => void;
+  canRequestD4Sign: boolean;
 }) {
   const activeTemplates = workspace.templates.filter((template) => template.status === 'active');
   const templatesByCategory = activeTemplates.filter(
@@ -679,8 +696,12 @@ function DocumentWizard({
                   type="button"
                   onClick={() => onSignature(generatedDocument)}
                   disabled={
+                    !canRequestD4Sign ||
                     !generatedDocument.canRequestSignature ||
                     busyAction === `sign-${generatedDocument.id}`
+                  }
+                  title={
+                    canRequestD4Sign ? undefined : 'Envio D4Sign indisponivel no plano deste tenant'
                   }
                   className="btn-primary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -890,6 +911,9 @@ export default function ClinicDocumentsContent() {
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [wizardGeneratedDocumentId, setWizardGeneratedDocumentId] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<ClinicDocumentRow | null>(null);
+  const [featureFlags, setFeatureFlags] = useState<Set<string>>(() => new Set());
+  const canRequestD4Sign = featureFlags.has('documents.d4sign_send');
+  const canCreateSignedUrls = featureFlags.has('documents.signed_urls');
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
@@ -903,6 +927,28 @@ export default function ClinicDocumentsContent() {
   useEffect(() => {
     void loadWorkspace();
   }, [loadWorkspace]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadFeatureFlags() {
+      try {
+        const response = await fetch('/api/auth/app-session');
+        const payload = (await response.json().catch(() => null)) as {
+          featureFlags?: string[];
+        } | null;
+        if (mounted && response.ok) setFeatureFlags(new Set(payload?.featureFlags ?? []));
+      } catch {
+        if (mounted) setFeatureFlags(new Set());
+      }
+    }
+
+    void loadFeatureFlags();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const activeTemplates = useMemo(
     () => workspace?.templates.filter((template) => template.status === 'active') ?? [],
@@ -988,6 +1034,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleSignature(document: ClinicDocumentRow) {
+    if (!canRequestD4Sign) {
+      setActionError('Envio D4Sign indisponivel no plano deste tenant.');
+      return;
+    }
     setBusyAction(`sign-${document.id}`);
     setActionError(null);
     setActionMessage(null);
@@ -1028,6 +1078,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleDownload(document: ClinicDocumentRow) {
+    if (!canCreateSignedUrls) {
+      setActionError('Signed URLs indisponiveis no plano deste tenant.');
+      return;
+    }
     setBusyAction(`download-${document.id}`);
     setActionError(null);
     setActionMessage(null);
@@ -1317,6 +1371,8 @@ export default function ClinicDocumentsContent() {
                               void handlePatientRelease(doc, released)
                             }
                             onSignature={(doc) => void handleSignature(doc)}
+                            canCreateSignedUrls={canCreateSignedUrls}
+                            canRequestD4Sign={canRequestD4Sign}
                           />
                         </td>
                       </tr>
@@ -1350,6 +1406,8 @@ export default function ClinicDocumentsContent() {
                         onDownload={(doc) => void handleDownload(doc)}
                         onSetRelease={(doc, released) => void handlePatientRelease(doc, released)}
                         onSignature={(doc) => void handleSignature(doc)}
+                        canCreateSignedUrls={canCreateSignedUrls}
+                        canRequestD4Sign={canRequestD4Sign}
                       />
                     </div>
                   </article>
@@ -1421,6 +1479,7 @@ export default function ClinicDocumentsContent() {
         onGenerate={() => void handleGenerateDocument()}
         onSetRelease={(document, released) => void handlePatientRelease(document, released)}
         onSignature={(document) => void handleSignature(document)}
+        canRequestD4Sign={canRequestD4Sign}
       />
 
       {selectedDocument ? (
@@ -1432,6 +1491,8 @@ export default function ClinicDocumentsContent() {
           onDownload={(document) => void handleDownload(document)}
           onSetRelease={(document, released) => void handlePatientRelease(document, released)}
           onSignature={(document) => void handleSignature(document)}
+          canCreateSignedUrls={canCreateSignedUrls}
+          canRequestD4Sign={canRequestD4Sign}
         />
       ) : null}
     </div>
