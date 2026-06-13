@@ -7,6 +7,7 @@ import type {
 import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
+import { requireClientFeatureFlag } from '@/services/clientEntitlementGuard';
 
 export interface SafeServiceError {
   message: string;
@@ -172,6 +173,8 @@ export const PAYMENT_RECEIPT_ACCEPTED_MIME_TYPES = [
 ] as const;
 
 export const PAYMENT_RECEIPT_MAX_BYTES = 10 * 1024 * 1024;
+const FINANCIAL_ASAAS_DISABLED_MESSAGE =
+  'Asaas financeiro nao esta habilitado no plano deste tenant.';
 
 function isMockEnabled() {
   return isMockDataEnabled();
@@ -823,6 +826,11 @@ export async function createPatientCustomer(
   }
   if (isMockEnabled())
     return { data: { id: `mock-customer-${patientId}` }, error: null as SafeServiceError | null };
+  const entitlementError = await requireClientFeatureFlag(
+    'financial.asaas',
+    FINANCIAL_ASAAS_DISABLED_MESSAGE
+  );
+  if (entitlementError) return { data: null, error: entitlementError };
   return invoke<{ id: string }>('asaas-create-patient-customer', {
     patient_id: patientId,
     ...(billingIdentity?.cpfCnpj ? { cpf_cnpj: billingIdentity.cpfCnpj } : {}),
@@ -1228,6 +1236,11 @@ export async function refundPatientPayment(input: {
       error: null as SafeServiceError | null,
     };
   }
+  const entitlementError = await requireClientFeatureFlag(
+    'financial.asaas',
+    FINANCIAL_ASAAS_DISABLED_MESSAGE
+  );
+  if (entitlementError) return { data: null, error: entitlementError };
   const res = await invoke<unknown>('asaas-refund-payment', {
     payment_id: input.paymentId ?? null,
     invoice_id: input.invoiceId ?? null,
@@ -1255,6 +1268,11 @@ export async function syncAsaasPayment(invoiceId: string, reason = 'manual_sync'
       error: null as SafeServiceError | null,
     };
   }
+  const entitlementError = await requireClientFeatureFlag(
+    'financial.asaas',
+    FINANCIAL_ASAAS_DISABLED_MESSAGE
+  );
+  if (entitlementError) return { data: null, error: entitlementError };
   const res = await invoke<unknown>('asaas-sync-payment', {
     invoice_id: invoiceId,
     reason,

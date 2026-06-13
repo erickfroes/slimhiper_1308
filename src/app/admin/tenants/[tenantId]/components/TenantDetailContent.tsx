@@ -1223,6 +1223,7 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
   const [resendTarget, setResendTarget] = useState<AdminTenantDetail['users'][number] | null>(null);
   const [resendReason, setResendReason] = useState('');
   const [isResending, setIsResending] = useState(false);
+  const pendingInviteUsers = detail.users.filter((user) => user.membershipStatus === 'invited');
 
   const startEdit = (user: AdminTenantDetail['users'][number]) => {
     setEditingId(user.id);
@@ -1319,7 +1320,11 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
     <SectionCard
       title="Usuarios"
       icon={Users}
-      action={<span className="text-xs text-muted-foreground">{detail.users.length} usuarios</span>}
+      action={
+        <span className="text-xs text-muted-foreground">
+          {detail.users.length} usuarios - {pendingInviteUsers.length} convites pendentes
+        </span>
+      }
     >
       <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
         <div className="mb-3 flex items-center gap-2">
@@ -1402,6 +1407,48 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
         Alteracoes em usuarios ja vinculados continuam por RPC auditada, com motivo obrigatorio e
         sem writes diretos do browser em tabelas de RBAC.
       </div>
+      {pendingInviteUsers.length > 0 ? (
+        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-bold text-blue-950">Convites pendentes</p>
+              <p className="text-xs text-blue-800">
+                Reenvio disponivel apenas para memberships com status invited.
+              </p>
+            </div>
+            <StateBadge tone="blue">{pendingInviteUsers.length} pendente(s)</StateBadge>
+          </div>
+          <div className="grid gap-2">
+            {pendingInviteUsers.map((user) => (
+              <div
+                key={`pending-${user.id}`}
+                className="flex flex-col gap-3 rounded-lg border border-blue-100 bg-white/80 p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-foreground">{user.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                  <p className="mt-1 text-[11px] text-blue-800">
+                    Papel: <span className="font-mono">{user.role}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setResendTarget(user)}
+                  disabled={!adminPermissions.canManageTenantUsers || isResending}
+                  className="btn-secondary shrink-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                  title={
+                    adminPermissions.canManageTenantUsers
+                      ? undefined
+                      : 'Apenas owner/admin podem reenviar convites.'
+                  }
+                >
+                  Reenviar convite
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>

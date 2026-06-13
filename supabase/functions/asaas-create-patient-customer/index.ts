@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { envString } from '../_shared/env.ts';
+import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
 
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void;
@@ -220,11 +221,11 @@ Deno.serve(async (req) => {
     const asaasKey = envString(Deno.env, 'ASAAS_API_KEY');
     const asaasBase = envString(Deno.env, 'ASAAS_BASE_URL');
 
-    if (!supabaseUrl || !anonKey || !serviceRoleKey || !asaasKey || !asaasBase) {
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       console.error('[asaas-create-patient-customer] missing environment configuration');
       return jsonResponse(500, {
         ok: false,
-        error: { code: 'server_misconfigured', message: 'Billing provider is not configured.' },
+        error: { code: 'server_misconfigured', message: 'Server configuration error.' },
         meta: { timestamp },
       });
     }
@@ -262,6 +263,27 @@ Deno.serve(async (req) => {
     const tenantResolution = await resolvePatientTenant({ supabase, userId: user.id, patientId });
     if (tenantResolution.error) return tenantResolution.error;
     const tenantId = tenantResolution.tenantId as string;
+
+    const asaasEnabledByPlan = await tenantHasFeatureFlag(admin, tenantId, 'financial.asaas');
+    if (!asaasEnabledByPlan) {
+      return jsonResponse(403, {
+        ok: false,
+        error: {
+          code: 'plan_feature_disabled',
+          message: 'Asaas billing is not enabled for this tenant plan.',
+        },
+        meta: { tenantId, timestamp },
+      });
+    }
+
+    if (!asaasKey || !asaasBase) {
+      console.error('[asaas-create-patient-customer] missing provider configuration');
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'server_misconfigured', message: 'Billing provider is not configured.' },
+        meta: { timestamp },
+      });
+    }
 
     const { data: existingCustomer, error: existingError } = await admin
       .from('patient_customers')

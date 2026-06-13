@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
 
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void;
@@ -180,6 +181,19 @@ Deno.serve(async (req) => {
     const documentId = String(doc.id);
     const storageBucket = String(doc.storage_bucket);
     const storagePath = String(doc.storage_path);
+
+    const signedUrlsEnabledByPlan = await tenantHasFeatureFlag(
+      admin,
+      tenantId,
+      'documents.signed_urls'
+    );
+    if (!signedUrlsEnabledByPlan) {
+      return jsonResponse(req, 403, {
+        ok: false,
+        error: { code: 'plan_feature_disabled' },
+        meta: { timestamp, tenantId },
+      });
+    }
 
     if (!allowedBuckets.has(storageBucket)) {
       return jsonResponse(req, 500, {

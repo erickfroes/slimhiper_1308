@@ -1,6 +1,7 @@
 import type { PatientDocument360Item, PatientDocumentSignatureStatus } from '@/domain/types';
 import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { requireClientFeatureFlag } from '@/services/clientEntitlementGuard';
 
 interface SafeServiceError {
   message: string;
@@ -198,6 +199,14 @@ export async function sendDocumentForSignature(
   }> = []
 ): Promise<{ data: SendForSignatureResult | null; error: SafeServiceError | null }> {
   try {
+    if (!isMockEnabled()) {
+      const entitlementError = await requireClientFeatureFlag(
+        'documents.d4sign_send',
+        'Assinatura digital nao esta habilitada no plano deste tenant.'
+      );
+      if (entitlementError) return { data: null, error: entitlementError };
+    }
+
     const normalizedSigners: DocumentSigner[] = signers.map(({ name, email, role }) => ({
       name,
       email,
@@ -236,6 +245,14 @@ export async function getDocumentSignedUrl(
   error: SafeServiceError | null;
 }> {
   try {
+    if (!isMockEnabled()) {
+      const entitlementError = await requireClientFeatureFlag(
+        'documents.signed_urls',
+        'Links temporarios de documentos nao estao habilitados no plano deste tenant.'
+      );
+      if (entitlementError) return { data: null, error: entitlementError };
+    }
+
     const res = await invokeSafe<{ url: string; expiresInSeconds: number }>('document-signed-url', {
       generated_document_id: generatedDocumentId,
       patient_id: patientId,

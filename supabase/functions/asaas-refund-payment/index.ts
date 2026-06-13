@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { envString } from '../_shared/env.ts';
+import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
 
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void;
@@ -10,7 +11,14 @@ type Json = Record<string, unknown>;
 
 const corsHeaders = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': (Deno.env.get('APP_ALLOWED_ORIGINS') ?? Deno.env.get('SITE_URL') ?? Deno.env.get('NEXT_PUBLIC_SITE_URL') ?? 'http://localhost:4028').split(',')[0].trim(),
+  'Access-Control-Allow-Origin': (
+    Deno.env.get('APP_ALLOWED_ORIGINS') ??
+    Deno.env.get('SITE_URL') ??
+    Deno.env.get('NEXT_PUBLIC_SITE_URL') ??
+    'http://localhost:4028'
+  )
+    .split(',')[0]
+    .trim(),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -112,11 +120,11 @@ Deno.serve(async (req) => {
     const asaasKey = envString(Deno.env, 'ASAAS_API_KEY');
     const asaasBase = envString(Deno.env, 'ASAAS_BASE_URL');
 
-    if (!supabaseUrl || !anonKey || !serviceRoleKey || !asaasKey || !asaasBase) {
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       console.error('[asaas-refund-payment] missing environment configuration');
       return jsonResponse(500, {
         ok: false,
-        error: { code: 'server_misconfigured', message: 'Billing provider is not configured.' },
+        error: { code: 'server_misconfigured', message: 'Server configuration error.' },
         meta: { timestamp },
       });
     }
@@ -228,6 +236,27 @@ Deno.serve(async (req) => {
       return jsonResponse(403, {
         ok: false,
         error: { code: 'forbidden', message: 'Missing financial.write permission.' },
+        meta: { tenantId, timestamp },
+      });
+    }
+
+    const asaasEnabledByPlan = await tenantHasFeatureFlag(admin, tenantId, 'financial.asaas');
+    if (!asaasEnabledByPlan) {
+      return jsonResponse(403, {
+        ok: false,
+        error: {
+          code: 'plan_feature_disabled',
+          message: 'Asaas billing is not enabled for this tenant plan.',
+        },
+        meta: { tenantId, timestamp },
+      });
+    }
+
+    if (!asaasKey || !asaasBase) {
+      console.error('[asaas-refund-payment] missing provider configuration');
+      return jsonResponse(500, {
+        ok: false,
+        error: { code: 'server_misconfigured', message: 'Billing provider is not configured.' },
         meta: { tenantId, timestamp },
       });
     }

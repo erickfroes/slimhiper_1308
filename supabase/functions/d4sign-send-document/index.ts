@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { envBoolean, envString } from '../_shared/env.ts';
+import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
 
 type Json = Record<string, unknown>;
 
@@ -370,6 +371,22 @@ Deno.serve(async (req) => {
       return jsonResponse(403, {
         ok: false,
         error: { code: 'forbidden', message: 'Missing documents.write permission.' },
+        meta: { timestamp, tenantId },
+      });
+    }
+
+    const d4signEnabledByPlan = await tenantHasFeatureFlag(
+      admin,
+      tenantId,
+      'documents.d4sign_send'
+    );
+    if (!d4signEnabledByPlan) {
+      return jsonResponse(403, {
+        ok: false,
+        error: {
+          code: 'plan_feature_disabled',
+          message: 'Digital signature is not enabled for this tenant plan.',
+        },
         meta: { timestamp, tenantId },
       });
     }
