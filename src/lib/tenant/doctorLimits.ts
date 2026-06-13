@@ -42,20 +42,55 @@ export async function canInvitePhysicianWithinLimit(params: {
 }): Promise<PhysicianLimitResult> {
   const { admin, tenantId, targetUserId } = params;
   const limit = await getTenantDoctorsLimit(admin, tenantId);
-  if (!limit) return { allowed: true, limit: null, current: 0 };
 
-  const { data, error } = await admin
-    .from('tenant_memberships')
-    .select('user_id,role_code,role,status')
-    .eq('tenant_id', tenantId)
-    .in('status', ['active', 'invited'])
-    .or('role_code.eq.physician,role.eq.physician');
-  if (error) throw error;
+  const [
+    { data: memberships, error: membershipsError },
+    { data: professionals, error: professionalsError },
+  ] = await Promise.all([
+    admin
+      .from('tenant_memberships')
+      .select('id,user_id,role_code,role,status')
+      .eq('tenant_id', tenantId)
+      .in('status', ['active', 'invited']),
+    admin
+      .from('tenant_professionals')
+      .select('membership_id,user_id,professional_type,is_active')
+      .eq('tenant_id', tenantId)
+      .eq('professional_type', 'physician'),
+  ]);
 
-  const current = (data ?? []).filter((membership) => {
+  if (membershipsError) throw membershipsError;
+  if (professionalsError) throw professionalsError;
+
+  const activeMembershipIds = new Set((memberships ?? []).map((membership) => membership.id));
+  const usersWithPhysicianProfile = new Set(
+    (professionals ?? [])
+      .map((professional) => (typeof professional.user_id === 'string' ? professional.user_id : ''))
+      .filter(Boolean)
+  );
+  const countedUserIds = new Set<string>();
+
+  (professionals ?? []).forEach((professional) => {
+    const userId = typeof professional.user_id === 'string' ? professional.user_id : '';
+    const membershipId =
+      typeof professional.membership_id === 'string' ? professional.membership_id : '';
+    if (!userId || !professional.is_active || !activeMembershipIds.has(membershipId)) return;
+    countedUserIds.add(userId);
+  });
+
+  (memberships ?? []).forEach((membership) => {
     const userId = typeof membership.user_id === 'string' ? membership.user_id : '';
+    if (!userId || usersWithPhysicianProfile.has(userId)) return;
+    if (membership.role_code === 'physician' || membership.role === 'physician') {
+      countedUserIds.add(userId);
+    }
+  });
+
+  const current = Array.from(countedUserIds).filter((userId) => {
     return !targetUserId || userId !== targetUserId;
   }).length;
+
+  if (!limit) return { allowed: true, limit: null, current };
 
   return {
     allowed: current < limit,

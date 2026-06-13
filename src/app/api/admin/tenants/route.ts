@@ -11,6 +11,11 @@ import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { applyTenantEntitlements } from '@/services/adminTenantEntitlements';
 import { normalizePlanEntitlements } from '@/services/planEntitlements';
 import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
+import {
+  normalizeProfessionalProfileInput,
+  professionalProfileAuditMetadata,
+  upsertTenantProfessionalProfile,
+} from '@/lib/tenant/professionalProfiles';
 
 const TRIAL_DAYS = 14;
 const DEFAULT_UNIT_CODE = 'matriz';
@@ -196,6 +201,10 @@ export async function POST(request: Request) {
   const unitCode = normalizeUnitCode(body.unitCode);
   const city = normalizeString(body.city, 120);
   const state = normalizeUf(body.state);
+  const professionalProfileResult = normalizeProfessionalProfileInput(
+    body.professionalProfile,
+    'tenant_owner'
+  );
 
   if (clinicName.length < 3) return jsonError('Informe o nome da clinica.', 400);
   if (!isSafeSlug(slug)) return jsonError('Slug do tenant invalido.', 400);
@@ -207,6 +216,11 @@ export async function POST(request: Request) {
   if (reason.length < 16) {
     return jsonError('Informe um motivo auditavel com pelo menos 16 caracteres.', 400);
   }
+  if (professionalProfileResult.error) {
+    return jsonError(professionalProfileResult.error, 400);
+  }
+
+  const professionalProfile = professionalProfileResult.profile;
 
   const { data: existingTenant, error: existingTenantError } = await admin
     .from('tenants')
@@ -401,6 +415,18 @@ export async function POST(request: Request) {
       .single();
     if (membershipError) throw membershipError;
 
+    if (professionalProfile) {
+      const { error: professionalError } = await upsertTenantProfessionalProfile({
+        admin,
+        tenantId: createdTenantId,
+        userId: authUser.id,
+        membershipId: membership.id,
+        unitId: unit.id,
+        profile: professionalProfile,
+      });
+      if (professionalError) throw professionalError;
+    }
+
     const { error: auditError } = await admin.from('audit_logs').insert({
       tenant_id: createdTenantId,
       user_id: session.userId,
@@ -420,6 +446,7 @@ export async function POST(request: Request) {
         ownerEmail: maskEmail(ownerEmail),
         ownerEmailDomain: ownerEmail.split('@')[1] ?? '',
         inviteDelivery,
+        professionalProfile: professionalProfileAuditMetadata(professionalProfile),
         trialDays: TRIAL_DAYS,
       },
     });

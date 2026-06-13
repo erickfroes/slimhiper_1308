@@ -72,7 +72,32 @@ export interface AdminTenantUser {
   unitId: string | null;
   mfaEnabled: boolean;
   lastLogin: string | null;
+  professionalProfile: ProfessionalProfile | null;
   createdAt: string | null;
+}
+
+export type ProfessionalType =
+  | 'physician'
+  | 'nutritionist'
+  | 'fitness_professional'
+  | 'external_professional';
+
+export interface ProfessionalProfile {
+  id: string;
+  professionalType: ProfessionalType;
+  licenseNumber: string;
+  licenseState: string;
+  specialty: string;
+  isActive: boolean;
+  countsAsDoctor: boolean;
+}
+
+export interface ProfessionalProfileInput {
+  enabled: boolean;
+  professionalType: ProfessionalType;
+  licenseNumber?: string;
+  licenseState?: string;
+  specialty?: string;
 }
 
 export interface AdminTenantUnit {
@@ -281,6 +306,7 @@ export interface CreateTenantInput {
   unitCode?: string;
   city?: string;
   state?: string;
+  professionalProfile?: ProfessionalProfileInput | null;
 }
 
 export interface CreateTenantResult {
@@ -391,6 +417,48 @@ function normalizeText(value: string, maxLength = 500) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, maxLength);
+}
+
+function normalizeProfessionalType(value: unknown): ProfessionalType {
+  if (
+    value === 'nutritionist' ||
+    value === 'fitness_professional' ||
+    value === 'external_professional'
+  ) {
+    return value;
+  }
+  return 'physician';
+}
+
+function sanitizeProfessionalProfileInput(
+  input: ProfessionalProfileInput | null | undefined,
+  roleCode: string
+): { profile: ProfessionalProfileInput | null; error: string | null } {
+  const enabled = roleCode === 'physician' || input?.enabled === true;
+  if (!enabled) return { profile: null, error: null };
+
+  const professionalType = normalizeProfessionalType(input?.professionalType);
+  const licenseNumber = normalizeText(input?.licenseNumber ?? '', 80);
+  const licenseState = normalizeText(input?.licenseState ?? '', 2).toUpperCase();
+  const specialty = normalizeText(input?.specialty ?? '', 160);
+
+  if (professionalType === 'physician') {
+    if (!licenseNumber) return { profile: null, error: 'Informe o CRM/registro do medico.' };
+    if (!licenseState || licenseState.length !== 2) {
+      return { profile: null, error: 'Informe a UF do CRM/registro do medico.' };
+    }
+  }
+
+  return {
+    profile: {
+      enabled: true,
+      professionalType,
+      licenseNumber,
+      licenseState,
+      specialty,
+    },
+    error: null,
+  };
 }
 
 function serviceValidationError(message: string) {
@@ -549,7 +617,24 @@ function mapUser(value: unknown): AdminTenantUser {
     unitId: asNullableString(record.unitId),
     mfaEnabled: asBoolean(record.mfaEnabled),
     lastLogin: asNullableString(record.lastLogin),
+    professionalProfile: mapProfessionalProfile(record.professionalProfile),
     createdAt: asNullableString(record.createdAt),
+  };
+}
+
+function mapProfessionalProfile(value: unknown): ProfessionalProfile | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+
+  return {
+    id,
+    professionalType: normalizeProfessionalType(record.professionalType),
+    licenseNumber: asString(record.licenseNumber),
+    licenseState: asString(record.licenseState),
+    specialty: asString(record.specialty),
+    isActive: asBoolean(record.isActive),
+    countsAsDoctor: asBoolean(record.countsAsDoctor),
   };
 }
 
@@ -989,6 +1074,11 @@ export async function createTenant(input: CreateTenantInput): Promise<{
   const planCode = normalizeText(input.planCode, 80).toLowerCase();
   const unitName = normalizeText(input.unitName, 120);
   const unitCode = normalizeText(input.unitCode ?? 'matriz', 80).toLowerCase();
+  const professionalProfileResult = sanitizeProfessionalProfileInput(
+    input.professionalProfile,
+    'tenant_owner'
+  );
+  const professionalProfile = professionalProfileResult.profile;
 
   if (clinicName.length < 3) {
     const { error } = serviceValidationError('Informe o nome da clinica.');
@@ -1020,6 +1110,10 @@ export async function createTenant(input: CreateTenantInput): Promise<{
     );
     return { data: null, error };
   }
+  if (professionalProfileResult.error) {
+    const { error } = serviceValidationError(professionalProfileResult.error);
+    return { data: null, error };
+  }
 
   try {
     const response = await fetch('/api/admin/tenants', {
@@ -1039,6 +1133,7 @@ export async function createTenant(input: CreateTenantInput): Promise<{
         unitCode,
         city: normalizeText(input.city ?? '', 120),
         state: normalizeText(input.state ?? '', 2).toUpperCase(),
+        professionalProfile,
       }),
     });
 
@@ -1639,6 +1734,7 @@ export async function invitePlatformTenantUser(input: {
   roleCode: string;
   unitId?: string | null;
   reason: string;
+  professionalProfile?: ProfessionalProfileInput | null;
 }) {
   const tenantId = input.tenantId.trim();
   const email = normalizeText(input.email, 254).toLowerCase();
@@ -1646,6 +1742,11 @@ export async function invitePlatformTenantUser(input: {
   const roleCode = normalizeText(input.roleCode, 80);
   const unitId = input.unitId ? input.unitId.trim() : null;
   const reason = normalizeText(input.reason, 500);
+  const professionalProfileResult = sanitizeProfessionalProfileInput(
+    input.professionalProfile,
+    roleCode
+  );
+  const professionalProfile = professionalProfileResult.profile;
 
   if (!isUuid(tenantId)) return serviceValidationError('Tenant invalido.');
   if (unitId && !isUuid(unitId)) return serviceValidationError('Unidade invalida.');
@@ -1654,6 +1755,9 @@ export async function invitePlatformTenantUser(input: {
   }
   if (reason.length < 16) {
     return serviceValidationError('Informe um motivo auditavel com pelo menos 16 caracteres.');
+  }
+  if (professionalProfileResult.error) {
+    return serviceValidationError(professionalProfileResult.error);
   }
 
   try {
@@ -1666,6 +1770,7 @@ export async function invitePlatformTenantUser(input: {
         roleCode,
         unitId,
         reason,
+        professionalProfile,
       }),
     });
 
@@ -1799,6 +1904,50 @@ export async function updatePlatformTenantMembership(input: {
     return { error: null as SafeServiceError | null };
   } catch (error) {
     return { error: asServiceError(error, 'Falha ao atualizar usuario do tenant.') };
+  }
+}
+
+export async function updatePlatformTenantProfessionalProfile(input: {
+  membershipId: string;
+  professionalProfile: ProfessionalProfileInput;
+  reason?: string;
+}) {
+  const membershipId = input.membershipId.trim();
+  const professionalType = input.professionalProfile.professionalType;
+  const licenseNumber = normalizeText(input.professionalProfile.licenseNumber ?? '', 80);
+  const licenseState = normalizeText(input.professionalProfile.licenseState ?? '', 2).toUpperCase();
+  const specialty = normalizeText(input.professionalProfile.specialty ?? '', 160);
+  const reason = normalizeText(input.reason ?? '', 500);
+
+  if (!isUuid(membershipId)) return serviceValidationError('Vinculo invalido.');
+  if (input.professionalProfile.enabled && professionalType === 'physician') {
+    if (!licenseNumber) return serviceValidationError('Informe o CRM/registro do medico.');
+    if (!licenseState || licenseState.length !== 2) {
+      return serviceValidationError('Informe a UF do CRM/registro do medico.');
+    }
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('upsert_tenant_professional_profile', {
+      p_membership_id: membershipId,
+      p_professional_type: professionalType,
+      p_license_number: licenseNumber || null,
+      p_license_state: licenseState || null,
+      p_specialty: specialty || null,
+      p_is_active: input.professionalProfile.enabled,
+      p_reason: reason || null,
+    });
+
+    if (error) {
+      return {
+        error: asServiceError(error, 'Falha ao atualizar perfil profissional.'),
+      };
+    }
+
+    return { error: null as SafeServiceError | null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Falha ao atualizar perfil profissional.') };
   }
 }
 

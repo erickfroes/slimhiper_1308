@@ -40,6 +40,7 @@ export interface UserProfile {
   name: string;
   email: string;
   role: UserRole;
+  professionalProfile?: ProfessionalProfile | null;
   avatarUrl?: string;
   specialty?: string;
   crmNumber?: string;
@@ -47,6 +48,22 @@ export interface UserProfile {
   phone?: string;
   isActive: boolean;
   createdAt: string;
+}
+
+export type ProfessionalType =
+  | 'physician'
+  | 'nutritionist'
+  | 'fitness_professional'
+  | 'external_professional';
+
+export interface ProfessionalProfile {
+  id: string;
+  professionalType: ProfessionalType;
+  licenseNumber?: string;
+  licenseState?: string;
+  specialty?: string;
+  isActive: boolean;
+  countsAsDoctor: boolean;
 }
 
 export type PatientStatus = 'ativo' | 'inativo' | 'pausado' | 'concluido' | 'cancelado';

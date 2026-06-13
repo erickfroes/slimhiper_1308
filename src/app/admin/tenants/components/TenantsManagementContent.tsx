@@ -33,6 +33,7 @@ import {
   type AdminPlatformPlan,
   type AdminTenantRow,
   type CreateTenantInput,
+  type ProfessionalType,
 } from '@/services/adminApi';
 
 function currency(value: number) {
@@ -135,7 +136,9 @@ function UsageBar({ used, limit }: { used: number; limit: number }) {
 }
 
 type CreateTenantStep = 'clinic' | 'owner' | 'plan';
-type TenantDraftErrors = Partial<Record<keyof CreateTenantInput | 'plans', string>>;
+type TenantDraftErrors = Partial<
+  Record<keyof CreateTenantInput | 'plans' | 'professionalProfile', string>
+>;
 
 const CREATE_TENANT_STEPS: Array<{
   key: CreateTenantStep;
@@ -162,6 +165,13 @@ function createEmptyTenantDraft(): CreateTenantInput {
     unitCode: 'matriz',
     city: '',
     state: '',
+    professionalProfile: {
+      enabled: false,
+      professionalType: 'physician',
+      licenseNumber: '',
+      licenseState: '',
+      specialty: '',
+    },
   };
 }
 
@@ -217,6 +227,16 @@ function validateTenantDraft(
   if (step === 'owner') {
     if (!draft.ownerName.trim()) errors.ownerName = 'Informe o owner.';
     if (!isEmail(draft.ownerEmail)) errors.ownerEmail = 'Informe um e-mail valido.';
+    if (
+      draft.professionalProfile?.enabled &&
+      draft.professionalProfile.professionalType === 'physician'
+    ) {
+      if (!draft.professionalProfile.licenseNumber?.trim()) {
+        errors.professionalProfile = 'Informe o CRM/registro do owner medico.';
+      } else if ((draft.professionalProfile.licenseState ?? '').trim().length !== 2) {
+        errors.professionalProfile = 'Informe a UF do CRM/registro.';
+      }
+    }
     if (draft.reason.trim().length < 16) {
       errors.reason = 'Motivo auditavel deve ter pelo menos 16 caracteres.';
     }
@@ -310,6 +330,24 @@ function CreateTenantModal({
       });
     },
     [slugTouched]
+  );
+
+  const updateOwnerProfessionalProfile = useCallback(
+    (patch: Partial<NonNullable<CreateTenantInput['professionalProfile']>>) => {
+      setDraft((current) => ({
+        ...current,
+        professionalProfile: {
+          enabled: false,
+          professionalType: 'physician',
+          licenseNumber: '',
+          licenseState: '',
+          specialty: '',
+          ...current.professionalProfile,
+          ...patch,
+        },
+      }));
+    },
+    []
   );
 
   const moveStep = (direction: 1 | -1) => {
@@ -506,6 +544,88 @@ function CreateTenantModal({
                 />
                 <FieldError message={visibleErrors.ownerEmail} />
               </label>
+              <div className="md:col-span-2 rounded-lg border border-border bg-muted/20 p-3">
+                <label className="flex items-start gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={draft.professionalProfile?.enabled ?? false}
+                    onChange={(event) =>
+                      updateOwnerProfessionalProfile({
+                        enabled: event.target.checked,
+                        professionalType: 'physician',
+                      })
+                    }
+                    className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+                  />
+                  <span>
+                    <span className="block font-semibold text-foreground">
+                      Owner tambem atua como profissional de saude
+                    </span>
+                    <span className="text-muted-foreground">
+                      O papel segue tenant_owner; o perfil clinico define se conta como medico.
+                    </span>
+                  </span>
+                </label>
+                {draft.professionalProfile?.enabled ? (
+                  <div className="mt-3 grid gap-3 md:grid-cols-4">
+                    <label>
+                      <span className="text-xs font-semibold text-foreground">Tipo</span>
+                      <select
+                        value={draft.professionalProfile.professionalType}
+                        onChange={(event) =>
+                          updateOwnerProfessionalProfile({
+                            professionalType: event.target.value as ProfessionalType,
+                          })
+                        }
+                        className="input-base mt-1 w-full text-sm"
+                      >
+                        <option value="physician">Medico</option>
+                        <option value="nutritionist">Nutricionista</option>
+                        <option value="fitness_professional">Profissional fitness</option>
+                        <option value="external_professional">Profissional externo</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span className="text-xs font-semibold text-foreground">Registro</span>
+                      <input
+                        value={draft.professionalProfile.licenseNumber ?? ''}
+                        onChange={(event) =>
+                          updateOwnerProfessionalProfile({ licenseNumber: event.target.value })
+                        }
+                        className="input-base mt-1 w-full text-sm"
+                        maxLength={80}
+                        placeholder="CRM"
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs font-semibold text-foreground">UF</span>
+                      <input
+                        value={draft.professionalProfile.licenseState ?? ''}
+                        onChange={(event) =>
+                          updateOwnerProfessionalProfile({
+                            licenseState: event.target.value.toUpperCase().slice(0, 2),
+                          })
+                        }
+                        className="input-base mt-1 w-full text-sm"
+                        maxLength={2}
+                        placeholder="SP"
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs font-semibold text-foreground">Especialidade</span>
+                      <input
+                        value={draft.professionalProfile.specialty ?? ''}
+                        onChange={(event) =>
+                          updateOwnerProfessionalProfile({ specialty: event.target.value })
+                        }
+                        className="input-base mt-1 w-full text-sm"
+                        maxLength={160}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                <FieldError message={visibleErrors.professionalProfile} />
+              </div>
               <label className="md:col-span-2">
                 <span className="text-xs font-semibold text-foreground">Motivo auditavel</span>
                 <textarea

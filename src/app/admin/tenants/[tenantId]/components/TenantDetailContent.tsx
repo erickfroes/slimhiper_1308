@@ -48,6 +48,7 @@ import {
   updatePlatformTenantIntegrationState,
   updatePlatformTenantConfig,
   updatePlatformTenantMembership,
+  updatePlatformTenantProfessionalProfile,
   upsertPlatformTenantUnit,
   type AdminPlatformPlan,
   type AdminBreakGlassRequest,
@@ -59,6 +60,8 @@ import {
   type AdminIntegrationProvider,
   type AdminWebhookEventSummary,
   type AdminWebhookReprocessJob,
+  type ProfessionalProfileInput,
+  type ProfessionalType,
 } from '@/services/adminApi';
 import {
   PLAN_MODULE_CATALOG,
@@ -93,6 +96,27 @@ const ADMIN_MUTABLE_ROLES = [
 ] as const;
 
 const ADMIN_MUTABLE_STATUSES = ['active', 'invited', 'suspended', 'revoked'] as const;
+
+const PROFESSIONAL_TYPE_LABELS: Record<ProfessionalType, string> = {
+  physician: 'Medico',
+  nutritionist: 'Nutricionista',
+  fitness_professional: 'Profissional fitness',
+  external_professional: 'Profissional externo',
+};
+
+const PROFESSIONAL_TYPE_OPTIONS: Array<{ value: ProfessionalType; label: string }> = [
+  { value: 'physician', label: PROFESSIONAL_TYPE_LABELS.physician },
+  { value: 'nutritionist', label: PROFESSIONAL_TYPE_LABELS.nutritionist },
+  { value: 'fitness_professional', label: PROFESSIONAL_TYPE_LABELS.fitness_professional },
+  { value: 'external_professional', label: PROFESSIONAL_TYPE_LABELS.external_professional },
+];
+
+function roleToProfessionalType(roleCode: string): ProfessionalType {
+  if (roleCode === 'nutritionist') return 'nutritionist';
+  if (roleCode === 'fitness_professional') return 'fitness_professional';
+  if (roleCode === 'external_professional') return 'external_professional';
+  return 'physician';
+}
 
 function formatDate(value: string | null | undefined) {
   if (!value) return 'N/D';
@@ -201,11 +225,7 @@ function isWebhookReprocessable(status: AdminWebhookEventSummary['status']) {
 }
 
 function countTenantDoctors(users: AdminTenantDetail['users']) {
-  return users.filter(
-    (user) =>
-      user.role === 'physician' &&
-      (user.membershipStatus === 'active' || user.membershipStatus === 'invited')
-  ).length;
+  return users.filter((user) => user.professionalProfile?.countsAsDoctor).length;
 }
 
 function countPendingInvites(users: AdminTenantDetail['users']) {
@@ -1219,11 +1239,47 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
     useState<(typeof ADMIN_MUTABLE_ROLES)[number]>('receptionist');
   const [inviteUnitId, setInviteUnitId] = useState('');
   const [inviteReason, setInviteReason] = useState('');
+  const [inviteProfessionalEnabled, setInviteProfessionalEnabled] = useState(false);
+  const [inviteProfessionalType, setInviteProfessionalType] =
+    useState<ProfessionalType>('physician');
+  const [inviteLicenseNumber, setInviteLicenseNumber] = useState('');
+  const [inviteLicenseState, setInviteLicenseState] = useState('');
+  const [inviteSpecialty, setInviteSpecialty] = useState('');
   const [isInviting, setIsInviting] = useState(false);
+  const [professionalEditUserId, setProfessionalEditUserId] = useState<string | null>(null);
+  const [professionalDraft, setProfessionalDraft] = useState<ProfessionalProfileInput>({
+    enabled: false,
+    professionalType: 'physician',
+    licenseNumber: '',
+    licenseState: '',
+    specialty: '',
+  });
+  const [professionalReason, setProfessionalReason] = useState('');
+  const [savingProfessionalId, setSavingProfessionalId] = useState<string | null>(null);
   const [resendTarget, setResendTarget] = useState<AdminTenantDetail['users'][number] | null>(null);
   const [resendReason, setResendReason] = useState('');
   const [isResending, setIsResending] = useState(false);
   const pendingInviteUsers = detail.users.filter((user) => user.membershipStatus === 'invited');
+  const inviteProfessionalProfile = inviteProfessionalEnabled
+    ? {
+        enabled: true,
+        professionalType: inviteProfessionalType,
+        licenseNumber: inviteLicenseNumber,
+        licenseState: inviteLicenseState,
+        specialty: inviteSpecialty,
+      }
+    : null;
+  const inviteProfessionalInvalid =
+    inviteProfessionalEnabled &&
+    inviteProfessionalType === 'physician' &&
+    (!inviteLicenseNumber.trim() || inviteLicenseState.trim().length !== 2);
+
+  useEffect(() => {
+    if (inviteRoleCode === 'physician') {
+      setInviteProfessionalEnabled(true);
+      setInviteProfessionalType('physician');
+    }
+  }, [inviteRoleCode]);
 
   const startEdit = (user: AdminTenantDetail['users'][number]) => {
     setEditingId(user.id);
@@ -1273,6 +1329,7 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
       roleCode: inviteRoleCode,
       unitId: inviteUnitId || null,
       reason: inviteReason,
+      professionalProfile: inviteProfessionalProfile,
     });
     setIsInviting(false);
 
@@ -1287,6 +1344,42 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
     setInviteRoleCode('receptionist');
     setInviteUnitId('');
     setInviteReason('');
+    setInviteProfessionalEnabled(false);
+    setInviteProfessionalType('physician');
+    setInviteLicenseNumber('');
+    setInviteLicenseState('');
+    setInviteSpecialty('');
+    onReload();
+  };
+
+  const startProfessionalEdit = (user: AdminTenantDetail['users'][number]) => {
+    const profile = user.professionalProfile;
+    setProfessionalEditUserId(user.id);
+    setProfessionalDraft({
+      enabled: profile?.isActive ?? false,
+      professionalType: profile?.professionalType ?? roleToProfessionalType(user.role),
+      licenseNumber: profile?.licenseNumber ?? '',
+      licenseState: profile?.licenseState ?? '',
+      specialty: profile?.specialty ?? '',
+    });
+    setProfessionalReason('');
+  };
+
+  const saveProfessionalProfile = async (user: AdminTenantDetail['users'][number]) => {
+    setSavingProfessionalId(user.id);
+    const { error } = await updatePlatformTenantProfessionalProfile({
+      membershipId: user.id,
+      professionalProfile: professionalDraft,
+      reason: professionalReason,
+    });
+    setSavingProfessionalId(null);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Perfil profissional atualizado sem alterar RBAC.');
+    setProfessionalEditUserId(null);
+    setProfessionalReason('');
     onReload();
   };
 
@@ -1352,9 +1445,13 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
           />
           <select
             value={inviteRoleCode}
-            onChange={(event) =>
-              setInviteRoleCode(event.target.value as (typeof ADMIN_MUTABLE_ROLES)[number])
-            }
+            onChange={(event) => {
+              const nextRole = event.target.value as (typeof ADMIN_MUTABLE_ROLES)[number];
+              setInviteRoleCode(nextRole);
+              if (nextRole !== 'physician' && !inviteProfessionalEnabled) {
+                setInviteProfessionalType(roleToProfessionalType(nextRole));
+              }
+            }}
             className="input-base text-xs"
           >
             {ADMIN_MUTABLE_ROLES.map((role) => (
@@ -1376,6 +1473,69 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
             ))}
           </select>
         </div>
+        <div className="mt-3 rounded-lg border border-emerald-100 bg-white/70 p-3">
+          <label className="flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={inviteProfessionalEnabled}
+              disabled={inviteRoleCode === 'physician'}
+              onChange={(event) => {
+                setInviteProfessionalEnabled(event.target.checked);
+                if (event.target.checked) {
+                  setInviteProfessionalType(roleToProfessionalType(inviteRoleCode));
+                }
+              }}
+              className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+            />
+            <span>
+              <span className="block font-semibold text-foreground">
+                Tambem atua como profissional de saude
+              </span>
+              <span className="text-muted-foreground">
+                O papel RBAC continua separado do perfil clinico.
+              </span>
+            </span>
+          </label>
+          {inviteProfessionalEnabled ? (
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-4">
+              <select
+                value={inviteProfessionalType}
+                disabled={inviteRoleCode === 'physician'}
+                onChange={(event) =>
+                  setInviteProfessionalType(event.target.value as ProfessionalType)
+                }
+                className="input-base text-xs"
+              >
+                {PROFESSIONAL_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={inviteLicenseNumber}
+                onChange={(event) => setInviteLicenseNumber(event.target.value)}
+                placeholder="Registro/CRM"
+                className="input-base text-xs"
+              />
+              <input
+                value={inviteLicenseState}
+                onChange={(event) =>
+                  setInviteLicenseState(event.target.value.toUpperCase().slice(0, 2))
+                }
+                placeholder="UF"
+                maxLength={2}
+                className="input-base text-xs"
+              />
+              <input
+                value={inviteSpecialty}
+                onChange={(event) => setInviteSpecialty(event.target.value)}
+                placeholder="Especialidade"
+                className="input-base text-xs"
+              />
+            </div>
+          ) : null}
+        </div>
         <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
           <input
             value={inviteReason}
@@ -1390,6 +1550,7 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
               !adminPermissions.canManageTenantUsers ||
               isInviting ||
               inviteReason.trim().length < 16 ||
+              inviteProfessionalInvalid ||
               !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())
             }
             className="btn-primary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
@@ -1469,6 +1630,13 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
           <tbody className="divide-y divide-border">
             {detail.users.map((user) => {
               const isEditing = editingId === user.id;
+              const isEditingProfessional = professionalEditUserId === user.id;
+              const professionalProfile = user.professionalProfile;
+              const professionalInvalid =
+                professionalDraft.enabled &&
+                professionalDraft.professionalType === 'physician' &&
+                (!professionalDraft.licenseNumber?.trim() ||
+                  professionalDraft.licenseState?.trim().length !== 2);
               const unit = detail.units.find((item) => item.id === user.unitId);
               return (
                 <React.Fragment key={user.id}>
@@ -1476,7 +1644,15 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
                     <td className="px-3 py-2.5 font-medium text-foreground">{user.name}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{user.email}</td>
                     <td className="px-3 py-2.5">
-                      <StateBadge tone="slate">{user.role}</StateBadge>
+                      <div className="flex flex-col items-start gap-1">
+                        <StateBadge tone="slate">{user.role}</StateBadge>
+                        {professionalProfile ? (
+                          <StateBadge tone={professionalProfile.isActive ? 'emerald' : 'slate'}>
+                            {PROFESSIONAL_TYPE_LABELS[professionalProfile.professionalType]}
+                            {professionalProfile.countsAsDoctor ? ' / limite' : ''}
+                          </StateBadge>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-3 py-2.5">
                       <StateBadge tone={membershipStatusTone(user.membershipStatus)}>
@@ -1500,6 +1676,17 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
                           className="btn-ghost px-3 py-1.5 text-xs"
                         >
                           Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            isEditingProfessional
+                              ? setProfessionalEditUserId(null)
+                              : startProfessionalEdit(user)
+                          }
+                          className="btn-secondary px-3 py-1.5 text-xs"
+                        >
+                          Perfil
                         </button>
                         {user.membershipStatus === 'invited' ? (
                           <button
@@ -1588,6 +1775,111 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
                             >
                               Cancelar
                             </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                  {isEditingProfessional ? (
+                    <tr>
+                      <td colSpan={8} className="bg-muted/20 px-3 py-3">
+                        <div className="space-y-3">
+                          <label className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                            <input
+                              type="checkbox"
+                              checked={professionalDraft.enabled}
+                              onChange={(event) =>
+                                setProfessionalDraft((current) => ({
+                                  ...current,
+                                  enabled: event.target.checked,
+                                }))
+                              }
+                              className="h-4 w-4 rounded border-border text-primary"
+                            />
+                            Tambem atua como profissional de saude
+                          </label>
+                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[180px_140px_80px_180px_1fr_auto]">
+                            <select
+                              value={professionalDraft.professionalType}
+                              onChange={(event) =>
+                                setProfessionalDraft((current) => ({
+                                  ...current,
+                                  professionalType: event.target.value as ProfessionalType,
+                                }))
+                              }
+                              className="input-base text-xs"
+                            >
+                              {PROFESSIONAL_TYPE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              value={professionalDraft.licenseNumber ?? ''}
+                              onChange={(event) =>
+                                setProfessionalDraft((current) => ({
+                                  ...current,
+                                  licenseNumber: event.target.value,
+                                }))
+                              }
+                              disabled={!professionalDraft.enabled}
+                              placeholder="Registro"
+                              className="input-base text-xs"
+                            />
+                            <input
+                              value={professionalDraft.licenseState ?? ''}
+                              onChange={(event) =>
+                                setProfessionalDraft((current) => ({
+                                  ...current,
+                                  licenseState: event.target.value.toUpperCase().slice(0, 2),
+                                }))
+                              }
+                              disabled={!professionalDraft.enabled}
+                              placeholder="UF"
+                              maxLength={2}
+                              className="input-base text-xs"
+                            />
+                            <input
+                              value={professionalDraft.specialty ?? ''}
+                              onChange={(event) =>
+                                setProfessionalDraft((current) => ({
+                                  ...current,
+                                  specialty: event.target.value,
+                                }))
+                              }
+                              disabled={!professionalDraft.enabled}
+                              placeholder="Especialidade"
+                              className="input-base text-xs"
+                            />
+                            <input
+                              value={professionalReason}
+                              onChange={(event) => setProfessionalReason(event.target.value)}
+                              placeholder="Motivo auditavel opcional"
+                              className="input-base text-xs"
+                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void saveProfessionalProfile(user)}
+                                disabled={
+                                  !adminPermissions.canManageTenantUsers ||
+                                  savingProfessionalId !== null ||
+                                  professionalInvalid ||
+                                  (!professionalDraft.enabled && !professionalProfile)
+                                }
+                                className="btn-primary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Salvar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setProfessionalEditUserId(null)}
+                                className="btn-ghost px-3 py-1.5 text-xs"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </td>

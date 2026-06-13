@@ -9,6 +9,11 @@ import {
   type TenantInviteDelivery,
 } from '@/lib/auth/tenantInviteEmail';
 import { canInvitePhysicianWithinLimit } from '@/lib/tenant/doctorLimits';
+import {
+  normalizeProfessionalProfileInput,
+  professionalProfileAuditMetadata,
+  upsertTenantProfessionalProfile,
+} from '@/lib/tenant/professionalProfiles';
 import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
 
 const INVITABLE_ROLES = new Set([
@@ -79,6 +84,10 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
   const roleCode = normalizeString(body.roleCode);
   const unitId = normalizeString(body.unitId) || null;
   const reason = normalizeString(body.reason);
+  const professionalProfileResult = normalizeProfessionalProfileInput(
+    body.professionalProfile,
+    roleCode
+  );
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return jsonError('E-mail invalido.', 400);
@@ -95,6 +104,11 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
   if (reason.length < 16) {
     return jsonError('Informe um motivo auditavel com pelo menos 16 caracteres.', 400);
   }
+  if (professionalProfileResult.error) {
+    return jsonError(professionalProfileResult.error, 400);
+  }
+
+  const professionalProfile = professionalProfileResult.profile;
 
   const { data: tenant, error: tenantError } = await admin
     .from('tenants')
@@ -146,7 +160,7 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
     let authUser = await findAuthUserByEmail(admin, email);
     let inviteDelivery: TenantInviteDelivery = 'password_setup_sent';
 
-    if (roleCode === 'physician') {
+    if (professionalProfile?.professionalType === 'physician') {
       const limitCheck = await canInvitePhysicianWithinLimit({
         admin,
         tenantId,
@@ -233,6 +247,18 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
 
     if (membershipResult.error) throw membershipResult.error;
 
+    if (professionalProfile) {
+      const { error: professionalError } = await upsertTenantProfessionalProfile({
+        admin,
+        tenantId,
+        userId: authUser.id,
+        membershipId: membershipResult.data.id,
+        unitId,
+        profile: professionalProfile,
+      });
+      if (professionalError) throw professionalError;
+    }
+
     const { error: auditError } = await admin.from('audit_logs').insert({
       tenant_id: tenantId,
       user_id: session.userId,
@@ -247,6 +273,7 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
         roleCode,
         unitId,
         inviteDelivery,
+        professionalProfile: professionalProfileAuditMetadata(professionalProfile),
       },
     });
 
@@ -261,6 +288,7 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
         role: membershipResult.data.role_code,
         status: membershipResult.data.status,
         unitId: membershipResult.data.unit_id,
+        professionalProfile: professionalProfileAuditMetadata(professionalProfile),
         inviteDelivery,
       },
       error: null,

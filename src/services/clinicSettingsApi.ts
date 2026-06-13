@@ -2,6 +2,11 @@ import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supab
 import type { SafeServiceError } from '@/services/billingApi';
 
 export type ClinicUnitStatus = 'active' | 'inactive' | 'archived';
+export type ProfessionalType =
+  | 'physician'
+  | 'nutritionist'
+  | 'fitness_professional'
+  | 'external_professional';
 
 export interface ClinicSettingsTenant {
   id: string;
@@ -135,7 +140,27 @@ export interface TeamMember {
   status: string;
   isActive: boolean;
   initials: string;
+  professionalProfile: ProfessionalProfile | null;
   createdAt: string | null;
+}
+
+export interface ProfessionalProfile {
+  id: string;
+  professionalType: ProfessionalType;
+  licenseNumber: string;
+  licenseState: string;
+  specialty: string;
+  isActive: boolean;
+  countsAsDoctor: boolean;
+}
+
+export interface ProfessionalProfileInput {
+  enabled: boolean;
+  professionalType: ProfessionalType;
+  licenseNumber?: string;
+  licenseState?: string;
+  specialty?: string;
+  reason?: string;
 }
 
 export interface ClinicRole {
@@ -371,6 +396,17 @@ function normalizeUnitStatus(value: unknown): ClinicUnitStatus {
   return 'active';
 }
 
+function normalizeProfessionalType(value: unknown): ProfessionalType {
+  if (
+    value === 'nutritionist' ||
+    value === 'fitness_professional' ||
+    value === 'external_professional'
+  ) {
+    return value;
+  }
+  return 'physician';
+}
+
 function mapSettings(rawSettings: Record<string, unknown>, tenant: ClinicSettingsTenant) {
   const profileRecord = asRecord(rawSettings.profile);
   const brandingRecord = asRecord(rawSettings.branding);
@@ -466,6 +502,7 @@ function mapTeamMember(value: unknown): TeamMember {
   const record = asRecord(value);
   const fullName = asString(record.fullName, 'Membro sem nome');
   const email = asString(record.email);
+  const professionalProfile = mapProfessionalProfile(record.professionalProfile);
   return {
     id: asString(record.id),
     userId: asString(record.userId),
@@ -477,7 +514,24 @@ function mapTeamMember(value: unknown): TeamMember {
     status: asString(record.status, 'invited'),
     isActive: asBoolean(record.isActive),
     initials: initialsFrom(fullName, email),
+    professionalProfile,
     createdAt: asString(record.createdAt) || null,
+  };
+}
+
+function mapProfessionalProfile(value: unknown): ProfessionalProfile | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  if (!id) return null;
+
+  return {
+    id,
+    professionalType: normalizeProfessionalType(record.professionalType),
+    licenseNumber: asString(record.licenseNumber),
+    licenseState: asString(record.licenseState),
+    specialty: asString(record.specialty),
+    isActive: asBoolean(record.isActive),
+    countsAsDoctor: asBoolean(record.countsAsDoctor),
   };
 }
 
@@ -981,18 +1035,82 @@ export async function updateClinicMemberRole(membershipId: string, roleCode: str
   }
 }
 
+export async function updateClinicMemberProfessionalProfile(
+  membershipId: string,
+  input: ProfessionalProfileInput
+) {
+  const professionalType = input.professionalType;
+  const licenseNumber = input.licenseNumber?.trim() ?? '';
+  const licenseState = input.licenseState?.trim().toUpperCase().slice(0, 2) ?? '';
+  const specialty = input.specialty?.trim() ?? '';
+  const reason = input.reason?.trim() ?? '';
+
+  if (!membershipId.trim()) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'Membro invalido para alterar perfil profissional.' } as SafeServiceError,
+    };
+  }
+
+  if (input.enabled && professionalType === 'physician') {
+    if (!licenseNumber) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: { message: 'Informe o CRM/registro do medico.' } as SafeServiceError,
+      };
+    }
+    if (!licenseState || licenseState.length !== 2) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: { message: 'Informe a UF do CRM/registro do medico.' } as SafeServiceError,
+      };
+    }
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('upsert_tenant_professional_profile', {
+      p_membership_id: membershipId,
+      p_professional_type: professionalType,
+      p_license_number: licenseNumber || null,
+      p_license_state: licenseState || null,
+      p_specialty: specialty || null,
+      p_is_active: input.enabled,
+      p_reason: reason || null,
+    });
+
+    if (error) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: asServiceError(error, 'Nao foi possivel alterar perfil profissional.'),
+      };
+    }
+
+    return getClinicSettings();
+  } catch (error) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: asServiceError(error, 'Nao foi possivel alterar perfil profissional.'),
+    };
+  }
+}
+
 export async function inviteClinicMember(input: {
   email: string;
   fullName?: string;
   roleCode: string;
   unitId?: string | null;
   reason: string;
+  professionalProfile?: ProfessionalProfileInput | null;
 }) {
   const email = input.email.trim().toLowerCase();
   const fullName = input.fullName?.trim() ?? '';
   const roleCode = input.roleCode.trim();
   const unitId = input.unitId?.trim() || null;
   const reason = input.reason.trim();
+  const professionalProfile =
+    input.professionalProfile ??
+    (roleCode === 'physician' ? { enabled: true, professionalType: 'physician' as const } : null);
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return {
@@ -1014,12 +1132,34 @@ export async function inviteClinicMember(input: {
       } as SafeServiceError,
     };
   }
+  if (professionalProfile?.enabled && professionalProfile.professionalType === 'physician') {
+    if (!professionalProfile.licenseNumber?.trim()) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: { message: 'Informe o CRM/registro do medico.' } as SafeServiceError,
+      };
+    }
+    const licenseState = professionalProfile.licenseState?.trim().toUpperCase() ?? '';
+    if (!licenseState || licenseState.length !== 2) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: { message: 'Informe a UF do CRM/registro do medico.' } as SafeServiceError,
+      };
+    }
+  }
 
   try {
     const response = await fetch('/api/clinic/invitations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, fullName, roleCode, unitId, reason }),
+      body: JSON.stringify({
+        email,
+        fullName,
+        roleCode,
+        unitId,
+        reason,
+        professionalProfile,
+      }),
     });
     const payload = (await response.json().catch(() => null)) as {
       error?: { message?: string } | null;

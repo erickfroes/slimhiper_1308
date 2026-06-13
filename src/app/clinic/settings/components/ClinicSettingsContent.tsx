@@ -35,6 +35,7 @@ import {
   saveClinicUnit,
   updateComplianceGapStatus,
   updateClinicMemberRole,
+  updateClinicMemberProfessionalProfile,
   updateClinicSettings,
   type AutoMessageTemplate,
   type ClinicChatServiceHour,
@@ -49,6 +50,8 @@ import {
   type ClinicUnitStatus,
   type ComplianceGap,
   type ComplianceGapStatus,
+  type ProfessionalProfileInput,
+  type ProfessionalType,
   type SaveAutoMessageTemplateInput,
   type SaveClinicUnitInput,
 } from '@/services/clinicSettingsApi';
@@ -615,6 +618,27 @@ const INVITABLE_ROLE_CODES = new Set([
   'external_professional',
 ]);
 
+const PROFESSIONAL_TYPE_LABELS: Record<ProfessionalType, string> = {
+  physician: 'Medico',
+  nutritionist: 'Nutricionista',
+  fitness_professional: 'Profissional fitness',
+  external_professional: 'Profissional externo',
+};
+
+const PROFESSIONAL_TYPE_OPTIONS: Array<{ value: ProfessionalType; label: string }> = [
+  { value: 'physician', label: PROFESSIONAL_TYPE_LABELS.physician },
+  { value: 'nutritionist', label: PROFESSIONAL_TYPE_LABELS.nutritionist },
+  { value: 'fitness_professional', label: PROFESSIONAL_TYPE_LABELS.fitness_professional },
+  { value: 'external_professional', label: PROFESSIONAL_TYPE_LABELS.external_professional },
+];
+
+function roleToProfessionalType(roleCode: string): ProfessionalType {
+  if (roleCode === 'nutritionist') return 'nutritionist';
+  if (roleCode === 'fitness_professional') return 'fitness_professional';
+  if (roleCode === 'external_professional') return 'external_professional';
+  return 'physician';
+}
+
 function SectionEquipe({
   snapshot,
   onSnapshotUpdated,
@@ -637,15 +661,54 @@ function SectionEquipe({
   const [inviteRole, setInviteRole] = useState(defaultRoleCode);
   const [inviteUnitId, setInviteUnitId] = useState('');
   const [inviteReason, setInviteReason] = useState('');
+  const [inviteProfessionalEnabled, setInviteProfessionalEnabled] = useState(false);
+  const [inviteProfessionalType, setInviteProfessionalType] =
+    useState<ProfessionalType>('physician');
+  const [inviteLicenseNumber, setInviteLicenseNumber] = useState('');
+  const [inviteLicenseState, setInviteLicenseState] = useState('');
+  const [inviteSpecialty, setInviteSpecialty] = useState('');
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteNotice, setInviteNotice] = useState<string | null>(null);
+  const [professionalEditMemberId, setProfessionalEditMemberId] = useState<string | null>(null);
+  const [professionalDraft, setProfessionalDraft] = useState<ProfessionalProfileInput>({
+    enabled: false,
+    professionalType: 'physician',
+    licenseNumber: '',
+    licenseState: '',
+    specialty: '',
+  });
+  const [professionalReason, setProfessionalReason] = useState('');
+  const [savingProfessionalId, setSavingProfessionalId] = useState<string | null>(null);
+  const [professionalError, setProfessionalError] = useState<string | null>(null);
+  const [professionalNotice, setProfessionalNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!roleOptions.some((role) => role.name === inviteRole)) {
       setInviteRole(defaultRoleCode);
     }
   }, [defaultRoleCode, inviteRole, roleOptions]);
+
+  useEffect(() => {
+    if (inviteRole === 'physician') {
+      setInviteProfessionalEnabled(true);
+      setInviteProfessionalType('physician');
+    }
+  }, [inviteRole]);
+
+  const inviteProfessionalProfile = inviteProfessionalEnabled
+    ? {
+        enabled: true,
+        professionalType: inviteProfessionalType,
+        licenseNumber: inviteLicenseNumber,
+        licenseState: inviteLicenseState,
+        specialty: inviteSpecialty,
+      }
+    : null;
+  const inviteProfessionalInvalid =
+    inviteProfessionalEnabled &&
+    inviteProfessionalType === 'physician' &&
+    (!inviteLicenseNumber.trim() || inviteLicenseState.trim().length !== 2);
 
   const submitInvite = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -661,6 +724,7 @@ function SectionEquipe({
       roleCode: inviteRole,
       unitId: inviteUnitId || null,
       reason: inviteReason,
+      professionalProfile: inviteProfessionalProfile,
     });
 
     if (result.error || !result.data) {
@@ -672,11 +736,52 @@ function SectionEquipe({
       setInviteRole(defaultRoleCode);
       setInviteUnitId('');
       setInviteReason('');
+      setInviteProfessionalEnabled(false);
+      setInviteProfessionalType('physician');
+      setInviteLicenseNumber('');
+      setInviteLicenseState('');
+      setInviteSpecialty('');
       setInviteOpen(false);
       setInviteNotice('Convite registrado e auditado para este tenant.');
     }
 
     setInviting(false);
+  };
+
+  const startProfessionalEdit = (member: (typeof snapshot.team)[number]) => {
+    const profile = member.professionalProfile;
+    setProfessionalEditMemberId(member.id);
+    setProfessionalDraft({
+      enabled: profile?.isActive ?? false,
+      professionalType: profile?.professionalType ?? roleToProfessionalType(member.roleCode),
+      licenseNumber: profile?.licenseNumber ?? '',
+      licenseState: profile?.licenseState ?? '',
+      specialty: profile?.specialty ?? '',
+    });
+    setProfessionalReason('');
+    setProfessionalError(null);
+    setProfessionalNotice(null);
+  };
+
+  const saveProfessionalProfile = async (member: (typeof snapshot.team)[number]) => {
+    setSavingProfessionalId(member.id);
+    setProfessionalError(null);
+    setProfessionalNotice(null);
+    const result = await updateClinicMemberProfessionalProfile(member.id, {
+      ...professionalDraft,
+      reason: professionalReason,
+    });
+
+    if (result.error || !result.data) {
+      setProfessionalError(
+        result.error?.message ?? 'Nao foi possivel alterar perfil profissional.'
+      );
+    } else {
+      onSnapshotUpdated(result.data);
+      setProfessionalEditMemberId(null);
+      setProfessionalNotice('Perfil profissional atualizado sem alterar o papel RBAC.');
+    }
+    setSavingProfessionalId(null);
   };
 
   return (
@@ -705,10 +810,12 @@ function SectionEquipe({
         </button>
       </div>
 
-      {(inviteError || inviteNotice) && (
+      {(inviteError || inviteNotice || professionalError || professionalNotice) && (
         <div className="space-y-2">
           {inviteError && <InlineAlert message={inviteError} />}
           {inviteNotice && <InlineAlert tone="ok" message={inviteNotice} />}
+          {professionalError && <InlineAlert message={professionalError} />}
+          {professionalNotice && <InlineAlert tone="ok" message={professionalNotice} />}
         </div>
       )}
 
@@ -743,7 +850,13 @@ function SectionEquipe({
               Papel
               <select
                 value={inviteRole}
-                onChange={(event) => setInviteRole(event.target.value)}
+                onChange={(event) => {
+                  const nextRole = event.target.value;
+                  setInviteRole(nextRole);
+                  if (nextRole !== 'physician' && !inviteProfessionalEnabled) {
+                    setInviteProfessionalType(roleToProfessionalType(nextRole));
+                  }
+                }}
                 className="input-base mt-1"
                 required
               >
@@ -770,6 +883,86 @@ function SectionEquipe({
               </select>
             </label>
           </div>
+
+          <div className="rounded-xl border border-border bg-background p-3">
+            <label className="flex items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={inviteProfessionalEnabled}
+                disabled={inviteRole === 'physician'}
+                onChange={(event) => {
+                  setInviteProfessionalEnabled(event.target.checked);
+                  if (event.target.checked) {
+                    setInviteProfessionalType(roleToProfessionalType(inviteRole));
+                  }
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-border text-primary"
+              />
+              <span>
+                <span className="block font-semibold text-foreground">
+                  Tambem atua como profissional de saude
+                </span>
+                <span className="text-muted-foreground">
+                  O papel de permissao continua separado do perfil clinico.
+                </span>
+              </span>
+            </label>
+
+            {inviteProfessionalEnabled ? (
+              <div className="mt-3 grid gap-3 md:grid-cols-4">
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  Tipo profissional
+                  <select
+                    value={inviteProfessionalType}
+                    disabled={inviteRole === 'physician'}
+                    onChange={(event) =>
+                      setInviteProfessionalType(event.target.value as ProfessionalType)
+                    }
+                    className="input-base mt-1"
+                  >
+                    {PROFESSIONAL_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  Registro
+                  <input
+                    value={inviteLicenseNumber}
+                    onChange={(event) => setInviteLicenseNumber(event.target.value)}
+                    className="input-base mt-1"
+                    required={inviteProfessionalType === 'physician'}
+                    placeholder="CRM"
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  UF
+                  <input
+                    value={inviteLicenseState}
+                    onChange={(event) =>
+                      setInviteLicenseState(event.target.value.toUpperCase().slice(0, 2))
+                    }
+                    className="input-base mt-1"
+                    maxLength={2}
+                    required={inviteProfessionalType === 'physician'}
+                    placeholder="SP"
+                  />
+                </label>
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  Especialidade
+                  <input
+                    value={inviteSpecialty}
+                    onChange={(event) => setInviteSpecialty(event.target.value)}
+                    className="input-base mt-1"
+                    placeholder="Opcional"
+                  />
+                </label>
+              </div>
+            ) : null}
+          </div>
+
           <label className="block space-y-1 text-xs font-medium text-muted-foreground">
             Motivo auditavel
             <textarea
@@ -793,7 +986,7 @@ function SectionEquipe({
             <button
               type="submit"
               className="btn-primary py-1.5 text-xs"
-              disabled={inviting || roleOptions.length === 0}
+              disabled={inviting || roleOptions.length === 0 || inviteProfessionalInvalid}
             >
               {inviting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
               Enviar convite
@@ -808,34 +1001,197 @@ function SectionEquipe({
             Nenhum membro retornado pelo contrato local.
           </div>
         ) : (
-          snapshot.team.map((member) => (
-            <div
-              key={member.id}
-              className="flex items-center gap-3 rounded-xl border border-border bg-background p-3"
-            >
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                {member.initials}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-sm font-semibold text-foreground">
-                    {member.fullName}
-                  </p>
-                  <StatusBadge status={member.status} />
-                  {!member.isActive && (
-                    <span className="rounded-full bg-negative-bg px-2 py-0.5 text-xs font-medium text-negative">
-                      Perfil inativo
-                    </span>
-                  )}
+          snapshot.team.map((member) => {
+            const profile = member.professionalProfile;
+            const isEditingProfessional = professionalEditMemberId === member.id;
+            const professionalInvalid =
+              professionalDraft.enabled &&
+              professionalDraft.professionalType === 'physician' &&
+              (!professionalDraft.licenseNumber?.trim() ||
+                professionalDraft.licenseState?.trim().length !== 2);
+
+            return (
+              <div key={member.id} className="space-y-2">
+                <div className="flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                    {member.initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {member.fullName}
+                      </p>
+                      <StatusBadge status={member.status} />
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                        RBAC: {member.roleCode}
+                      </span>
+                      {profile ? (
+                        <span
+                          className={[
+                            'rounded-full px-2 py-0.5 text-xs font-medium',
+                            profile.isActive
+                              ? 'bg-positive-bg text-positive'
+                              : 'bg-muted text-muted-foreground',
+                          ].join(' ')}
+                        >
+                          {PROFESSIONAL_TYPE_LABELS[profile.professionalType]}
+                          {profile.countsAsDoctor ? ' / conta no limite' : ''}
+                        </span>
+                      ) : null}
+                      {!member.isActive && (
+                        <span className="rounded-full bg-negative-bg px-2 py-0.5 text-xs font-medium text-negative">
+                          Perfil inativo
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+                  </div>
+                  <div className="hidden text-right text-xs text-muted-foreground sm:block">
+                    <p>{member.unitName ?? 'Sem unidade'}</p>
+                    {profile?.licenseState ? <p>UF {profile.licenseState}</p> : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary py-1.5 text-xs"
+                    onClick={() =>
+                      isEditingProfessional
+                        ? setProfessionalEditMemberId(null)
+                        : startProfessionalEdit(member)
+                    }
+                  >
+                    <Edit2 size={14} />
+                    Perfil
+                  </button>
                 </div>
-                <p className="truncate text-xs text-muted-foreground">{member.email}</p>
+
+                {isEditingProfessional ? (
+                  <div className="rounded-xl border border-border bg-muted/10 p-3">
+                    {(professionalError || professionalNotice) && (
+                      <div className="mb-3 space-y-2">
+                        {professionalError && <InlineAlert message={professionalError} />}
+                        {professionalNotice && (
+                          <InlineAlert tone="ok" message={professionalNotice} />
+                        )}
+                      </div>
+                    )}
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={professionalDraft.enabled}
+                          onChange={(event) =>
+                            setProfessionalDraft((current) => ({
+                              ...current,
+                              enabled: event.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-border text-primary"
+                        />
+                        Tambem atua como profissional de saude
+                      </label>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Tipo profissional
+                        <select
+                          value={professionalDraft.professionalType}
+                          onChange={(event) =>
+                            setProfessionalDraft((current) => ({
+                              ...current,
+                              professionalType: event.target.value as ProfessionalType,
+                            }))
+                          }
+                          className="input-base mt-1"
+                        >
+                          {PROFESSIONAL_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Registro
+                        <input
+                          value={professionalDraft.licenseNumber ?? ''}
+                          onChange={(event) =>
+                            setProfessionalDraft((current) => ({
+                              ...current,
+                              licenseNumber: event.target.value,
+                            }))
+                          }
+                          className="input-base mt-1"
+                          disabled={!professionalDraft.enabled}
+                        />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        UF
+                        <input
+                          value={professionalDraft.licenseState ?? ''}
+                          onChange={(event) =>
+                            setProfessionalDraft((current) => ({
+                              ...current,
+                              licenseState: event.target.value.toUpperCase().slice(0, 2),
+                            }))
+                          }
+                          className="input-base mt-1"
+                          disabled={!professionalDraft.enabled}
+                          maxLength={2}
+                        />
+                      </label>
+                      <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                        Especialidade
+                        <input
+                          value={professionalDraft.specialty ?? ''}
+                          onChange={(event) =>
+                            setProfessionalDraft((current) => ({
+                              ...current,
+                              specialty: event.target.value,
+                            }))
+                          }
+                          className="input-base mt-1"
+                          disabled={!professionalDraft.enabled}
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto]">
+                      <input
+                        value={professionalReason}
+                        onChange={(event) => setProfessionalReason(event.target.value)}
+                        className="input-base text-xs"
+                        placeholder="Motivo auditavel opcional"
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary py-1.5 text-xs"
+                        onClick={() => setProfessionalEditMemberId(null)}
+                        disabled={savingProfessionalId === member.id}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary py-1.5 text-xs"
+                        disabled={
+                          savingProfessionalId !== null ||
+                          professionalInvalid ||
+                          (!professionalDraft.enabled && !profile)
+                        }
+                        onClick={() => void saveProfessionalProfile(member)}
+                      >
+                        {savingProfessionalId === member.id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Save size={14} />
+                        )}
+                        Salvar perfil
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <div className="hidden text-right text-xs text-muted-foreground sm:block">
-                <p className="font-medium text-foreground">{member.roleCode}</p>
-                <p>{member.unitName ?? 'Sem unidade'}</p>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
