@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { sendTenantPasswordSetupEmail } from '@/lib/auth/tenantInviteEmail';
+import { sendTenantInviteEmail } from '@/lib/auth/tenantInviteEmail';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
 
@@ -78,11 +78,13 @@ export async function POST(
   }
 
   try {
-    await sendTenantPasswordSetupEmail({
+    const resentInvite = await sendTenantInviteEmail({
       admin,
       request,
       email,
       tenantId,
+      roleCode: membership.role_code,
+      fullName: normalizeText(profile?.full_name, 160) || undefined,
     });
 
     const nowIso = new Date().toISOString();
@@ -113,6 +115,7 @@ export async function POST(
         roleCode: membership.role_code,
         unitId: membership.unit_id,
         lastInviteSentAt: nowIso,
+        inviteDelivery: resentInvite.delivery,
       },
     });
 
@@ -124,10 +127,19 @@ export async function POST(
         status: 'invited',
         lastInviteSentAt: nowIso,
         emailRedacted,
+        inviteDelivery: resentInvite.delivery,
       },
       error: null,
     });
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (/rate limit|too many|over email send rate limit/i.test(message)) {
+      return jsonError(
+        'Limite de envio de e-mails atingido. Aguarde alguns minutos e tente novamente.',
+        429
+      );
+    }
+
     return jsonError('Falha ao reenviar convite do tenant.', 500);
   }
 }
