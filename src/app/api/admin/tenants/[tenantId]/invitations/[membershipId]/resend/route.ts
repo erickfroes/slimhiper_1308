@@ -127,7 +127,15 @@ export async function POST(
       },
       error: null,
     });
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (/rate limit|too many|over email send rate limit/i.test(message)) {
+      return jsonError(
+        'Limite de envio de e-mails atingido. Aguarde alguns minutos e tente novamente.',
+        429
+      );
+    }
+
     return jsonError('Falha ao reenviar convite do tenant.', 500);
   }
 }
