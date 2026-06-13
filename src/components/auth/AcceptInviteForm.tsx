@@ -21,6 +21,7 @@ export default function AcceptInviteForm() {
   const router = useRouter();
   const [state, setState] = useState<InviteState>('checking');
   const [email, setEmail] = useState('');
+  const [tenantId, setTenantId] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export default function AcceptInviteForm() {
 
       const url = new URL(window.location.href);
       const code = url.searchParams.get('code');
+      const inviteTenantId = url.searchParams.get('tenantId') ?? '';
       if (code) {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError) {
@@ -65,6 +67,7 @@ export default function AcceptInviteForm() {
 
       window.history.replaceState({}, document.title, '/auth/accept-invite');
       setEmail(data.session.user.email ?? '');
+      setTenantId(inviteTenantId);
       setState('ready');
     }
 
@@ -99,6 +102,23 @@ export default function AcceptInviteForm() {
     const { error: updateError } = await supabase.auth.updateUser({ password });
     if (updateError) {
       setError('Nao foi possivel salvar a senha. Solicite um novo convite.');
+      setState('ready');
+      return;
+    }
+
+    const acceptResponse = await fetch('/api/auth/accept-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId: tenantId || undefined }),
+    });
+    const acceptPayload = (await acceptResponse.json().catch(() => null)) as {
+      error?: { message?: string } | null;
+    } | null;
+    if (!acceptResponse.ok || acceptPayload?.error) {
+      setError(
+        acceptPayload?.error?.message ??
+          'Senha salva, mas nao foi possivel ativar o convite. Solicite suporte.'
+      );
       setState('ready');
       return;
     }

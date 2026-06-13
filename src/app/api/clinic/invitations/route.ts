@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
-import { getInviteRedirectTo } from '@/lib/auth/inviteRedirect';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import {
+  findAuthUserByEmail,
+  sendTenantInviteEmail,
+  sendTenantPasswordSetupEmail,
+  type TenantInviteDelivery,
+} from '@/lib/auth/tenantInviteEmail';
 import { canInvitePhysicianWithinLimit } from '@/lib/tenant/doctorLimits';
 
 const INVITABLE_ROLES = new Set([
@@ -35,15 +40,6 @@ function maskEmail(value: string) {
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
-async function findAuthUserByEmail(
-  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
-  email: string
-) {
-  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (error) throw error;
-  return data.users.find((user) => user.email?.toLowerCase() === email) ?? null;
 }
 
 export async function POST(request: Request) {
@@ -114,7 +110,7 @@ export async function POST(request: Request) {
 
   try {
     let authUser = await findAuthUserByEmail(admin, email);
-    let inviteDelivery: 'existing_auth_user' | 'supabase_invite_sent' = 'existing_auth_user';
+    let inviteDelivery: TenantInviteDelivery = 'password_setup_sent';
 
     if (roleCode === 'physician') {
       const limitCheck = await canInvitePhysicianWithinLimit({
@@ -131,22 +127,23 @@ export async function POST(request: Request) {
     }
 
     if (!authUser) {
-      const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
+      const invited = await sendTenantInviteEmail({
+        admin,
+        request,
         email,
-        {
-          redirectTo: getInviteRedirectTo(request),
-          data: {
-            full_name: fullName || undefined,
-            tenant_id: tenantId,
-            role_code: roleCode,
-          },
-        }
-      );
-
-      if (inviteError) throw inviteError;
-      if (!invited.user) throw new Error('Supabase Auth nao retornou usuario convidado.');
+        tenantId,
+        roleCode,
+        fullName,
+      });
       authUser = invited.user;
-      inviteDelivery = 'supabase_invite_sent';
+      inviteDelivery = invited.delivery;
+    } else {
+      await sendTenantPasswordSetupEmail({
+        admin,
+        request,
+        email,
+        tenantId,
+      });
     }
 
     const { error: profileError } = await admin.from('profiles').upsert(

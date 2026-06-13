@@ -123,5 +123,17 @@ export async function PATCH(
     return jsonError('Falha ao atualizar usuario do tenant.', 500);
   }
 
+  if (status && status !== 'active') {
+    const { error: clearAcceptedAtError } = await admin
+      .from('tenant_memberships')
+      .update({ accepted_at: null })
+      .eq('tenant_id', tenantId)
+      .eq('id', membershipId);
+
+    if (clearAcceptedAtError) {
+      return jsonError('Usuario atualizado, mas aceite anterior nao foi limpo.', 500);
+    }
+  }
+
   return NextResponse.json({ data, error: null });
 }

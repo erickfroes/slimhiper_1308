@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { getInviteRedirectTo } from '@/lib/auth/inviteRedirect';
+import {
+  findAuthUserByEmail,
+  sendTenantInviteEmail,
+  sendTenantPasswordSetupEmail,
+  type TenantInviteDelivery,
+} from '@/lib/auth/tenantInviteEmail';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { applyTenantEntitlements } from '@/services/adminTenantEntitlements';
 import { normalizePlanEntitlements } from '@/services/planEntitlements';
@@ -119,19 +124,6 @@ function planUsageDefaults(metadata: unknown) {
         ? Math.trunc(doctorsLimit)
         : DEFAULT_TECHNICAL_LIMITS.doctorsLimit,
   };
-}
-
-async function findAuthUserByEmail(admin: SupabaseAdmin, email: string) {
-  for (let page = 1; page <= 10; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-    if (error) throw error;
-
-    const user = data.users.find((item) => item.email?.toLowerCase() === email);
-    if (user) return user;
-    if (data.users.length < 1000) return null;
-  }
-
-  return null;
 }
 
 async function rollbackTenantProvisioning(params: {
@@ -305,12 +297,13 @@ export async function POST(request: Request) {
       return jsonError('Falha ao criar tenant.', 500);
     }
 
-    tenantId = tenant.id;
+    const createdTenantId = tenant.id;
+    tenantId = createdTenantId;
 
     const { data: unit, error: unitError } = await admin
       .from('tenant_units')
       .insert({
-        tenant_id: tenantId,
+        tenant_id: createdTenantId,
         code: unitCode,
         name: unitName,
         status: 'active',
@@ -326,7 +319,7 @@ export async function POST(request: Request) {
     if (unitError) throw unitError;
 
     const { error: subscriptionError } = await admin.from('tenant_subscriptions').insert({
-      tenant_id: tenantId,
+      tenant_id: createdTenantId,
       platform_plan_id: plan.id,
       status: 'trialing',
       starts_at: nowIso,
@@ -341,7 +334,7 @@ export async function POST(request: Request) {
     const { data: ownerRole, error: ownerRoleError } = await admin
       .from('roles')
       .select('id')
-      .eq('tenant_id', tenantId)
+      .eq('tenant_id', createdTenantId)
       .eq('name', 'tenant_owner')
       .maybeSingle();
     if (ownerRoleError) throw ownerRoleError;
@@ -349,30 +342,32 @@ export async function POST(request: Request) {
 
     await applyTenantEntitlements({
       admin,
-      tenantId: tenant.id,
+      tenantId: createdTenantId,
       entitlements: planEntitlements,
     });
 
     let authUser = existingAuthUser;
-    let inviteDelivery: 'existing_auth_user' | 'supabase_invite_sent' = 'existing_auth_user';
+    let inviteDelivery: TenantInviteDelivery = 'password_setup_sent';
 
     if (!authUser) {
-      const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-        ownerEmail,
-        {
-          redirectTo: getInviteRedirectTo(request),
-          data: {
-            full_name: ownerName,
-            tenant_id: tenantId,
-            role_code: 'tenant_owner',
-          },
-        }
-      );
-      if (inviteError) throw inviteError;
-      if (!invited.user) throw new Error('owner_invite_missing_user');
+      const invited = await sendTenantInviteEmail({
+        admin,
+        request,
+        email: ownerEmail,
+        tenantId: createdTenantId,
+        roleCode: 'tenant_owner',
+        fullName: ownerName,
+      });
       authUser = invited.user;
-      createdAuthUserId = invited.user.id;
-      inviteDelivery = 'supabase_invite_sent';
+      createdAuthUserId = invited.delivery === 'supabase_invite_sent' ? invited.user.id : null;
+      inviteDelivery = invited.delivery;
+    } else {
+      await sendTenantPasswordSetupEmail({
+        admin,
+        request,
+        email: ownerEmail,
+        tenantId: createdTenantId,
+      });
     }
 
     if (!previousProfile) createdProfileUserId = authUser.id;
@@ -383,7 +378,7 @@ export async function POST(request: Request) {
         email: ownerEmail,
         full_name: ownerName || previousProfile?.full_name || ownerEmail,
         platform_role: previousProfile?.platform_role ?? 'user',
-        active_tenant_id: tenantId,
+        active_tenant_id: createdTenantId,
         is_active: true,
       },
       { onConflict: 'id' }
@@ -393,25 +388,25 @@ export async function POST(request: Request) {
     const { data: membership, error: membershipError } = await admin
       .from('tenant_memberships')
       .insert({
-        tenant_id: tenantId,
+        tenant_id: createdTenantId,
         user_id: authUser.id,
         unit_id: unit.id,
         role_code: 'tenant_owner',
         role: 'tenant_owner',
-        status: 'active',
+        status: 'invited',
         invited_by: session.userId,
-        accepted_at: nowIso,
+        accepted_at: null,
       })
       .select('id, status, role_code')
       .single();
     if (membershipError) throw membershipError;
 
     const { error: auditError } = await admin.from('audit_logs').insert({
-      tenant_id: tenantId,
+      tenant_id: createdTenantId,
       user_id: session.userId,
       action: 'platform_tenant.created',
       entity_type: 'tenant',
-      entity_id: tenantId,
+      entity_id: createdTenantId,
       metadata: {
         reason,
         description: `Tenant ${clinicName} criado pela plataforma.`,
@@ -433,7 +428,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         data: {
-          tenantId,
+          tenantId: createdTenantId,
           tenantSlug: tenant.slug,
           unitId: unit.id,
           ownerMembershipId: membership.id,

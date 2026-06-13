@@ -288,7 +288,7 @@ export interface CreateTenantResult {
   tenantSlug: string;
   unitId: string;
   ownerMembershipId: string;
-  ownerInviteDelivery: 'existing_auth_user' | 'supabase_invite_sent';
+  ownerInviteDelivery: 'existing_auth_user' | 'supabase_invite_sent' | 'password_setup_sent';
   subscriptionStatus: string;
   trialEndsAt: string | null;
 }
@@ -860,7 +860,9 @@ function mapCreateTenantResult(value: unknown): CreateTenantResult | null {
     unitId: asString(record.unitId),
     ownerMembershipId: asString(record.ownerMembershipId),
     ownerInviteDelivery:
-      inviteDelivery === 'supabase_invite_sent' ? 'supabase_invite_sent' : 'existing_auth_user',
+      inviteDelivery === 'supabase_invite_sent' || inviteDelivery === 'password_setup_sent'
+        ? inviteDelivery
+        : 'existing_auth_user',
     subscriptionStatus: asString(record.subscriptionStatus, 'trialing'),
     trialEndsAt: asNullableString(record.trialEndsAt),
   };

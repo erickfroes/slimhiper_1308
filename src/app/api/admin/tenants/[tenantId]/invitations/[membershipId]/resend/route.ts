@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
-import { getInviteRedirectTo } from '@/lib/auth/inviteRedirect';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { sendTenantPasswordSetupEmail } from '@/lib/auth/tenantInviteEmail';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
 
@@ -78,16 +78,12 @@ export async function POST(
   }
 
   try {
-    const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: getInviteRedirectTo(request),
-      data: {
-        full_name: normalizeText(profile?.full_name, 160) || undefined,
-        tenant_id: tenantId,
-        role_code: membership.role_code,
-      },
+    await sendTenantPasswordSetupEmail({
+      admin,
+      request,
+      email,
+      tenantId,
     });
-
-    if (inviteError) throw inviteError;
 
     const nowIso = new Date().toISOString();
     const { error: updateError } = await admin
