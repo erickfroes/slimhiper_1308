@@ -29,6 +29,43 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function readDoctorsLimit(settings: unknown) {
+  const usage = asRecord(asRecord(settings).usage);
+  return normalizePositiveNumber(usage.doctorsLimit ?? usage.doctors_limit, 10000) ?? 1;
+}
+
+export async function GET(_request: Request, context: { params: Promise<{ tenantId: string }> }) {
+  const session = await getCurrentAppSession();
+  if (!session) return jsonError('Sessao obrigatoria para carregar tenant.', 401);
+
+  if (!canAccessPlatformAdminFromSession(session)) {
+    return jsonError('Acesso administrativo obrigatorio para carregar tenant.', 403);
+  }
+
+  const { tenantId } = await context.params;
+  if (!isUuid(tenantId)) return jsonError('Tenant invalido.', 400);
+
+  const admin = createSupabaseAdminClient();
+  if (!admin) return jsonError('Supabase admin client nao configurado no servidor.', 503);
+
+  const { data: tenant, error } = await admin
+    .from('tenants')
+    .select('id,settings')
+    .eq('id', tenantId)
+    .maybeSingle();
+
+  if (error) return jsonError('Falha ao carregar tenant.', 500);
+  if (!tenant) return jsonError('Tenant nao encontrado.', 404);
+
+  return NextResponse.json({
+    data: {
+      tenantId,
+      doctorsLimit: readDoctorsLimit(tenant.settings),
+    },
+    error: null,
+  });
+}
+
 export async function PATCH(request: Request, context: { params: Promise<{ tenantId: string }> }) {
   const session = await getCurrentAppSession();
   if (!session) return jsonError('Sessao obrigatoria para atualizar tenant.', 401);
@@ -97,15 +134,26 @@ export async function PATCH(request: Request, context: { params: Promise<{ tenan
 
   const usageInput = asRecord(body.usage);
   const usage = { ...asRecord(currentSettings.usage) };
-  const usersLimit = normalizePositiveNumber(usageInput.usersLimit, 10000);
-  const storageCapacityGb = normalizePositiveNumber(usageInput.storageCapacityGb, 100000);
-  const apiLimitMonthly = normalizePositiveNumber(usageInput.apiLimitMonthly, 100000000);
-  if (usersLimit !== null) usage.usersLimit = usersLimit;
-  if (storageCapacityGb !== null) usage.storageCapacityGb = storageCapacityGb;
-  if (apiLimitMonthly !== null) usage.apiLimitMonthly = apiLimitMonthly;
-  if (usersLimit !== null || storageCapacityGb !== null || apiLimitMonthly !== null) {
+  const doctorsLimit = normalizePositiveNumber(usageInput.doctorsLimit, 10000);
+  if (doctorsLimit !== null) {
+    const { count: doctorsCount, error: doctorsCountError } = await admin
+      .from('tenant_memberships')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .in('status', ['active', 'invited'])
+      .or('role_code.eq.physician,role.eq.physician');
+
+    if (doctorsCountError) return jsonError('Falha ao validar uso atual de medicos.', 500);
+    if ((doctorsCount ?? 0) > doctorsLimit) {
+      return jsonError(
+        `Limite de medicos menor que o uso atual (${doctorsCount}/${doctorsLimit}).`,
+        409
+      );
+    }
+
+    usage.doctorsLimit = doctorsLimit;
     nextSettings.usage = usage;
-    changes.usage = usage;
+    changes.usage = { doctorsLimit };
   }
 
   const featureFlagsInput = asRecord(body.featureFlags);
@@ -131,10 +179,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ tenan
     .eq('id', tenantId);
   if (updateError) return jsonError('Falha ao atualizar tenant.', 500);
 
+  const action =
+    doctorsLimit !== null
+      ? 'platform_tenant.doctors_limit_updated'
+      : 'platform_tenant.config_updated';
+
   const { error: auditError } = await admin.from('audit_logs').insert({
     tenant_id: tenantId,
     user_id: session.userId,
-    action: 'platform_tenant.config_updated',
+    action,
     entity_type: 'tenant',
     entity_id: tenantId,
     metadata: {

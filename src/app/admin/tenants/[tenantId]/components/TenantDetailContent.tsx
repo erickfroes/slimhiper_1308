@@ -36,12 +36,13 @@ import {
   getTenantDetail,
   getTenantEntitlements,
   invitePlatformTenantUser,
+  listTenantWebhookSummaries,
   listWebhookReprocessJobs,
-  listWebhookSummaries,
   listPlatformPlans,
   requestPlatformBreakGlass,
   requestPlatformSupportSession,
   requestWebhookReprocess,
+  resendPlatformTenantInvite,
   revokePlatformBreakGlass,
   saveTenantEntitlements,
   updatePlatformTenantConfig,
@@ -74,6 +75,8 @@ type TenantTab =
   | 'webhooks'
   | 'support'
   | 'breakglass';
+
+type AuditCategory = AdminTenantDetail['auditLogs'][number]['category'];
 
 const ADMIN_MUTABLE_ROLES = [
   'tenant_owner',
@@ -194,6 +197,26 @@ function isWebhookReprocessable(status: AdminWebhookEventSummary['status']) {
   );
 }
 
+function countTenantDoctors(users: AdminTenantDetail['users']) {
+  return users.filter(
+    (user) =>
+      user.role === 'physician' &&
+      (user.membershipStatus === 'active' || user.membershipStatus === 'invited')
+  ).length;
+}
+
+function countPendingInvites(users: AdminTenantDetail['users']) {
+  return users.filter((user) => user.membershipStatus === 'invited').length;
+}
+
+function membershipStatusTone(status: string): 'emerald' | 'blue' | 'amber' | 'red' | 'slate' {
+  if (status === 'active') return 'emerald';
+  if (status === 'invited') return 'blue';
+  if (status === 'suspended') return 'amber';
+  if (status === 'revoked') return 'red';
+  return 'slate';
+}
+
 function SectionCard({
   title,
   icon: Icon,
@@ -233,17 +256,22 @@ function TenantConfigPanel({
     tenant.status === 'trial' ? 'active' : tenant.status
   );
   const [planCode, setPlanCode] = useState(tenant.plan);
-  const [usersLimit, setUsersLimit] = useState(String(tenant.usersLimit));
-  const [storageCapacityGb, setStorageCapacityGb] = useState(String(tenant.storageCapacityGb));
-  const [apiLimitMonthly, setApiLimitMonthly] = useState(String(tenant.apiLimitMonthly));
+  const [doctorsLimit, setDoctorsLimit] = useState(String(tenant.doctorsLimit));
   const [featureFlagKey, setFeatureFlagKey] = useState('');
   const [featureFlagEnabled, setFeatureFlagEnabled] = useState(true);
   const [reason, setReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const normalizedDoctorsLimit = Number(doctorsLimit);
 
   useEffect(() => {
     listPlatformPlans().then(({ data }) => setPlans(data));
   }, []);
+
+  useEffect(() => {
+    setStatus(tenant.status === 'trial' ? 'active' : tenant.status);
+    setPlanCode(tenant.plan);
+    setDoctorsLimit(String(tenant.doctorsLimit));
+  }, [tenant.doctorsLimit, tenant.plan, tenant.status]);
 
   const saveConfig = async () => {
     setIsSaving(true);
@@ -252,9 +280,7 @@ function TenantConfigPanel({
       status,
       planCode,
       usage: {
-        usersLimit: Number(usersLimit),
-        storageCapacityGb: Number(storageCapacityGb),
-        apiLimitMonthly: Number(apiLimitMonthly),
+        doctorsLimit: Number(doctorsLimit),
       },
       featureFlags: featureFlagKey.trim() ? { [featureFlagKey.trim()]: featureFlagEnabled } : {},
       reason,
@@ -273,7 +299,8 @@ function TenantConfigPanel({
   return (
     <SectionCard title="Configuracao auditada" icon={Shield}>
       <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-        Alteracoes sao locais e auditadas. Esta tela nao chama Asaas ou D4Sign.
+        Alteracoes sao locais e auditadas. O plano limita apenas medicos; storage, API e D4Sign
+        ficam como telemetria/estado operacional e esta tela nao chama providers.
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <label>
@@ -306,32 +333,13 @@ function TenantConfigPanel({
           </select>
         </label>
         <label>
-          <span className="text-xs font-semibold text-foreground">Limite usuarios</span>
+          <span className="text-xs font-semibold text-foreground">Limite de medicos</span>
           <input
             type="number"
             min={1}
-            value={usersLimit}
-            onChange={(event) => setUsersLimit(event.target.value)}
-            className="input-base mt-1 text-sm"
-          />
-        </label>
-        <label>
-          <span className="text-xs font-semibold text-foreground">Storage GB</span>
-          <input
-            type="number"
-            min={1}
-            value={storageCapacityGb}
-            onChange={(event) => setStorageCapacityGb(event.target.value)}
-            className="input-base mt-1 text-sm"
-          />
-        </label>
-        <label>
-          <span className="text-xs font-semibold text-foreground">API mensal</span>
-          <input
-            type="number"
-            min={1}
-            value={apiLimitMonthly}
-            onChange={(event) => setApiLimitMonthly(event.target.value)}
+            max={10000}
+            value={doctorsLimit}
+            onChange={(event) => setDoctorsLimit(event.target.value)}
             className="input-base mt-1 text-sm"
           />
         </label>
@@ -366,7 +374,11 @@ function TenantConfigPanel({
           type="button"
           onClick={saveConfig}
           disabled={
-            !adminPermissions.canManageTenantConfig || isSaving || reason.trim().length < 16
+            !adminPermissions.canManageTenantConfig ||
+            isSaving ||
+            reason.trim().length < 16 ||
+            !Number.isFinite(normalizedDoctorsLimit) ||
+            normalizedDoctorsLimit < 1
           }
           className="btn-primary text-xs disabled:cursor-not-allowed disabled:opacity-50"
           title={
@@ -731,6 +743,8 @@ function TenantEntitlementsPanel({
 
 function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
   const tenant = detail.tenant;
+  const doctorsUsed = countTenantDoctors(detail.users);
+  const pendingInvites = countPendingInvites(detail.users);
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -770,6 +784,12 @@ function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload
               <span className="text-sm font-bold text-foreground">{currency(tenant.mrr)}</span>
             </div>
             <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Medicos no plano</span>
+              <span className="text-xs font-semibold text-foreground">
+                {doctorsUsed}/{tenant.doctorsLimit}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Proxima cobranca</span>
               <span className="text-xs font-medium text-foreground">
                 {formatDate(tenant.nextBillingDate)}
@@ -788,7 +808,7 @@ function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload
                 </StateBadge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Conta:{' '}
+                Conta redigida:{' '}
                 <span className="font-mono text-foreground">{tenant.asaasAccountId || 'N/D'}</span>
               </p>
             </div>
@@ -799,21 +819,38 @@ function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload
                   {tenant.d4signStatus}
                 </StateBadge>
               </div>
-              <UsageBar used={tenant.d4signDocsUsed} limit={tenant.d4signDocsLimit} unit=" docs" />
+              <p className="text-xs text-muted-foreground">
+                Estado local sanitizado. Acoes provider-related ficam bloqueadas por contrato.
+              </p>
             </div>
           </div>
         </SectionCard>
       </div>
 
-      <SectionCard title="Metricas de Uso" icon={Activity}>
+      <SectionCard title="Metricas operacionais" icon={Activity}>
         <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
-          <UsageBar used={tenant.users} limit={tenant.usersLimit} />
-          <UsageBar
-            used={Number(tenant.storageUsedGb.toFixed(1))}
-            limit={tenant.storageCapacityGb}
-            unit=" GB"
-          />
-          <UsageBar used={tenant.apiCallsThisMonth} limit={tenant.apiLimitMonthly} />
+          <div>
+            <p className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
+              <Users size={11} /> Medicos
+            </p>
+            <UsageBar used={doctorsUsed} limit={tenant.doctorsLimit} />
+          </div>
+          <div>
+            <p className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
+              <Mail size={11} /> Convites pendentes
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-foreground">{pendingInvites}</p>
+            <p className="text-xs text-muted-foreground">{tenant.users} usuarios totais</p>
+          </div>
+          <div>
+            <p className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
+              <Activity size={11} /> API no mes
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-foreground">
+              {tenant.apiCallsThisMonth}
+            </p>
+            <p className="text-xs text-muted-foreground">Telemetria read-only</p>
+          </div>
           <div>
             <p className="mb-2 flex items-center gap-1 text-xs text-muted-foreground">
               <Activity size={11} /> Agendamentos mes
@@ -834,6 +871,7 @@ function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload
 
 function BillingTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: () => void }) {
   const tenant = detail.tenant;
+  const doctorsUsed = countTenantDoctors(detail.users);
   const billingAudit = detail.auditLogs.filter(
     (entry) =>
       entry.category === 'billing' ||
@@ -859,6 +897,7 @@ function BillingTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
               ['Plano', tenant.plan],
               ['Status assinatura', tenant.saasSubscriptionStatus],
               ['MRR', currency(tenant.mrr)],
+              ['Medicos no plano', `${doctorsUsed}/${tenant.doctorsLimit}`],
               ['Proxima cobranca', formatDate(tenant.nextBillingDate)],
               ['Metodo', tenant.paymentMethod || 'not_configured'],
             ].map(([label, value]) => (
@@ -964,7 +1003,13 @@ function IntegrationsTab({ detail }: { detail: AdminTenantDetail }) {
                 {tenant.d4signStatus}
               </StateBadge>
             </div>
-            <UsageBar used={tenant.d4signDocsUsed} limit={tenant.d4signDocsLimit} unit=" docs" />
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Docs processados</span>
+              <span className="font-semibold text-foreground">{tenant.d4signDocsUsed}</span>
+            </div>
+            <p className="rounded-lg border border-border bg-muted/30 p-3 text-muted-foreground">
+              Provider-related: exibicao sanitizada, sem chamada real a D4Sign pela UI.
+            </p>
           </div>
         </SectionCard>
 
@@ -1028,6 +1073,9 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
   const [inviteUnitId, setInviteUnitId] = useState('');
   const [inviteReason, setInviteReason] = useState('');
   const [isInviting, setIsInviting] = useState(false);
+  const [resendTarget, setResendTarget] = useState<AdminTenantDetail['users'][number] | null>(null);
+  const [resendReason, setResendReason] = useState('');
+  const [isResending, setIsResending] = useState(false);
 
   const startEdit = (user: AdminTenantDetail['users'][number]) => {
     setEditingId(user.id);
@@ -1091,6 +1139,32 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
     setInviteRoleCode('receptionist');
     setInviteUnitId('');
     setInviteReason('');
+    onReload();
+  };
+
+  const closeResendDialog = () => {
+    if (isResending) return;
+    setResendTarget(null);
+    setResendReason('');
+  };
+
+  const resendInvite = async () => {
+    if (!resendTarget) return;
+    setIsResending(true);
+    const { data, error } = await resendPlatformTenantInvite({
+      tenantId: detail.tenant.id,
+      membershipId: resendTarget.id,
+      reason: resendReason,
+    });
+    setIsResending(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(`Convite reenviado para ${data?.emailRedacted ?? 'usuario convidado'}.`);
+    closeResendDialog();
     onReload();
   };
 
@@ -1211,7 +1285,7 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
                       <StateBadge tone="slate">{user.role}</StateBadge>
                     </td>
                     <td className="px-3 py-2.5">
-                      <StateBadge tone={user.status === 'active' ? 'emerald' : 'slate'}>
+                      <StateBadge tone={membershipStatusTone(user.membershipStatus)}>
                         {user.membershipStatus}
                       </StateBadge>
                     </td>
@@ -1225,13 +1299,30 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
                       {formatDate(user.createdAt)}
                     </td>
                     <td className="px-3 py-2.5">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(user)}
-                        className="btn-ghost px-3 py-1.5 text-xs"
-                      >
-                        Editar
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(user)}
+                          className="btn-ghost px-3 py-1.5 text-xs"
+                        >
+                          Editar
+                        </button>
+                        {user.membershipStatus === 'invited' ? (
+                          <button
+                            type="button"
+                            onClick={() => setResendTarget(user)}
+                            disabled={!adminPermissions.canManageTenantUsers || isResending}
+                            className="btn-secondary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                            title={
+                              adminPermissions.canManageTenantUsers
+                                ? undefined
+                                : 'Apenas owner/admin podem reenviar convites.'
+                            }
+                          >
+                            Reenviar convite
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                   {isEditing ? (
@@ -1314,6 +1405,59 @@ function UsersTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
           </tbody>
         </table>
       </div>
+      {resendTarget ? (
+        <Dialog
+          open
+          title="Reenviar convite"
+          description="O convite sera reenviado pelo Auth Admin com redirecionamento para criacao de senha. O link nao sera exibido na UI."
+          onOpenChange={(open) => {
+            if (!open) closeResendDialog();
+          }}
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeResendDialog}
+                disabled={isResending}
+                className="btn-ghost px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={resendInvite}
+                disabled={
+                  !adminPermissions.canManageTenantUsers ||
+                  isResending ||
+                  resendReason.trim().length < 16
+                }
+                className="btn-primary px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isResending ? 'Reenviando...' : 'Reenviar convite'}
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs">
+              <p className="font-semibold text-foreground">{resendTarget.name}</p>
+              <p className="mt-1 text-muted-foreground">{resendTarget.email}</p>
+              <p className="mt-1 text-muted-foreground">
+                Papel: <span className="font-mono">{resendTarget.role}</span>
+              </p>
+            </div>
+            <label className="block">
+              <span className="text-xs font-semibold text-foreground">Motivo auditavel</span>
+              <textarea
+                value={resendReason}
+                onChange={(event) => setResendReason(event.target.value)}
+                placeholder="Explique por que o convite precisa ser reenviado. Minimo de 16 caracteres."
+                className="input-base mt-1 min-h-24 text-sm"
+              />
+            </label>
+          </div>
+        </Dialog>
+      ) : null}
     </SectionCard>
   );
 }
@@ -1497,16 +1641,57 @@ function UnitsTab({ detail, onReload }: { detail: AdminTenantDetail; onReload: (
 }
 
 function AuditTab({ detail }: { detail: AdminTenantDetail }) {
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<'all' | AuditCategory>('all');
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredLogs = detail.auditLogs.filter((entry) => {
+    const matchesCategory = category === 'all' || entry.category === category;
+    const matchesQuery =
+      !normalizedQuery ||
+      [entry.action, entry.description, entry.admin]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedQuery);
+    return matchesCategory && matchesQuery;
+  });
+  const selectedEntry = filteredLogs.find((entry) => entry.id === selectedEntryId) ?? null;
+
   return (
     <SectionCard title="Log de Auditoria" icon={ClipboardList}>
+      <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_180px]">
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Buscar por acao, descricao ou ator"
+          className="input-base text-xs"
+        />
+        <select
+          value={category}
+          onChange={(event) => setCategory(event.target.value as 'all' | AuditCategory)}
+          className="input-base text-xs"
+        >
+          <option value="all">Todas categorias</option>
+          <option value="billing">Billing</option>
+          <option value="security">Seguranca</option>
+          <option value="config">Config</option>
+          <option value="support">Suporte</option>
+          <option value="integration">Integracao</option>
+        </select>
+      </div>
       <div className="space-y-1">
-        {detail.auditLogs.length === 0 ? (
+        {filteredLogs.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            Nenhuma acao auditada para este tenant.
+            Nenhuma acao auditada encontrada para este filtro.
           </div>
         ) : (
-          detail.auditLogs.map((entry) => (
-            <div key={entry.id} className="flex items-start gap-3 rounded-xl p-3 hover:bg-muted/40">
+          filteredLogs.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => setSelectedEntryId(entry.id)}
+              className="flex w-full items-start gap-3 rounded-xl p-3 text-left hover:bg-muted/40"
+            >
               <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
                 <ClipboardList size={13} className="text-primary" />
               </div>
@@ -1519,10 +1704,38 @@ function AuditTab({ detail }: { detail: AdminTenantDetail }) {
               <span className="flex-shrink-0 text-xs text-muted-foreground">
                 {formatDate(entry.timestamp)}
               </span>
-            </div>
+            </button>
           ))
         )}
       </div>
+      {selectedEntry ? (
+        <Dialog
+          open
+          title="Detalhe auditado"
+          description="Visualizacao sanitizada. Payloads brutos e segredos nao sao exibidos."
+          onOpenChange={(open) => {
+            if (!open) setSelectedEntryId(null);
+          }}
+        >
+          <div className="space-y-3 text-xs">
+            {[
+              ['Acao', selectedEntry.action],
+              ['Categoria', selectedEntry.category],
+              ['Ator', selectedEntry.admin],
+              ['Horario', formatDate(selectedEntry.timestamp)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-muted-foreground">{label}</p>
+                <p className="mt-1 break-words font-semibold text-foreground">{value}</p>
+              </div>
+            ))}
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <p className="text-muted-foreground">Resumo redigido</p>
+              <p className="mt-1 text-foreground">{selectedEntry.description}</p>
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
     </SectionCard>
   );
 }
@@ -1549,9 +1762,9 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
   const loadTenantWebhookOps = useCallback(() => {
     setIsLoading(true);
     setLoadError(null);
-    Promise.all([listWebhookSummaries(200), listWebhookReprocessJobs(100)])
+    Promise.all([listTenantWebhookSummaries(detail.tenant.id, 100), listWebhookReprocessJobs(100)])
       .then(([eventsResult, jobsResult]) => {
-        setEvents(eventsResult.data.filter((event) => event.tenantId === detail.tenant.id));
+        setEvents(eventsResult.data);
         setJobs(jobsResult.data.filter((job) => job.tenantId === detail.tenant.id));
         setLoadError(eventsResult.error?.message ?? jobsResult.error?.message ?? null);
       })

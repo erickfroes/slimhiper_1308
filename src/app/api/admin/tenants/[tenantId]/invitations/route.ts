@@ -260,7 +260,7 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
         id: membershipResult.data.id,
         tenantId,
         userId: authUser.id,
-        email,
+        emailRedacted: maskEmail(email),
         role: membershipResult.data.role_code,
         status: membershipResult.data.status,
         unitId: membershipResult.data.unit_id,

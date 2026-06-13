@@ -44,6 +44,7 @@ export interface AdminTenantRow {
   d4signDocsUsed: number;
   d4signDocsLimit: number;
   usersLimit: number;
+  doctorsLimit: number;
   appointmentsThisMonth: number;
   featureFlags: Record<string, boolean>;
   openSupportSessions: number;
@@ -289,9 +290,7 @@ export interface UpdateTenantConfigInput {
   status?: AdminTenantStatus;
   planCode?: string;
   usage?: {
-    usersLimit?: number;
-    storageCapacityGb?: number;
-    apiLimitMonthly?: number;
+    doctorsLimit?: number;
   };
   featureFlags?: Record<string, boolean>;
   reason: string;
@@ -515,6 +514,7 @@ function mapTenantRow(value: unknown): AdminTenantRow {
     d4signDocsUsed: asNumber(record.d4signDocsUsed),
     d4signDocsLimit: asNumber(record.d4signDocsLimit, 100),
     usersLimit: asNumber(record.usersLimit, 10),
+    doctorsLimit: asNumber(record.doctorsLimit, asNumber(record.usersLimit, 1)),
     appointmentsThisMonth: asNumber(record.appointmentsThisMonth),
     featureFlags: flags,
     openSupportSessions: asNumber(record.openSupportSessions),
@@ -775,6 +775,13 @@ function mapTenantDetail(value: unknown): AdminTenantDetail {
     webhookErrors: asArray(record.webhookErrors).map(mapTenantWebhookError),
     supportSessions: asArray(record.supportSessions).map(mapSupport),
     breakGlassRequests: asArray(record.breakGlassRequests).map(mapBreakGlass),
+  };
+}
+
+function mapTenantConfigSummary(value: unknown) {
+  const record = asRecord(value);
+  return {
+    doctorsLimit: asNumber(record.doctorsLimit, 1),
   };
 }
 
@@ -1088,6 +1095,41 @@ export async function updatePlatformTenantConfig(input: UpdateTenantConfigInput)
   }
 }
 
+export async function getPlatformTenantConfig(tenantId: string): Promise<{
+  data: { doctorsLimit: number } | null;
+  error: SafeServiceError | null;
+}> {
+  const normalizedTenantId = tenantId.trim();
+  if (!isUuid(normalizedTenantId)) return { data: null, error: { message: 'Tenant invalido.' } };
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${normalizedTenantId}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      data?: unknown;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null,
+        error: {
+          message: payload?.error?.message ?? 'Falha ao carregar configuracao do tenant.',
+        },
+      };
+    }
+
+    return { data: mapTenantConfigSummary(payload?.data), error: null };
+  } catch (error) {
+    return {
+      data: null,
+      error: asServiceError(error, 'Falha ao carregar configuracao do tenant.'),
+    };
+  }
+}
+
 export async function getTenantEntitlements(tenantId: string): Promise<{
   data: AdminTenantEntitlementsState | null;
   error: SafeServiceError | null;
@@ -1236,7 +1278,13 @@ export async function getTenantDetail(tenantId: string): Promise<{
       return { data: null, error: asServiceError(error, 'Falha ao carregar tenant.') };
     }
 
-    return { data: mapTenantDetail(data), error: null };
+    const detail = mapTenantDetail(data);
+    const configResult = await getPlatformTenantConfig(tenantId);
+    if (configResult.data) {
+      detail.tenant.doctorsLimit = configResult.data.doctorsLimit;
+    }
+
+    return { data: detail, error: null };
   } catch (error) {
     return { data: null, error: asServiceError(error, 'Falha ao carregar tenant.') };
   }
@@ -1259,6 +1307,40 @@ export async function listWebhookSummaries(limit = 100): Promise<{
     return { data: asArray(data).map(mapWebhook), error: null };
   } catch (error) {
     return { data: [], error: asServiceError(error, 'Falha ao carregar webhooks.') };
+  }
+}
+
+export async function listTenantWebhookSummaries(
+  tenantId: string,
+  limit = 100
+): Promise<{
+  data: AdminWebhookEventSummary[];
+  error: SafeServiceError | null;
+}> {
+  const normalizedTenantId = tenantId.trim();
+  if (!isUuid(normalizedTenantId)) return { data: [], error: { message: 'Tenant invalido.' } };
+
+  try {
+    const response = await fetch(
+      `/api/admin/tenants/${normalizedTenantId}/webhooks?limit=${Math.trunc(limit)}`
+    );
+    const payload = (await response.json().catch(() => null)) as {
+      data?: unknown;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: [],
+        error: {
+          message: payload?.error?.message ?? 'Falha ao carregar webhooks do tenant.',
+        },
+      };
+    }
+
+    return { data: asArray(payload?.data).map(mapWebhook), error: null };
+  } catch (error) {
+    return { data: [], error: asServiceError(error, 'Falha ao carregar webhooks do tenant.') };
   }
 }
 
@@ -1509,6 +1591,71 @@ export async function invitePlatformTenantUser(input: {
   }
 }
 
+export async function resendPlatformTenantInvite(input: {
+  tenantId: string;
+  membershipId: string;
+  reason: string;
+}): Promise<{
+  data: {
+    membershipId: string;
+    status: 'invited';
+    lastInviteSentAt: string;
+    emailRedacted: string;
+  } | null;
+  error: SafeServiceError | null;
+}> {
+  const tenantId = input.tenantId.trim();
+  const membershipId = input.membershipId.trim();
+  const reason = normalizeText(input.reason, 500);
+
+  if (!isUuid(tenantId)) return { data: null, error: { message: 'Tenant invalido.' } };
+  if (!isUuid(membershipId)) return { data: null, error: { message: 'Vinculo invalido.' } };
+  if (reason.length < 16) {
+    return {
+      data: null,
+      error: { message: 'Informe um motivo auditavel com pelo menos 16 caracteres.' },
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `/api/admin/tenants/${tenantId}/invitations/${membershipId}/resend`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      }
+    );
+
+    const payload = (await response.json().catch(() => null)) as {
+      data?: unknown;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null,
+        error: {
+          message: payload?.error?.message ?? 'Falha ao reenviar convite.',
+        },
+      };
+    }
+
+    const record = asRecord(payload?.data);
+    return {
+      data: {
+        membershipId: asString(record.membershipId),
+        status: 'invited',
+        lastInviteSentAt: asString(record.lastInviteSentAt),
+        emailRedacted: asString(record.emailRedacted),
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao reenviar convite.') };
+  }
+}
+
 export async function updatePlatformTenantMembership(input: {
   tenantId: string;
   membershipId: string;
@@ -1530,17 +1677,29 @@ export async function updatePlatformTenantMembership(input: {
   }
 
   try {
-    const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase.rpc('update_platform_tenant_membership', {
-      p_tenant_id: tenantId,
-      p_membership_id: membershipId,
-      p_role_code: input.roleCode ? normalizeText(input.roleCode, 80) : null,
-      p_status: input.status ? normalizeText(input.status, 40) : null,
-      p_unit_id: unitId,
-      p_reason: reason,
+    const response = await fetch(`/api/admin/tenants/${tenantId}/memberships/${membershipId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roleCode: input.roleCode ? normalizeText(input.roleCode, 80) : null,
+        status: input.status ? normalizeText(input.status, 40) : null,
+        unitId,
+        reason,
+      }),
     });
 
-    if (error) return { error: asServiceError(error, 'Falha ao atualizar usuario do tenant.') };
+    const payload = (await response.json().catch(() => null)) as {
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        error: {
+          message: payload?.error?.message ?? 'Falha ao atualizar usuario do tenant.',
+        } satisfies SafeServiceError,
+      };
+    }
+
     return { error: null as SafeServiceError | null };
   } catch (error) {
     return { error: asServiceError(error, 'Falha ao atualizar usuario do tenant.') };
