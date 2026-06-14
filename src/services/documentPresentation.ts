@@ -1,20 +1,21 @@
-import type { PatientDocument360Item, PatientDocumentCategory } from '@/domain/types';
+import type { PatientDocumentCategory } from '@/domain/types';
+import { getPatientDocumentStatusLabel as getCentralPatientDocumentStatusLabel } from '@/domain/documentStatus';
 
 export const DOCUMENT_CATEGORY_LABELS: Record<string, string> = {
-  relatorio: 'Relatorio',
-  report: 'Relatorio',
-  prescricao: 'Prescricao',
-  prescription: 'Prescricao',
+  relatorio: 'Relatório',
+  report: 'Relatório',
+  prescricao: 'Prescrição',
+  prescription: 'Prescrição',
   termo: 'Termo',
   term: 'Termo',
   contrato: 'Contrato',
   contract: 'Contrato',
   consentimento: 'Consentimento',
   consent: 'Consentimento',
-  orientacao: 'Orientacao',
-  orientation: 'Orientacao',
-  pacote_evidencia: 'Pacote de evidencia',
-  evidence_package: 'Pacote de evidencia',
+  orientacao: 'Orientação',
+  orientation: 'Orientação',
+  pacote_evidencia: 'Pacote de evidência',
+  evidence_package: 'Pacote de evidência',
   outros: 'Outros',
   other: 'Outros',
 };
@@ -54,20 +55,6 @@ export function getDocumentCategoryLabel(value: string | null | undefined) {
   return DOCUMENT_CATEGORY_LABELS[normalized] ?? normalized.replace(/_/g, ' ');
 }
 
-export function getPatientDocumentStatusLabel(status: PatientDocument360Item['status'] | string) {
-  const labels: Record<string, string> = {
-    assinado: 'Assinado',
-    pendente_assinatura: 'Pendente assinatura',
-    em_analise: 'Em analise',
-    vencido: 'Vencido',
-    cancelado: 'Cancelado',
-    disponivel: 'Disponivel',
-    generated: 'Disponivel',
-    signed: 'Assinado',
-    sent_for_signature: 'Pendente assinatura',
-    expired: 'Vencido',
-    canceled: 'Cancelado',
-    cancelled: 'Cancelado',
-  };
-  return labels[String(status).toLowerCase()] ?? String(status || 'Disponivel').replace(/_/g, ' ');
+export function getPatientDocumentStatusLabel(status: string) {
+  return getCentralPatientDocumentStatusLabel(status);
 }
