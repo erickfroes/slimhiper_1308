@@ -14,6 +14,7 @@ import {
   FileClock,
   FilePlus2,
   FileSearch,
+  Archive,
   FileText,
   FileX,
   Filter,
@@ -24,19 +25,25 @@ import {
   Search,
   Send,
   ShieldCheck,
+  UploadCloud,
   Unlock,
 } from 'lucide-react';
 import {
+  archiveClinicDocumentTemplate,
+  createClinicDocumentTemplate,
   duplicateClinicDocumentTemplate,
   generateClinicDocument,
   getClinicDocumentSignedUrl,
   getClinicDocumentsWorkspace,
+  publishClinicDocumentTemplate,
   requestClinicDocumentSignature,
   setClinicDocumentPatientRelease,
   type ClinicDocumentAuditEvent,
   type ClinicDocumentCategory,
   type ClinicDocumentRow,
   type ClinicDocumentTemplate,
+  updateClinicDocumentTemplate,
+  validateTemplateVariables,
   type ClinicDocumentsWorkspace,
 } from '@/services/clinicDocumentsApi';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
@@ -233,6 +240,9 @@ function TemplateLibrary({
   onSearchChange,
   onDuplicate,
   onPickTemplate,
+  onEditTemplate,
+  onArchiveTemplate,
+  onPublishTemplate,
 }: {
   templates: ClinicDocumentTemplate[];
   categories: ClinicDocumentCategory[];
@@ -245,6 +255,9 @@ function TemplateLibrary({
   onSearchChange: (value: string) => void;
   onDuplicate: (template: ClinicDocumentTemplate) => void;
   onPickTemplate: (template: ClinicDocumentTemplate) => void;
+  onEditTemplate: (template: ClinicDocumentTemplate) => void;
+  onArchiveTemplate: (template: ClinicDocumentTemplate) => void;
+  onPublishTemplate: (template: ClinicDocumentTemplate) => void;
 }) {
   return (
     <section className="rounded-lg border border-border bg-card">
@@ -343,15 +356,45 @@ function TemplateLibrary({
                     {template.allowedVariables.length} variaveis livres
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onDuplicate(template)}
-                  disabled={busyAction === `duplicate-${template.id}`}
-                  className="btn-secondary mt-3 min-h-10 w-full justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Copy size={14} aria-hidden="true" />
-                  {busyAction === `duplicate-${template.id}` ? 'Duplicando...' : 'Duplicar'}
-                </button>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onEditTemplate(template)}
+                    className="btn-secondary min-h-10 justify-center text-xs"
+                  >
+                    <PenSquare size={14} aria-hidden="true" />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDuplicate(template)}
+                    disabled={busyAction === `duplicate-${template.id}`}
+                    className="btn-secondary min-h-10 justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Copy size={14} aria-hidden="true" />
+                    {busyAction === `duplicate-${template.id}` ? 'Duplicando...' : 'Duplicar'}
+                  </button>
+                  {template.status === 'draft' ? (
+                    <button
+                      type="button"
+                      onClick={() => onPublishTemplate(template)}
+                      disabled={busyAction === `publish-${template.id}`}
+                      className="btn-primary min-h-10 justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <UploadCloud size={14} aria-hidden="true" />
+                      Publicar
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => onArchiveTemplate(template)}
+                    disabled={busyAction === `archive-${template.id}`}
+                    className="btn-secondary min-h-10 justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Archive size={14} aria-hidden="true" />
+                    {template.status === 'archived' ? 'Restaurar' : 'Arquivar'}
+                  </button>
+                </div>
               </article>
             ))}
           </div>
@@ -893,6 +936,155 @@ function DocumentWizard({
   );
 }
 
+type TemplateEditorForm = {
+  name: string;
+  category: string;
+  templateBody: string;
+  status: 'draft' | 'active' | 'archived';
+  d4signEnabled: boolean;
+  allowedVariablesText: string;
+};
+
+function templateToForm(template?: ClinicDocumentTemplate): TemplateEditorForm {
+  return {
+    name: template?.name ?? '',
+    category: template?.category ?? 'outros',
+    templateBody: template?.templateBody ?? '',
+    status: (template?.status as TemplateEditorForm['status']) ?? 'draft',
+    d4signEnabled: template?.d4signEnabled ?? false,
+    allowedVariablesText: template?.allowedVariables.join('\n') ?? '',
+  };
+}
+
+function TemplateEditorDialog({
+  template,
+  form,
+  busyAction,
+  onClose,
+  onChange,
+  onSave,
+}: {
+  template: ClinicDocumentTemplate | null;
+  form: TemplateEditorForm;
+  busyAction: string | null;
+  onClose: () => void;
+  onChange: (form: TemplateEditorForm) => void;
+  onSave: () => void;
+}) {
+  const allowedVariables = form.allowedVariablesText
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const validationError = validateTemplateVariables(form.templateBody, allowedVariables)?.message;
+  const saving = busyAction === 'template-save';
+
+  return (
+    <Dialog
+      open
+      title={template ? 'Editar template' : 'Novo template'}
+      description="Configure nome, categoria, modelo, status e assinatura digital."
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onClose();
+      }}
+      placement="right"
+      mobileFullscreen
+      footer={
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} className="btn-secondary justify-center text-sm">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={
+              saving || Boolean(validationError) || !form.name.trim() || !form.category.trim()
+            }
+            className="btn-primary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <CheckCircle2 size={16} aria-hidden="true" />
+            {saving ? 'Salvando...' : 'Salvar template'}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <label className="block text-xs font-medium text-muted-foreground">
+          Nome
+          <input
+            value={form.name}
+            onChange={(event) => onChange({ ...form, name: event.target.value })}
+            className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+            maxLength={200}
+          />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-medium text-muted-foreground">
+            Categoria
+            <input
+              value={form.category}
+              onChange={(event) => onChange({ ...form, category: event.target.value })}
+              className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              maxLength={80}
+            />
+          </label>
+          <label className="block text-xs font-medium text-muted-foreground">
+            Status
+            <select
+              value={form.status}
+              onChange={(event) =>
+                onChange({ ...form, status: event.target.value as TemplateEditorForm['status'] })
+              }
+              className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+            >
+              <option value="draft">Rascunho</option>
+              <option value="active">Ativo</option>
+              <option value="archived">Arquivado</option>
+            </select>
+          </label>
+        </div>
+        <label className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={form.d4signEnabled}
+            onChange={(event) => onChange({ ...form, d4signEnabled: event.target.checked })}
+          />
+          Exigir assinatura digital D4Sign para documentos gerados deste template
+        </label>
+        <label className="block text-xs font-medium text-muted-foreground">
+          Conteudo/modelo
+          <textarea
+            value={form.templateBody}
+            onChange={(event) => onChange({ ...form, templateBody: event.target.value })}
+            className="mt-1 min-h-56 w-full rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm text-foreground"
+            placeholder="Use {{variavel_livre}}. Variaveis protegidas sao preenchidas pelo sistema."
+          />
+        </label>
+        <label className="block text-xs font-medium text-muted-foreground">
+          Variaveis livres permitidas (uma por linha ou separadas por virgula)
+          <textarea
+            value={form.allowedVariablesText}
+            onChange={(event) => onChange({ ...form, allowedVariablesText: event.target.value })}
+            className="mt-1 min-h-28 w-full rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm text-foreground"
+            placeholder="exames_solicitados\nobservacoes"
+          />
+        </label>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Variaveis protegidas como patient_id, patient_name, clinic_name e generated_at nao podem
+          ser salvas na configuracao editavel; elas continuam resolvidas pelo sistema.
+        </div>
+        {validationError ? (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {validationError}
+          </div>
+        ) : null}
+      </div>
+    </Dialog>
+  );
+}
+
 export default function ClinicDocumentsContent() {
   const [workspace, setWorkspace] = useState<ClinicDocumentsWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -911,6 +1103,11 @@ export default function ClinicDocumentsContent() {
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [wizardGeneratedDocumentId, setWizardGeneratedDocumentId] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<ClinicDocumentRow | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<ClinicDocumentTemplate | null>(null);
+  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
+  const [templateEditorForm, setTemplateEditorForm] = useState<TemplateEditorForm>(() =>
+    templateToForm()
+  );
   const [featureFlags, setFeatureFlags] = useState<Set<string>>(() => new Set());
   const canRequestD4Sign = featureFlags.has('documents.d4sign_send');
   const canCreateSignedUrls = featureFlags.has('documents.signed_urls');
@@ -1103,6 +1300,82 @@ export default function ClinicDocumentsContent() {
     setActionMessage('Link temporario gerado.');
   }
 
+  function openTemplateEditor(template: ClinicDocumentTemplate) {
+    setEditingTemplate(template);
+    setTemplateEditorForm(templateToForm(template));
+    setActionError(null);
+    setActionMessage(null);
+    setTemplateEditorOpen(true);
+  }
+
+  function getTemplatePayload() {
+    return {
+      name: templateEditorForm.name.trim(),
+      category: templateEditorForm.category.trim().toLowerCase() || 'outros',
+      templateBody: templateEditorForm.templateBody,
+      status: templateEditorForm.status,
+      d4signEnabled: templateEditorForm.d4signEnabled,
+      allowedVariables: templateEditorForm.allowedVariablesText
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    };
+  }
+
+  async function handleSaveTemplate() {
+    const payload = getTemplatePayload();
+    setBusyAction('template-save');
+    setActionError(null);
+    setActionMessage(null);
+    const result = editingTemplate
+      ? await updateClinicDocumentTemplate(editingTemplate.id, payload)
+      : await createClinicDocumentTemplate(payload);
+    setBusyAction(null);
+
+    if (result.error || !result.data) {
+      setActionError(result.error?.message ?? 'Nao foi possivel salvar template.');
+      return;
+    }
+
+    setTemplateEditorOpen(false);
+    setEditingTemplate(null);
+    setActionMessage(editingTemplate ? 'Template atualizado.' : 'Template criado.');
+    await loadWorkspace();
+  }
+
+  async function handleArchiveTemplate(template: ClinicDocumentTemplate) {
+    const archived = template.status !== 'archived';
+    setBusyAction(`archive-${template.id}`);
+    setActionError(null);
+    setActionMessage(null);
+    const result = await archiveClinicDocumentTemplate(template.id, archived);
+    setBusyAction(null);
+
+    if (result.error || !result.data) {
+      setActionError(result.error?.message ?? 'Nao foi possivel arquivar/restaurar template.');
+      return;
+    }
+
+    setActionMessage(archived ? 'Template arquivado.' : 'Template restaurado como rascunho.');
+    await loadWorkspace();
+  }
+
+  async function handlePublishTemplate(template: ClinicDocumentTemplate) {
+    setBusyAction(`publish-${template.id}`);
+    setActionError(null);
+    setActionMessage(null);
+    const result = await publishClinicDocumentTemplate(template.id);
+    setBusyAction(null);
+
+    if (result.error || !result.data) {
+      setActionError(result.error?.message ?? 'Nao foi possivel publicar template.');
+      return;
+    }
+
+    setActionMessage('Rascunho publicado como template ativo.');
+    await loadWorkspace();
+  }
+
   async function handleDuplicateTemplate(template: ClinicDocumentTemplate) {
     setBusyAction(`duplicate-${template.id}`);
     setActionError(null);
@@ -1197,6 +1470,18 @@ export default function ClinicDocumentsContent() {
               <RefreshCw size={14} aria-hidden="true" />
               Atualizar
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingTemplate(null);
+                setTemplateEditorForm(templateToForm());
+                setTemplateEditorOpen(true);
+              }}
+              className="btn-secondary text-xs"
+            >
+              <LayoutTemplate size={14} aria-hidden="true" />
+              Novo template
+            </button>
             <button type="button" onClick={() => openWizard()} className="btn-primary text-xs">
               <FilePlus2 size={14} aria-hidden="true" />
               Novo documento
@@ -1268,6 +1553,9 @@ export default function ClinicDocumentsContent() {
             onSearchChange={setTemplateSearch}
             onDuplicate={(template) => void handleDuplicateTemplate(template)}
             onPickTemplate={openWizard}
+            onEditTemplate={openTemplateEditor}
+            onArchiveTemplate={(template) => void handleArchiveTemplate(template)}
+            onPublishTemplate={(template) => void handlePublishTemplate(template)}
           />
 
           <section className="rounded-lg border border-border bg-card p-4">
@@ -1481,6 +1769,20 @@ export default function ClinicDocumentsContent() {
         onSignature={(document) => void handleSignature(document)}
         canRequestD4Sign={canRequestD4Sign}
       />
+
+      {templateEditorOpen ? (
+        <TemplateEditorDialog
+          template={editingTemplate}
+          form={templateEditorForm}
+          busyAction={busyAction}
+          onClose={() => {
+            setTemplateEditorOpen(false);
+            setEditingTemplate(null);
+          }}
+          onChange={setTemplateEditorForm}
+          onSave={() => void handleSaveTemplate()}
+        />
+      ) : null}
 
       {selectedDocument ? (
         <DocumentDrawer

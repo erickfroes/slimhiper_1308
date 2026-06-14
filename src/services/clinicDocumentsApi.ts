@@ -18,6 +18,7 @@ export interface ClinicDocumentTemplate {
   status: string;
   d4signEnabled: boolean;
   signatureLabel: string;
+  templateBody: string;
   allowedVariables: string[];
   currentVersion: number;
   updatedAt: string;
@@ -101,6 +102,7 @@ type TemplateRow = {
   status: string | null;
   d4sign_enabled: boolean | null;
   variables: unknown;
+  template_body: string | null;
   current_version?: number | null;
   updated_at: string | null;
 };
@@ -164,7 +166,7 @@ type AuditEventRow = {
   summary: unknown;
 };
 
-const PROTECTED_TEMPLATE_VARIABLES = new Set([
+export const PROTECTED_TEMPLATE_VARIABLES = new Set([
   'patient_id',
   'patient_name',
   'patient_email',
@@ -180,6 +182,8 @@ const PROTECTED_TEMPLATE_VARIABLES = new Set([
 ]);
 
 const SIGNATURE_PENDING_STATUSES = new Set(['pending', 'sent', 'viewed']);
+const TEMPLATE_VARIABLE_PATTERN = /{{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*}}/g;
+
 const DOCUMENT_FAILED_STATUSES = new Set(['failed', 'expired', 'cancelled', 'canceled']);
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -208,7 +212,7 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function getAllowedVariables(value: unknown): string[] {
+export function getAllowedVariables(value: unknown): string[] {
   return Object.keys(asRecord(value))
     .filter((key) => !PROTECTED_TEMPLATE_VARIABLES.has(key))
     .sort((a, b) => a.localeCompare(b));
@@ -329,6 +333,7 @@ function mapTemplate(row: TemplateRow, generatedCount: number): ClinicDocumentTe
     status: row.status ?? 'draft',
     d4signEnabled: row.d4sign_enabled === true,
     signatureLabel: row.d4sign_enabled === true ? 'Assinatura digital' : 'Sem assinatura',
+    templateBody: row.template_body ?? '',
     allowedVariables: getAllowedVariables(row.variables),
     currentVersion: Number(row.current_version ?? 1),
     updatedAt: formatDate(row.updated_at),
@@ -363,6 +368,11 @@ function mapAuditEvent(row: AuditEventRow): ClinicDocumentAuditEvent {
     'document.released_to_patient': 'Documento liberado ao paciente',
     'document.hidden_from_patient': 'Documento ocultado do paciente',
     'document_template.duplicated': 'Template duplicado',
+    'document_template.created': 'Template criado',
+    'document_template.updated': 'Template atualizado',
+    'document_template.archived': 'Template arquivado',
+    'document_template.restored': 'Template restaurado',
+    'document_template.published': 'Template publicado',
   };
 
   return {
@@ -419,7 +429,9 @@ export async function getClinicDocumentsWorkspace(): Promise<{
     const [templatesRes, documentsRes, patientsRes, eventsRes, auditRes] = await Promise.all([
       supabase
         .from('document_templates')
-        .select('id,name,category,status,d4sign_enabled,variables,current_version,updated_at')
+        .select(
+          'id,name,category,status,d4sign_enabled,variables,template_body,current_version,updated_at'
+        )
         .order('name', { ascending: true }),
       supabase
         .from('generated_documents')
@@ -568,6 +580,149 @@ export async function getClinicDocumentsWorkspace(): Promise<{
     };
   } catch (error) {
     return { data: null, error: safeError(error, 'Nao foi possivel carregar documentos.') };
+  }
+}
+
+export interface ClinicDocumentTemplatePayload {
+  name: string;
+  category: string;
+  templateBody: string;
+  status: 'draft' | 'active' | 'archived';
+  d4signEnabled: boolean;
+  allowedVariables: string[];
+}
+
+function extractTemplateVariables(templateBody: string) {
+  return [...templateBody.matchAll(TEMPLATE_VARIABLE_PATTERN)].map((match) => match[1] ?? '');
+}
+
+export function validateTemplateVariables(
+  templateBody: string,
+  allowedVariables: string[]
+): SafeServiceError | null {
+  const uniqueAllowed = new Set(allowedVariables.map((item) => item.trim()).filter(Boolean));
+  for (const variable of uniqueAllowed) {
+    if (PROTECTED_TEMPLATE_VARIABLES.has(variable)) {
+      return { message: `A variavel protegida ${variable} nao pode ser editada diretamente.` };
+    }
+    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(variable)) {
+      return { message: `Variavel invalida: ${variable}. Use apenas letras, numeros e _.` };
+    }
+  }
+
+  for (const variable of extractTemplateVariables(templateBody)) {
+    if (PROTECTED_TEMPLATE_VARIABLES.has(variable)) continue;
+    if (!uniqueAllowed.has(variable)) {
+      return { message: `Inclua ${variable} nas variaveis permitidas antes de salvar.` };
+    }
+  }
+
+  return null;
+}
+
+function buildVariablesJson(allowedVariables: string[]) {
+  return Object.fromEntries(
+    [...new Set(allowedVariables.map((item) => item.trim()).filter(Boolean))].map((key) => [
+      key,
+      { source: 'manual' },
+    ])
+  );
+}
+
+function mapTemplateMutationResult(data: unknown) {
+  const record = asRecord(data);
+  return {
+    id: String(record.id ?? ''),
+    name: String(record.name ?? 'Template'),
+    status: String(record.status ?? 'draft'),
+    currentVersion: Number(record.currentVersion ?? 1),
+  };
+}
+
+export async function createClinicDocumentTemplate(
+  payload: ClinicDocumentTemplatePayload
+): Promise<{
+  data: { id: string; name: string; status: string; currentVersion: number } | null;
+  error: SafeServiceError | null;
+}> {
+  const validationError = validateTemplateVariables(payload.templateBody, payload.allowedVariables);
+  if (validationError) return { data: null, error: validationError };
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('create_document_template', {
+      p_name: payload.name,
+      p_category: payload.category,
+      p_template_body: payload.templateBody,
+      p_variables: buildVariablesJson(payload.allowedVariables),
+      p_d4sign_enabled: payload.d4signEnabled,
+      p_status: payload.status,
+    });
+
+    if (error) return { data: null, error: safeError(error, 'Nao foi possivel criar template.') };
+    return { data: mapTemplateMutationResult(data), error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel criar template.') };
+  }
+}
+
+export async function updateClinicDocumentTemplate(
+  templateId: string,
+  payload: ClinicDocumentTemplatePayload
+): Promise<{
+  data: { id: string; name: string; status: string; currentVersion: number } | null;
+  error: SafeServiceError | null;
+}> {
+  const validationError = validateTemplateVariables(payload.templateBody, payload.allowedVariables);
+  if (validationError) return { data: null, error: validationError };
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('update_document_template', {
+      p_template_id: templateId,
+      p_name: payload.name,
+      p_category: payload.category,
+      p_template_body: payload.templateBody,
+      p_variables: buildVariablesJson(payload.allowedVariables),
+      p_d4sign_enabled: payload.d4signEnabled,
+      p_status: payload.status,
+    });
+
+    if (error)
+      return { data: null, error: safeError(error, 'Nao foi possivel atualizar template.') };
+    return { data: mapTemplateMutationResult(data), error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel atualizar template.') };
+  }
+}
+
+export async function archiveClinicDocumentTemplate(templateId: string, archived: boolean) {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('archive_document_template', {
+      p_template_id: templateId,
+      p_archived: archived,
+    });
+
+    if (error)
+      return { data: null, error: safeError(error, 'Nao foi possivel arquivar/restaurar.') };
+    return { data: mapTemplateMutationResult(data), error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel arquivar/restaurar.') };
+  }
+}
+
+export async function publishClinicDocumentTemplate(templateId: string) {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('publish_document_template', {
+      p_template_id: templateId,
+    });
+
+    if (error) return { data: null, error: safeError(error, 'Nao foi possivel publicar.') };
+    return { data: mapTemplateMutationResult(data), error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel publicar.') };
   }
 }
 
