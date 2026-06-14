@@ -412,23 +412,43 @@ Implementacao P1 registrada:
 
 ### P1 - Portal do paciente e ativacao de acesso
 
-- [ ] Documentar fluxo operacional: criar paciente -> criar usuario/convite ->
+- [x] Documentar fluxo operacional: criar paciente -> criar usuario/convite ->
       criar `tenant_membership` patient/guardian -> criar `patient_accounts` ou
       `guardian_links` -> liberar `patient_portal.access`.
-- [ ] Criar UI de ativacao/desativacao de portal no cadastro do paciente ou
+- [x] Criar UI de ativacao/desativacao de portal no cadastro do paciente ou
       Paciente 360.
-- [ ] Permitir convite de paciente e responsavel com email/telefone validado.
-- [ ] Mostrar status do portal: sem acesso, convite pendente, ativo, suspenso,
+- [x] Permitir convite de paciente e responsavel com email/telefone validado.
+- [x] Mostrar status do portal: sem acesso, convite pendente, ativo, suspenso,
       revogado.
-- [ ] Permitir revogar acesso e manter historico de auditoria.
-- [ ] Expor checklist de dados minimos antes de liberar portal.
-- [ ] Validar que `/patient` continua fail-closed quando o vinculo nao existe.
+- [x] Permitir revogar acesso e manter historico de auditoria.
+- [x] Expor checklist de dados minimos antes de liberar portal.
+- [x] Validar que `/patient` continua fail-closed quando o vinculo nao existe.
 
 Criterios de aceite:
 
 - Um paciente/responsavel convidado consegue aceitar acesso e cair em `/patient`.
 - Usuario sem vinculo ativo recebe estado negado sem dados clinicos.
 - Revogacao bloqueia acesso imediatamente.
+
+Implementacao P1 registrada:
+
+- Migration `20260615000000_520_patient_portal_access_activation.sql` cria
+  `patient_portal_access_invites`, RLS de leitura para equipe autorizada e RPCs
+  `get_patient_portal_access_status()` e `manage_patient_portal_access()` para
+  convite, ativacao, suspensao e revogacao auditadas.
+- O fluxo operacional fica: equipe cadastra paciente e consentimentos, registra
+  convite de paciente/responsavel por email ou telefone, vincula perfil Auth
+  existente quando houver, cria/atualiza `tenant_memberships` patient/guardian e
+  `patient_accounts`/`guardian_links`, e ativa/suspende/revoga sem chamar
+  provider externo.
+- `/patient` permanece fail-closed pelo contrato existente de
+  `get_patient_portal_snapshot()` e `patient_portal.access`; a nova UI apenas
+  prepara ou muda os vinculos canonicos usados por esse contrato.
+- `src/services/patientsApi.ts` normaliza status, checklist minimo, contas,
+  responsaveis e convites em envelope `{ data, error }`.
+- `PatientListContent.tsx` adiciona acao touch/keyboard para gerenciar o portal
+  na lista/carteira, mostrando status, checklist de dados minimos, convites,
+  ativacao, suspensao e revogacao com erro visivel.
 
 ### P2 - Read models, timeline e auditoria
 
@@ -454,12 +474,12 @@ Criterios de aceite:
 
 - [x] Nenhum segredo, `.env`, token, cookie, payload bruto de provider ou signed
       URL sensivel foi impresso.
-- [ ] Nenhuma chamada Asaas ou D4Sign foi feita sem autorizacao explicita.
+- [x] Nenhuma chamada Asaas ou D4Sign foi feita sem autorizacao explicita.
 - [x] Nenhuma migration antiga foi editada.
 - [x] Novas tabelas com dados clinicos/financeiros/documentos tem RLS, grants,
       indices e analise de tenant.
 - [x] Campos de foto usam storage privado ou URL assinada curta quando aplicavel.
-- [ ] Dados do portal continuam escopados por `patient_accounts` e
+- [x] Dados do portal continuam escopados por `patient_accounts` e
       `guardian_links`.
 
 ### Contratos
@@ -477,7 +497,7 @@ Criterios de aceite:
 - [ ] Builder de planos mostra estado vazio acionavel quando nao ha profissional.
 - [ ] Triagem/bioimpedancia tem fluxo touch/keyboard, nao hover-only.
 - [x] Formularios de paciente/usuario validam campos obrigatorios e opcionais.
-- [ ] Portal mostra status de acesso de forma clara para equipe.
+- [x] Portal mostra status de acesso de forma clara para equipe.
 
 ### Checks minimos por entrega
 

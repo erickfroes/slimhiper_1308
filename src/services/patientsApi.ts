@@ -1378,6 +1378,154 @@ export async function updatePatient(
   }
 }
 
+export type PatientPortalAccessStatusValue =
+  | 'none'
+  | 'pending'
+  | 'active'
+  | 'suspended'
+  | 'revoked';
+
+export type PatientPortalAccessStatus = {
+  patientId: string;
+  tenantId: string;
+  status: PatientPortalAccessStatusValue;
+  minimumData: {
+    hasEmailOrPhone: boolean;
+    hasPortalConsent: boolean;
+    hasPatientRecord: boolean;
+  };
+  accounts: Array<{
+    id: string;
+    userId: string;
+    status: string;
+    linkedAt?: string | null;
+    email?: string | null;
+  }>;
+  guardians: Array<{
+    id: string;
+    userId: string;
+    status: string;
+    relationship?: string | null;
+    email?: string | null;
+  }>;
+  invites: Array<{
+    id: string;
+    type: 'patient' | 'guardian';
+    email?: string | null;
+    phone?: string | null;
+    relationship?: string | null;
+    status: string;
+    invitedAt?: string | null;
+  }>;
+};
+
+export type PatientPortalAccessMutationInput = {
+  action: 'invite' | 'activate' | 'suspend' | 'revoke';
+  inviteeType?: 'patient' | 'guardian';
+  email?: string | null;
+  phone?: string | null;
+  relationship?: string | null;
+};
+
+function normalizePortalAccessStatus(raw: unknown): PatientPortalAccessStatus {
+  const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const minimumData =
+    record.minimumData && typeof record.minimumData === 'object'
+      ? (record.minimumData as Record<string, unknown>)
+      : {};
+  const status = typeof record.status === 'string' ? record.status : 'none';
+
+  return {
+    patientId: typeof record.patientId === 'string' ? record.patientId : '',
+    tenantId: typeof record.tenantId === 'string' ? record.tenantId : '',
+    status: ['none', 'pending', 'active', 'suspended', 'revoked'].includes(status)
+      ? (status as PatientPortalAccessStatusValue)
+      : 'none',
+    minimumData: {
+      hasEmailOrPhone: minimumData.hasEmailOrPhone === true,
+      hasPortalConsent: minimumData.hasPortalConsent === true,
+      hasPatientRecord: minimumData.hasPatientRecord !== false,
+    },
+    accounts: Array.isArray(record.accounts)
+      ? record.accounts.map((item) => {
+          const account = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+          return {
+            id: typeof account.id === 'string' ? account.id : '',
+            userId: typeof account.userId === 'string' ? account.userId : '',
+            status: typeof account.status === 'string' ? account.status : 'pending',
+            linkedAt: typeof account.linkedAt === 'string' ? account.linkedAt : null,
+            email: typeof account.email === 'string' ? account.email : null,
+          };
+        })
+      : [],
+    guardians: Array.isArray(record.guardians)
+      ? record.guardians.map((item) => {
+          const guardian =
+            item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+          return {
+            id: typeof guardian.id === 'string' ? guardian.id : '',
+            userId: typeof guardian.userId === 'string' ? guardian.userId : '',
+            status: typeof guardian.status === 'string' ? guardian.status : 'pending',
+            relationship: typeof guardian.relationship === 'string' ? guardian.relationship : null,
+            email: typeof guardian.email === 'string' ? guardian.email : null,
+          };
+        })
+      : [],
+    invites: Array.isArray(record.invites)
+      ? record.invites.map((item) => {
+          const invite = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+          return {
+            id: typeof invite.id === 'string' ? invite.id : '',
+            type: invite.type === 'guardian' ? 'guardian' : 'patient',
+            email: typeof invite.email === 'string' ? invite.email : null,
+            phone: typeof invite.phone === 'string' ? invite.phone : null,
+            relationship: typeof invite.relationship === 'string' ? invite.relationship : null,
+            status: typeof invite.status === 'string' ? invite.status : 'pending',
+            invitedAt: typeof invite.invitedAt === 'string' ? invite.invitedAt : null,
+          };
+        })
+      : [],
+  };
+}
+
+export async function getPatientPortalAccessStatus(
+  patientId: string
+): Promise<{ data: PatientPortalAccessStatus | null; error: SafeServiceError | null }> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('get_patient_portal_access_status', {
+      p_patient_id: patientId,
+    });
+    if (error) throw error;
+    return { data: normalizePortalAccessStatus(data), error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao carregar status do portal.') };
+  }
+}
+
+export async function managePatientPortalAccess(
+  patientId: string,
+  input: PatientPortalAccessMutationInput
+): Promise<{ data: PatientPortalAccessStatus | null; error: SafeServiceError | null }> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('manage_patient_portal_access', {
+      p_patient_id: patientId,
+      p_payload: {
+        action: input.action,
+        inviteeType: input.inviteeType ?? 'patient',
+        email: normalizeOptionalText(input.email),
+        phone: normalizeOptionalText(input.phone),
+        relationship: normalizeOptionalText(input.relationship),
+      },
+    });
+    if (error) throw error;
+    return { data: normalizePortalAccessStatus(data), error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao atualizar acesso ao portal.') };
+  }
+}
+
 export async function createPatientReviewFlag(
   patientId: string,
   reason = 'Revisao solicitada pela equipe'
