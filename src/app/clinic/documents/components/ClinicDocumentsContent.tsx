@@ -43,6 +43,7 @@ import {
   type ClinicDocumentAuditEvent,
   type ClinicDocumentCategory,
   type ClinicDocumentRow,
+  type ClinicDocumentSigner,
   type ClinicDocumentTemplate,
   updateClinicDocumentTemplate,
   validateTemplateVariables,
@@ -506,6 +507,242 @@ function DocumentActions({
         Assinar
       </button>
     </div>
+  );
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type SignatureRequestDraft = ClinicDocumentSigner & { id: string };
+
+function makeSignatureDraft(signer?: Partial<ClinicDocumentSigner>): SignatureRequestDraft {
+  return {
+    id: `signer-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: signer?.name ?? '',
+    email: signer?.email ?? '',
+    role: signer?.role ?? '',
+  };
+}
+
+function validateSignatureDrafts(signers: SignatureRequestDraft[]) {
+  const normalized = signers.map((signer) => ({
+    ...signer,
+    name: signer.name.trim(),
+    email: signer.email.trim().toLowerCase(),
+    role: signer.role?.trim() ?? '',
+  }));
+  if (normalized.length === 0) return 'Informe ao menos um signatario.';
+  if (normalized.some((signer) => !signer.name || !signer.email)) {
+    return 'Preencha nome e email de todos os signatarios.';
+  }
+  if (normalized.some((signer) => !EMAIL_PATTERN.test(signer.email))) {
+    return 'Informe emails validos para os signatarios.';
+  }
+  const emails = normalized.map((signer) => signer.email);
+  if (new Set(emails).size !== emails.length) {
+    return 'Remova emails duplicados antes de enviar para assinatura digital.';
+  }
+  return null;
+}
+
+function SignatureRequestDialog({
+  document,
+  workspace,
+  busyAction,
+  onClose,
+  onSubmit,
+}: {
+  document: ClinicDocumentRow;
+  workspace: ClinicDocumentsWorkspace;
+  busyAction: string | null;
+  onClose: () => void;
+  onSubmit: (document: ClinicDocumentRow, signers: ClinicDocumentSigner[]) => void;
+}) {
+  const suggestedSigners = useMemo(() => {
+    const patient = workspace.patients.find((item) => item.id === document.patientId);
+    const suggestions: ClinicDocumentSigner[] = [];
+    if (patient?.email) {
+      suggestions.push({ name: patient.name, email: patient.email, role: 'Paciente' });
+    }
+    if (patient?.guardianEmail) {
+      suggestions.push({
+        name: patient.guardianName || `Responsavel de ${patient.name}`,
+        email: patient.guardianEmail,
+        role: 'Responsavel',
+      });
+    }
+    for (const professional of workspace.professionalSigners) {
+      suggestions.push({
+        name: professional.name,
+        email: professional.email,
+        role: professional.role || 'Profissional',
+      });
+    }
+    const seen = new Set<string>();
+    return suggestions.filter((signer) => {
+      const email = signer.email.trim().toLowerCase();
+      if (!email || seen.has(email)) return false;
+      seen.add(email);
+      return true;
+    });
+  }, [document.patientId, workspace.patients, workspace.professionalSigners]);
+
+  const [signers, setSigners] = useState<SignatureRequestDraft[]>(() =>
+    suggestedSigners.length > 0
+      ? suggestedSigners.slice(0, 2).map(makeSignatureDraft)
+      : [makeSignatureDraft()]
+  );
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const isSending = busyAction === `sign-${document.id}`;
+
+  function addSigner(signer?: ClinicDocumentSigner) {
+    setSigners((current) => [...current, makeSignatureDraft(signer)]);
+    setValidationError(null);
+  }
+
+  function updateSigner(id: string, field: keyof ClinicDocumentSigner, value: string) {
+    setSigners((current) =>
+      current.map((signer) => (signer.id === id ? { ...signer, [field]: value } : signer))
+    );
+    setValidationError(null);
+  }
+
+  function removeSigner(id: string) {
+    setSigners((current) => current.filter((signer) => signer.id !== id));
+    setValidationError(null);
+  }
+
+  function submit() {
+    const validation = validateSignatureDrafts(signers);
+    if (validation) {
+      setValidationError(validation);
+      return;
+    }
+    onSubmit(
+      document,
+      signers.map((signer) => ({
+        name: signer.name.trim(),
+        email: signer.email.trim().toLowerCase(),
+        role: signer.role?.trim() || undefined,
+      }))
+    );
+  }
+
+  return (
+    <Dialog
+      open
+      title="Enviar para assinatura digital"
+      description={`Revise os signatarios de ${document.displayCode} antes do envio.`}
+      onOpenChange={(open) => {
+        if (!open && !isSending) onClose();
+      }}
+      footer={
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSending}
+            className="btn-secondary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={isSending}
+            className="btn-primary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Send size={16} aria-hidden="true" />
+            {isSending ? 'Enviando...' : 'Enviar para assinatura'}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          Selecione paciente, responsavel ou profissional quando disponiveis, ou adicione outro
+          signatario manualmente.
+        </div>
+
+        {suggestedSigners.length > 0 ? (
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Sugestoes disponiveis
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {suggestedSigners.map((signer) => (
+                <button
+                  key={`${signer.email}-${signer.role ?? 'signer'}`}
+                  type="button"
+                  onClick={() => addSigner(signer)}
+                  className="rounded-full border border-border px-3 py-1 text-xs text-foreground hover:bg-muted"
+                >
+                  {signer.role}: {signer.name}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        <div className="space-y-3">
+          {signers.map((signer, index) => (
+            <div key={signer.id} className="rounded-lg border border-border p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-foreground">Signatario {index + 1}</p>
+                <button
+                  type="button"
+                  onClick={() => removeSigner(signer.id)}
+                  className="text-xs font-medium text-red-600 hover:underline"
+                >
+                  Remover
+                </button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="text-xs font-medium text-muted-foreground sm:col-span-1">
+                  Nome
+                  <input
+                    value={signer.name}
+                    onChange={(event) => updateSigner(signer.id, 'name', event.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+                  />
+                </label>
+                <label className="text-xs font-medium text-muted-foreground sm:col-span-1">
+                  Email
+                  <input
+                    value={signer.email}
+                    type="email"
+                    onChange={(event) => updateSigner(signer.id, 'email', event.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+                  />
+                </label>
+                <label className="text-xs font-medium text-muted-foreground sm:col-span-1">
+                  Papel
+                  <input
+                    value={signer.role ?? ''}
+                    onChange={(event) => updateSigner(signer.id, 'role', event.target.value)}
+                    placeholder="Paciente, responsavel..."
+                    className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button type="button" onClick={() => addSigner()} className="btn-secondary text-sm">
+          <FilePlus2 size={16} aria-hidden="true" />
+          Adicionar signatario
+        </button>
+
+        {validationError ? (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {validationError}
+          </div>
+        ) : null}
+      </div>
+    </Dialog>
   );
 }
 
@@ -1390,6 +1627,7 @@ export default function ClinicDocumentsContent() {
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [wizardGeneratedDocumentId, setWizardGeneratedDocumentId] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<ClinicDocumentRow | null>(null);
+  const [signatureDocument, setSignatureDocument] = useState<ClinicDocumentRow | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<ClinicDocumentTemplate | null>(null);
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [templateEditorForm, setTemplateEditorForm] = useState<TemplateEditorForm>(() =>
@@ -1543,13 +1781,25 @@ export default function ClinicDocumentsContent() {
 
   async function handleSignature(document: ClinicDocumentRow) {
     if (!canRequestD4Sign) {
-      setActionError('Envio D4Sign indisponivel no plano deste tenant.');
+      setActionError('Assinatura digital indisponivel no plano deste tenant.');
+      return;
+    }
+    setSignatureDocument(document);
+  }
+
+  async function submitSignatureRequest(
+    document: ClinicDocumentRow,
+    signers: ClinicDocumentSigner[]
+  ) {
+    const validation = validateSignatureDrafts(signers.map(makeSignatureDraft));
+    if (validation) {
+      setActionError(validation);
       return;
     }
     setBusyAction(`sign-${document.id}`);
     setActionError(null);
     setActionMessage(null);
-    const result = await requestClinicDocumentSignature(document.id, document.patientId);
+    const result = await requestClinicDocumentSignature(document.id, document.patientId, signers);
     setBusyAction(null);
 
     if (result.error || !result.data) {
@@ -1558,6 +1808,7 @@ export default function ClinicDocumentsContent() {
     }
 
     setActionMessage('Documento enviado para assinatura digital.');
+    setSignatureDocument(null);
     await loadWorkspace();
   }
 
@@ -2131,6 +2382,16 @@ export default function ClinicDocumentsContent() {
           }}
           onChange={setTemplateEditorForm}
           onSave={() => void handleSaveTemplate()}
+        />
+      ) : null}
+
+      {signatureDocument ? (
+        <SignatureRequestDialog
+          document={signatureDocument}
+          workspace={workspace}
+          busyAction={busyAction}
+          onClose={() => setSignatureDocument(null)}
+          onSubmit={(document, signers) => void submitSignatureRequest(document, signers)}
         />
       ) : null}
 
