@@ -633,6 +633,30 @@ function normalizePatient360Summary(payload: unknown): Patient360Summary {
       invoices: Array.isArray(asRecord(raw?.financial)?.invoices)
         ? (asRecord(raw?.financial)?.invoices as Patient360Summary['financial']['invoices'])
         : [],
+      paymentHistory: Array.isArray(asRecord(raw?.financial)?.paymentHistory)
+        ? (asRecord(raw?.financial)
+            ?.paymentHistory as Patient360Summary['financial']['paymentHistory'])
+        : [],
+      charges: Array.isArray(asRecord(raw?.financial)?.charges)
+        ? (asRecord(raw?.financial)?.charges as Patient360Summary['financial']['charges'])
+        : [],
+      receipts: Array.isArray(asRecord(raw?.financial)?.receipts)
+        ? (asRecord(raw?.financial)?.receipts as Patient360Summary['financial']['receipts'])
+        : [],
+      negotiations: Array.isArray(asRecord(raw?.financial)?.negotiations)
+        ? (asRecord(raw?.financial)?.negotiations as Patient360Summary['financial']['negotiations'])
+        : [],
+      paymentReceipts: Array.isArray(asRecord(raw?.financial)?.paymentReceipts)
+        ? (asRecord(raw?.financial)
+            ?.paymentReceipts as Patient360Summary['financial']['paymentReceipts'])
+        : [],
+      subscriptions: Array.isArray(asRecord(raw?.financial)?.subscriptions)
+        ? (asRecord(raw?.financial)
+            ?.subscriptions as Patient360Summary['financial']['subscriptions'])
+        : [],
+      refunds: Array.isArray(asRecord(raw?.financial)?.refunds)
+        ? (asRecord(raw?.financial)?.refunds as Patient360Summary['financial']['refunds'])
+        : [],
       financialState:
         typeof asRecord(raw?.financial)?.financialState === 'string'
           ? (asRecord(raw?.financial)

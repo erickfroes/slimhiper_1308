@@ -277,6 +277,24 @@ const eventTypeConfig: Record<TimelineEventType, EventConfig> = {
     iconBg: 'bg-purple-50',
     label: 'Check-in semanal',
   },
+  tarefa_atribuida: {
+    icon: ClipboardList,
+    iconColor: 'text-amber-600',
+    iconBg: 'bg-amber-50',
+    label: 'Tarefa atribuida',
+  },
+  tarefa_concluida: {
+    icon: CheckCircle2,
+    iconColor: 'text-emerald-600',
+    iconBg: 'bg-emerald-50',
+    label: 'Tarefa concluida',
+  },
+  tarefa_reaberta: {
+    icon: ClipboardEdit,
+    iconColor: 'text-blue-600',
+    iconBg: 'bg-blue-50',
+    label: 'Tarefa reaberta',
+  },
 };
 const categoryBadgeConfig: Record<TimelineEventCategory, { label: string; className: string }> = {
   clinical: { label: 'Clínico', className: 'bg-teal-50 text-teal-700 border border-teal-200' },
