@@ -263,6 +263,24 @@ type AppointmentRow = {
   notes: string | null;
 };
 
+const APPOINTMENT_STATUS_FLOW: AppointmentStatus[] = [
+  'agendado',
+  'confirmado',
+  'chegou',
+  'triagem',
+  'medidas',
+  'bioimpedancia',
+  'aguardando_medico',
+  'em_consulta',
+  'checkout',
+];
+
+const APPOINTMENT_TERMINAL_STATUSES = new Set<AppointmentStatus>([
+  'concluido',
+  'falta',
+  'cancelado',
+]);
+
 const APPOINTMENT_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
   agendado: ['confirmado', 'cancelado', 'falta'],
   confirmado: ['chegou', 'cancelado', 'falta'],
@@ -284,6 +302,27 @@ function getNextStatusForOperationalStage(stage: OperationalClinicalStage): Appo
   return 'aguardando_medico';
 }
 
+function getMockQueueStatusForAppointment(
+  status: AppointmentStatus
+): AttendanceQueueStatus | undefined {
+  if (status === 'agendado' || status === 'confirmado') return 'scheduled';
+  if (status === 'chegou') return 'waiting';
+  if (
+    status === 'triagem' ||
+    status === 'medidas' ||
+    status === 'bioimpedancia' ||
+    status === 'aguardando_medico' ||
+    status === 'em_consulta'
+  ) {
+    return 'in_attendance';
+  }
+  if (status === 'checkout') return 'checkout';
+  if (status === 'concluido') return 'completed';
+  if (status === 'falta') return 'no_show';
+  if (status === 'cancelado') return 'cancelled';
+  return undefined;
+}
+
 function isMockExplicitlyEnabled(): boolean {
   return isMockDataEnabled();
 }
@@ -300,108 +339,165 @@ function canUseMockAgendaProvider(): boolean {
 let mockAgendaProviderPromise: Promise<AgendaProvider> | null = null;
 
 function getMockAgendaProvider(): Promise<AgendaProvider> {
-  mockAgendaProviderPromise ??= import('@/data/mockData').then((mockData) => ({
-    async getAgendaDay(date) {
-      const appointments = mockData.mockTodayAppointments.map((appointment) => ({
-        ...appointment,
-        scheduledAt: shiftIsoDate(appointment.scheduledAt, date),
-      }));
-      const waitingQueue = mockData.mockWaitingQueue.map((entry) => ({
+  mockAgendaProviderPromise ??= import('@/data/mockData').then((mockData) => {
+    const mockAppointments = mockData.mockTodayAppointments.map((appointment) => ({
+      ...appointment,
+    }));
+    const mockQueue = mockData.mockWaitingQueue.map((entry) => {
+      const appointment = mockAppointments.find((item) => item.patientId === entry.patientId);
+      return {
         ...entry,
-        scheduledTime: entry.scheduledTime.includes('T')
-          ? shiftIsoDate(entry.scheduledTime, date)
-          : entry.scheduledTime,
-      }));
+        queueId: entry.queueId ?? entry.id,
+        appointmentId: entry.appointmentId ?? appointment?.id,
+        queueStatus: entry.queueStatus ?? getMockQueueStatusForAppointment(entry.status),
+      };
+    });
 
-      return {
-        appointments,
-        waitingQueue,
-        returns: [],
-        blockedSlots: [],
-        calendarEvents: { [date]: appointments.length },
-      };
-    },
-    async getScheduleOptions(date) {
-      return {
-        date,
-        rooms: [],
-        professionals: [],
-        allocations: [],
-        units: [],
-      };
-    },
-    async saveClinicRoom(input) {
-      return {
-        id: input.id ?? 'mock-room',
-        unitId: input.unitId ?? undefined,
-        code: input.code,
-        name: input.name,
-        roomType: input.roomType,
-        status: input.status,
-        capacity: input.capacity ?? 1,
-      };
-    },
-    async saveProfessionalDayAllocation(input) {
-      return {
-        id: input.id ?? 'mock-allocation',
-        unitId: input.unitId ?? undefined,
-        workDate: input.workDate,
-        startsAt: `${input.workDate}T${input.startTime}:00`,
-        endsAt: `${input.workDate}T${input.endTime}:00`,
-        startTime: input.startTime,
-        endTime: input.endTime,
-        status: input.status ?? 'available',
-        notes: input.notes ?? undefined,
-        professionalProfileId: input.professionalProfileId,
-        professionalUserId: 'mock-professional-user',
-        professionalName: 'Profissional mock',
-        roomId: input.roomId ?? undefined,
-      };
-    },
-    async cancelProfessionalDayAllocation() {
-      return undefined;
-    },
-    async updateAppointmentStatus() {
-      return undefined;
-    },
-    async recordOperationalClinicalStage(input) {
-      return {
-        appointmentId: input.appointmentId ?? 'mock-appointment',
-        queueId: input.queueId ?? 'mock-queue',
-        patientId: input.patientId ?? 'patient-001',
-        stage: input.stage,
-        action: input.action,
-        status:
-          input.action === 'complete' ? getNextStatusForOperationalStage(input.stage) : input.stage,
-        queueStatus: 'waiting',
-        occurredAt: input.occurredAt ?? new Date().toISOString(),
-      };
-    },
-    async createAppointment() {
-      return { id: 'mock-appointment', financialStatus: 'not_required' };
-    },
-    async updateAppointment(appointmentId) {
-      return { id: appointmentId, financialStatus: 'not_required' };
-    },
-    async cancelAppointment() {
-      return undefined;
-    },
-    async callAttendanceQueue() {
-      return undefined;
-    },
-    async startAttendanceEncounter() {
-      return {
-        encounterId: 'mock-encounter',
-        appointmentId: 'mock-appointment',
-        queueId: 'mock-queue',
-        patientId: 'patient-001',
-        href: '/clinic/patients/patient-001/encounter',
-      };
-    },
-    async recordPatientReturnAction() {
-      return undefined;
-    },
-  }));
+    const applyMockAppointmentStatus = (appointmentId: string, nextStatus: AppointmentStatus) => {
+      const appointment = mockAppointments.find((item) => item.id === appointmentId);
+      if (appointment) {
+        appointment.status = nextStatus;
+      }
+
+      const entry = mockQueue.find(
+        (item) => item.appointmentId === appointmentId || item.patientId === appointment?.patientId
+      );
+      if (entry) {
+        entry.status = nextStatus;
+        entry.queueStatus = getMockQueueStatusForAppointment(nextStatus);
+      }
+    };
+
+    return {
+      async getAgendaDay(date) {
+        const appointments = mockAppointments.map((appointment) => ({
+          ...appointment,
+          scheduledAt: shiftIsoDate(appointment.scheduledAt, date),
+        }));
+        const waitingQueue = mockQueue.map((entry) => ({
+          ...entry,
+          scheduledTime: entry.scheduledTime.includes('T')
+            ? shiftIsoDate(entry.scheduledTime, date)
+            : entry.scheduledTime,
+        }));
+
+        return {
+          appointments,
+          waitingQueue,
+          returns: [],
+          blockedSlots: [],
+          calendarEvents: { [date]: appointments.length },
+        };
+      },
+      async getScheduleOptions(date) {
+        return {
+          date,
+          rooms: [],
+          professionals: [],
+          allocations: [],
+          units: [],
+        };
+      },
+      async saveClinicRoom(input) {
+        return {
+          id: input.id ?? 'mock-room',
+          unitId: input.unitId ?? undefined,
+          code: input.code,
+          name: input.name,
+          roomType: input.roomType,
+          status: input.status,
+          capacity: input.capacity ?? 1,
+        };
+      },
+      async saveProfessionalDayAllocation(input) {
+        return {
+          id: input.id ?? 'mock-allocation',
+          unitId: input.unitId ?? undefined,
+          workDate: input.workDate,
+          startsAt: `${input.workDate}T${input.startTime}:00`,
+          endsAt: `${input.workDate}T${input.endTime}:00`,
+          startTime: input.startTime,
+          endTime: input.endTime,
+          status: input.status ?? 'available',
+          notes: input.notes ?? undefined,
+          professionalProfileId: input.professionalProfileId,
+          professionalUserId: 'mock-professional-user',
+          professionalName: 'Profissional mock',
+          roomId: input.roomId ?? undefined,
+        };
+      },
+      async cancelProfessionalDayAllocation() {
+        return undefined;
+      },
+      async updateAppointmentStatus(appointmentId, nextStatus) {
+        applyMockAppointmentStatus(appointmentId, nextStatus);
+        return undefined;
+      },
+      async recordOperationalClinicalStage(input) {
+        const appointmentId = input.appointmentId ?? 'mock-appointment';
+        const queueId = input.queueId ?? 'mock-queue';
+        const nextStatus =
+          input.action === 'complete' ? getNextStatusForOperationalStage(input.stage) : input.stage;
+        applyMockAppointmentStatus(appointmentId, nextStatus);
+
+        const queueEntry = mockQueue.find(
+          (entry) =>
+            entry.queueId === queueId ||
+            entry.id === queueId ||
+            entry.appointmentId === appointmentId
+        );
+        if (queueEntry) {
+          queueEntry.clinicalWorkflow = {
+            ...queueEntry.clinicalWorkflow,
+            [input.stage]: {
+              ...queueEntry.clinicalWorkflow?.[input.stage],
+              ...(input.action === 'start'
+                ? { startedAt: input.occurredAt ?? new Date().toISOString() }
+                : { completedAt: input.occurredAt ?? new Date().toISOString() }),
+              roomId: input.roomId ?? undefined,
+              professionalProfileId: input.professionalProfileId ?? undefined,
+              notes: input.notes ?? undefined,
+            },
+          };
+        }
+
+        return {
+          appointmentId,
+          queueId,
+          patientId: input.patientId ?? 'patient-001',
+          stage: input.stage,
+          action: input.action,
+          status: nextStatus,
+          queueStatus: getMockQueueStatusForAppointment(nextStatus),
+          occurredAt: input.occurredAt ?? new Date().toISOString(),
+        };
+      },
+      async createAppointment() {
+        return { id: 'mock-appointment', financialStatus: 'not_required' };
+      },
+      async updateAppointment(appointmentId) {
+        return { id: appointmentId, financialStatus: 'not_required' };
+      },
+      async cancelAppointment() {
+        return undefined;
+      },
+      async callAttendanceQueue() {
+        return undefined;
+      },
+      async startAttendanceEncounter() {
+        return {
+          encounterId: 'mock-encounter',
+          appointmentId: 'mock-appointment',
+          queueId: 'mock-queue',
+          patientId: 'patient-001',
+          href: '/clinic/patients/patient-001/encounter',
+        };
+      },
+      async recordPatientReturnAction() {
+        return undefined;
+      },
+    };
+  });
 
   return mockAgendaProviderPromise;
 }
@@ -1478,4 +1574,39 @@ export async function recordPatientReturnAction(
 
 export function getNextAppointmentStatus(status: AppointmentStatus): AppointmentStatus | null {
   return APPOINTMENT_TRANSITIONS[status]?.[0] ?? null;
+}
+
+export function getPreviousAppointmentStatus(status: AppointmentStatus): AppointmentStatus | null {
+  if (APPOINTMENT_TERMINAL_STATUSES.has(status)) return null;
+  const currentIndex = APPOINTMENT_STATUS_FLOW.indexOf(status);
+  if (currentIndex <= 0) return null;
+  return APPOINTMENT_STATUS_FLOW[currentIndex - 1] ?? null;
+}
+
+export function getAppointmentStatusPath(
+  currentStatus: AppointmentStatus,
+  targetStatus: AppointmentStatus
+): AppointmentStatus[] {
+  if (currentStatus === targetStatus) return [];
+  if (
+    APPOINTMENT_TERMINAL_STATUSES.has(currentStatus) ||
+    APPOINTMENT_TERMINAL_STATUSES.has(targetStatus)
+  ) {
+    return [];
+  }
+
+  const currentIndex = APPOINTMENT_STATUS_FLOW.indexOf(currentStatus);
+  const targetIndex = APPOINTMENT_STATUS_FLOW.indexOf(targetStatus);
+  if (currentIndex < 0 || targetIndex < 0) return [];
+
+  const step = currentIndex < targetIndex ? 1 : -1;
+  const path: AppointmentStatus[] = [];
+  for (
+    let index = currentIndex + step;
+    step > 0 ? index <= targetIndex : index >= targetIndex;
+    index += step
+  ) {
+    path.push(APPOINTMENT_STATUS_FLOW[index]);
+  }
+  return path;
 }

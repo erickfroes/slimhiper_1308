@@ -55,9 +55,11 @@ import {
   cancelAppointment,
   cancelProfessionalDayAllocation,
   createAppointment,
+  getAppointmentStatusPath,
   getAgendaDay,
   getAgendaScheduleOptions,
   getNextAppointmentStatus,
+  getPreviousAppointmentStatus,
   recordOperationalClinicalStage,
   recordPatientReturnAction,
   saveClinicRoom,
@@ -210,6 +212,8 @@ const operationalStageIcon: Record<OperationalClinicalStage, React.ElementType> 
   medidas: Ruler,
   bioimpedancia: Activity,
 };
+
+const operationalStages: OperationalClinicalStage[] = ['triagem', 'medidas', 'bioimpedancia'];
 
 type OperationalClinicalFormState = {
   roomId: string;
@@ -1702,7 +1706,7 @@ interface KanbanColumnProps {
   stage: WorkflowStage;
   appointments: AppointmentSummary[];
   transitioningId: string | null;
-  onAdvanceStatus: (appointment: AppointmentSummary) => void;
+  onMoveStatus: (appointment: AppointmentSummary, targetStatus: AppointmentStatus) => void;
   onEditAppointment: (appointment: AppointmentSummary) => void;
   onCancelAppointment: (appointment: AppointmentSummary) => void;
 }
@@ -1711,7 +1715,7 @@ function KanbanColumn({
   stage,
   appointments,
   transitioningId,
-  onAdvanceStatus,
+  onMoveStatus,
   onEditAppointment,
   onCancelAppointment,
 }: KanbanColumnProps) {
@@ -1745,6 +1749,10 @@ function KanbanColumn({
         ) : (
           items.map((appt) => {
             const nextStatus = getNextAppointmentStatus(appt.status);
+            const previousStatus = getPreviousAppointmentStatus(appt.status);
+            const shortcutStages = operationalStages.filter(
+              (targetStage) => getAppointmentStatusPath(appt.status, targetStage).length > 0
+            );
             const isTransitioning = transitioningId === appt.id;
 
             return (
@@ -1813,12 +1821,26 @@ function KanbanColumn({
                     </div>
                   )}
                 </Link>
+                {previousStatus ? (
+                  <button
+                    type="button"
+                    onClick={() => onMoveStatus(appt, previousStatus)}
+                    disabled={isTransitioning}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    title={`Voltar para ${appointmentStatusLabel[previousStatus]}`}
+                  >
+                    <ChevronLeft size={12} />
+                    {isTransitioning
+                      ? 'Atualizando...'
+                      : `Voltar para ${appointmentStatusLabel[previousStatus]}`}
+                  </button>
+                ) : null}
                 {nextStatus ? (
                   <button
                     type="button"
-                    onClick={() => onAdvanceStatus(appt)}
+                    onClick={() => onMoveStatus(appt, nextStatus)}
                     disabled={isTransitioning}
-                    className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
                     title={`Avançar para ${appointmentStatusLabel[nextStatus]}`}
                   >
                     <ArrowRight size={12} />
@@ -1831,6 +1853,35 @@ function KanbanColumn({
                     Sem próxima etapa
                   </div>
                 )}
+                {shortcutStages.length > 0 ? (
+                  <div className="mt-2 rounded-lg border border-border bg-muted/20 p-2">
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Atalhos
+                    </p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {shortcutStages.map((targetStage) => {
+                        const ShortcutIcon = operationalStageIcon[targetStage];
+                        return (
+                          <button
+                            key={targetStage}
+                            type="button"
+                            onClick={() => onMoveStatus(appt, targetStage)}
+                            disabled={isTransitioning}
+                            className="inline-flex min-h-8 items-center justify-center gap-1 rounded-md border border-border bg-card px-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                            title={`Ir para ${operationalStageLabel[targetStage]}`}
+                          >
+                            <ShortcutIcon size={12} />
+                            <span className="truncate">
+                              {targetStage === 'bioimpedancia'
+                                ? 'Bio'
+                                : operationalStageLabel[targetStage]}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -2112,22 +2163,27 @@ type OperationalClinicalHandler = (
   form: OperationalClinicalFormState
 ) => Promise<string | null>;
 
+type AppointmentStatusHandler = (
+  entry: WaitingQueueEntry,
+  targetStatus: AppointmentStatus
+) => Promise<string | null>;
+
 interface OperationalClinicalPanelProps {
   queue: WaitingQueueEntry[];
   rooms: AgendaScheduleOptions['rooms'];
   actionId: string | null;
+  onMoveStatus: AppointmentStatusHandler;
   onStartStage: OperationalClinicalHandler;
   onCompleteTriage: OperationalClinicalHandler;
   onRecordMeasurements: OperationalClinicalHandler;
   onRecordBioimpedance: OperationalClinicalHandler;
 }
 
-const operationalStages: OperationalClinicalStage[] = ['triagem', 'medidas', 'bioimpedancia'];
-
 function OperationalClinicalPanel({
   queue,
   rooms,
   actionId,
+  onMoveStatus,
   onStartStage,
   onCompleteTriage,
   onRecordMeasurements,
@@ -2211,6 +2267,10 @@ function OperationalClinicalPanel({
                   const started = Boolean(stageState?.startedAt);
                   const busy = actionId === entry.id || actionId === entry.queueId;
                   const roomValue = form.roomId || entry.roomId || '';
+                  const previousStatus = getPreviousAppointmentStatus(entry.status);
+                  const shortcutStages = operationalStages.filter(
+                    (targetStage) => getAppointmentStatusPath(entry.status, targetStage).length > 0
+                  );
 
                   return (
                     <article
@@ -2346,6 +2406,20 @@ function OperationalClinicalPanel({
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
+                        {previousStatus ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void runAction(entry, () => onMoveStatus(entry, previousStatus))
+                            }
+                            disabled={busy}
+                            className="btn-secondary text-xs disabled:opacity-60"
+                            title={`Voltar para ${appointmentStatusLabel[previousStatus]}`}
+                          >
+                            <ChevronLeft size={13} />
+                            Voltar
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() =>
@@ -2412,6 +2486,37 @@ function OperationalClinicalPanel({
                           </button>
                         ) : null}
                       </div>
+                      {shortcutStages.length > 0 ? (
+                        <div className="mt-3 rounded-xl border border-border bg-muted/20 p-2">
+                          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Atalhos
+                          </p>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {shortcutStages.map((targetStage) => {
+                              const ShortcutIcon = operationalStageIcon[targetStage];
+                              return (
+                                <button
+                                  key={targetStage}
+                                  type="button"
+                                  onClick={() =>
+                                    void runAction(entry, () => onMoveStatus(entry, targetStage))
+                                  }
+                                  disabled={busy}
+                                  className="inline-flex min-h-8 items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary disabled:opacity-60"
+                                  title={`Ir para ${operationalStageLabel[targetStage]}`}
+                                >
+                                  <ShortcutIcon size={12} />
+                                  <span className="truncate">
+                                    {targetStage === 'bioimpedancia'
+                                      ? 'Bio'
+                                      : operationalStageLabel[targetStage]}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </article>
                   );
                 })
@@ -2459,6 +2564,7 @@ function QueueWorkspace({
   onCall,
   onStart,
   onOpenPatient,
+  onMoveStatus,
   onStartStage,
   onCompleteTriage,
   onRecordMeasurements,
@@ -2472,6 +2578,7 @@ function QueueWorkspace({
   onCall: (entry: WaitingQueueEntry) => void;
   onStart: (entry: WaitingQueueEntry) => void;
   onOpenPatient: (entry: WaitingQueueEntry) => void;
+  onMoveStatus: AppointmentStatusHandler;
   onStartStage: OperationalClinicalHandler;
   onCompleteTriage: OperationalClinicalHandler;
   onRecordMeasurements: OperationalClinicalHandler;
@@ -2508,6 +2615,7 @@ function QueueWorkspace({
           queue={[]}
           rooms={rooms}
           actionId={actionId}
+          onMoveStatus={onMoveStatus}
           onStartStage={onStartStage}
           onCompleteTriage={onCompleteTriage}
           onRecordMeasurements={onRecordMeasurements}
@@ -2530,6 +2638,7 @@ function QueueWorkspace({
         queue={operationalQueue}
         rooms={rooms}
         actionId={actionId}
+        onMoveStatus={onMoveStatus}
         onStartStage={onStartStage}
         onCompleteTriage={onCompleteTriage}
         onRecordMeasurements={onRecordMeasurements}
@@ -2566,6 +2675,9 @@ function QueueWorkspace({
           const canCall = ['scheduled', 'waiting', 'stuck'].includes(status);
           const canStart = ['called', 'waiting', 'in_attendance', 'checkout'].includes(status);
           const busy = actionId === entry.id;
+          const shortcutStages = operationalStages.filter(
+            (targetStage) => getAppointmentStatusPath(entry.status, targetStage).length > 0
+          );
 
           return (
             <article
@@ -2640,6 +2752,35 @@ function QueueWorkspace({
                   </button>
                 ) : null}
               </div>
+              {shortcutStages.length > 0 ? (
+                <div className="mt-3 rounded-xl border border-border bg-muted/20 p-2">
+                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Atalhos clinicos
+                  </p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {shortcutStages.map((targetStage) => {
+                      const ShortcutIcon = operationalStageIcon[targetStage];
+                      return (
+                        <button
+                          key={targetStage}
+                          type="button"
+                          onClick={() => void onMoveStatus(entry, targetStage)}
+                          disabled={busy}
+                          className="inline-flex min-h-8 items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary disabled:opacity-60"
+                          title={`Ir para ${operationalStageLabel[targetStage]}`}
+                        >
+                          <ShortcutIcon size={12} />
+                          <span className="truncate">
+                            {targetStage === 'bioimpedancia'
+                              ? 'Bio'
+                              : operationalStageLabel[targetStage]}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </article>
           );
         })}
@@ -3127,6 +3268,75 @@ export default function AgendaContent() {
       }
     },
     [loadAgenda]
+  );
+
+  const handleMoveAppointmentStatus = useCallback(
+    async (input: {
+      appointmentId?: string | null;
+      currentStatus: AppointmentStatus;
+      targetStatus: AppointmentStatus;
+      queueBusyId?: string | null;
+      reason?: string | null;
+    }) => {
+      if (!input.appointmentId) return 'Consulta sem vinculo para alterar etapa.';
+
+      const path = getAppointmentStatusPath(input.currentStatus, input.targetStatus);
+      if (path.length === 0) return null;
+
+      const isBackward = path[0] === getPreviousAppointmentStatus(input.currentStatus);
+      const reason =
+        input.reason ?? (isBackward || path.length > 1 ? 'Ajuste operacional pela agenda.' : null);
+
+      setTransitioningId(input.appointmentId);
+      if (input.queueBusyId) setQueueActionId(input.queueBusyId);
+      setLoadError(null);
+
+      try {
+        for (const status of path) {
+          await updateAppointmentStatus(input.appointmentId, status, reason);
+        }
+        await loadAgenda();
+        return null;
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Nao foi possivel atualizar o status da consulta.';
+        setLoadError(message);
+        return message;
+      } finally {
+        setTransitioningId(null);
+        if (input.queueBusyId) setQueueActionId(null);
+      }
+    },
+    [loadAgenda]
+  );
+
+  const handleMoveKanbanStatus = useCallback(
+    (appointment: AppointmentSummary, targetStatus: AppointmentStatus) => {
+      if (targetStatus === getNextAppointmentStatus(appointment.status)) {
+        void handleAdvanceStatus(appointment);
+        return;
+      }
+
+      void handleMoveAppointmentStatus({
+        appointmentId: appointment.id,
+        currentStatus: appointment.status,
+        targetStatus,
+      });
+    },
+    [handleAdvanceStatus, handleMoveAppointmentStatus]
+  );
+
+  const handleMoveQueueStatus = useCallback(
+    async (entry: WaitingQueueEntry, targetStatus: AppointmentStatus) =>
+      handleMoveAppointmentStatus({
+        appointmentId: entry.appointmentId,
+        currentStatus: entry.status,
+        targetStatus,
+        queueBusyId: entry.id,
+      }),
+    [handleMoveAppointmentStatus]
   );
 
   const handleCallQueue = useCallback(
@@ -3890,7 +4100,7 @@ export default function AgendaContent() {
                       stage={stage}
                       appointments={appointments}
                       transitioningId={transitioningId}
-                      onAdvanceStatus={handleAdvanceStatus}
+                      onMoveStatus={handleMoveKanbanStatus}
                       onEditAppointment={openEditAppointment}
                       onCancelAppointment={handleCancelAppointment}
                     />
@@ -3919,6 +4129,7 @@ export default function AgendaContent() {
           onCall={handleCallQueue}
           onStart={handleStartQueueEntry}
           onOpenPatient={(entry) => setPatientDrawerTarget({ kind: 'queue', item: entry })}
+          onMoveStatus={handleMoveQueueStatus}
           onStartStage={handleStartOperationalStage}
           onCompleteTriage={handleCompleteTriage}
           onRecordMeasurements={handleRecordOperationalMeasurements}

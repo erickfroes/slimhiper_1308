@@ -268,6 +268,9 @@ Implementacao P1 registrada:
 - [x] Permitir que registros avulsos aparecam no prontuario, evolucao e timeline.
 - [x] Criar transicoes claras da fila: chegou -> triagem -> medidas ->
       bioimpedancia -> aguardando medico.
+- [x] Permitir correcao operacional de uma etapa para tras com motivo auditavel.
+- [x] Expor atalhos para enviar consulta para `triagem`, `medidas` ou
+      `bioimpedancia` a partir da agenda/fila.
 - [x] Criar empty/error/forbidden states para cada painel.
 
 Criterios de aceite:
@@ -290,12 +293,15 @@ Implementacao P1 registrada:
   actor, sala, profissional e timestamps, e aplica a transicao da consulta.
 - RPC `get_agenda_operational_queue()` expõe o workflow operacional para a UI
   da agenda sem alterar o snapshot principal.
+- Migration `20260615050000_560_agenda_status_backstep_shortcuts.sql` permite
+  retrocesso imediato e auditavel entre etapas do fluxo sem reabrir estados
+  terminais.
 - `src/services/agendaApi.ts` e `src/services/clinicalRecordsApi.ts` enviam e
   normalizam o novo contrato.
 - A aba Fila de `AgendaContent.tsx` ganhou painel operacional para iniciar
   etapa, concluir triagem, registrar medidas e registrar bioimpedancia fora do
-  SOAP, com empty/error states e avancos para `medidas`, `bioimpedancia` e
-  `aguardando_medico`.
+  SOAP, com empty/error states, retrocesso de etapa e atalhos para `triagem`,
+  `medidas` e `bioimpedancia`.
 
 ### P1 - Exames, prescricoes e tarefas como acoes unificadas
 
