@@ -29,6 +29,7 @@ import {
   Activity,
   LockKeyhole,
   Camera,
+  UserPlus,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
@@ -40,9 +41,12 @@ import {
   createPatientReviewFlag,
   auditPatientWalletContextOpen,
   getPatientFormSnapshot,
+  getPatientPortalAccessStatus,
   getPatientWalletSnapshot,
+  managePatientPortalAccess,
   updatePatient,
   type PatientMutationInput,
+  type PatientPortalAccessStatus,
 } from '@/services/patientsApi';
 import type {
   ProgramType,
@@ -929,6 +933,199 @@ function PatientFormModal({
   );
 }
 
+function PortalAccessModal({
+  patient,
+  status,
+  loading,
+  error,
+  inviteEmail,
+  invitePhone,
+  inviteeType,
+  relationship,
+  submitting,
+  onClose,
+  onChangeInvite,
+  onAction,
+}: {
+  patient: PatientWalletRow;
+  status: PatientPortalAccessStatus | null;
+  loading: boolean;
+  error: string | null;
+  inviteEmail: string;
+  invitePhone: string;
+  inviteeType: 'patient' | 'guardian';
+  relationship: string;
+  submitting: boolean;
+  onClose: () => void;
+  onChangeInvite: (patch: {
+    inviteEmail?: string;
+    invitePhone?: string;
+    inviteeType?: 'patient' | 'guardian';
+    relationship?: string;
+  }) => void;
+  onAction: (action: 'invite' | 'activate' | 'suspend' | 'revoke') => void;
+}) {
+  const statusLabel: Record<PatientPortalAccessStatus['status'], string> = {
+    none: 'Sem acesso',
+    pending: 'Convite pendente',
+    active: 'Ativo',
+    suspended: 'Suspenso',
+    revoked: 'Revogado',
+  };
+  const checklist = status?.minimumData ?? {
+    hasEmailOrPhone: false,
+    hasPortalConsent: false,
+    hasPatientRecord: true,
+  };
+
+  return (
+    <Dialog
+      open
+      title={`Portal do paciente - ${patient.name}`}
+      description="Ative, suspenda ou revogue acesso mantendo vinculo e auditoria."
+      onOpenChange={(open) => {
+        if (!open && !submitting) onClose();
+      }}
+      placement="center"
+    >
+      <div className="space-y-4">
+        {loading ? (
+          <div className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+            Carregando status do portal...
+          </div>
+        ) : (
+          <>
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">
+                    Status atual
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-foreground">
+                    {status ? statusLabel[status.status] : 'Indisponivel'}
+                  </p>
+                </div>
+                <LockKeyhole size={22} className="text-primary" />
+              </div>
+              <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+                <span className={checklist.hasPatientRecord ? 'text-emerald-700' : 'text-red-700'}>
+                  Registro do paciente
+                </span>
+                <span className={checklist.hasEmailOrPhone ? 'text-emerald-700' : 'text-red-700'}>
+                  Email ou telefone
+                </span>
+                <span
+                  className={checklist.hasPortalConsent ? 'text-emerald-700' : 'text-amber-700'}
+                >
+                  Consentimento portal
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                Tipo de convite
+                <select
+                  value={inviteeType}
+                  onChange={(event) =>
+                    onChangeInvite({ inviteeType: event.target.value as 'patient' | 'guardian' })
+                  }
+                  className="input-base text-sm"
+                >
+                  <option value="patient">Paciente</option>
+                  <option value="guardian">Responsavel</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                Relacao do responsavel
+                <input
+                  value={relationship}
+                  onChange={(event) => onChangeInvite({ relationship: event.target.value })}
+                  className="input-base text-sm"
+                  disabled={inviteeType !== 'guardian'}
+                  placeholder="Mae, pai, cuidador..."
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                Email validado
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(event) => onChangeInvite({ inviteEmail: event.target.value })}
+                  className="input-base text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                Telefone validado
+                <input
+                  value={invitePhone}
+                  onChange={(event) => onChangeInvite({ invitePhone: event.target.value })}
+                  className="input-base text-sm"
+                />
+              </label>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-3 text-xs text-muted-foreground">
+              <p className="font-semibold text-foreground">Vinculos e convites</p>
+              <p className="mt-1">
+                Contas: {status?.accounts.length ?? 0} · Responsaveis:{' '}
+                {status?.guardians.length ?? 0} · Convites: {status?.invites.length ?? 0}
+              </p>
+            </div>
+          </>
+        )}
+        {error ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="btn-secondary text-sm disabled:opacity-60"
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            onClick={() => onAction('invite')}
+            disabled={loading || submitting}
+            className="btn-secondary text-sm disabled:opacity-60"
+          >
+            Convidar
+          </button>
+          <button
+            type="button"
+            onClick={() => onAction('activate')}
+            disabled={loading || submitting}
+            className="btn-primary text-sm disabled:opacity-60"
+          >
+            Ativar
+          </button>
+          <button
+            type="button"
+            onClick={() => onAction('suspend')}
+            disabled={loading || submitting}
+            className="btn-secondary text-sm disabled:opacity-60"
+          >
+            Suspender
+          </button>
+          <button
+            type="button"
+            onClick={() => onAction('revoke')}
+            disabled={loading || submitting}
+            className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 disabled:opacity-60"
+          >
+            Revogar
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 function SortableHeader({
   label,
   sortKey,
@@ -1002,6 +1199,17 @@ export default function PatientListContent() {
   const [patientFormSubmitting, setPatientFormSubmitting] = useState(false);
   const [reviewActionPatientId, setReviewActionPatientId] = useState<string | null>(null);
   const [contextPatient, setContextPatient] = useState<PatientWalletRow | null>(null);
+  const [portalPatient, setPortalPatient] = useState<PatientWalletRow | null>(null);
+  const [portalStatus, setPortalStatus] = useState<PatientPortalAccessStatus | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
+  const [portalSubmitting, setPortalSubmitting] = useState(false);
+  const [portalInvite, setPortalInvite] = useState({
+    inviteEmail: '',
+    invitePhone: '',
+    inviteeType: 'patient' as 'patient' | 'guardian',
+    relationship: '',
+  });
   const loadRequestIdRef = useRef(0);
 
   const hasDerivedFilters = Boolean(
@@ -1191,6 +1399,48 @@ export default function PatientListContent() {
     });
   };
 
+  const openPortalAccess = async (patient: PatientWalletRow) => {
+    setPortalPatient(patient);
+    setPortalStatus(null);
+    setPortalError(null);
+    setPortalInvite({ inviteEmail: '', invitePhone: '', inviteeType: 'patient', relationship: '' });
+    setPortalLoading(true);
+    const result = await getPatientPortalAccessStatus(patient.id);
+    setPortalLoading(false);
+    if (result.error || !result.data) {
+      setPortalError(result.error?.message ?? 'Falha ao carregar portal.');
+      return;
+    }
+    setPortalStatus(result.data);
+    const firstInvite = result.data.invites[0];
+    setPortalInvite({
+      inviteEmail: firstInvite?.email ?? '',
+      invitePhone: firstInvite?.phone ?? '',
+      inviteeType: firstInvite?.type ?? 'patient',
+      relationship: firstInvite?.relationship ?? '',
+    });
+  };
+
+  const handlePortalAction = async (action: 'invite' | 'activate' | 'suspend' | 'revoke') => {
+    if (!portalPatient) return;
+    setPortalSubmitting(true);
+    setPortalError(null);
+    const result = await managePatientPortalAccess(portalPatient.id, {
+      action,
+      inviteeType: portalInvite.inviteeType,
+      email: portalInvite.inviteEmail,
+      phone: portalInvite.invitePhone,
+      relationship: portalInvite.relationship,
+    });
+    setPortalSubmitting(false);
+    if (result.error || !result.data) {
+      setPortalError(result.error?.message ?? 'Falha ao atualizar portal.');
+      return;
+    }
+    setPortalStatus(result.data);
+    toast.success(action === 'invite' ? 'Convite registrado.' : 'Acesso do portal atualizado.');
+  };
+
   const handleSubmitPatientForm = async () => {
     setPatientFormSubmitting(true);
     setPatientFormError(null);
@@ -1371,6 +1621,22 @@ export default function PatientListContent() {
           onChange={(patch) => setPatientForm((current) => ({ ...current, ...patch }))}
           onClose={closePatientForm}
           onSubmit={handleSubmitPatientForm}
+        />
+      )}
+      {portalPatient && (
+        <PortalAccessModal
+          patient={portalPatient}
+          status={portalStatus}
+          loading={portalLoading}
+          error={portalError}
+          inviteEmail={portalInvite.inviteEmail}
+          invitePhone={portalInvite.invitePhone}
+          inviteeType={portalInvite.inviteeType}
+          relationship={portalInvite.relationship}
+          submitting={portalSubmitting}
+          onClose={() => setPortalPatient(null)}
+          onChangeInvite={(patch) => setPortalInvite((current) => ({ ...current, ...patch }))}
+          onAction={(action) => void handlePortalAction(action)}
         />
       )}
       {contextPatient && (
@@ -1877,6 +2143,15 @@ export default function PatientListContent() {
                     aria-label={`Editar paciente ${patient.name}`}
                   >
                     <Pencil size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void openPortalAccess(patient)}
+                    className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
+                    aria-label={`Gerenciar portal de ${patient.name}`}
+                    title="Portal do paciente"
+                  >
+                    <UserPlus size={15} />
                   </button>
                   <Link
                     href={`/clinic/inbox?tab=conversas&patientId=${patient.id}`}
