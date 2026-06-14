@@ -34,6 +34,16 @@ type PatientPiiRow = {
   cpf_masked?: string | null;
   birth_date: string | null;
   sex_gender?: string | null;
+  address?: Record<string, unknown> | null;
+  secondary_document?: string | null;
+  alternate_phone?: string | null;
+  profession?: string | null;
+  preference_notes?: string | null;
+  consents?: Record<string, unknown> | null;
+  primary_guardian_name?: string | null;
+  primary_guardian_phone?: string | null;
+  profile_photo_bucket?: string | null;
+  profile_photo_path?: string | null;
 };
 
 type PatientAlertRow = {
@@ -106,6 +116,33 @@ export type PatientMutationInput = {
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
   internalNotes?: string | null;
+  address?: PatientStructuredAddress;
+  secondaryDocument?: string | null;
+  alternatePhone?: string | null;
+  profession?: string | null;
+  preferenceNotes?: string | null;
+  consents?: PatientConsentFlags;
+  primaryGuardianName?: string | null;
+  primaryGuardianPhone?: string | null;
+  profilePhotoFile?: File | null;
+};
+
+export type PatientStructuredAddress = {
+  postalCode?: string | null;
+  street?: string | null;
+  number?: string | null;
+  complement?: string | null;
+  district?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+};
+
+export type PatientConsentFlags = {
+  dataProcessing?: boolean;
+  clinicalCommunication?: boolean;
+  imageUse?: boolean;
+  portalAccess?: boolean;
 };
 
 export type PatientFormSnapshot = {
@@ -126,6 +163,15 @@ export type PatientFormSnapshot = {
   emergencyContactName: string;
   emergencyContactPhone: string;
   internalNotes: string;
+  address: Required<Record<keyof PatientStructuredAddress, string>>;
+  secondaryDocument: string;
+  alternatePhone: string;
+  profession: string;
+  preferenceNotes: string;
+  consents: Required<PatientConsentFlags>;
+  primaryGuardianName: string;
+  primaryGuardianPhone: string;
+  profilePhotoUrl?: string;
 };
 
 const DEFAULT_PROGRAM_TYPE: ProgramType = 'emagrecimento';
@@ -184,6 +230,30 @@ function normalizeOptionalText(value: string | null | undefined) {
 function metadataText(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key];
   return typeof value === 'string' ? value : '';
+}
+
+function buildStructuredAddress(address: PatientStructuredAddress | undefined) {
+  return Object.fromEntries(
+    Object.entries({
+      postalCode: normalizeOptionalText(address?.postalCode),
+      street: normalizeOptionalText(address?.street),
+      number: normalizeOptionalText(address?.number),
+      complement: normalizeOptionalText(address?.complement),
+      district: normalizeOptionalText(address?.district),
+      city: normalizeOptionalText(address?.city),
+      state: normalizeOptionalText(address?.state)?.toUpperCase() ?? null,
+      country: normalizeOptionalText(address?.country) ?? 'Brasil',
+    }).filter(([, value]) => value !== null)
+  );
+}
+
+function buildPatientConsents(consents: PatientConsentFlags | undefined) {
+  return {
+    dataProcessing: Boolean(consents?.dataProcessing),
+    clinicalCommunication: Boolean(consents?.clinicalCommunication),
+    imageUse: Boolean(consents?.imageUse),
+    portalAccess: Boolean(consents?.portalAccess),
+  };
 }
 
 function buildPatientMetadata(input: PatientMutationInput) {
@@ -589,6 +659,34 @@ function normalizeWalletSnapshot(
   };
 }
 
+async function attachPatientAvatarUrls(rows: PatientWalletRow[]): Promise<PatientWalletRow[]> {
+  if (rows.length === 0) return rows;
+  const supabase = createBrowserSupabaseClient();
+  const tenantId = await resolveActiveTenantId();
+  const { data, error } = await supabase
+    .from('patient_pii')
+    .select('patient_id,profile_photo_path')
+    .eq('tenant_id', tenantId)
+    .in(
+      'patient_id',
+      rows.map((row) => row.id)
+    );
+  if (error) return rows;
+
+  const pathByPatientId = new Map(
+    ((data ?? []) as PatientPiiRow[])
+      .filter((row) => row.profile_photo_path)
+      .map((row) => [row.patient_id, row.profile_photo_path as string])
+  );
+  const signedEntries = await Promise.all(
+    Array.from(pathByPatientId.entries()).map(
+      async ([patientId, path]) => [patientId, await getPatientProfilePhotoSignedUrl(path)] as const
+    )
+  );
+  const urlByPatientId = new Map(signedEntries.filter(([, url]) => Boolean(url)));
+  return rows.map((row) => ({ ...row, avatarUrl: urlByPatientId.get(row.id) ?? row.avatarUrl }));
+}
+
 function mockWalletRow(row: PatientListRow): PatientWalletRow {
   const score =
     (row.alertCount > 0 ? Math.min(35, row.alertCount * 12) : 0) +
@@ -644,6 +742,58 @@ function mockWalletRow(row: PatientListRow): PatientWalletRow {
     clinicalAlertSeverity:
       row.alertCount > 2 ? 'critical' : row.alertCount > 0 ? 'medium' : undefined,
   };
+}
+
+function normalizeAddressSnapshot(
+  value: unknown
+): Required<Record<keyof PatientStructuredAddress, string>> {
+  const record = asRecord(value);
+  return {
+    postalCode: asString(record.postalCode),
+    street: asString(record.street),
+    number: asString(record.number),
+    complement: asString(record.complement),
+    district: asString(record.district),
+    city: asString(record.city),
+    state: asString(record.state),
+    country: asString(record.country, 'Brasil'),
+  };
+}
+
+function normalizeConsentsSnapshot(value: unknown): Required<PatientConsentFlags> {
+  const record = asRecord(value);
+  return {
+    dataProcessing: asBoolean(record.dataProcessing),
+    clinicalCommunication: asBoolean(record.clinicalCommunication),
+    imageUse: asBoolean(record.imageUse),
+    portalAccess: asBoolean(record.portalAccess),
+  };
+}
+
+async function getPatientProfilePhotoSignedUrl(path: string | null | undefined) {
+  if (!path) return undefined;
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.storage
+    .from('patient-profile-photos')
+    .createSignedUrl(path, 60 * 10);
+  if (error) return undefined;
+  return data?.signedUrl || undefined;
+}
+
+async function uploadPatientProfilePhoto(tenantId: string, patientId: string, file: File) {
+  const extension =
+    file.name
+      .split('.')
+      .pop()
+      ?.toLowerCase()
+      .replace(/[^a-z0-9]/g, '') || 'jpg';
+  const path = `${tenantId}/${patientId}/avatar-${Date.now()}.${extension}`;
+  const supabase = createBrowserSupabaseClient();
+  const { error } = await supabase.storage
+    .from('patient-profile-photos')
+    .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true });
+  if (error) throw error;
+  return { path, mimeType: file.type || null, sizeBytes: file.size };
 }
 
 function validatePatientInput(input: PatientMutationInput) {
@@ -780,7 +930,9 @@ async function getPatientListFromSupabase(
     await Promise.all([
       supabase
         .from('patient_pii')
-        .select('patient_id,full_name,email,phone,cpf_masked,birth_date,sex_gender')
+        .select(
+          'patient_id,full_name,email,phone,cpf_masked,birth_date,sex_gender,address,secondary_document,alternate_phone,profession,preference_notes,consents,primary_guardian_name,primary_guardian_phone,profile_photo_bucket,profile_photo_path'
+        )
         .eq('tenant_id', tenantId)
         .in('patient_id', patientIds),
       supabase
@@ -991,6 +1143,9 @@ export async function getPatientWalletSnapshot(
     if (error) throw error;
 
     const snapshot = normalizeWalletSnapshot(data, page, pageSize);
+    if (snapshot) {
+      snapshot.rows = await attachPatientAvatarUrls(snapshot.rows);
+    }
     if (!snapshot) {
       return {
         data: null,
@@ -1051,7 +1206,9 @@ export async function getPatientFormSnapshot(
         .single(),
       supabase
         .from('patient_pii')
-        .select('patient_id,full_name,email,phone,cpf_masked,birth_date,sex_gender')
+        .select(
+          'patient_id,full_name,email,phone,cpf_masked,birth_date,sex_gender,address,secondary_document,alternate_phone,profession,preference_notes,consents,primary_guardian_name,primary_guardian_phone,profile_photo_bucket,profile_photo_path'
+        )
         .eq('tenant_id', tenantId)
         .eq('patient_id', patientId)
         .single(),
@@ -1063,6 +1220,7 @@ export async function getPatientFormSnapshot(
     const patient = patientResult.data as PatientRow;
     const pii = piiResult.data as PatientPiiRow;
     const metadata = patient.metadata ?? {};
+    const profilePhotoUrl = await getPatientProfilePhotoSignedUrl(pii.profile_photo_path);
 
     return {
       data: {
@@ -1083,6 +1241,15 @@ export async function getPatientFormSnapshot(
         emergencyContactName: metadataText(metadata, 'emergency_contact_name'),
         emergencyContactPhone: metadataText(metadata, 'emergency_contact_phone'),
         internalNotes: metadataText(metadata, 'internal_notes'),
+        address: normalizeAddressSnapshot(pii.address),
+        secondaryDocument: pii.secondary_document ?? '',
+        alternatePhone: pii.alternate_phone ?? '',
+        profession: pii.profession ?? '',
+        preferenceNotes: pii.preference_notes ?? '',
+        consents: normalizeConsentsSnapshot(pii.consents),
+        primaryGuardianName: pii.primary_guardian_name ?? '',
+        primaryGuardianPhone: pii.primary_guardian_phone ?? '',
+        profilePhotoUrl,
       },
       error: null,
     };
@@ -1098,6 +1265,7 @@ export async function createPatient(
     validatePatientInput(input);
 
     const supabase = createBrowserSupabaseClient();
+    const tenantId = await resolveActiveTenantId();
     const metadata = buildPatientMetadata(input);
     const { data, error } = await supabase.rpc('upsert_patient_with_pii', {
       p_patient_id: null,
@@ -1112,6 +1280,14 @@ export async function createPatient(
         status: toDbPatientStatus(input.status),
         tags: input.tags ?? [],
         metadata,
+        address: buildStructuredAddress(input.address),
+        secondaryDocument: normalizeOptionalText(input.secondaryDocument),
+        alternatePhone: normalizeOptionalText(input.alternatePhone),
+        profession: normalizeOptionalText(input.profession),
+        preferenceNotes: normalizeOptionalText(input.preferenceNotes),
+        consents: buildPatientConsents(input.consents),
+        primaryGuardianName: normalizeOptionalText(input.primaryGuardianName),
+        primaryGuardianPhone: normalizeOptionalText(input.primaryGuardianPhone),
       },
     });
 
@@ -1119,6 +1295,35 @@ export async function createPatient(
     const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
     const id = typeof record.id === 'string' ? record.id : '';
     if (!id) throw new Error('invalid_patient_upsert_contract');
+
+    if (input.profilePhotoFile) {
+      const profilePhoto = await uploadPatientProfilePhoto(tenantId, id, input.profilePhotoFile);
+      const photoResult = await supabase.rpc('upsert_patient_with_pii', {
+        p_patient_id: id,
+        p_payload: {
+          fullName: input.fullName.trim(),
+          preferredName: normalizeOptionalText(input.preferredName),
+          email: normalizeOptionalText(input.email),
+          phone: normalizeOptionalText(input.phone),
+          cpfMasked: normalizeOptionalText(input.cpfMasked),
+          birthDate: normalizeOptionalText(input.birthDate),
+          sexGender: normalizeOptionalText(input.sexGender),
+          status: toDbPatientStatus(input.status),
+          tags: input.tags ?? [],
+          metadata,
+          address: buildStructuredAddress(input.address),
+          secondaryDocument: normalizeOptionalText(input.secondaryDocument),
+          alternatePhone: normalizeOptionalText(input.alternatePhone),
+          profession: normalizeOptionalText(input.profession),
+          preferenceNotes: normalizeOptionalText(input.preferenceNotes),
+          consents: buildPatientConsents(input.consents),
+          primaryGuardianName: normalizeOptionalText(input.primaryGuardianName),
+          primaryGuardianPhone: normalizeOptionalText(input.primaryGuardianPhone),
+          profilePhoto,
+        },
+      });
+      if (photoResult.error) throw photoResult.error;
+    }
 
     return { data: { id }, error: null };
   } catch (error) {
@@ -1134,6 +1339,7 @@ export async function updatePatient(
     validatePatientInput(input);
 
     const supabase = createBrowserSupabaseClient();
+    const tenantId = await resolveActiveTenantId();
     const metadata = await buildMergedPatientMetadata(patientId, input);
     const { data, error } = await supabase.rpc('upsert_patient_with_pii', {
       p_patient_id: patientId,
@@ -1148,6 +1354,17 @@ export async function updatePatient(
         status: toDbPatientStatus(input.status),
         tags: input.tags ?? [],
         metadata,
+        address: buildStructuredAddress(input.address),
+        secondaryDocument: normalizeOptionalText(input.secondaryDocument),
+        alternatePhone: normalizeOptionalText(input.alternatePhone),
+        profession: normalizeOptionalText(input.profession),
+        preferenceNotes: normalizeOptionalText(input.preferenceNotes),
+        consents: buildPatientConsents(input.consents),
+        primaryGuardianName: normalizeOptionalText(input.primaryGuardianName),
+        primaryGuardianPhone: normalizeOptionalText(input.primaryGuardianPhone),
+        profilePhoto: input.profilePhotoFile
+          ? await uploadPatientProfilePhoto(tenantId, patientId, input.profilePhotoFile)
+          : undefined,
       },
     });
 

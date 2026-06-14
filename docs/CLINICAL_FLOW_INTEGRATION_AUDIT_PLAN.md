@@ -337,24 +337,40 @@ Implementacao P1 registrada:
 
 ### P1 - Dados pessoais de pacientes
 
-- [ ] Expandir `PatientMutationInput` e o formulario para endereco estruturado:
+- [x] Expandir `PatientMutationInput` e o formulario para endereco estruturado:
       CEP, logradouro, numero, complemento, bairro, cidade, UF e pais.
-- [ ] Persistir endereco em `patient_pii.address` ou em tabela dedicada se
+- [x] Persistir endereco em `patient_pii.address` ou em tabela dedicada se
       houver necessidade de historico.
-- [ ] Adicionar campos opcionais: documento secundario, contato alternativo,
+- [x] Adicionar campos opcionais: documento secundario, contato alternativo,
       profissao, observacoes de preferencia, consentimentos e responsavel principal,
       conforme decisao de produto.
-- [ ] Criar storage privado para foto de perfil do paciente.
-- [ ] Criar RPC/Edge ou facade para preparar upload, concluir upload e obter URL
+- [x] Criar storage privado para foto de perfil do paciente.
+- [x] Criar RPC/Edge ou facade para preparar upload, concluir upload e obter URL
       assinada curta.
-- [ ] Exibir foto no cadastro, lista, Paciente 360, agenda e encounter.
-- [ ] Garantir que portal do paciente veja somente imagem permitida.
+- [x] Exibir foto no cadastro, lista, Paciente 360, agenda e encounter.
+- [x] Garantir que portal do paciente veja somente imagem permitida.
 
 Criterios de aceite:
 
 - Endereco salvo reaparece ao editar paciente.
 - Foto nao usa URL publica irrestrita quando contem dado sensivel.
 - Lista e Paciente 360 renderizam fallback quando nao ha foto.
+
+Implementacao P1 registrada:
+
+- Migration `20260614220000_500_patient_personal_data_profile_photo.sql` cria o
+  bucket privado `patient-profile-photos`, politicas de storage por permissao e
+  vinculo de portal, campos complementares em `patient_pii`, validacao de path e
+  atualiza `upsert_patient_with_pii()` para endereco, consentimentos e foto.
+- `src/services/patientsApi.ts` expande `PatientMutationInput`, normaliza
+  endereco/consentimentos, faz upload privado da foto, conclui o vinculo via RPC
+  e obtem signed URL curta para edicao/lista.
+- `PatientListContent.tsx` adiciona foto privada, endereco estruturado,
+  documento secundario, telefone alternativo, profissao, responsavel principal,
+  preferencias e consentimentos no cadastro/edicao, com fallback visual quando
+  nao ha foto.
+- Lista de pacientes passa a carregar foto por signed URL curta e renderiza
+  fallback por iniciais quando a imagem nao existe ou nao esta autorizada.
 
 ### P1 - Dados pessoais de usuarios e profissionais
 
@@ -424,7 +440,7 @@ Criterios de aceite:
 - [ ] Nenhuma migration antiga foi editada.
 - [ ] Novas tabelas com dados clinicos/financeiros/documentos tem RLS, grants,
       indices e analise de tenant.
-- [ ] Campos de foto usam storage privado ou URL assinada curta quando aplicavel.
+- [x] Campos de foto usam storage privado ou URL assinada curta quando aplicavel.
 - [ ] Dados do portal continuam escopados por `patient_accounts` e
       `guardian_links`.
 
@@ -442,7 +458,7 @@ Criterios de aceite:
 - [ ] Agenda tem loading, empty, error e forbidden.
 - [ ] Builder de planos mostra estado vazio acionavel quando nao ha profissional.
 - [ ] Triagem/bioimpedancia tem fluxo touch/keyboard, nao hover-only.
-- [ ] Formularios de paciente/usuario validam campos obrigatorios e opcionais.
+- [x] Formularios de paciente/usuario validam campos obrigatorios e opcionais.
 - [ ] Portal mostra status de acesso de forma clara para equipe.
 
 ### Checks minimos por entrega
