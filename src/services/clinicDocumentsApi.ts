@@ -36,6 +36,22 @@ export interface ClinicDocumentCategory {
 export interface ClinicDocumentPatient {
   id: string;
   name: string;
+  email?: string;
+  guardianName?: string;
+  guardianEmail?: string;
+}
+
+export interface ClinicDocumentSigner {
+  name: string;
+  email: string;
+  role?: string;
+}
+
+export interface ClinicDocumentProfessionalSigner {
+  id: string;
+  name: string;
+  email: string;
+  role?: string;
 }
 
 export interface ClinicDocumentRow {
@@ -84,6 +100,7 @@ export interface ClinicDocumentsWorkspace {
   documents: ClinicDocumentRow[];
   monitorEvents: ClinicDocumentMonitorEvent[];
   auditEvents: ClinicDocumentAuditEvent[];
+  professionalSigners: ClinicDocumentProfessionalSigner[];
   warnings: SafeServiceError[];
   metrics: {
     templates: number;
@@ -143,6 +160,33 @@ type PatientRow = {
 type PatientPiiRow = {
   patient_id: string;
   full_name: string | null;
+  email?: string | null;
+};
+
+type PatientContactRow = {
+  patient_id: string;
+  name: string | null;
+  email: string | null;
+  relationship: string | null;
+  is_primary: boolean | null;
+  status: string | null;
+};
+
+type TenantProfessionalRow = {
+  id: string;
+  professional_type: string | null;
+  specialty?: string | null;
+  is_active: boolean | null;
+  profiles?:
+    | {
+        full_name: string | null;
+        email: string | null;
+      }
+    | Array<{
+        full_name: string | null;
+        email: string | null;
+      }>
+    | null;
 };
 
 type ProviderEventRow = {
@@ -485,18 +529,31 @@ export async function getClinicDocumentsWorkspace(): Promise<{
     ];
 
     let piiRows: PatientPiiRow[] = [];
+    let contactRows: PatientContactRow[] = [];
     if (patientIds.length > 0) {
       const { data: piiData, error: piiError } = await supabase
         .from('patient_pii')
-        .select('patient_id,full_name')
+        .select('patient_id,full_name,email')
         .in('patient_id', patientIds);
       if (piiError) {
         warnings.push(safeError(piiError, 'Identificacao completa de pacientes indisponivel.'));
       }
       piiRows = (piiData ?? []) as PatientPiiRow[];
+
+      const { data: contactData, error: contactError } = await supabase
+        .from('patient_contacts')
+        .select('patient_id,name,email,relationship,is_primary,status')
+        .in('patient_id', patientIds)
+        .eq('status', 'active')
+        .order('is_primary', { ascending: false });
+      if (contactError) {
+        warnings.push(safeError(contactError, 'Responsaveis de pacientes indisponiveis.'));
+      }
+      contactRows = (contactData ?? []) as PatientContactRow[];
     }
 
     const patientNameById = new Map<string, string>();
+    const patientEmailById = new Map<string, string>();
     for (const patient of patientRows) {
       patientNameById.set(
         patient.id,
@@ -505,6 +562,20 @@ export async function getClinicDocumentsWorkspace(): Promise<{
     }
     for (const pii of piiRows) {
       if (pii.full_name) patientNameById.set(pii.patient_id, pii.full_name);
+      if (pii.email) patientEmailById.set(pii.patient_id, pii.email);
+    }
+
+    const { data: professionalData, error: professionalError } = await supabase
+      .from('tenant_professionals')
+      .select(
+        'id,professional_type,specialty,is_active,profiles!tenant_professionals_user_id_fkey(full_name,email)'
+      )
+      .eq('is_active', true)
+      .limit(100);
+    if (professionalError) {
+      warnings.push(
+        safeError(professionalError, 'Profissionais disponiveis para assinatura indisponiveis.')
+      );
     }
 
     const generatedCountByTemplate = new Map<string, number>();
@@ -545,13 +616,44 @@ export async function getClinicDocumentsWorkspace(): Promise<{
       ...((eventsRes.data ?? []) as ProviderEventRow[]).map(getProviderEventSummary),
     ].slice(0, 25);
 
-    const patients = patientRows.map((patient) => ({
-      id: patient.id,
-      name:
-        patientNameById.get(patient.id) ??
-        patient.preferred_name ??
-        `Paciente ${shortCode(patient.id)}`,
-    }));
+    const primaryContactByPatientId = new Map<string, PatientContactRow>();
+    for (const contact of contactRows) {
+      if (!contact.email) continue;
+      const current = primaryContactByPatientId.get(contact.patient_id);
+      if (!current || contact.is_primary)
+        primaryContactByPatientId.set(contact.patient_id, contact);
+    }
+
+    const patients = patientRows.map((patient) => {
+      const guardian = primaryContactByPatientId.get(patient.id);
+      return {
+        id: patient.id,
+        name:
+          patientNameById.get(patient.id) ??
+          patient.preferred_name ??
+          `Paciente ${shortCode(patient.id)}`,
+        email: patientEmailById.get(patient.id),
+        guardianName: guardian?.name ?? undefined,
+        guardianEmail: guardian?.email ?? undefined,
+      };
+    });
+
+    const professionalSigners = (
+      professionalError ? [] : ((professionalData ?? []) as TenantProfessionalRow[])
+    ).reduce<ClinicDocumentProfessionalSigner[]>((items, professional) => {
+      const profile = Array.isArray(professional.profiles)
+        ? professional.profiles[0]
+        : professional.profiles;
+      const email = profile?.email?.trim();
+      if (!email) return items;
+      items.push({
+        id: professional.id,
+        name: profile?.full_name?.trim() || email,
+        email,
+        role: professional.specialty || professional.professional_type || 'Profissional',
+      });
+      return items;
+    }, []);
 
     const auditEvents = auditRes.error
       ? []
@@ -565,6 +667,7 @@ export async function getClinicDocumentsWorkspace(): Promise<{
         documents,
         monitorEvents,
         auditEvents,
+        professionalSigners,
         warnings,
         metrics: {
           templates: templates.filter((template) => template.status === 'active').length,
@@ -758,8 +861,12 @@ export async function generateClinicDocument(
   return generatePatientDocument(patientId, templateId, variables);
 }
 
-export async function requestClinicDocumentSignature(documentId: string, patientId: string) {
-  return sendDocumentForSignature(documentId, patientId);
+export async function requestClinicDocumentSignature(
+  documentId: string,
+  patientId: string,
+  signers: ClinicDocumentSigner[]
+) {
+  return sendDocumentForSignature(documentId, patientId, signers);
 }
 
 export async function getClinicDocumentSignedUrl(documentId: string, patientId: string) {
