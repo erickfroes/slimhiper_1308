@@ -63,8 +63,31 @@ import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
 import DataState from '@/components/ui/DataState';
 import Dialog from '@/components/ui/Dialog';
 import DocumentAuditTimeline from './DocumentAuditTimeline';
+import { type DocumentPermissionAccess } from '@/services/session/permissions';
 
 type WizardStep = 0 | 1 | 2 | 3 | 4 | 5;
+
+const DOCUMENT_PERMISSION_MESSAGES = {
+  planWithoutD4Sign: 'Assinatura D4Sign indisponivel no plano deste tenant.',
+  missingRead: 'Seu usuario nao possui documents.read para acessar a central de documentos.',
+  missingWrite: 'Seu usuario nao possui documents.write para gerar documentos.',
+  missingRelease:
+    'Seu usuario nao possui documents.release para liberar ou ocultar documentos no portal.',
+  missingSign: 'Seu usuario nao possui documents.sign para enviar ou reconciliar assinaturas.',
+  missingTemplateManage:
+    'Seu usuario nao possui documents.template.manage para criar, editar, publicar ou arquivar templates.',
+  signedUrlsUnavailable: 'Links temporarios indisponiveis no plano deste tenant.',
+  operationalFailure:
+    'Falha operacional. Tente novamente ou acione o suporte com o requestId exibido.',
+} as const;
+
+const EMPTY_DOCUMENT_PERMISSIONS: DocumentPermissionAccess = {
+  read: false,
+  write: false,
+  release: false,
+  sign: false,
+  templateManage: false,
+};
 
 const PREVIEW_PROTECTED_VALUES: Record<string, string> = {
   patient_id: 'paciente-mock-seguro',
@@ -299,6 +322,7 @@ function TemplateLibrary({
   onEditTemplate,
   onArchiveTemplate,
   onPublishTemplate,
+  canManageTemplates,
 }: {
   templates: ClinicDocumentTemplate[];
   categories: ClinicDocumentCategory[];
@@ -314,6 +338,7 @@ function TemplateLibrary({
   onEditTemplate: (template: ClinicDocumentTemplate) => void;
   onArchiveTemplate: (template: ClinicDocumentTemplate) => void;
   onPublishTemplate: (template: ClinicDocumentTemplate) => void;
+  canManageTemplates: boolean;
 }) {
   return (
     <section className="rounded-lg border border-border bg-card">
@@ -416,7 +441,13 @@ function TemplateLibrary({
                   <button
                     type="button"
                     onClick={() => onEditTemplate(template)}
-                    className="btn-secondary min-h-10 justify-center text-xs"
+                    disabled={!canManageTemplates}
+                    title={
+                      canManageTemplates
+                        ? undefined
+                        : DOCUMENT_PERMISSION_MESSAGES.missingTemplateManage
+                    }
+                    className="btn-secondary min-h-10 disabled:cursor-not-allowed disabled:opacity-60 justify-center text-xs"
                   >
                     <PenSquare size={14} aria-hidden="true" />
                     Editar
@@ -424,7 +455,7 @@ function TemplateLibrary({
                   <button
                     type="button"
                     onClick={() => onDuplicate(template)}
-                    disabled={busyAction === `duplicate-${template.id}`}
+                    disabled={!canManageTemplates || busyAction === `duplicate-${template.id}`}
                     className="btn-secondary min-h-10 justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Copy size={14} aria-hidden="true" />
@@ -434,7 +465,7 @@ function TemplateLibrary({
                     <button
                       type="button"
                       onClick={() => onPublishTemplate(template)}
-                      disabled={busyAction === `publish-${template.id}`}
+                      disabled={!canManageTemplates || busyAction === `publish-${template.id}`}
                       className="btn-primary min-h-10 justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <UploadCloud size={14} aria-hidden="true" />
@@ -444,7 +475,7 @@ function TemplateLibrary({
                   <button
                     type="button"
                     onClick={() => onArchiveTemplate(template)}
-                    disabled={busyAction === `archive-${template.id}`}
+                    disabled={!canManageTemplates || busyAction === `archive-${template.id}`}
                     className="btn-secondary min-h-10 justify-center text-xs disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Archive size={14} aria-hidden="true" />
@@ -472,6 +503,8 @@ function DocumentActions({
   onUpdateSignatureStatus,
   canCreateSignedUrls,
   canRequestD4Sign,
+  canRelease,
+  canSign,
 }: {
   document: ClinicDocumentRow;
   busyAction: string | null;
@@ -484,6 +517,8 @@ function DocumentActions({
   onUpdateSignatureStatus: (document: ClinicDocumentRow) => void;
   canCreateSignedUrls: boolean;
   canRequestD4Sign: boolean;
+  canRelease: boolean;
+  canSign: boolean;
 }) {
   return (
     <div className={`flex flex-wrap gap-2 ${compact ? '' : 'justify-start'}`}>
@@ -506,7 +541,8 @@ function DocumentActions({
       <button
         type="button"
         onClick={() => onSetRelease(document, !document.releasedToPatient)}
-        disabled={busyAction === `release-${document.id}`}
+        disabled={!canRelease || busyAction === `release-${document.id}`}
+        title={canRelease ? undefined : DOCUMENT_PERMISSION_MESSAGES.missingRelease}
         className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
       >
         {document.releasedToPatient ? (
@@ -520,16 +556,21 @@ function DocumentActions({
         type="button"
         onClick={() => onSignature(document)}
         disabled={
-          !canRequestD4Sign || !document.canRequestSignature || busyAction === `sign-${document.id}`
+          !canSign ||
+          !canRequestD4Sign ||
+          !document.canRequestSignature ||
+          busyAction === `sign-${document.id}`
         }
         title={
-          !canRequestD4Sign
-            ? 'Envio D4Sign indisponivel no plano deste tenant'
-            : document.canRequestSignature
-              ? undefined
-              : document.signatureEnabled
-                ? 'Assinatura indisponivel neste status'
-                : 'Template sem assinatura digital'
+          !canSign
+            ? DOCUMENT_PERMISSION_MESSAGES.missingSign
+            : !canRequestD4Sign
+              ? DOCUMENT_PERMISSION_MESSAGES.planWithoutD4Sign
+              : document.canRequestSignature
+                ? undefined
+                : document.signatureEnabled
+                  ? 'Assinatura indisponivel neste status'
+                  : 'Template sem assinatura digital'
         }
         className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
       >
@@ -539,8 +580,14 @@ function DocumentActions({
       <button
         type="button"
         onClick={() => onUpdateSignatureStatus(document)}
-        disabled={!document.signatureEnabled || busyAction === `status-${document.id}`}
-        title={document.signatureEnabled ? undefined : 'Documento sem assinatura digital'}
+        disabled={!canSign || !document.signatureEnabled || busyAction === `status-${document.id}`}
+        title={
+          !canSign
+            ? DOCUMENT_PERMISSION_MESSAGES.missingSign
+            : document.signatureEnabled
+              ? undefined
+              : 'Documento sem assinatura digital'
+        }
         className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
       >
         <RefreshCw size={13} aria-hidden="true" />
@@ -857,6 +904,8 @@ function DocumentDetailDialog({
   onUpdateSignatureStatus,
   canCreateSignedUrls,
   canRequestD4Sign,
+  canRelease,
+  canSign,
 }: {
   document: ClinicDocumentRow;
   templates: ClinicDocumentTemplate[];
@@ -868,6 +917,8 @@ function DocumentDetailDialog({
   onUpdateSignatureStatus: (document: ClinicDocumentRow) => void;
   canCreateSignedUrls: boolean;
   canRequestD4Sign: boolean;
+  canRelease: boolean;
+  canSign: boolean;
 }) {
   const [evidence, setEvidence] = useState<DocumentEvidenceResult | null>(null);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -933,6 +984,8 @@ function DocumentDetailDialog({
             onUpdateSignatureStatus={onUpdateSignatureStatus}
             canCreateSignedUrls={canCreateSignedUrls}
             canRequestD4Sign={canRequestD4Sign}
+            canRelease={canRelease}
+            canSign={canSign}
           />
           <button
             type="button"
@@ -1384,6 +1437,8 @@ function DocumentAccessStep({
   busyAction,
   canCreateSignedUrls,
   canRequestD4Sign,
+  canRelease,
+  canSign,
   onDownload,
   onSetRelease,
   onSignature,
@@ -1394,6 +1449,8 @@ function DocumentAccessStep({
   busyAction: string | null;
   canCreateSignedUrls: boolean;
   canRequestD4Sign: boolean;
+  canRelease: boolean;
+  canSign: boolean;
   onDownload: (document: ClinicDocumentRow) => void;
   onSetRelease: (document: ClinicDocumentRow, released: boolean) => void;
   onSignature: (document: ClinicDocumentRow) => void;
@@ -1430,7 +1487,8 @@ function DocumentAccessStep({
             <button
               type="button"
               onClick={() => onSetRelease(document, !document.releasedToPatient)}
-              disabled={busyAction === `release-${document.id}`}
+              disabled={!canRelease || busyAction === `release-${document.id}`}
+              title={canRelease ? undefined : DOCUMENT_PERMISSION_MESSAGES.missingRelease}
               className="btn-secondary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
               {document.releasedToPatient ? (
@@ -1444,6 +1502,7 @@ function DocumentAccessStep({
               type="button"
               onClick={() => onSignature(document)}
               disabled={
+                !canSign ||
                 !canRequestD4Sign ||
                 !document.canRequestSignature ||
                 busyAction === `sign-${document.id}`
@@ -1504,6 +1563,9 @@ function DocumentWizard({
   onBackToList,
   canRequestD4Sign,
   canCreateSignedUrls,
+  canWrite,
+  canRelease,
+  canSign,
 }: {
   open: boolean;
   workspace: ClinicDocumentsWorkspace;
@@ -1528,6 +1590,9 @@ function DocumentWizard({
   onBackToList: (document: ClinicDocumentRow) => void;
   canRequestD4Sign: boolean;
   canCreateSignedUrls: boolean;
+  canWrite: boolean;
+  canRelease: boolean;
+  canSign: boolean;
 }) {
   const activeTemplates = workspace.templates.filter((template) => template.status === 'active');
   const templatesByCategory = activeTemplates.filter(
@@ -1545,7 +1610,9 @@ function DocumentWizard({
     step === 4 ||
     step === 5;
   const canGenerate =
-    Boolean(selectedPatientId && selectedTemplateId) && missingRequiredVariables.length === 0;
+    canWrite &&
+    Boolean(selectedPatientId && selectedTemplateId) &&
+    missingRequiredVariables.length === 0;
 
   function nextStep() {
     if (step < 5) onStepChange((step + 1) as WizardStep);
@@ -1593,6 +1660,7 @@ function DocumentWizard({
                 type="button"
                 onClick={onGenerate}
                 disabled={!canGenerate || busyAction === 'generate'}
+                title={canWrite ? undefined : DOCUMENT_PERMISSION_MESSAGES.missingWrite}
                 className="btn-primary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <FilePlus2 size={16} aria-hidden="true" />
@@ -1650,6 +1718,8 @@ function DocumentWizard({
             busyAction={busyAction}
             canCreateSignedUrls={canCreateSignedUrls}
             canRequestD4Sign={canRequestD4Sign}
+            canRelease={canRelease}
+            canSign={canSign}
             onDownload={onDownload}
             onSetRelease={onSetRelease}
             onSignature={onSignature}
@@ -1890,11 +1960,13 @@ function OperationalMonitor({
   busyAction,
   onAcknowledge,
   onReprocess,
+  canSign,
 }: {
   events: ClinicDocumentMonitorEvent[];
   busyAction: string | null;
   onAcknowledge: (event: ClinicDocumentMonitorEvent) => void;
   onReprocess: (event: ClinicDocumentMonitorEvent) => void;
+  canSign: boolean;
 }) {
   const bySeverity = events.reduce<Record<string, number>>((acc, event) => {
     acc[event.severity] = (acc[event.severity] ?? 0) + 1;
@@ -1960,7 +2032,7 @@ function OperationalMonitor({
                     <button
                       type="button"
                       onClick={() => onAcknowledge(event)}
-                      disabled={busyAction === `ack-${event.id}`}
+                      disabled={!canSign || busyAction === `ack-${event.id}`}
                       className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <CheckCircle2 size={13} aria-hidden="true" />
@@ -1970,7 +2042,11 @@ function OperationalMonitor({
                   <button
                     type="button"
                     onClick={() => onReprocess(event)}
-                    disabled={busyAction === `reprocess-${event.id}` || event.id.startsWith('doc-')}
+                    disabled={
+                      !canSign ||
+                      busyAction === `reprocess-${event.id}` ||
+                      event.id.startsWith('doc-')
+                    }
                     title={
                       event.id.startsWith('doc-')
                         ? 'Reprocesso disponivel apenas para eventos D4Sign'
@@ -2022,39 +2098,68 @@ export default function ClinicDocumentsContent() {
     templateToForm()
   );
   const [featureFlags, setFeatureFlags] = useState<Set<string>>(() => new Set());
+  const [documentPermissions, setDocumentPermissions] = useState<DocumentPermissionAccess>(
+    EMPTY_DOCUMENT_PERMISSIONS
+  );
+  const [sessionLoaded, setSessionLoaded] = useState(false);
   const canRequestD4Sign = featureFlags.has('documents.d4sign_send');
   const canCreateSignedUrls = featureFlags.has('documents.signed_urls');
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
     setError(null);
+    if (!documentPermissions.read) {
+      setWorkspace(null);
+      setError(null);
+      setLoading(false);
+      return null;
+    }
+
     const result = await getClinicDocumentsWorkspace(documentFilters);
     setWorkspace(result.data);
     setError(result.error?.message ?? null);
     setLoading(false);
     return result.data;
-  }, [documentFilters]);
+  }, [documentFilters, documentPermissions.read]);
 
   useEffect(() => {
+    if (!sessionLoaded) return;
     void loadWorkspace();
-  }, [loadWorkspace]);
+  }, [loadWorkspace, sessionLoaded]);
 
   useEffect(() => {
     let mounted = true;
 
-    async function loadFeatureFlags() {
+    async function loadSessionAccess() {
       try {
         const response = await fetch('/api/auth/app-session');
         const payload = (await response.json().catch(() => null)) as {
           featureFlags?: string[];
+          documentPermissions?: Partial<DocumentPermissionAccess>;
         } | null;
-        if (mounted && response.ok) setFeatureFlags(new Set(payload?.featureFlags ?? []));
+        if (mounted) {
+          if (response.ok) {
+            setFeatureFlags(new Set(payload?.featureFlags ?? []));
+            setDocumentPermissions({
+              ...EMPTY_DOCUMENT_PERMISSIONS,
+              ...payload?.documentPermissions,
+            });
+          } else {
+            setFeatureFlags(new Set());
+            setDocumentPermissions(EMPTY_DOCUMENT_PERMISSIONS);
+          }
+          setSessionLoaded(true);
+        }
       } catch {
-        if (mounted) setFeatureFlags(new Set());
+        if (mounted) {
+          setFeatureFlags(new Set());
+          setDocumentPermissions(EMPTY_DOCUMENT_PERMISSIONS);
+          setSessionLoaded(true);
+        }
       }
     }
 
-    void loadFeatureFlags();
+    void loadSessionAccess();
 
     return () => {
       mounted = false;
@@ -2176,6 +2281,10 @@ export default function ClinicDocumentsContent() {
   }, [searchParams, workspace]);
 
   function openWizard(template?: ClinicDocumentTemplate) {
+    if (!documentPermissions.write) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingWrite);
+      return;
+    }
     setWizardGeneratedDocumentId(null);
     setActionError(null);
     setActionMessage(null);
@@ -2189,6 +2298,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleGenerateDocument() {
+    if (!documentPermissions.write) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingWrite);
+      return;
+    }
     if (!selectedPatientId || !selectedTemplateId) {
       setActionError('Selecione paciente e template para gerar o documento.');
       return;
@@ -2227,8 +2340,12 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleSignature(document: ClinicDocumentRow) {
+    if (!documentPermissions.sign) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingSign);
+      return;
+    }
     if (!canRequestD4Sign) {
-      setActionError('Assinatura digital indisponivel no plano deste tenant.');
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.planWithoutD4Sign);
       return;
     }
     setSignatureDocument(document);
@@ -2238,6 +2355,10 @@ export default function ClinicDocumentsContent() {
     document: ClinicDocumentRow,
     signers: ClinicDocumentSigner[]
   ) {
+    if (!documentPermissions.sign) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingSign);
+      return;
+    }
     const validation = validateSignatureDrafts(signers.map(makeSignatureDraft));
     if (validation) {
       setActionError(validation);
@@ -2260,6 +2381,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleUpdateSignatureStatus(document: ClinicDocumentRow) {
+    if (!documentPermissions.sign) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingSign);
+      return;
+    }
     const status = window.prompt(
       'Informe o status seguro (pending, sent, viewed, signed, rejected, canceled, expired, failed):',
       document.signatureStatus === 'assinado' ? 'signed' : 'sent'
@@ -2289,6 +2414,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleAcknowledgeD4SignEvent(event: ClinicDocumentMonitorEvent) {
+    if (!documentPermissions.sign) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingSign);
+      return;
+    }
     const note = window.prompt('Nota de reconhecimento (opcional, sem dados sensiveis):') ?? '';
     setBusyAction(`ack-${event.id}`);
     setActionError(null);
@@ -2306,6 +2435,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleReprocessD4SignEvent(event: ClinicDocumentMonitorEvent) {
+    if (!documentPermissions.sign) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingSign);
+      return;
+    }
     const reason = window.prompt(
       'Justificativa para reprocessamento local (minimo 12 caracteres; nao chama D4Sign):'
     );
@@ -2326,6 +2459,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handlePatientRelease(document: ClinicDocumentRow, releasedToPatient: boolean) {
+    if (!documentPermissions.release) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingRelease);
+      return;
+    }
     setBusyAction(`release-${document.id}`);
     setActionError(null);
     setActionMessage(null);
@@ -2351,7 +2488,7 @@ export default function ClinicDocumentsContent() {
 
   async function handleDownload(document: ClinicDocumentRow) {
     if (!canCreateSignedUrls) {
-      setActionError('Signed URLs indisponiveis no plano deste tenant.');
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.signedUrlsUnavailable);
       return;
     }
     setBusyAction(`download-${document.id}`);
@@ -2394,6 +2531,10 @@ export default function ClinicDocumentsContent() {
   }
 
   function openTemplateEditor(template: ClinicDocumentTemplate) {
+    if (!documentPermissions.templateManage) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingTemplateManage);
+      return;
+    }
     setEditingTemplate(template);
     setTemplateEditorForm(templateToForm(template));
     setActionError(null);
@@ -2416,6 +2557,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleSaveTemplate() {
+    if (!documentPermissions.templateManage) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingTemplateManage);
+      return;
+    }
     const payload = getTemplatePayload();
     setBusyAction('template-save');
     setActionError(null);
@@ -2437,6 +2582,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleArchiveTemplate(template: ClinicDocumentTemplate) {
+    if (!documentPermissions.templateManage) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingTemplateManage);
+      return;
+    }
     const archived = template.status !== 'archived';
     setBusyAction(`archive-${template.id}`);
     setActionError(null);
@@ -2454,6 +2603,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handlePublishTemplate(template: ClinicDocumentTemplate) {
+    if (!documentPermissions.templateManage) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingTemplateManage);
+      return;
+    }
     setBusyAction(`publish-${template.id}`);
     setActionError(null);
     setActionMessage(null);
@@ -2470,6 +2623,10 @@ export default function ClinicDocumentsContent() {
   }
 
   async function handleDuplicateTemplate(template: ClinicDocumentTemplate) {
+    if (!documentPermissions.templateManage) {
+      setActionError(DOCUMENT_PERMISSION_MESSAGES.missingTemplateManage);
+      return;
+    }
     setBusyAction(`duplicate-${template.id}`);
     setActionError(null);
     setActionMessage(null);
@@ -2485,7 +2642,7 @@ export default function ClinicDocumentsContent() {
     await loadWorkspace();
   }
 
-  if (loading) {
+  if (!sessionLoaded || loading) {
     return (
       <div className="space-y-6 p-4 lg:p-6">
         <section className="rounded-lg border border-border bg-card p-5 lg:p-6">
@@ -2523,6 +2680,22 @@ export default function ClinicDocumentsContent() {
             </div>
           </div>
         </section>
+      </div>
+    );
+  }
+
+  if (!documentPermissions.read) {
+    return (
+      <div className="space-y-6 p-4 lg:p-6">
+        <section className="rounded-lg border border-border bg-card p-5 lg:p-6">
+          <h1 className="text-2xl font-bold text-foreground">Documentos da Clinica</h1>
+        </section>
+        <DataState
+          kind="forbidden"
+          title="Acesso documental bloqueado"
+          description={`${DOCUMENT_PERMISSION_MESSAGES.missingRead} As RPCs e Edge Functions seguem validando permissoes server-side; solicite ajuste de perfil ao administrador da clinica.`}
+          className="min-h-64"
+        />
       </div>
     );
   }
@@ -2566,16 +2739,34 @@ export default function ClinicDocumentsContent() {
             <button
               type="button"
               onClick={() => {
+                if (!documentPermissions.templateManage) {
+                  setActionError(DOCUMENT_PERMISSION_MESSAGES.missingTemplateManage);
+                  return;
+                }
                 setEditingTemplate(null);
                 setTemplateEditorForm(templateToForm());
                 setTemplateEditorOpen(true);
               }}
-              className="btn-secondary text-xs"
+              disabled={!documentPermissions.templateManage}
+              title={
+                documentPermissions.templateManage
+                  ? undefined
+                  : DOCUMENT_PERMISSION_MESSAGES.missingTemplateManage
+              }
+              className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
             >
               <LayoutTemplate size={14} aria-hidden="true" />
               Novo template
             </button>
-            <button type="button" onClick={() => openWizard()} className="btn-primary text-xs">
+            <button
+              type="button"
+              onClick={() => openWizard()}
+              disabled={!documentPermissions.write}
+              title={
+                documentPermissions.write ? undefined : DOCUMENT_PERMISSION_MESSAGES.missingWrite
+              }
+              className="btn-primary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+            >
               <FilePlus2 size={14} aria-hidden="true" />
               Novo documento
             </button>
@@ -2649,6 +2840,7 @@ export default function ClinicDocumentsContent() {
             onEditTemplate={openTemplateEditor}
             onArchiveTemplate={(template) => void handleArchiveTemplate(template)}
             onPublishTemplate={(template) => void handlePublishTemplate(template)}
+            canManageTemplates={documentPermissions.templateManage}
           />
 
           <section className="rounded-lg border border-border bg-card p-4">
@@ -2923,6 +3115,8 @@ export default function ClinicDocumentsContent() {
                             onUpdateSignatureStatus={(doc) => void handleUpdateSignatureStatus(doc)}
                             canCreateSignedUrls={canCreateSignedUrls}
                             canRequestD4Sign={canRequestD4Sign}
+                            canRelease={documentPermissions.release}
+                            canSign={documentPermissions.sign}
                           />
                         </td>
                       </tr>
@@ -2959,6 +3153,8 @@ export default function ClinicDocumentsContent() {
                         onUpdateSignatureStatus={(doc) => void handleUpdateSignatureStatus(doc)}
                         canCreateSignedUrls={canCreateSignedUrls}
                         canRequestD4Sign={canRequestD4Sign}
+                        canRelease={documentPermissions.release}
+                        canSign={documentPermissions.sign}
                       />
                     </div>
                   </article>
@@ -3000,6 +3196,7 @@ export default function ClinicDocumentsContent() {
         busyAction={busyAction}
         onAcknowledge={(event) => void handleAcknowledgeD4SignEvent(event)}
         onReprocess={(event) => void handleReprocessD4SignEvent(event)}
+        canSign={documentPermissions.sign}
       />
 
       <DocumentWizard
@@ -3032,6 +3229,9 @@ export default function ClinicDocumentsContent() {
         onBackToList={handleBackToFilteredDocumentList}
         canRequestD4Sign={canRequestD4Sign}
         canCreateSignedUrls={canCreateSignedUrls}
+        canWrite={documentPermissions.write}
+        canRelease={documentPermissions.release}
+        canSign={documentPermissions.sign}
       />
 
       {templateEditorOpen ? (
@@ -3070,6 +3270,8 @@ export default function ClinicDocumentsContent() {
           onUpdateSignatureStatus={(document) => void handleUpdateSignatureStatus(document)}
           canCreateSignedUrls={canCreateSignedUrls}
           canRequestD4Sign={canRequestD4Sign}
+          canRelease={documentPermissions.release}
+          canSign={documentPermissions.sign}
         />
       ) : null}
     </div>

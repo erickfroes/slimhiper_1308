@@ -4,6 +4,10 @@ import {
   getCurrentAppSession,
 } from '@/services/session/getCurrentAppSession';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
+import {
+  DOCUMENT_PERMISSION_REQUIREMENTS,
+  getDocumentPermissionAccess,
+} from '@/services/session/permissions';
 import { createClient } from '@/lib/supabase/server';
 import {
   createObservabilityContext,
@@ -41,6 +45,7 @@ export async function GET(request: Request) {
   const canAccessClinicWorkspace = session.canAccessClinicWorkspace();
   const canAccessPatientPortal = session.canAccessPatientPortal();
   const targetRoute = getAppSessionTargetRoute(session);
+  const documentPermissions = getDocumentPermissionAccess(session.permissions);
 
   logObservedEvent(context, 'auth_session_resolved', 'info', 'success', {
     auth_state: 'authenticated',
@@ -55,6 +60,8 @@ export async function GET(request: Request) {
       authenticated: true,
       platformRole: session.platformRole,
       permissions: session.permissions,
+      documentPermissions,
+      documentPermissionRequirements: DOCUMENT_PERMISSION_REQUIREMENTS,
       featureFlags: session.featureFlags,
       planEntitlements: session.planEntitlements,
       canAccessPlatformAdmin,
