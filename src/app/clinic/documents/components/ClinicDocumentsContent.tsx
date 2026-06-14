@@ -30,6 +30,7 @@ import {
   UploadCloud,
   Unlock,
 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import {
   acknowledgeClinicD4SignEventFailure,
   archiveClinicDocumentTemplate,
@@ -56,6 +57,7 @@ import {
   type ClinicDocumentsWorkspace,
   type ClinicDocumentsWorkspaceFilters,
 } from '@/services/clinicDocumentsApi';
+import { getDocumentCategoryLabel } from '@/services/documentPresentation';
 import { getPatientDocumentEvidence, type DocumentEvidenceResult } from '@/services/documentsApi';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
 import DataState from '@/components/ui/DataState';
@@ -278,19 +280,7 @@ function MetricCard({
 
 function categoryLabel(category: ClinicDocumentCategory | string) {
   if (typeof category !== 'string') return category.label;
-  const labels: Record<string, string> = {
-    consent: 'Consentimento',
-    consentimento: 'Consentimento',
-    contract: 'Contrato',
-    contrato: 'Contrato',
-    termo: 'Termo',
-    orientacao: 'Orientacao',
-    orientation: 'Orientacao',
-    prescricao: 'Prescricao',
-    prescription: 'Prescricao',
-    outros: 'Outros',
-  };
-  return labels[category] ?? category.replace(/_/g, ' ');
+  return getDocumentCategoryLabel(category);
 }
 
 function TemplateLibrary({
@@ -2109,13 +2099,19 @@ export default function ClinicDocumentsContent() {
 
   useEffect(() => {
     if (!workspace) return;
-    setSelectedPatientId((current) => current || workspace.patients[0]?.id || '');
+    const requestedPatientId = searchParams.get('patientId');
+    const hasRequestedPatient = workspace.patients.some(
+      (patient) => patient.id === requestedPatientId
+    );
+    setSelectedPatientId((current) =>
+      hasRequestedPatient ? requestedPatientId! : current || workspace.patients[0]?.id || ''
+    );
     setSelectedTemplateId((current) =>
       activeTemplates.some((template) => template.id === current)
         ? current
         : activeTemplates[0]?.id || ''
     );
-  }, [activeTemplates, workspace]);
+  }, [activeTemplates, searchParams, workspace]);
 
   useEffect(() => {
     const allowed = selectedTemplate?.allowedVariables ?? [];
@@ -2127,6 +2123,20 @@ export default function ClinicDocumentsContent() {
         >
     );
   }, [selectedTemplate]);
+
+  useEffect(() => {
+    if (!workspace) return;
+    if (searchParams.get('newDocument') !== '1') return;
+    const requestedPatientId = searchParams.get('patientId');
+    if (!requestedPatientId) return;
+    if (!workspace.patients.some((patient) => patient.id === requestedPatientId)) return;
+    setSelectedPatientId(requestedPatientId);
+    setWizardGeneratedDocumentId(null);
+    setActionError(null);
+    setActionMessage(null);
+    setWizardStep(1);
+    setWizardOpen(true);
+  }, [searchParams, workspace]);
 
   function openWizard(template?: ClinicDocumentTemplate) {
     setWizardGeneratedDocumentId(null);
