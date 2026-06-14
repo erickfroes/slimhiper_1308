@@ -49,6 +49,7 @@ import {
   validateTemplateVariables,
   type ClinicDocumentsWorkspace,
 } from '@/services/clinicDocumentsApi';
+import { getPatientDocumentEvidence, type DocumentEvidenceResult } from '@/services/documentsApi';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
 import DataState from '@/components/ui/DataState';
 import Dialog from '@/components/ui/Dialog';
@@ -504,7 +505,7 @@ function DocumentActions({
         className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
       >
         <PenSquare size={13} aria-hidden="true" />
-        Assinar
+        {documentSignatureActionLabel(document)}
       </button>
     </div>
   );
@@ -746,9 +747,70 @@ function SignatureRequestDialog({
   );
 }
 
-function DocumentDrawer({
+function documentSignatureActionLabel(document: ClinicDocumentRow) {
+  return ['falhou', 'recusado', 'expirado'].includes(document.signatureStatus)
+    ? 'Reenviar assinatura'
+    : 'Enviar assinatura';
+}
+
+function DetailField({ label, value }: { label: string; value?: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm text-foreground">{value || '-'}</dd>
+    </div>
+  );
+}
+
+function EvidenceSummary({ evidence }: { evidence: DocumentEvidenceResult }) {
+  const entries = Object.entries(evidence.summary ?? {});
+  return (
+    <div className="space-y-3">
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <DetailField
+          label="Pacote de evidencias"
+          value={evidence.hasPackage ? 'Disponivel' : 'Nao disponivel'}
+        />
+        <DetailField label="Status da evidencia" value={evidence.status} />
+        <DetailField label="Criada em" value={evidence.createdAt || '-'} />
+        <DetailField label="Documento" value={evidence.documentName || evidence.documentId} />
+      </dl>
+      {entries.length === 0 ? (
+        <DataState
+          kind="empty"
+          title="Resumo de evidencias vazio"
+          description="A consulta foi permitida, mas nao retornou detalhes auditaveis adicionais."
+          className="min-h-32"
+        />
+      ) : (
+        <div className="rounded-lg border border-border bg-muted/30 p-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Resumo tecnico
+          </h4>
+          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+            {entries.map(([key, value]) => (
+              <div key={key} className="rounded bg-card px-2 py-1.5">
+                <dt className="font-medium text-muted-foreground">{key}</dt>
+                <dd className="mt-1 break-words text-foreground">
+                  {typeof value === 'string' ||
+                  typeof value === 'number' ||
+                  typeof value === 'boolean'
+                    ? String(value)
+                    : JSON.stringify(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocumentDetailDialog({
   document,
   auditEvents,
+  templates,
   busyAction,
   onClose,
   onDownload,
@@ -759,6 +821,7 @@ function DocumentDrawer({
 }: {
   document: ClinicDocumentRow;
   auditEvents: ClinicDocumentAuditEvent[];
+  templates: ClinicDocumentTemplate[];
   busyAction: string | null;
   onClose: () => void;
   onDownload: (document: ClinicDocumentRow) => void;
@@ -767,83 +830,201 @@ function DocumentDrawer({
   canCreateSignedUrls: boolean;
   canRequestD4Sign: boolean;
 }) {
+  const [evidence, setEvidence] = useState<DocumentEvidenceResult | null>(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const auditSectionId = `document-audit-${document.id}`;
   const relatedAudit = auditEvents.filter(
     (event) => event.documentId === document.id || event.templateId === document.templateId
   );
+  const template = templates.find((item) => item.id === document.templateId);
+
+  const loadEvidence = useCallback(async () => {
+    setEvidenceLoading(true);
+    setEvidenceError(null);
+    const result = await getPatientDocumentEvidence(document.id, document.patientId);
+    setEvidence(result.data);
+    setEvidenceError(result.error?.message ?? null);
+    setEvidenceLoading(false);
+  }, [document.id, document.patientId]);
+
+  useEffect(() => {
+    setEvidence(null);
+    void loadEvidence();
+  }, [loadEvidence]);
+
+  const canRequestSignatureNow = canRequestD4Sign && document.canRequestSignature;
 
   return (
     <Dialog
       open
-      title={document.name}
-      description={`Codigo ${document.displayCode}`}
+      title="Detalhes do documento"
+      description={`${document.name} · Codigo ${document.displayCode}`}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
       placement="right"
       mobileFullscreen
       footer={
-        <DocumentActions
-          document={document}
-          busyAction={busyAction}
-          compact
-          showDetails={false}
-          onDetails={() => undefined}
-          onDownload={onDownload}
-          onSetRelease={onSetRelease}
-          onSignature={onSignature}
-          canCreateSignedUrls={canCreateSignedUrls}
-          canRequestD4Sign={canRequestD4Sign}
-        />
+        <div className="flex flex-col gap-2">
+          <DocumentActions
+            document={document}
+            busyAction={busyAction}
+            compact
+            showDetails={false}
+            onDetails={() => undefined}
+            onDownload={onDownload}
+            onSetRelease={onSetRelease}
+            onSignature={onSignature}
+            canCreateSignedUrls={canCreateSignedUrls}
+            canRequestD4Sign={canRequestD4Sign}
+          />
+          <button
+            type="button"
+            onClick={() =>
+              globalThis.document
+                .getElementById(auditSectionId)
+                ?.scrollIntoView({ behavior: 'smooth' })
+            }
+            className="btn-secondary justify-center text-xs"
+          >
+            <Activity size={13} aria-hidden="true" />
+            Visualizar auditoria
+          </button>
+        </div>
       }
     >
       <div className="space-y-5">
-        <div className="flex flex-wrap gap-2">
-          <DocumentStatusPill document={document} />
-          <SignaturePill document={document} />
-          <ReleasePill released={document.releasedToPatient} />
-        </div>
-
-        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Paciente</dt>
-            <dd className="mt-1 text-foreground">{document.patientName}</dd>
+        <section className="space-y-3 rounded-lg border border-border p-4">
+          <div className="flex flex-wrap gap-2">
+            <DocumentStatusPill document={document} />
+            <SignaturePill document={document} />
+            <ReleasePill released={document.releasedToPatient} />
           </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Categoria</dt>
-            <dd className="mt-1 text-foreground">{categoryLabel(document.category)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Template</dt>
-            <dd className="mt-1 text-foreground">{document.templateName ?? '-'}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Atualizado</dt>
-            <dd className="mt-1 text-foreground">{document.updatedAt}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Gerado em</dt>
-            <dd className="mt-1 text-foreground">{document.generatedAt}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium text-muted-foreground">Assinatura digital</dt>
-            <dd className="mt-1 text-foreground">
-              {document.signatureEnabled ? 'Habilitada' : 'Nao habilitada'}
-            </dd>
-          </div>
-        </dl>
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <DetailField
+              label="Identificacao"
+              value={`${document.displayCode || document.id} · ${document.name}`}
+            />
+            <DetailField label="Paciente" value={document.patientName} />
+            <DetailField
+              label="Template e versao"
+              value={
+                document.templateName
+                  ? `${document.templateName} · v${template?.currentVersion ?? 'nao informada'}`
+                  : 'Sem template vinculado'
+              }
+            />
+            <DetailField label="Status interno" value={document.status} />
+            <DetailField
+              label="Status de assinatura"
+              value={
+                document.signatureStatus ||
+                (document.signatureEnabled ? 'disponivel' : 'sem assinatura')
+              }
+            />
+            <DetailField
+              label="Liberacao ao paciente"
+              value={
+                document.releasedToPatient
+                  ? 'Liberado ao portal do paciente/responsavel'
+                  : 'Oculto do portal do paciente/responsavel'
+              }
+            />
+            <DetailField label="Gerado em" value={document.generatedAt} />
+            <DetailField label="Atualizado em" value={document.updatedAt} />
+          </dl>
+        </section>
 
         <section className="rounded-lg border border-border p-4">
-          <h3 className="text-sm font-semibold text-foreground">Auditoria recente</h3>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Acoes contextuais</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Signed URL, liberacao ao paciente e assinatura respeitam permissoes e status atuais.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+            <p>
+              {canCreateSignedUrls ? 'Signed URL disponivel.' : 'Signed URL bloqueada pelo plano.'}
+            </p>
+            <p>
+              {canRequestSignatureNow
+                ? `${documentSignatureActionLabel(document)} permitido.`
+                : 'Assinatura indisponivel neste contexto.'}
+            </p>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-foreground">Evidencias sob demanda</h3>
+            <button
+              type="button"
+              onClick={() => void loadEvidence()}
+              className="btn-secondary text-xs"
+              disabled={evidenceLoading}
+            >
+              <RefreshCw
+                size={13}
+                className={evidenceLoading ? 'animate-spin' : undefined}
+                aria-hidden="true"
+              />
+              Recarregar
+            </button>
+          </div>
+          <div className="mt-3">
+            {evidenceLoading ? (
+              <DataState
+                kind="loading"
+                title="Carregando evidencias"
+                description="Buscando pacote auditavel do documento."
+                className="min-h-32"
+              />
+            ) : evidenceError ? (
+              <DataState
+                kind={
+                  /permiss|permission|forbidden|rls|acesso|unauthorized/i.test(evidenceError)
+                    ? 'forbidden'
+                    : 'error'
+                }
+                title="Nao foi possivel carregar evidencias"
+                description={evidenceError}
+                actionLabel="Tentar novamente"
+                onAction={() => void loadEvidence()}
+                className="min-h-32"
+              />
+            ) : evidence ? (
+              <EvidenceSummary evidence={evidence} />
+            ) : (
+              <DataState
+                kind="empty"
+                title="Sem evidencias"
+                description="Nenhuma evidencia foi retornada para este documento."
+                className="min-h-32"
+              />
+            )}
+          </div>
+        </section>
+
+        <section id={auditSectionId} className="rounded-lg border border-border p-4">
+          <h3 className="text-sm font-semibold text-foreground">Auditoria relacionada</h3>
           <div className="mt-3 space-y-2">
             {relatedAudit.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nenhum evento de auditoria recente para este documento.
-              </p>
+              <DataState
+                kind="empty"
+                title="Auditoria vazia"
+                description="Nenhum evento recente foi encontrado para este documento ou template."
+                className="min-h-32"
+              />
             ) : (
-              relatedAudit.slice(0, 8).map((event) => (
+              relatedAudit.slice(0, 12).map((event) => (
                 <div key={event.id} className="rounded-lg bg-muted/40 px-3 py-2">
                   <p className="text-sm font-medium text-foreground">{event.title}</p>
-                  <p className="text-xs text-muted-foreground">{event.createdAt}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {event.action} · {event.createdAt}
+                  </p>
                 </div>
               ))
             )}
@@ -1701,6 +1882,16 @@ export default function ClinicDocumentsContent() {
     [documentFilterId, workspace?.documents]
   );
 
+  useEffect(() => {
+    if (!selectedDocument || !workspace) return;
+    const refreshedDocument = workspace.documents.find(
+      (document) => document.id === selectedDocument.id
+    );
+    if (refreshedDocument && refreshedDocument !== selectedDocument) {
+      setSelectedDocument(refreshedDocument);
+    }
+  }, [selectedDocument, workspace]);
+
   const wizardGeneratedDocument = useMemo(
     () =>
       workspace?.documents.find((document) => document.id === wizardGeneratedDocumentId) ?? null,
@@ -2396,9 +2587,10 @@ export default function ClinicDocumentsContent() {
       ) : null}
 
       {selectedDocument ? (
-        <DocumentDrawer
+        <DocumentDetailDialog
           document={selectedDocument}
           auditEvents={workspace.auditEvents}
+          templates={workspace.templates}
           busyAction={busyAction}
           onClose={() => setSelectedDocument(null)}
           onDownload={(document) => void handleDownload(document)}
