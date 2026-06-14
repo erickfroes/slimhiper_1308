@@ -36,6 +36,7 @@ import {
   updateComplianceGapStatus,
   updateClinicMemberRole,
   updateClinicMemberProfessionalProfile,
+  updateClinicMemberPersonalProfile,
   updateClinicSettings,
   type AutoMessageTemplate,
   type ClinicChatServiceHour,
@@ -50,8 +51,10 @@ import {
   type ClinicUnitStatus,
   type ComplianceGap,
   type ComplianceGapStatus,
+  type ProfessionalAddress,
   type ProfessionalProfileInput,
   type ProfessionalType,
+  type TeamMemberPersonalProfileInput,
   type SaveAutoMessageTemplateInput,
   type SaveClinicUnitInput,
 } from '@/services/clinicSettingsApi';
@@ -157,6 +160,17 @@ const EMPTY_UNIT: SaveClinicUnitInput = {
   city: '',
   phone: '',
   isMain: false,
+};
+
+const EMPTY_PROFESSIONAL_ADDRESS: ProfessionalAddress = {
+  zipCode: '',
+  street: '',
+  number: '',
+  complement: '',
+  district: '',
+  city: '',
+  state: '',
+  country: 'Brasil',
 };
 
 const EMPTY_AUTO_TEMPLATE: SaveAutoMessageTemplateInput = {
@@ -679,6 +693,20 @@ function SectionEquipe({
     specialty: '',
   });
   const [professionalReason, setProfessionalReason] = useState('');
+  const [personalDraft, setPersonalDraft] = useState<TeamMemberPersonalProfileInput>({
+    phone: '',
+    avatarFile: null,
+    privateProfile: {
+      personalAddress: EMPTY_PROFESSIONAL_ADDRESS,
+      emergencyContact: '',
+      privateNotes: '',
+    },
+    professionalAddress: EMPTY_PROFESSIONAL_ADDRESS,
+    attendanceUnitIds: [],
+    signatureFooter: '',
+    publicProfile: { bio: '', displayPhone: '' },
+    reason: '',
+  });
   const [savingProfessionalId, setSavingProfessionalId] = useState<string | null>(null);
   const [professionalError, setProfessionalError] = useState<string | null>(null);
   const [professionalNotice, setProfessionalNotice] = useState<string | null>(null);
@@ -759,8 +787,56 @@ function SectionEquipe({
       specialty: profile?.specialty ?? '',
     });
     setProfessionalReason('');
+    setPersonalDraft({
+      phone: member.phone,
+      avatarFile: null,
+      privateProfile: member.privateProfile,
+      professionalAddress: profile?.professionalAddress ?? EMPTY_PROFESSIONAL_ADDRESS,
+      attendanceUnitIds: profile?.attendanceUnitIds ?? [],
+      signatureFooter: profile?.signatureFooter ?? '',
+      publicProfile: profile?.publicProfile ?? { bio: '', displayPhone: '' },
+      reason: '',
+    });
     setProfessionalError(null);
     setProfessionalNotice(null);
+  };
+
+  const updatePersonalAddress = (
+    scope: 'personal' | 'professional',
+    key: keyof ProfessionalAddress,
+    value: string
+  ) => {
+    setPersonalDraft((current) => {
+      if (scope === 'personal') {
+        return {
+          ...current,
+          privateProfile: {
+            ...current.privateProfile,
+            personalAddress: { ...current.privateProfile.personalAddress, [key]: value },
+          },
+        };
+      }
+      return {
+        ...current,
+        professionalAddress: { ...current.professionalAddress, [key]: value },
+      };
+    });
+  };
+
+  const savePersonalProfile = async (member: (typeof snapshot.team)[number]) => {
+    setSavingProfessionalId(member.id);
+    setProfessionalError(null);
+    setProfessionalNotice(null);
+    const result = await updateClinicMemberPersonalProfile(member, personalDraft);
+    if (result.error || !result.data) {
+      setProfessionalError(
+        result.error?.message ?? 'Nao foi possivel salvar dados pessoais/profissionais.'
+      );
+    } else {
+      onSnapshotUpdated(result.data);
+      setProfessionalNotice('Dados pessoais e identidade profissional atualizados com auditoria.');
+    }
+    setSavingProfessionalId(null);
   };
 
   const saveProfessionalProfile = async (member: (typeof snapshot.team)[number]) => {
@@ -1013,8 +1089,13 @@ function SectionEquipe({
             return (
               <div key={member.id} className="space-y-2">
                 <div className="flex items-center gap-3 rounded-xl border border-border bg-background p-3">
-                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                    {member.initials}
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-xs font-bold text-primary">
+                    {member.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={member.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      member.initials
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1154,6 +1235,201 @@ function SectionEquipe({
                         />
                       </label>
                     </div>
+                    <div className="mt-4 space-y-3 rounded-xl border border-border bg-background p-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">
+                          Dados pessoais privados
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Telefone, avatar e endereco pessoal ficam separados do RBAC e nao sao
+                          exibidos ao paciente por padrao.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                          Telefone
+                          <input
+                            value={personalDraft.phone}
+                            onChange={(event) =>
+                              setPersonalDraft((current) => ({
+                                ...current,
+                                phone: event.target.value,
+                              }))
+                            }
+                            className="input-base mt-1"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                          Avatar privado
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            onChange={(event) =>
+                              setPersonalDraft((current) => ({
+                                ...current,
+                                avatarFile: event.target.files?.[0] ?? null,
+                              }))
+                            }
+                            className="input-base mt-1"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                          Contato de emergencia
+                          <input
+                            value={personalDraft.privateProfile.emergencyContact}
+                            onChange={(event) =>
+                              setPersonalDraft((current) => ({
+                                ...current,
+                                privateProfile: {
+                                  ...current.privateProfile,
+                                  emergencyContact: event.target.value,
+                                },
+                              }))
+                            }
+                            className="input-base mt-1"
+                          />
+                        </label>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-4">
+                        <input
+                          value={personalDraft.privateProfile.personalAddress.zipCode}
+                          onChange={(event) =>
+                            updatePersonalAddress('personal', 'zipCode', event.target.value)
+                          }
+                          className="input-base text-xs"
+                          placeholder="CEP pessoal"
+                        />
+                        <input
+                          value={personalDraft.privateProfile.personalAddress.street}
+                          onChange={(event) =>
+                            updatePersonalAddress('personal', 'street', event.target.value)
+                          }
+                          className="input-base text-xs"
+                          placeholder="Logradouro"
+                        />
+                        <input
+                          value={personalDraft.privateProfile.personalAddress.number}
+                          onChange={(event) =>
+                            updatePersonalAddress('personal', 'number', event.target.value)
+                          }
+                          className="input-base text-xs"
+                          placeholder="Numero"
+                        />
+                        <input
+                          value={personalDraft.privateProfile.personalAddress.city}
+                          onChange={(event) =>
+                            updatePersonalAddress('personal', 'city', event.target.value)
+                          }
+                          className="input-base text-xs"
+                          placeholder="Cidade"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 space-y-3 rounded-xl border border-border bg-background p-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">
+                          Identidade profissional publica/controlada
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Dados usados por agenda, builder e rodape de prescricoes/documentos quando
+                          houver regra explicita.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <input
+                          value={personalDraft.professionalAddress.zipCode}
+                          onChange={(event) =>
+                            updatePersonalAddress('professional', 'zipCode', event.target.value)
+                          }
+                          className="input-base text-xs"
+                          placeholder="CEP profissional"
+                          disabled={!professionalDraft.enabled}
+                        />
+                        <input
+                          value={personalDraft.professionalAddress.street}
+                          onChange={(event) =>
+                            updatePersonalAddress('professional', 'street', event.target.value)
+                          }
+                          className="input-base text-xs"
+                          placeholder="Endereco profissional"
+                          disabled={!professionalDraft.enabled}
+                        />
+                        <input
+                          value={personalDraft.professionalAddress.city}
+                          onChange={(event) =>
+                            updatePersonalAddress('professional', 'city', event.target.value)
+                          }
+                          className="input-base text-xs"
+                          placeholder="Cidade/UF"
+                          disabled={!professionalDraft.enabled}
+                        />
+                        <input
+                          value={personalDraft.publicProfile.displayPhone}
+                          onChange={(event) =>
+                            setPersonalDraft((current) => ({
+                              ...current,
+                              publicProfile: {
+                                ...current.publicProfile,
+                                displayPhone: event.target.value,
+                              },
+                            }))
+                          }
+                          className="input-base text-xs"
+                          placeholder="Telefone exibivel"
+                          disabled={!professionalDraft.enabled}
+                        />
+                        <input
+                          value={personalDraft.signatureFooter}
+                          onChange={(event) =>
+                            setPersonalDraft((current) => ({
+                              ...current,
+                              signatureFooter: event.target.value,
+                            }))
+                          }
+                          className="input-base text-xs md:col-span-2"
+                          placeholder="Assinatura/rodape profissional"
+                          disabled={!professionalDraft.enabled}
+                        />
+                      </div>
+                      <textarea
+                        value={personalDraft.publicProfile.bio}
+                        onChange={(event) =>
+                          setPersonalDraft((current) => ({
+                            ...current,
+                            publicProfile: { ...current.publicProfile, bio: event.target.value },
+                          }))
+                        }
+                        className="input-base min-h-16 text-xs"
+                        placeholder="Bio profissional controlada"
+                        disabled={!professionalDraft.enabled}
+                      />
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {unitOptions.map((unit) => (
+                          <label
+                            key={unit.id}
+                            className="flex items-center gap-2 text-xs text-muted-foreground"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={personalDraft.attendanceUnitIds.includes(unit.id)}
+                              disabled={!professionalDraft.enabled}
+                              onChange={(event) =>
+                                setPersonalDraft((current) => ({
+                                  ...current,
+                                  attendanceUnitIds: event.target.checked
+                                    ? Array.from(new Set([...current.attendanceUnitIds, unit.id]))
+                                    : current.attendanceUnitIds.filter((id) => id !== unit.id),
+                                }))
+                              }
+                              className="h-4 w-4 rounded border-border text-primary"
+                            />
+                            {unit.name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
                     <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto]">
                       <input
                         value={professionalReason}
@@ -1168,6 +1444,19 @@ function SectionEquipe({
                         disabled={savingProfessionalId === member.id}
                       >
                         Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary py-1.5 text-xs"
+                        disabled={savingProfessionalId !== null}
+                        onClick={() => void savePersonalProfile(member)}
+                      >
+                        {savingProfessionalId === member.id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Save size={14} />
+                        )}
+                        Salvar dados
                       </button>
                       <button
                         type="button"
