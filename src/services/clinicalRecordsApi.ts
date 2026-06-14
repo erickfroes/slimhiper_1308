@@ -107,10 +107,13 @@ export interface BioimpedanceInput {
 export interface LabOrderInput {
   patientId: string;
   encounterId?: string | null;
+  appointmentId?: string | null;
+  sourceModule?: string | null;
   panelName: string;
   tests: string[];
   urgency?: string;
   note?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface LabResultInput {
@@ -821,6 +824,9 @@ export async function createLabOrder(
         tests: input.tests,
         urgency: input.urgency ?? 'routine',
         note: input.note ?? null,
+        appointmentId: input.appointmentId ?? null,
+        sourceModule: input.sourceModule ?? null,
+        metadata: input.metadata ?? {},
       },
     });
     if (error) throw error;

@@ -299,18 +299,18 @@ Implementacao P1 registrada:
 
 ### P1 - Exames, prescricoes e tarefas como acoes unificadas
 
-- [ ] Reaproveitar `createLabOrder` em uma interface fora do encounter:
+- [x] Reaproveitar `createLabOrder` em uma interface fora do encounter:
       Paciente 360 e/ou agenda/fila.
-- [ ] Habilitar criacao de prescricoes no encounter usando
+- [x] Habilitar criacao de prescricoes no encounter usando
       `savePatientPrescription` com `encounterId`.
-- [ ] Decidir se o editor completo de prescricoes sera modal compartilhado ou
+- [x] Decidir se o editor completo de prescricoes sera modal compartilhado ou
       deep-link para aba Prescricoes com contexto de encounter.
-- [ ] Criar fluxo de atribuicao de tarefa clinica com paciente, responsavel,
+- [x] Criar fluxo de atribuicao de tarefa clinica com paciente, responsavel,
       prioridade, vencimento, categoria, origem e status.
-- [ ] Criar acoes de concluir/reabrir tarefa com auditoria.
-- [ ] Mostrar tarefas criadas no resumo do Paciente 360, encounter e inbox quando
+- [x] Criar acoes de concluir/reabrir tarefa com auditoria.
+- [x] Mostrar tarefas criadas no resumo do Paciente 360, encounter e inbox quando
       aplicavel.
-- [ ] Registrar timeline para exame solicitado, prescricao emitida/atualizada e
+- [x] Registrar timeline para exame solicitado, prescricao emitida/atualizada e
       tarefa atribuida/concluida.
 
 Criterios de aceite:
@@ -319,6 +319,21 @@ Criterios de aceite:
 - Prescricao pode nascer do encounter e aparecer na aba Prescricoes.
 - Tarefa criada aparece imediatamente no Paciente 360 e respeita permissao.
 - Todas as acoes retornam erro visivel e nao caem em mock silencioso.
+
+Implementacao P1 registrada:
+
+- Migration `20260614200000_490_unified_clinical_actions.sql` adiciona origem,
+  categoria, prioridade, vinculos opcionais e status auditavel em
+  `patient_tasks`, alem de RPCs `upsert_patient_clinical_task()` e
+  `set_patient_clinical_task_status()` com `audit_logs` e timeline.
+- `create_patient_lab_order()` passa a aceitar `sourceModule` e
+  `appointmentId`, preservando exames avulsos fora do encounter com origem
+  auditavel.
+- `src/components/UnifiedClinicalActions.tsx` centraliza solicitacao de exames,
+  emissao simples de prescricoes e atribuicao de tarefas para uso compartilhado.
+- O encounter habilita botoes de prescricao e tarefa e usa o componente
+  compartilhado com `encounterId`; o Resumo do Paciente 360 expoe as mesmas
+  acoes sem mock silencioso.
 
 ### P1 - Dados pessoais de pacientes
 
@@ -415,10 +430,10 @@ Criterios de aceite:
 
 ### Contratos
 
-- [ ] Services frontend continuam retornando `{ data, error }`.
-- [ ] RPCs novas validam tenant, permissao e ownership.
-- [ ] Mutacoes escrevem `audit_logs` ou evento equivalente.
-- [ ] Read-models do Paciente 360 aceitam estados vazios.
+- [x] Services frontend continuam retornando `{ data, error }`.
+- [x] RPCs novas validam tenant, permissao e ownership.
+- [x] Mutacoes escrevem `audit_logs` ou evento equivalente.
+- [x] Read-models do Paciente 360 aceitam estados vazios.
 - [ ] Agenda nao depende de texto livre para sala/profissional quando IDs estao
       disponiveis.
 
