@@ -617,6 +617,27 @@ function DocumentDrawer({
   );
 }
 
+function getMissingRequiredVariables(
+  template: ClinicDocumentTemplate | null | undefined,
+  variables: Record<string, string>
+) {
+  return (template?.allowedVariables ?? []).filter((key) => !variables[key]?.trim());
+}
+
+function buildDocumentPreview(
+  template: ClinicDocumentTemplate | null | undefined,
+  variables: Record<string, string>
+) {
+  if (!template) return '';
+  return template.templateBody.replace(
+    /{{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*}}/g,
+    (_match, key: string) => {
+      if (key in PREVIEW_PROTECTED_VALUES) return PREVIEW_PROTECTED_VALUES[key];
+      return variables[key]?.trim() || `{{${key}}}`;
+    }
+  );
+}
+
 function WizardProgress({ step }: { step: WizardStep }) {
   return (
     <ol className="grid grid-cols-3 gap-2 text-xs sm:grid-cols-6">
@@ -635,6 +656,331 @@ function WizardProgress({ step }: { step: WizardStep }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+function DocumentPatientStep({
+  patients,
+  selectedPatientId,
+  onPatientChange,
+}: {
+  patients: ClinicDocumentsWorkspace['patients'];
+  selectedPatientId: string;
+  onPatientChange: (patientId: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-foreground">Selecione o paciente</h3>
+      <label className="block">
+        <span className="sr-only">Paciente</span>
+        <select
+          value={selectedPatientId}
+          onChange={(event) => onPatientChange(event.target.value)}
+          className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+        >
+          <option value="">Selecione</option>
+          {patients.map((patient) => (
+            <option key={patient.id} value={patient.id}>
+              {patient.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function DocumentCategoryStep({
+  categories,
+  activeTemplatesCount,
+  selectedCategoryId,
+  onCategoryChange,
+}: {
+  categories: ClinicDocumentCategory[];
+  activeTemplatesCount: number;
+  selectedCategoryId: string;
+  onCategoryChange: (categoryId: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-foreground">Escolha a categoria</h3>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => onCategoryChange('all')}
+          className={`rounded-lg border px-3 py-3 text-left text-sm ${
+            selectedCategoryId === 'all'
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-border text-foreground'
+          }`}
+        >
+          Todas categorias
+          <span className="mt-1 block text-xs text-muted-foreground">
+            {activeTemplatesCount} templates ativos
+          </span>
+        </button>
+        {categories.map((category) => (
+          <button
+            key={category.id}
+            type="button"
+            onClick={() => onCategoryChange(category.id)}
+            className={`rounded-lg border px-3 py-3 text-left text-sm ${
+              selectedCategoryId === category.id
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border text-foreground'
+            }`}
+          >
+            {category.label}
+            <span className="mt-1 block text-xs text-muted-foreground">
+              {category.activeTemplates} ativos
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DocumentTemplateStep({
+  templates,
+  selectedTemplateId,
+  onTemplateChange,
+}: {
+  templates: ClinicDocumentTemplate[];
+  selectedTemplateId: string;
+  onTemplateChange: (templateId: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-foreground">Selecione o template</h3>
+      {templates.length === 0 ? (
+        <DataState
+          kind="empty"
+          title="Nenhum template ativo"
+          description="Escolha outra categoria ou ative um template da biblioteca."
+          className="min-h-40"
+        />
+      ) : (
+        <div className="space-y-2">
+          {templates.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              onClick={() => onTemplateChange(template.id)}
+              className={`w-full rounded-lg border px-3 py-3 text-left ${
+                selectedTemplateId === template.id
+                  ? 'border-primary bg-primary/10'
+                  : 'border-border'
+              }`}
+            >
+              <span className="text-sm font-semibold text-foreground">{template.name}</span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {categoryLabel(template.category)} · v{template.currentVersion} ·{' '}
+                {template.signatureLabel}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocumentVariablesStep({
+  template,
+  variables,
+  missingRequiredVariables,
+  onVariableChange,
+}: {
+  template: ClinicDocumentTemplate | null | undefined;
+  variables: Record<string, string>;
+  missingRequiredVariables: string[];
+  onVariableChange: (key: string, value: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-foreground">Variaveis do template</h3>
+      {missingRequiredVariables.length ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Preencha os campos obrigatorios: {missingRequiredVariables.join(', ')}.
+        </div>
+      ) : null}
+      {template?.allowedVariables.length ? (
+        template.allowedVariables.map((key) => (
+          <label key={key} className="block text-xs font-medium text-muted-foreground">
+            {key} <span className="text-red-600">*</span>
+            <input
+              value={variables[key] ?? ''}
+              onChange={(event) => onVariableChange(key, event.target.value)}
+              required
+              className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              maxLength={160}
+            />
+          </label>
+        ))
+      ) : (
+        <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
+          Este template usa apenas variaveis protegidas preenchidas pelo sistema.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocumentReviewStep({
+  patientName,
+  template,
+  variables,
+  missingRequiredVariables,
+  preview,
+}: {
+  patientName: string;
+  template: ClinicDocumentTemplate | null | undefined;
+  variables: Record<string, string>;
+  missingRequiredVariables: string[];
+  preview: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-foreground">Revisao</h3>
+      {missingRequiredVariables.length ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          Complete os campos obrigatorios antes de gerar: {missingRequiredVariables.join(', ')}.
+        </div>
+      ) : null}
+      <dl className="grid gap-3 text-sm">
+        <div className="rounded-lg border border-border px-3 py-2">
+          <dt className="text-xs text-muted-foreground">Paciente</dt>
+          <dd className="mt-1 font-medium text-foreground">{patientName || '-'}</dd>
+        </div>
+        <div className="rounded-lg border border-border px-3 py-2">
+          <dt className="text-xs text-muted-foreground">Template</dt>
+          <dd className="mt-1 font-medium text-foreground">{template?.name ?? '-'}</dd>
+        </div>
+        <div className="rounded-lg border border-border px-3 py-2">
+          <dt className="text-xs text-muted-foreground">Variaveis livres</dt>
+          <dd className="mt-1 text-foreground">
+            {template?.allowedVariables.length
+              ? template.allowedVariables
+                  .map((key) => `${key}: ${variables[key] || '-'}`)
+                  .join(' | ')
+              : 'Sem variaveis livres'}
+          </dd>
+        </div>
+      </dl>
+      <section className="rounded-lg border border-border bg-muted/30 p-3">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Preview do documento
+        </h4>
+        <pre className="mt-2 max-h-80 whitespace-pre-wrap rounded-md bg-card p-3 text-sm text-foreground">
+          {preview || 'Selecione um template para montar o preview antes da geracao.'}
+        </pre>
+      </section>
+    </div>
+  );
+}
+
+function DocumentAccessStep({
+  document,
+  busyAction,
+  canCreateSignedUrls,
+  canRequestD4Sign,
+  onDownload,
+  onSetRelease,
+  onSignature,
+  onCopyIdentifier,
+  onBackToList,
+}: {
+  document: ClinicDocumentRow | null;
+  busyAction: string | null;
+  canCreateSignedUrls: boolean;
+  canRequestD4Sign: boolean;
+  onDownload: (document: ClinicDocumentRow) => void;
+  onSetRelease: (document: ClinicDocumentRow, released: boolean) => void;
+  onSignature: (document: ClinicDocumentRow) => void;
+  onCopyIdentifier: (document: ClinicDocumentRow) => void;
+  onBackToList: (document: ClinicDocumentRow) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        Documento gerado. Use as acoes imediatas abaixo para abrir, liberar ao portal, enviar para
+        assinatura ou voltar para a lista filtrada.
+      </div>
+      {document ? (
+        <div className="rounded-lg border border-border p-4">
+          <p className="text-sm font-semibold text-foreground">{document.name}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Codigo {document.displayCode} · {document.patientName}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <DocumentStatusPill document={document} />
+            <SignaturePill document={document} />
+            <ReleasePill released={document.releasedToPatient} />
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => onDownload(document)}
+              disabled={!canCreateSignedUrls || busyAction === `download-${document.id}`}
+              className="btn-secondary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download size={16} aria-hidden="true" />
+              Abrir/download
+            </button>
+            <button
+              type="button"
+              onClick={() => onSetRelease(document, !document.releasedToPatient)}
+              disabled={busyAction === `release-${document.id}`}
+              className="btn-secondary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {document.releasedToPatient ? (
+                <Lock size={16} aria-hidden="true" />
+              ) : (
+                <Unlock size={16} aria-hidden="true" />
+              )}
+              {document.releasedToPatient ? 'Ocultar do portal' : 'Liberar ao portal'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSignature(document)}
+              disabled={
+                !canRequestD4Sign ||
+                !document.canRequestSignature ||
+                busyAction === `sign-${document.id}`
+              }
+              className="btn-secondary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Send size={16} aria-hidden="true" />
+              Enviar para assinatura
+            </button>
+            <button
+              type="button"
+              onClick={() => onCopyIdentifier(document)}
+              className="btn-secondary justify-center text-sm"
+            >
+              <Copy size={16} aria-hidden="true" />
+              Copiar identificador
+            </button>
+            <button
+              type="button"
+              onClick={() => onBackToList(document)}
+              className="btn-primary justify-center text-sm sm:col-span-2"
+            >
+              <FileSearch size={16} aria-hidden="true" />
+              Voltar a lista filtrada
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Atualize a lista caso o documento ainda nao apareca no workspace.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -657,7 +1003,11 @@ function DocumentWizard({
   onGenerate,
   onSetRelease,
   onSignature,
+  onDownload,
+  onCopyIdentifier,
+  onBackToList,
   canRequestD4Sign,
+  canCreateSignedUrls,
 }: {
   open: boolean;
   workspace: ClinicDocumentsWorkspace;
@@ -677,7 +1027,11 @@ function DocumentWizard({
   onGenerate: () => void;
   onSetRelease: (document: ClinicDocumentRow, released: boolean) => void;
   onSignature: (document: ClinicDocumentRow) => void;
+  onDownload: (document: ClinicDocumentRow) => void;
+  onCopyIdentifier: (document: ClinicDocumentRow) => void;
+  onBackToList: (document: ClinicDocumentRow) => void;
   canRequestD4Sign: boolean;
+  canCreateSignedUrls: boolean;
 }) {
   const activeTemplates = workspace.templates.filter((template) => template.status === 'active');
   const templatesByCategory = activeTemplates.filter(
@@ -685,13 +1039,17 @@ function DocumentWizard({
   );
   const selectedPatient = workspace.patients.find((patient) => patient.id === selectedPatientId);
   const selectedTemplate = activeTemplates.find((template) => template.id === selectedTemplateId);
+  const missingRequiredVariables = getMissingRequiredVariables(selectedTemplate, variables);
+  const preview = buildDocumentPreview(selectedTemplate, variables);
   const canGoNext =
     (step === 0 && Boolean(selectedPatientId)) ||
     (step === 1 && Boolean(selectedCategoryId)) ||
     (step === 2 && Boolean(selectedTemplateId)) ||
-    step === 3 ||
+    (step === 3 && missingRequiredVariables.length === 0) ||
     step === 4 ||
     step === 5;
+  const canGenerate =
+    Boolean(selectedPatientId && selectedTemplateId) && missingRequiredVariables.length === 0;
 
   function nextStep() {
     if (step < 5) onStepChange((step + 1) as WizardStep);
@@ -738,47 +1096,12 @@ function DocumentWizard({
               <button
                 type="button"
                 onClick={onGenerate}
-                disabled={!selectedPatientId || !selectedTemplateId || busyAction === 'generate'}
+                disabled={!canGenerate || busyAction === 'generate'}
                 className="btn-primary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <FilePlus2 size={16} aria-hidden="true" />
                 {busyAction === 'generate' ? 'Gerando...' : 'Gerar documento'}
               </button>
-            ) : null}
-            {step === 5 && generatedDocument ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSetRelease(generatedDocument, !generatedDocument.releasedToPatient)
-                  }
-                  disabled={busyAction === `release-${generatedDocument.id}`}
-                  className="btn-secondary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {generatedDocument.releasedToPatient ? (
-                    <Lock size={16} aria-hidden="true" />
-                  ) : (
-                    <Unlock size={16} aria-hidden="true" />
-                  )}
-                  {generatedDocument.releasedToPatient ? 'Ocultar' : 'Liberar'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSignature(generatedDocument)}
-                  disabled={
-                    !canRequestD4Sign ||
-                    !generatedDocument.canRequestSignature ||
-                    busyAction === `sign-${generatedDocument.id}`
-                  }
-                  title={
-                    canRequestD4Sign ? undefined : 'Envio D4Sign indisponivel no plano deste tenant'
-                  }
-                  className="btn-primary justify-center text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Send size={16} aria-hidden="true" />
-                  Assinar
-                </button>
-              </>
             ) : null}
           </div>
         </div>
@@ -786,177 +1109,57 @@ function DocumentWizard({
     >
       <div className="space-y-5">
         <WizardProgress step={step} />
-
         {step === 0 ? (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Selecione o paciente</h3>
-            <label className="block">
-              <span className="sr-only">Paciente</span>
-              <select
-                value={selectedPatientId}
-                onChange={(event) => onPatientChange(event.target.value)}
-                className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
-              >
-                <option value="">Selecione</option>
-                {workspace.patients.map((patient) => (
-                  <option key={patient.id} value={patient.id}>
-                    {patient.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <DocumentPatientStep
+            patients={workspace.patients}
+            selectedPatientId={selectedPatientId}
+            onPatientChange={onPatientChange}
+          />
         ) : null}
-
         {step === 1 ? (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Escolha a categoria</h3>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => onCategoryChange('all')}
-                className={`rounded-lg border px-3 py-3 text-left text-sm ${
-                  selectedCategoryId === 'all'
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border text-foreground'
-                }`}
-              >
-                Todas categorias
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {activeTemplates.length} templates ativos
-                </span>
-              </button>
-              {workspace.categories.map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  onClick={() => onCategoryChange(category.id)}
-                  className={`rounded-lg border px-3 py-3 text-left text-sm ${
-                    selectedCategoryId === category.id
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-foreground'
-                  }`}
-                >
-                  {category.label}
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {category.activeTemplates} ativos
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <DocumentCategoryStep
+            categories={workspace.categories}
+            activeTemplatesCount={activeTemplates.length}
+            selectedCategoryId={selectedCategoryId}
+            onCategoryChange={onCategoryChange}
+          />
         ) : null}
-
         {step === 2 ? (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Selecione o template</h3>
-            {templatesByCategory.length === 0 ? (
-              <DataState
-                kind="empty"
-                title="Nenhum template ativo"
-                description="Escolha outra categoria ou ative um template da biblioteca."
-                className="min-h-40"
-              />
-            ) : (
-              <div className="space-y-2">
-                {templatesByCategory.map((template) => (
-                  <button
-                    key={template.id}
-                    type="button"
-                    onClick={() => onTemplateChange(template.id)}
-                    className={`w-full rounded-lg border px-3 py-3 text-left ${
-                      selectedTemplateId === template.id
-                        ? 'border-primary bg-primary/10'
-                        : 'border-border'
-                    }`}
-                  >
-                    <span className="text-sm font-semibold text-foreground">{template.name}</span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {categoryLabel(template.category)} · v{template.currentVersion} ·{' '}
-                      {template.signatureLabel}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <DocumentTemplateStep
+            templates={templatesByCategory}
+            selectedTemplateId={selectedTemplateId}
+            onTemplateChange={onTemplateChange}
+          />
         ) : null}
-
         {step === 3 ? (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Variaveis do template</h3>
-            {selectedTemplate?.allowedVariables.length ? (
-              selectedTemplate.allowedVariables.map((key) => (
-                <label key={key} className="block text-xs font-medium text-muted-foreground">
-                  {key}
-                  <input
-                    value={variables[key] ?? ''}
-                    onChange={(event) => onVariableChange(key, event.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
-                    maxLength={160}
-                  />
-                </label>
-              ))
-            ) : (
-              <div className="rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
-                Este template usa apenas variaveis protegidas preenchidas pelo sistema.
-              </div>
-            )}
-          </div>
+          <DocumentVariablesStep
+            template={selectedTemplate}
+            variables={variables}
+            missingRequiredVariables={missingRequiredVariables}
+            onVariableChange={onVariableChange}
+          />
         ) : null}
-
         {step === 4 ? (
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground">Revisao</h3>
-            <dl className="grid gap-3 text-sm">
-              <div className="rounded-lg border border-border px-3 py-2">
-                <dt className="text-xs text-muted-foreground">Paciente</dt>
-                <dd className="mt-1 font-medium text-foreground">{selectedPatient?.name ?? '-'}</dd>
-              </div>
-              <div className="rounded-lg border border-border px-3 py-2">
-                <dt className="text-xs text-muted-foreground">Template</dt>
-                <dd className="mt-1 font-medium text-foreground">
-                  {selectedTemplate?.name ?? '-'}
-                </dd>
-              </div>
-              <div className="rounded-lg border border-border px-3 py-2">
-                <dt className="text-xs text-muted-foreground">Variaveis livres</dt>
-                <dd className="mt-1 text-foreground">
-                  {selectedTemplate?.allowedVariables.length
-                    ? selectedTemplate.allowedVariables
-                        .map((key) => `${key}: ${variables[key] || '-'}`)
-                        .join(' | ')
-                    : 'Sem variaveis livres'}
-                </dd>
-              </div>
-            </dl>
-          </div>
+          <DocumentReviewStep
+            patientName={selectedPatient?.name ?? ''}
+            template={selectedTemplate}
+            variables={variables}
+            missingRequiredVariables={missingRequiredVariables}
+            preview={preview}
+          />
         ) : null}
-
         {step === 5 ? (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-              Documento gerado. Defina se ele sera liberado ao portal ou enviado para assinatura
-              digital.
-            </div>
-            {generatedDocument ? (
-              <div className="rounded-lg border border-border p-4">
-                <p className="text-sm font-semibold text-foreground">{generatedDocument.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Codigo {generatedDocument.displayCode} · {generatedDocument.patientName}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <DocumentStatusPill document={generatedDocument} />
-                  <SignaturePill document={generatedDocument} />
-                  <ReleasePill released={generatedDocument.releasedToPatient} />
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Atualize a lista caso o documento ainda nao apareca no workspace.
-              </p>
-            )}
-          </div>
+          <DocumentAccessStep
+            document={generatedDocument}
+            busyAction={busyAction}
+            canCreateSignedUrls={canCreateSignedUrls}
+            canRequestD4Sign={canRequestD4Sign}
+            onDownload={onDownload}
+            onSetRelease={onSetRelease}
+            onSignature={onSignature}
+            onCopyIdentifier={onCopyIdentifier}
+            onBackToList={onBackToList}
+          />
         ) : null}
       </div>
     </Dialog>
@@ -1178,6 +1381,7 @@ export default function ClinicDocumentsContent() {
   const [templateSearch, setTemplateSearch] = useState('');
   const [templateCategory, setTemplateCategory] = useState('all');
   const [templateStatus, setTemplateStatus] = useState('all');
+  const [documentFilterId, setDocumentFilterId] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<WizardStep>(0);
   const [selectedPatientId, setSelectedPatientId] = useState('');
@@ -1202,6 +1406,7 @@ export default function ClinicDocumentsContent() {
     setWorkspace(result.data);
     setError(result.error?.message ?? null);
     setLoading(false);
+    return result.data;
   }, []);
 
   useEffect(() => {
@@ -1248,6 +1453,14 @@ export default function ClinicDocumentsContent() {
   const selectedTemplate = useMemo(
     () => activeTemplates.find((template) => template.id === selectedTemplateId) ?? null,
     [activeTemplates, selectedTemplateId]
+  );
+
+  const filteredDocuments = useMemo(
+    () =>
+      documentFilterId
+        ? (workspace?.documents ?? []).filter((document) => document.id === documentFilterId)
+        : (workspace?.documents ?? []),
+    [documentFilterId, workspace?.documents]
   );
 
   const wizardGeneratedDocument = useMemo(
@@ -1299,6 +1512,12 @@ export default function ClinicDocumentsContent() {
     setBusyAction('generate');
     setActionError(null);
     setActionMessage(null);
+    const missingRequiredVariables = getMissingRequiredVariables(selectedTemplate, variables);
+    if (missingRequiredVariables.length > 0) {
+      setActionError(`Preencha os campos obrigatorios: ${missingRequiredVariables.join(', ')}.`);
+      return;
+    }
+
     const result = await generateClinicDocument(selectedPatientId, selectedTemplateId, variables);
     setBusyAction(null);
 
@@ -1307,10 +1526,19 @@ export default function ClinicDocumentsContent() {
       return;
     }
 
-    setWizardGeneratedDocumentId(result.data.generatedDocumentId);
+    const generatedDocumentId = result.data.generatedDocumentId;
+    const refreshedWorkspace = await loadWorkspace();
+    const refreshedDocument = refreshedWorkspace?.documents.find(
+      (document) => document.id === generatedDocumentId
+    );
+
+    setWizardGeneratedDocumentId(generatedDocumentId);
     setWizardStep(5);
-    setActionMessage('Documento gerado com sucesso.');
-    await loadWorkspace();
+    setActionMessage(
+      refreshedDocument
+        ? 'Documento gerado com sucesso.'
+        : 'Documento gerado; atualize caso ele ainda nao apareca na lista.'
+    );
   }
 
   async function handleSignature(document: ClinicDocumentRow) {
@@ -1381,6 +1609,24 @@ export default function ClinicDocumentsContent() {
 
     window.open(safeUrl, '_blank', 'noopener,noreferrer');
     setActionMessage('Link temporario gerado.');
+  }
+
+  async function handleCopyDocumentIdentifier(document: ClinicDocumentRow) {
+    const identifier = document.displayCode || document.id;
+    try {
+      await navigator.clipboard.writeText(identifier);
+      setActionError(null);
+      setActionMessage('Identificador copiado.');
+    } catch {
+      setActionError('Nao foi possivel copiar o identificador automaticamente.');
+    }
+  }
+
+  function handleBackToFilteredDocumentList(document: ClinicDocumentRow) {
+    setDocumentFilterId(document.id);
+    setWizardOpen(false);
+    setActionError(null);
+    setActionMessage(`Lista filtrada pelo documento ${document.displayCode}.`);
   }
 
   function openTemplateEditor(template: ClinicDocumentTemplate) {
@@ -1669,15 +1915,32 @@ export default function ClinicDocumentsContent() {
             </h2>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Filter size={14} aria-hidden="true" />
-              {workspace.documents.length} registros
+              {filteredDocuments.length} de {workspace.documents.length} registros
             </div>
           </div>
 
-          {workspace.documents.length === 0 ? (
+          {documentFilterId ? (
+            <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+              <span>Lista filtrada pelo documento criado.</span>
+              <button
+                type="button"
+                onClick={() => setDocumentFilterId(null)}
+                className="font-medium text-primary hover:underline"
+              >
+                Limpar filtro
+              </button>
+            </div>
+          ) : null}
+
+          {filteredDocuments.length === 0 ? (
             <DataState
               kind="empty"
               title="Nenhum documento gerado"
-              description="Use o wizard para gerar um documento por template."
+              description={
+                documentFilterId
+                  ? 'Limpe o filtro para ver todos os documentos emitidos.'
+                  : 'Use o wizard para gerar um documento por template.'
+              }
               className="min-h-64 border-0 bg-transparent"
             />
           ) : (
@@ -1703,7 +1966,7 @@ export default function ClinicDocumentsContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {workspace.documents.map((document) => (
+                    {filteredDocuments.map((document) => (
                       <tr key={document.id} className="border-t border-border hover:bg-muted/40">
                         <td className="px-4 py-3">
                           <p className="font-medium text-foreground">{document.name}</p>
@@ -1753,7 +2016,7 @@ export default function ClinicDocumentsContent() {
               </div>
 
               <div className="space-y-3 p-3 md:hidden">
-                {workspace.documents.map((document) => (
+                {filteredDocuments.map((document) => (
                   <article key={document.id} className="rounded-lg border border-border p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -1850,7 +2113,11 @@ export default function ClinicDocumentsContent() {
         onGenerate={() => void handleGenerateDocument()}
         onSetRelease={(document, released) => void handlePatientRelease(document, released)}
         onSignature={(document) => void handleSignature(document)}
+        onDownload={(document) => void handleDownload(document)}
+        onCopyIdentifier={(document) => void handleCopyDocumentIdentifier(document)}
+        onBackToList={handleBackToFilteredDocumentList}
         canRequestD4Sign={canRequestD4Sign}
+        canCreateSignedUrls={canCreateSignedUrls}
       />
 
       {templateEditorOpen ? (
