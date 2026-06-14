@@ -30,9 +30,12 @@ import type { ClinicProgram, PatientListRow, ProgramStatus } from '@/domain/type
 import {
   cloneProgram,
   enrollPatientInProgram,
+  formatProgramEnrollmentConflictMessage,
   getClinicPrograms,
+  getPatientProgramEnrollmentConflict,
   setProgramStatus,
   type ClinicProgramsSummary,
+  type ProgramEnrollmentConflict,
 } from '@/services/programsApi';
 import { getPatientListPage } from '@/services/patientsApi';
 import Dialog from '@/components/ui/Dialog';
@@ -439,6 +442,10 @@ export default function ProgramsContent() {
   const [enrollmentStartDate, setEnrollmentStartDate] = useState(todayIsoDate);
   const [enrollmentLoadingPatients, setEnrollmentLoadingPatients] = useState(false);
   const [enrollmentSubmitting, setEnrollmentSubmitting] = useState(false);
+  const [enrollmentCheckingConflict, setEnrollmentCheckingConflict] = useState(false);
+  const [enrollmentConflict, setEnrollmentConflict] = useState<ProgramEnrollmentConflict | null>(
+    null
+  );
   const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
   const [enrollmentResult, setEnrollmentResult] = useState<EnrollmentResult | null>(null);
 
@@ -482,6 +489,10 @@ export default function ProgramsContent() {
     () => (filter === 'todos' ? programs : programs.filter((program) => program.status === filter)),
     [filter, programs]
   );
+  const selectedEnrollmentPatient = useMemo(
+    () => enrollmentPatients.find((item) => item.id === enrollmentPatientId),
+    [enrollmentPatientId, enrollmentPatients]
+  );
 
   const runProgramAction = async (
     program: ClinicProgram,
@@ -504,6 +515,7 @@ export default function ProgramsContent() {
   const loadEnrollmentPatients = useCallback(async (search: string) => {
     setEnrollmentLoadingPatients(true);
     setEnrollmentError(null);
+    setEnrollmentConflict(null);
     const response = await getPatientListPage({ page: 1, pageSize: 25, search, status: 'ativo' });
     if (response.error) {
       setEnrollmentPatients([]);
@@ -517,20 +529,69 @@ export default function ProgramsContent() {
     setEnrollmentLoadingPatients(false);
   }, []);
 
+  useEffect(() => {
+    if (!enrollmentProgram || !enrollmentPatientId || !enrollmentStartDate) {
+      setEnrollmentCheckingConflict(false);
+      setEnrollmentConflict(null);
+      return;
+    }
+
+    let cancelled = false;
+    setEnrollmentCheckingConflict(true);
+    setEnrollmentConflict(null);
+
+    const checkEnrollmentConflict = async () => {
+      const response = await getPatientProgramEnrollmentConflict(
+        enrollmentPatientId,
+        enrollmentProgram.id,
+        enrollmentStartDate
+      );
+
+      if (cancelled) return;
+
+      if (response.error) {
+        setEnrollmentError(response.error.message);
+        setEnrollmentConflict(null);
+      } else {
+        setEnrollmentConflict(response.data);
+        setEnrollmentError(null);
+      }
+      setEnrollmentCheckingConflict(false);
+    };
+
+    void checkEnrollmentConflict();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enrollmentPatientId, enrollmentProgram, enrollmentStartDate]);
+
   const openEnrollment = (program: ClinicProgram) => {
     setEnrollmentProgram(program);
     setEnrollmentSearch('');
     setEnrollmentPatientId('');
     setEnrollmentStartDate(todayIsoDate());
+    setEnrollmentCheckingConflict(false);
+    setEnrollmentConflict(null);
     setEnrollmentResult(null);
     setEnrollmentError(null);
     void loadEnrollmentPatients('');
   };
 
   const submitEnrollment = async () => {
-    if (!enrollmentProgram || !enrollmentPatientId || enrollmentSubmitting) return;
+    if (
+      !enrollmentProgram ||
+      !enrollmentPatientId ||
+      enrollmentSubmitting ||
+      enrollmentCheckingConflict
+    ) {
+      return;
+    }
+    if (enrollmentConflict) {
+      setEnrollmentError(formatProgramEnrollmentConflictMessage(enrollmentConflict));
+      return;
+    }
 
-    const patient = enrollmentPatients.find((item) => item.id === enrollmentPatientId);
     setEnrollmentSubmitting(true);
     setEnrollmentError(null);
     const response = await enrollPatientInProgram(
@@ -543,12 +604,13 @@ export default function ProgramsContent() {
     } else {
       setEnrollmentResult({
         programName: enrollmentProgram.name,
-        patientName: patient?.name ?? 'Paciente selecionado',
+        patientName: selectedEnrollmentPatient?.name ?? 'Paciente selecionado',
         checkinsCreated: response.data?.checkinsCreated ?? 0,
         documentTasksCreated: response.data?.documentTasksCreated ?? 0,
         appointmentId: response.data?.appointmentId,
         invoiceId: response.data?.invoiceId,
       });
+      setEnrollmentPatientId('');
       await loadPrograms();
     }
     setEnrollmentSubmitting(false);
@@ -748,6 +810,18 @@ export default function ProgramsContent() {
                 />
               </label>
 
+              {enrollmentCheckingConflict && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                  Verificando matriculas vigentes neste programa...
+                </div>
+              )}
+
+              {enrollmentConflict && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {formatProgramEnrollmentConflictMessage(enrollmentConflict)}
+                </div>
+              )}
+
               {enrollmentError && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                   {enrollmentError}
@@ -782,7 +856,12 @@ export default function ProgramsContent() {
               <button
                 type="button"
                 onClick={() => void submitEnrollment()}
-                disabled={!enrollmentPatientId || enrollmentSubmitting}
+                disabled={
+                  !enrollmentPatientId ||
+                  enrollmentSubmitting ||
+                  enrollmentCheckingConflict ||
+                  Boolean(enrollmentConflict)
+                }
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {enrollmentSubmitting ? 'Matriculando...' : 'Confirmar matricula'}

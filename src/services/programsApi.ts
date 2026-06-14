@@ -47,6 +47,13 @@ export interface ProgramMutationResult {
   documentTasksCreated?: number;
 }
 
+export interface ProgramEnrollmentConflict {
+  id: string;
+  status: string;
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
 export const BUILDER_STEPS: BuilderStep[] = [
   { key: 'dados_gerais', label: 'Dados gerais', description: 'Nome, objetivo, duracao e tipo' },
   { key: 'fases', label: 'Fases', description: 'Estrutura de fases e cronograma' },
@@ -470,11 +477,50 @@ function normalizeSummary(item: unknown, programs: ClinicProgram[]): ClinicProgr
 
 function serviceError(error: unknown, fallback: string): SafeServiceError {
   const raw = asRecord(error);
+  const message = asString(raw.message, fallback);
+  const code = typeof raw.code === 'string' ? raw.code : undefined;
+  if (
+    message.includes('active_program_enrollment_conflict') ||
+    message.includes('patient_already_enrolled_in_program')
+  ) {
+    return {
+      message: formatProgramEnrollmentConflictMessage(),
+      code: code ?? 'active_program_enrollment_conflict',
+      details: typeof raw.details === 'string' ? raw.details : undefined,
+    };
+  }
+
   return {
-    message: asString(raw.message, fallback),
-    code: typeof raw.code === 'string' ? raw.code : undefined,
+    message,
+    code,
     details: typeof raw.details === 'string' ? raw.details : undefined,
   };
+}
+
+const BLOCKING_ENROLLMENT_STATUSES = ['ativo', 'pausado', 'aguardando'] as const;
+
+function normalizeIsoDate(value?: string) {
+  if (!value) return new Date().toISOString().slice(0, 10);
+  return value.slice(0, 10);
+}
+
+function hasBlockingDateOverlap(endDate: string | null | undefined, requestedStartDate: string) {
+  return !endDate || endDate >= requestedStartDate;
+}
+
+function formatIsoDateLabel(value?: string | null) {
+  if (!value) return null;
+  const [year, month, day] = value.split('-');
+  return year && month && day ? `${day}/${month}/${year}` : value;
+}
+
+export function formatProgramEnrollmentConflictMessage(
+  conflict?: ProgramEnrollmentConflict | null
+) {
+  const endDateLabel = formatIsoDateLabel(conflict?.endDate);
+  return endDateLabel
+    ? `Este paciente ja possui matricula vigente neste programa ate ${endDateLabel}. Finalize, cancele ou aguarde o periodo atual antes de matricular novamente.`
+    : 'Este paciente ja possui matricula vigente neste programa. Finalize, cancele ou aguarde o periodo atual antes de matricular novamente.';
 }
 
 export function createInitialProgramBuilderDraft(): ProgramBuilderDraft {
@@ -732,6 +778,62 @@ export async function cloneProgram(
   }
 }
 
+export async function getPatientProgramEnrollmentConflict(
+  patientId: string,
+  programId: string,
+  startDate?: string
+): Promise<{ data: ProgramEnrollmentConflict | null; error: SafeServiceError | null }> {
+  try {
+    if (!patientId.trim() || !programId.trim()) {
+      return { data: null, error: { message: 'Paciente e programa sao obrigatorios.' } };
+    }
+    if (startDate && Number.isNaN(Date.parse(startDate))) {
+      return { data: null, error: { message: 'Data de inicio invalida.' } };
+    }
+    if (isMockEnabled()) {
+      return { data: null, error: null };
+    }
+
+    const requestedStartDate = normalizeIsoDate(startDate);
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase
+      .from('patient_program_enrollments')
+      .select('id,status,start_date,end_date')
+      .eq('patient_id', patientId)
+      .eq('program_id', programId)
+      .in('status', [...BLOCKING_ENROLLMENT_STATUSES])
+      .order('end_date', { ascending: false });
+
+    if (error) {
+      return {
+        data: null,
+        error: serviceError(error, 'Falha ao verificar matriculas vigentes.'),
+      };
+    }
+
+    const conflict = (data ?? [])
+      .map(asRecord)
+      .find((row) => hasBlockingDateOverlap(asNullableString(row.end_date), requestedStartDate));
+
+    return conflict
+      ? {
+          data: {
+            id: asString(conflict.id),
+            status: asString(conflict.status, 'ativo'),
+            startDate: asNullableString(conflict.start_date),
+            endDate: asNullableString(conflict.end_date),
+          },
+          error: null,
+        }
+      : { data: null, error: null };
+  } catch (error) {
+    return {
+      data: null,
+      error: serviceError(error, 'Falha ao verificar matriculas vigentes.'),
+    };
+  }
+}
+
 export async function enrollPatientInProgram(
   patientId: string,
   programId: string,
@@ -753,6 +855,20 @@ export async function enrollPatientInProgram(
           documentTasksCreated: 0,
         },
         error: null,
+      };
+    }
+
+    const conflict = await getPatientProgramEnrollmentConflict(patientId, programId, startDate);
+    if (conflict.error) {
+      return { data: null, error: conflict.error };
+    }
+    if (conflict.data) {
+      return {
+        data: null,
+        error: {
+          message: formatProgramEnrollmentConflictMessage(conflict.data),
+          code: 'active_program_enrollment_conflict',
+        },
       };
     }
 
