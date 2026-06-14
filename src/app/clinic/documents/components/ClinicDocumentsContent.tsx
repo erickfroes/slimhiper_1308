@@ -57,6 +57,16 @@ import {
   type ClinicDocumentsWorkspace,
   type ClinicDocumentsWorkspaceFilters,
 } from '@/services/clinicDocumentsApi';
+import {
+  CLINIC_DOCUMENT_SIGNATURE_FILTER_OPTIONS,
+  CLINIC_DOCUMENT_SIGNATURE_STATUS_CLASSES,
+  CLINIC_DOCUMENT_SIGNATURE_STATUS_LABELS,
+  CLINIC_DOCUMENT_STATUS_CLASSES,
+  CLINIC_DOCUMENT_STATUS_FILTER_OPTIONS,
+  CLINIC_DOCUMENT_STATUS_LABELS,
+  type ClinicDocumentSignatureStatus,
+  type ClinicDocumentStatusKind,
+} from '@/domain/documentStatus';
 import { getDocumentCategoryLabel } from '@/services/documentPresentation';
 import { getPatientDocumentEvidence, type DocumentEvidenceResult } from '@/services/documentsApi';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
@@ -152,37 +162,22 @@ const wizardSteps = [
   'Acesso',
 ] as const;
 
-const statusConfig = {
-  draft: {
-    label: 'Rascunho',
-    icon: FileSearch,
-    classes: 'border-blue-200 bg-blue-50 text-blue-700',
-  },
-  available: {
-    label: 'Disponivel',
-    icon: CheckCircle2,
-    classes: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  },
-  pending_signature: {
-    label: 'Pendente assinatura',
-    icon: FileClock,
-    classes: 'border-amber-200 bg-amber-50 text-amber-700',
-  },
-  signed: {
-    label: 'Assinado',
-    icon: ShieldCheck,
-    classes: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  },
-  failed: {
-    label: 'Falha operacional',
-    icon: FileX,
-    classes: 'border-red-200 bg-red-50 text-red-700',
-  },
-  restricted: {
-    label: 'Restrito',
-    icon: Lock,
-    classes: 'border-slate-200 bg-slate-100 text-slate-700',
-  },
+const statusIcons: Record<ClinicDocumentStatusKind, React.ElementType> = {
+  draft: FileSearch,
+  available: CheckCircle2,
+  pending_signature: FileClock,
+  signed: ShieldCheck,
+  failed: FileX,
+  restricted: Lock,
+};
+
+const signatureStatusIcons: Record<ClinicDocumentSignatureStatus, React.ElementType> = {
+  assinado: ShieldCheck,
+  pendente: PenSquare,
+  nao_requerido: FileText,
+  recusado: AlertTriangle,
+  expirado: AlertTriangle,
+  falhou: AlertTriangle,
 };
 
 function Pill({
@@ -205,47 +200,26 @@ function Pill({
 }
 
 function DocumentStatusPill({ document }: { document: ClinicDocumentRow }) {
-  const config = statusConfig[document.statusKind] ?? statusConfig.available;
-  return <Pill icon={config.icon} label={config.label} classes={config.classes} />;
+  return (
+    <Pill
+      icon={statusIcons[document.statusKind] ?? CheckCircle2}
+      label={CLINIC_DOCUMENT_STATUS_LABELS[document.statusKind]}
+      classes={CLINIC_DOCUMENT_STATUS_CLASSES[document.statusKind]}
+    />
+  );
 }
 
 function SignaturePill({ document }: { document: ClinicDocumentRow }) {
-  if (document.signatureStatus === 'assinado') {
-    return (
-      <Pill
-        icon={ShieldCheck}
-        label="Assinado"
-        classes="border-emerald-200 bg-emerald-50 text-emerald-700"
-      />
-    );
-  }
-  if (document.signatureStatus === 'pendente') {
-    return (
-      <Pill
-        icon={PenSquare}
-        label="Assinatura pendente"
-        classes="border-amber-200 bg-amber-50 text-amber-700"
-      />
-    );
-  }
-  if (
-    document.signatureStatus === 'falhou' ||
-    document.signatureStatus === 'recusado' ||
-    document.signatureStatus === 'expirado'
-  ) {
-    return (
-      <Pill
-        icon={AlertTriangle}
-        label="Falha assinatura"
-        classes="border-red-200 bg-red-50 text-red-700"
-      />
-    );
-  }
+  const status = document.signatureStatus;
+  const label =
+    status === 'nao_requerido' && document.signatureEnabled
+      ? 'Assinatura disponível'
+      : CLINIC_DOCUMENT_SIGNATURE_STATUS_LABELS[status];
   return (
     <Pill
-      icon={FileText}
-      label={document.signatureEnabled ? 'Assinatura disponivel' : 'Sem assinatura'}
-      classes="border-slate-200 bg-slate-100 text-slate-700"
+      icon={signatureStatusIcons[status] ?? FileText}
+      label={label}
+      classes={CLINIC_DOCUMENT_SIGNATURE_STATUS_CLASSES[status]}
     />
   );
 }
@@ -860,18 +834,18 @@ function EvidenceSummary({ evidence }: { evidence: DocumentEvidenceResult }) {
     <div className="space-y-3">
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <DetailField
-          label="Pacote de evidencias"
-          value={evidence.hasPackage ? 'Disponivel' : 'Nao disponivel'}
+          label="Pacote de evidências"
+          value={evidence.hasPackage ? 'Disponível' : 'Não disponível'}
         />
-        <DetailField label="Status da evidencia" value={evidence.status} />
+        <DetailField label="Status da evidência" value={evidence.status} />
         <DetailField label="Criada em" value={evidence.createdAt || '-'} />
         <DetailField label="Documento" value={evidence.documentName || evidence.documentId} />
       </dl>
       {entries.length === 0 ? (
         <DataState
           kind="empty"
-          title="Resumo de evidencias vazio"
-          description="A consulta foi permitida, mas nao retornou detalhes auditaveis adicionais."
+          title="Resumo de evidências vazio"
+          description="A consulta foi permitida, mas não retornou detalhes auditáveis adicionais."
           className="min-h-32"
         />
       ) : (
@@ -2709,7 +2683,7 @@ export default function ClinicDocumentsContent() {
         <DataState
           kind="empty"
           title="Workspace documental vazio"
-          description="O contrato de documentos nao retornou dados para o tenant ativo."
+          description="O contrato de documentos não retornou dados para o tenant ativo."
           actionLabel="Tentar novamente"
           onAction={() => void loadWorkspace()}
         />
@@ -2783,7 +2757,7 @@ export default function ClinicDocumentsContent() {
         <MetricCard icon={FileText} label="Documentos" value={workspace.metrics.generated} />
         <MetricCard
           icon={Send}
-          label="Assinatura pendente"
+          label={CLINIC_DOCUMENT_STATUS_LABELS.pending_signature}
           value={workspace.metrics.pendingSignature}
         />
         <MetricCard icon={ShieldCheck} label="Assinados" value={workspace.metrics.signed} />
@@ -2910,11 +2884,11 @@ export default function ClinicDocumentsContent() {
                 className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
               >
                 <option value="all">Todos</option>
-                <option value="draft">Rascunho</option>
-                <option value="generated">Gerado</option>
-                <option value="sent_for_signature">Enviado para assinatura</option>
-                <option value="signed">Assinado</option>
-                <option value="failed">Falhou</option>
+                {CLINIC_DOCUMENT_STATUS_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="block text-xs font-medium text-muted-foreground">
@@ -2944,12 +2918,11 @@ export default function ClinicDocumentsContent() {
                 className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
               >
                 <option value="all">Todas</option>
-                <option value="pending">Pendente</option>
-                <option value="sent">Enviada</option>
-                <option value="viewed">Visualizada</option>
-                <option value="signed">Assinada</option>
-                <option value="failed">Falhou</option>
-                <option value="expired">Expirada</option>
+                {CLINIC_DOCUMENT_SIGNATURE_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="block text-xs font-medium text-muted-foreground">

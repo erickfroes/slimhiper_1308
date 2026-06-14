@@ -5,6 +5,14 @@ import {
   sendDocumentForSignature,
 } from '@/services/documentsApi';
 import {
+  DOCUMENT_FAILED_STATUSES,
+  DOCUMENT_SIGNATURE_PENDING_PROVIDER_STATUSES,
+  getClinicDocumentStatusKind,
+  normalizeProviderSignatureStatus,
+  type ClinicDocumentSignatureStatus,
+  type ClinicDocumentStatusKind,
+} from '@/domain/documentStatus';
+import {
   getDocumentCategoryLabel,
   normalizeDocumentCategory,
 } from '@/services/documentPresentation';
@@ -68,8 +76,8 @@ export interface ClinicDocumentRow {
   templateName: string | null;
   category: string;
   status: string;
-  statusKind: 'draft' | 'available' | 'pending_signature' | 'signed' | 'failed' | 'restricted';
-  signatureStatus: string;
+  statusKind: ClinicDocumentStatusKind;
+  signatureStatus: ClinicDocumentSignatureStatus;
   releasedToPatient: boolean;
   generatedAt: string;
   updatedAt: string;
@@ -282,10 +290,7 @@ export const PROTECTED_TEMPLATE_VARIABLES = new Set([
   'professional_name',
 ]);
 
-const SIGNATURE_PENDING_STATUSES = new Set(['pending', 'sent', 'viewed']);
 const TEMPLATE_VARIABLE_PATTERN = /{{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*}}/g;
-
-const DOCUMENT_FAILED_STATUSES = new Set(['failed', 'expired', 'cancelled', 'canceled']);
 
 function safeError(error: unknown, fallback: string): SafeServiceError {
   if (error && typeof error === 'object' && 'message' in error) {
@@ -336,31 +341,17 @@ function isSignatureEnabled(row: GeneratedDocumentRow) {
   return getDocumentTemplate(row)?.d4sign_enabled === true;
 }
 
-function mapSignatureStatus(row: GeneratedDocumentRow) {
+function mapSignatureStatus(row: GeneratedDocumentRow): ClinicDocumentSignatureStatus {
   const signature = row.signature_requests?.[0] ?? null;
-  if (!signature) return 'nao_requerido';
-  const status = String(signature.status ?? '').toLowerCase();
-  if (status === 'signed') return 'assinado';
-  if (status === 'rejected' || status === 'canceled' || status === 'cancelled') return 'recusado';
-  if (status === 'expired') return 'expirado';
-  if (status === 'failed' || status === 'error') return 'falhou';
-  return 'pendente';
+  return normalizeProviderSignatureStatus(signature?.status, Boolean(signature));
 }
 
 function getStatusKind(
   status: string,
-  signatureStatus: string,
+  signatureStatus: ClinicDocumentSignatureStatus,
   releasedToPatient: boolean
-): ClinicDocumentRow['statusKind'] {
-  const normalized = status.toLowerCase();
-  if (signatureStatus === 'assinado' || normalized === 'signed') return 'signed';
-  if (signatureStatus === 'pendente' || normalized === 'sent_for_signature') {
-    return 'pending_signature';
-  }
-  if (DOCUMENT_FAILED_STATUSES.has(normalized) || signatureStatus === 'falhou') return 'failed';
-  if (normalized === 'draft') return 'draft';
-  if (!releasedToPatient) return 'restricted';
-  return 'available';
+): ClinicDocumentStatusKind {
+  return getClinicDocumentStatusKind({ status, signatureStatus, releasedToPatient });
 }
 
 function canRequestSignature(row: GeneratedDocumentRow) {
@@ -376,7 +367,7 @@ function canRequestSignature(row: GeneratedDocumentRow) {
   ) {
     return false;
   }
-  if (signature && SIGNATURE_PENDING_STATUSES.has(signatureStatus)) return false;
+  if (signature && DOCUMENT_SIGNATURE_PENDING_PROVIDER_STATUSES.has(signatureStatus)) return false;
   return true;
 }
 
