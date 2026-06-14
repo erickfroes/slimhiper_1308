@@ -213,20 +213,20 @@ Implementacao P1 registrada:
 
 ### P1 - Agendamento comercial, financeiro e clinico
 
-- [ ] Estender formulario de agenda com profissional obrigatorio quando houver
+- [x] Estender formulario de agenda com profissional obrigatorio quando houver
       escala disponivel.
 - [x] Estender formulario com sala/recurso.
-- [ ] Estender formulario com programa, pacote ou servico do catalogo.
-- [ ] Permitir agendamento sem cobranca, com cobranca local pendente ou com
+- [x] Estender formulario com programa, pacote ou servico do catalogo.
+- [x] Permitir agendamento sem cobranca, com cobranca local pendente ou com
       pagamento manual local.
-- [ ] Gerar invoice local quando houver valor a cobrar, sem chamar Asaas por
+- [x] Gerar invoice local quando houver valor a cobrar, sem chamar Asaas por
       padrao.
-- [ ] Registrar pagamento manual local quando informado pela recepcao.
-- [ ] Vincular appointment ao enrollment/pacote/servico/invoice/payment via
+- [x] Registrar pagamento manual local quando informado pela recepcao.
+- [x] Vincular appointment ao enrollment/pacote/servico/invoice/payment via
       colunas dedicadas ou metadata documentada.
-- [ ] Refletir o contexto financeiro no Paciente 360 e em `/clinic/financeiro`.
-- [ ] Refletir o contexto do programa/pacote no encounter aberto pela agenda.
-- [ ] Refletir o evento na timeline do paciente.
+- [x] Refletir o contexto financeiro no Paciente 360 e em `/clinic/financeiro`.
+- [x] Refletir o contexto do programa/pacote no encounter aberto pela agenda.
+- [x] Refletir o evento na timeline do paciente.
 
 Criterios de aceite:
 
@@ -235,6 +235,27 @@ Criterios de aceite:
 - Um pagamento local registrado no agendamento impacta o resumo financeiro.
 - Falha financeira nao apaga a consulta; estado parcial fica visivel e
   auditavel.
+
+Implementacao P1 registrada:
+
+- Migration `20260614143000_470_agenda_commercial_financial_clinical_context.sql`
+  adiciona IDs comerciais/financeiros dedicados em `appointments`, metadata de
+  origem e status financeiro local (`not_required`, `pending_local_invoice`,
+  `manual_paid`, `failed`).
+- `create_agenda_appointment()` e `update_agenda_appointment()` passam a aceitar
+  `p_commercial_context` e `p_billing_context`, vinculam programa, pacote,
+  servico e enrollment, criam `patient_invoices` locais e registram pagamento
+  manual em `payments`/`patient_receipts` sem chamar Asaas.
+- Falhas financeiras ficam isoladas em bloco transacional interno: a consulta
+  permanece salva com `financial_status = 'failed'`, `financial_error`, timeline
+  e `audit_logs`.
+- `get_agenda_day_snapshot()` passa a devolver programa, pacote, servico,
+  invoice, payment e status financeiro para agenda/fila.
+- `src/services/agendaApi.ts` e `AgendaContent.tsx` enviam/normalizam o novo
+  contrato, carregam catalogo comercial, exigem profissional quando ha escala e
+  mostram contexto comercial/financeiro nos cards e drawer.
+- `src/services/encounterApi.ts` e o encounter SOAP carregam `appointmentId` da
+  URL e exibem o contexto da consulta vinculada para desktop e mobile.
 
 ### P1 - Triagem, medidas e bioimpedancia fora do encounter
 

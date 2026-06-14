@@ -3,7 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import DashboardShell from '@/components/DashboardShell';
-import { finalizeEncounterSoap, getEncounterContext, saveSoapDraft } from '@/services/encounterApi';
+import {
+  finalizeEncounterSoap,
+  getEncounterContext,
+  saveSoapDraft,
+  type EncounterAppointmentContext,
+} from '@/services/encounterApi';
 import {
   createBioimpedanceResult,
   createLabOrder,
@@ -108,6 +113,14 @@ function formatDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('pt-BR');
+}
+
+function formatMoneyFromCents(value?: number | null) {
+  if (!value) return '-';
+  return (value / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
 }
 
 function formatClinicalValue(value?: string | number | boolean | null, fallback = '-') {
@@ -289,6 +302,9 @@ export default function EncounterPage() {
   const appointmentId = searchParams.get('appointmentId');
 
   const [data, setData] = useState<Patient360Summary | null>(null);
+  const [appointmentContext, setAppointmentContext] = useState<EncounterAppointmentContext | null>(
+    null
+  );
   const [clinicalRecords, setClinicalRecords] = useState<ClinicalRecordsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -331,17 +347,19 @@ export default function EncounterPage() {
       setAutosaveStatus('idle');
       setAutosaveMessage(null);
 
-      const result = await getEncounterContext(patientId);
+      const result = await getEncounterContext(patientId, appointmentId);
       if (!isMounted) return;
 
       if (result.error || !result.data) {
         setData(null);
+        setAppointmentContext(null);
         setLoadError(result.error?.message ?? 'Nao foi possivel carregar o atendimento.');
         setLoading(false);
         return;
       }
 
       setData(result.data.summary);
+      setAppointmentContext(result.data.appointment);
       const recordsResult = await getPatientClinicalRecords(patientId);
       if (!isMounted) return;
 
@@ -373,7 +391,7 @@ export default function EncounterPage() {
       isMounted = false;
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [patientId]);
+  }, [appointmentId, patientId]);
 
   useEffect(() => {
     if (!hydratedSoapRef.current || loading || finalized) return;
@@ -708,6 +726,17 @@ export default function EncounterPage() {
       Math.round((activePackage.currentWeek / Math.max(activePackage.totalWeeks, 1)) * 100)
     )
   );
+  const appointmentFinancialStatusLabel: Record<string, string> = {
+    not_required: 'Sem cobranca',
+    pending_local_invoice: 'Cobranca pendente',
+    manual_paid: 'Pago local',
+    failed: 'Financeiro parcial',
+  };
+  const appointmentContextTitle =
+    appointmentContext?.serviceName ??
+    appointmentContext?.packageName ??
+    appointmentContext?.programName ??
+    null;
   const recentClinicalEvents = (data.recentTimeline ?? [])
     .filter(
       (event) =>
@@ -892,6 +921,48 @@ export default function EncounterPage() {
                 </div>
               )}
             </SectionCard>
+
+            {appointmentContext && (
+              <SectionCard title="Consulta da Agenda">
+                {appointmentContextTitle && (
+                  <p className="mb-3 text-sm font-semibold text-foreground">
+                    {appointmentContextTitle}
+                  </p>
+                )}
+                <div className="space-y-0">
+                  <MetricPill label="Data" value={formatDate(appointmentContext.scheduledAt)} />
+                  {appointmentContext.programName && (
+                    <MetricPill label="Programa" value={appointmentContext.programName} />
+                  )}
+                  {appointmentContext.packageName && (
+                    <MetricPill label="Pacote" value={appointmentContext.packageName} />
+                  )}
+                  {appointmentContext.serviceName && (
+                    <MetricPill label="Servico" value={appointmentContext.serviceName} />
+                  )}
+                  {appointmentContext.financialStatus && (
+                    <MetricPill
+                      label="Financeiro"
+                      value={
+                        appointmentFinancialStatusLabel[appointmentContext.financialStatus] ??
+                        appointmentContext.financialStatus
+                      }
+                    />
+                  )}
+                  {appointmentContext.financialAmountCents ? (
+                    <MetricPill
+                      label="Valor"
+                      value={formatMoneyFromCents(appointmentContext.financialAmountCents)}
+                    />
+                  ) : null}
+                </div>
+                {appointmentContext.financialError && (
+                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {appointmentContext.financialError}
+                  </div>
+                )}
+              </SectionCard>
+            )}
 
             {/* Active package */}
             <SectionCard title="Pacote Ativo">
@@ -1540,6 +1611,43 @@ export default function EncounterPage() {
                     </div>
                   )}
                 </SectionCard>
+
+                {appointmentContext && (
+                  <SectionCard title="Consulta da Agenda">
+                    {appointmentContextTitle && (
+                      <p className="mb-3 text-sm font-semibold text-foreground">
+                        {appointmentContextTitle}
+                      </p>
+                    )}
+                    <div className="space-y-0">
+                      <MetricPill label="Data" value={formatDate(appointmentContext.scheduledAt)} />
+                      {appointmentContext.programName && (
+                        <MetricPill label="Programa" value={appointmentContext.programName} />
+                      )}
+                      {appointmentContext.packageName && (
+                        <MetricPill label="Pacote" value={appointmentContext.packageName} />
+                      )}
+                      {appointmentContext.serviceName && (
+                        <MetricPill label="Servico" value={appointmentContext.serviceName} />
+                      )}
+                      {appointmentContext.financialStatus && (
+                        <MetricPill
+                          label="Financeiro"
+                          value={
+                            appointmentFinancialStatusLabel[appointmentContext.financialStatus] ??
+                            appointmentContext.financialStatus
+                          }
+                        />
+                      )}
+                      {appointmentContext.financialAmountCents ? (
+                        <MetricPill
+                          label="Valor"
+                          value={formatMoneyFromCents(appointmentContext.financialAmountCents)}
+                        />
+                      ) : null}
+                    </div>
+                  </SectionCard>
+                )}
 
                 <SectionCard title="Pacote Ativo">
                   <p className="text-sm font-semibold text-foreground mb-1">

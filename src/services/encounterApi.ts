@@ -19,6 +19,28 @@ export interface EncounterSoapState extends SoapFields {
 export interface EncounterContext {
   summary: Patient360Summary;
   soap: EncounterSoapState | null;
+  appointment: EncounterAppointmentContext | null;
+}
+
+export interface EncounterAppointmentContext {
+  id: string;
+  scheduledAt: string;
+  type: string;
+  status: string;
+  programId?: string | null;
+  programName?: string | null;
+  packageId?: string | null;
+  packageName?: string | null;
+  serviceId?: string | null;
+  serviceName?: string | null;
+  enrollmentId?: string | null;
+  invoiceId?: string | null;
+  paymentId?: string | null;
+  financialStatus?: string | null;
+  financialAmountCents?: number | null;
+  financialDueDate?: string | null;
+  financialPaymentMethod?: string | null;
+  financialError?: string | null;
 }
 
 export interface PersistSoapInput extends SoapFields {
@@ -48,6 +70,24 @@ type SoapRow = {
   objective: string | null;
   assessment: string | null;
   plan: string | null;
+};
+
+type AppointmentContextRow = {
+  id: string;
+  scheduled_at: string;
+  type: string | null;
+  status: string | null;
+  commercial_program_id: string | null;
+  commercial_package_id: string | null;
+  commercial_service_id: string | null;
+  commercial_enrollment_id: string | null;
+  financial_invoice_id: string | null;
+  financial_payment_id: string | null;
+  financial_status: string | null;
+  financial_amount_cents: number | null;
+  financial_due_date: string | null;
+  financial_payment_method: string | null;
+  financial_error: string | null;
 };
 
 function isMockEnabled(): boolean {
@@ -142,6 +182,96 @@ function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
+async function getAppointmentContext(
+  patientId: string,
+  appointmentId?: string | null
+): Promise<EncounterAppointmentContext | null> {
+  if (!appointmentId) return null;
+
+  const { supabase, tenantId } = await resolveTenantPatientContext(patientId);
+  const { data: row, error } = await supabase
+    .from('appointments')
+    .select(
+      [
+        'id',
+        'scheduled_at',
+        'type',
+        'status',
+        'commercial_program_id',
+        'commercial_package_id',
+        'commercial_service_id',
+        'commercial_enrollment_id',
+        'financial_invoice_id',
+        'financial_payment_id',
+        'financial_status',
+        'financial_amount_cents',
+        'financial_due_date',
+        'financial_payment_method',
+        'financial_error',
+      ].join(',')
+    )
+    .eq('tenant_id', tenantId)
+    .eq('patient_id', patientId)
+    .eq('id', appointmentId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!row) return null;
+
+  const appointment = row as unknown as AppointmentContextRow;
+  const [programResult, packageResult, serviceResult] = await Promise.all([
+    appointment.commercial_program_id
+      ? supabase
+          .from('programs')
+          .select('name')
+          .eq('tenant_id', tenantId)
+          .eq('id', appointment.commercial_program_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    appointment.commercial_package_id
+      ? supabase
+          .from('packages')
+          .select('name')
+          .eq('tenant_id', tenantId)
+          .eq('id', appointment.commercial_package_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    appointment.commercial_service_id
+      ? supabase
+          .from('services')
+          .select('name')
+          .eq('tenant_id', tenantId)
+          .eq('id', appointment.commercial_service_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (programResult.error) throw programResult.error;
+  if (packageResult.error) throw packageResult.error;
+  if (serviceResult.error) throw serviceResult.error;
+
+  return {
+    id: appointment.id,
+    scheduledAt: appointment.scheduled_at,
+    type: appointment.type ?? 'consulta_medica',
+    status: appointment.status ?? 'agendado',
+    programId: appointment.commercial_program_id,
+    programName: asString(programResult.data?.name) || null,
+    packageId: appointment.commercial_package_id,
+    packageName: asString(packageResult.data?.name) || null,
+    serviceId: appointment.commercial_service_id,
+    serviceName: asString(serviceResult.data?.name) || null,
+    enrollmentId: appointment.commercial_enrollment_id,
+    invoiceId: appointment.financial_invoice_id,
+    paymentId: appointment.financial_payment_id,
+    financialStatus: appointment.financial_status,
+    financialAmountCents: appointment.financial_amount_cents,
+    financialDueDate: appointment.financial_due_date,
+    financialPaymentMethod: appointment.financial_payment_method,
+    financialError: appointment.financial_error,
+  };
+}
+
 async function autosaveSoapDraft(input: PersistSoapInput): Promise<PersistSoapResult> {
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await supabase.rpc('autosave_encounter', {
@@ -173,7 +303,8 @@ async function autosaveSoapDraft(input: PersistSoapInput): Promise<PersistSoapRe
 }
 
 export async function getEncounterContext(
-  patientId: string
+  patientId: string,
+  appointmentId?: string | null
 ): Promise<{ data: EncounterContext | null; error: SafeServiceError | null }> {
   try {
     const summaryResult = await getPatient360Summary(patientId);
@@ -185,7 +316,7 @@ export async function getEncounterContext(
     }
 
     if (isMockEnabled()) {
-      return { data: { summary: summaryResult.data, soap: null }, error: null };
+      return { data: { summary: summaryResult.data, soap: null, appointment: null }, error: null };
     }
 
     const { supabase, tenantId } = await resolveTenantPatientContext(patientId);
@@ -219,7 +350,9 @@ export async function getEncounterContext(
       soap.encounterId = latestEncounter.id;
     }
 
-    return { data: { summary: summaryResult.data, soap }, error: null };
+    const appointment = await getAppointmentContext(patientId, appointmentId);
+
+    return { data: { summary: summaryResult.data, soap, appointment }, error: null };
   } catch (error) {
     return { data: null, error: safeError(error, 'Unable to load encounter context.') };
   }

@@ -311,6 +311,20 @@ export interface AppointmentSummary {
   roomCode?: string;
   unitId?: string;
   unitName?: string;
+  programId?: string;
+  programName?: string;
+  packageId?: string;
+  packageName?: string;
+  serviceId?: string;
+  serviceName?: string;
+  enrollmentId?: string;
+  invoiceId?: string;
+  paymentId?: string;
+  financialStatus?: 'not_required' | 'pending_local_invoice' | 'manual_paid' | 'failed';
+  financialAmountCents?: number;
+  financialDueDate?: string;
+  financialPaymentMethod?: string;
+  financialError?: string;
   notes?: string;
   attendanceLink?: string;
   attendanceQueueId?: string;
@@ -955,6 +969,15 @@ export interface WaitingQueueEntry {
   professionalName: string;
   roomId?: string;
   room?: string;
+  programId?: string;
+  programName?: string;
+  packageId?: string;
+  packageName?: string;
+  serviceId?: string;
+  serviceName?: string;
+  invoiceId?: string;
+  paymentId?: string;
+  financialStatus?: 'not_required' | 'pending_local_invoice' | 'manual_paid' | 'failed';
   encounterId?: string;
   attendanceLink?: string;
 }

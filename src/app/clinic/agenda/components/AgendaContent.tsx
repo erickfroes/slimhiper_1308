@@ -26,6 +26,8 @@ import {
   Ban,
   Building2,
   Save,
+  CreditCard,
+  ReceiptText,
 } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
 import PageHeader from '@/components/PageHeader';
@@ -41,6 +43,9 @@ import type {
   PatientListRow,
   PatientReturnSummary,
   WaitingQueueEntry,
+  CommercialPackage,
+  CommercialProgramOption,
+  CommercialService,
 } from '@/domain/types';
 import {
   callAttendanceQueue,
@@ -58,10 +63,13 @@ import {
   updateAppointmentStatus,
   type AgendaRoomStatus,
   type AgendaRoomType,
+  type AgendaBillingMode,
+  type AgendaManualPaymentMethod,
   type AgendaScheduleOptions,
   type AppointmentMutationInput,
   type ProfessionalDayAllocationStatus,
 } from '@/services/agendaApi';
+import { getClinicCommercialCatalog } from '@/services/commercialApi';
 import { getPatientList } from '@/services/patientsApi';
 
 // ─── WORKFLOW STAGES ──────────────────────────────────────────────────────────
@@ -214,6 +222,41 @@ const returnStatusLabel: Record<PatientReturnSummary['status'], string> = {
   cancelado: 'Cancelado',
 };
 
+const billingModeLabel: Record<AgendaBillingMode, string> = {
+  none: 'Sem cobranca',
+  local_invoice: 'Cobranca local pendente',
+  manual_paid: 'Pagamento manual local',
+};
+
+const manualPaymentMethodLabel: Record<AgendaManualPaymentMethod, string> = {
+  pix: 'Pix',
+  cartao_credito: 'Cartao credito',
+  cartao_debito: 'Cartao debito',
+  boleto: 'Boleto',
+  dinheiro: 'Dinheiro',
+  transferencia: 'Transferencia',
+};
+
+const appointmentFinancialStatusLabel: Record<
+  NonNullable<AppointmentSummary['financialStatus']>,
+  string
+> = {
+  not_required: 'Sem cobranca',
+  pending_local_invoice: 'Cobranca pendente',
+  manual_paid: 'Pago local',
+  failed: 'Financeiro parcial',
+};
+
+const appointmentFinancialStatusClass: Record<
+  NonNullable<AppointmentSummary['financialStatus']>,
+  string
+> = {
+  not_required: 'border-slate-200 bg-slate-50 text-slate-600',
+  pending_local_invoice: 'border-amber-200 bg-amber-50 text-amber-700',
+  manual_paid: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  failed: 'border-red-200 bg-red-50 text-red-700',
+};
+
 function isAgendaTab(value: string | null): value is AgendaTab {
   return value === 'agenda' || value === 'fila' || value === 'retornos';
 }
@@ -235,6 +278,29 @@ function formatDateTime(value?: string | null) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatMoneyFromCents(value?: number | null) {
+  const amount = (value ?? 0) / 100;
+  return amount.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+  });
+}
+
+function centsToCurrencyInput(value?: number | null) {
+  if (!value) return '';
+  return (value / 100).toFixed(2).replace('.', ',');
+}
+
+function parseCurrencyToCents(value: string) {
+  const normalized = value
+    .replace(/\./g, '')
+    .replace(',', '.')
+    .replace(/[^\d.]/g, '');
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? Math.max(0, Math.round(numeric * 100)) : 0;
 }
 
 function getWeekDates(selectedDate: string) {
@@ -318,8 +384,22 @@ type AppointmentFormState = {
   professionalProfileId: string;
   roomId: string;
   unitId: string;
+  programId: string;
+  packageId: string;
+  serviceId: string;
+  billingMode: AgendaBillingMode;
+  billingAmount: string;
+  billingDueDate: string;
+  paymentMethod: AgendaManualPaymentMethod;
+  billingDescription: string;
   location: string;
   notes: string;
+};
+
+type CommercialCatalogState = {
+  services: CommercialService[];
+  packages: CommercialPackage[];
+  programs: CommercialProgramOption[];
 };
 
 type RoomFormState = {
@@ -350,9 +430,44 @@ function createEmptyAppointmentForm(date: string): AppointmentFormState {
     professionalProfileId: '',
     roomId: '',
     unitId: '',
+    programId: '',
+    packageId: '',
+    serviceId: '',
+    billingMode: 'none',
+    billingAmount: '',
+    billingDueDate: date,
+    paymentMethod: 'pix',
+    billingDescription: '',
     location: '',
     notes: '',
   };
+}
+
+function createEmptyCommercialCatalog(): CommercialCatalogState {
+  return {
+    services: [],
+    packages: [],
+    programs: [],
+  };
+}
+
+function packageMatchesProgram(pkg: CommercialPackage, programId: string) {
+  if (!programId) return true;
+  return pkg.programLinks.some((link) => link.programId === programId && link.status === 'ativo');
+}
+
+function serviceMatchesPackage(service: CommercialService, pkg?: CommercialPackage | null) {
+  if (!pkg) return true;
+  return pkg.services.some((item) => item.serviceId === service.id);
+}
+
+function getSuggestedBillingAmountCents(
+  form: Pick<AppointmentFormState, 'serviceId' | 'packageId'>,
+  catalog: CommercialCatalogState
+) {
+  const selectedService = catalog.services.find((service) => service.id === form.serviceId);
+  const selectedPackage = catalog.packages.find((pkg) => pkg.id === form.packageId);
+  return selectedService?.basePriceCents ?? selectedPackage?.priceCents ?? 0;
 }
 
 function createEmptyRoomForm(): RoomFormState {
@@ -388,12 +503,34 @@ function appointmentToForm(appointment: AppointmentSummary): AppointmentFormStat
     professionalProfileId: appointment.professionalProfileId ?? '',
     roomId: appointment.roomId ?? '',
     unitId: appointment.unitId ?? '',
+    programId: appointment.programId ?? '',
+    packageId: appointment.packageId ?? '',
+    serviceId: appointment.serviceId ?? '',
+    billingMode:
+      appointment.financialStatus === 'manual_paid'
+        ? 'manual_paid'
+        : appointment.financialStatus === 'pending_local_invoice' ||
+            appointment.financialStatus === 'failed'
+          ? 'local_invoice'
+          : 'none',
+    billingAmount: centsToCurrencyInput(appointment.financialAmountCents),
+    billingDueDate: appointment.financialDueDate ?? parts.date,
+    paymentMethod: (appointment.financialPaymentMethod as AgendaManualPaymentMethod) || 'pix',
+    billingDescription:
+      appointment.serviceName ??
+      appointment.packageName ??
+      appointment.programName ??
+      appointmentTypeLabel[appointment.type],
     location: appointment.roomName ?? '',
     notes: appointment.notes ?? '',
   };
 }
 
 function toAppointmentMutationInput(form: AppointmentFormState): AppointmentMutationInput {
+  const amountCents = parseCurrencyToCents(form.billingAmount);
+  const billingDescription =
+    form.billingDescription.trim() || appointmentTypeLabel[form.type] || 'Agendamento';
+
   return {
     patientId: form.patientId,
     type: form.type,
@@ -404,6 +541,22 @@ function toAppointmentMutationInput(form: AppointmentFormState): AppointmentMuta
     professionalProfileId: form.professionalProfileId || null,
     roomId: form.roomId || null,
     unitId: form.unitId || null,
+    commercialContext: {
+      programId: form.programId || null,
+      packageId: form.packageId || null,
+      serviceId: form.serviceId || null,
+    },
+    billingContext:
+      form.billingMode === 'none'
+        ? { mode: 'none' }
+        : {
+            mode: form.billingMode,
+            amountCents,
+            dueDate: form.billingDueDate || form.date,
+            paymentMethod: form.billingMode === 'manual_paid' ? form.paymentMethod : null,
+            paidAt: form.billingMode === 'manual_paid' ? new Date().toISOString() : null,
+            description: billingDescription,
+          },
   };
 }
 
@@ -436,6 +589,9 @@ function AppointmentFormModal({
   form,
   patients,
   patientsLoading,
+  commercialCatalog,
+  commercialCatalogLoading,
+  commercialCatalogError,
   scheduleOptions,
   scheduleOptionsLoading,
   error,
@@ -448,6 +604,9 @@ function AppointmentFormModal({
   form: AppointmentFormState;
   patients: PatientListRow[];
   patientsLoading: boolean;
+  commercialCatalog: CommercialCatalogState;
+  commercialCatalogLoading: boolean;
+  commercialCatalogError: string | null;
   scheduleOptions: AgendaScheduleOptions;
   scheduleOptionsLoading: boolean;
   error: string | null;
@@ -460,6 +619,17 @@ function AppointmentFormModal({
   const activeAllocations = scheduleOptions.allocations.filter(
     (allocation) => allocation.status === 'available' || allocation.status === 'scheduled'
   );
+  const activePrograms = commercialCatalog.programs.filter((program) => program.status === 'ativo');
+  const activePackages = commercialCatalog.packages.filter((pkg) => pkg.status === 'ativo');
+  const activeServices = commercialCatalog.services.filter((service) => service.status === 'ativo');
+  const selectedPackage = activePackages.find((pkg) => pkg.id === form.packageId) ?? null;
+  const programPackages = activePackages.filter((pkg) =>
+    packageMatchesProgram(pkg, form.programId)
+  );
+  const packageServices = activeServices.filter((service) =>
+    serviceMatchesPackage(service, selectedPackage)
+  );
+  const suggestedAmountCents = getSuggestedBillingAmountCents(form, commercialCatalog);
 
   return (
     <Dialog
@@ -594,8 +764,13 @@ function AppointmentFormModal({
                 }}
                 className="input-base text-sm"
                 disabled={scheduleOptionsLoading}
+                required={activeAllocations.length > 0}
               >
-                <option value="">Sem profissional estruturado</option>
+                <option value="">
+                  {activeAllocations.length > 0
+                    ? 'Selecione um profissional'
+                    : 'Sem profissional estruturado'}
+                </option>
                 {scheduleOptions.professionals.map((professional) => (
                   <option key={professional.id} value={professional.id}>
                     {professional.name}
@@ -639,6 +814,230 @@ function AppointmentFormModal({
                 className="input-base text-sm"
               />
             </label>
+            <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3 md:col-span-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                <Package size={14} />
+                Contexto comercial e clinico
+              </div>
+              {commercialCatalogError && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {commercialCatalogError}
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Programa
+                  <select
+                    value={form.programId}
+                    onChange={(event) => {
+                      const programId = event.target.value;
+                      const nextPackages = activePackages.filter((pkg) =>
+                        packageMatchesProgram(pkg, programId)
+                      );
+                      const packageStillValid =
+                        !form.packageId || nextPackages.some((pkg) => pkg.id === form.packageId);
+                      onChange({
+                        programId,
+                        packageId: packageStillValid ? form.packageId : '',
+                        serviceId: packageStillValid ? form.serviceId : '',
+                        billingAmount:
+                          packageStillValid || form.billingMode === 'none'
+                            ? form.billingAmount
+                            : '',
+                      });
+                    }}
+                    className="input-base text-sm"
+                    disabled={commercialCatalogLoading || activePrograms.length === 0}
+                  >
+                    <option value="">
+                      {commercialCatalogLoading
+                        ? 'Carregando...'
+                        : activePrograms.length === 0
+                          ? 'Sem programa ativo'
+                          : 'Sem programa'}
+                    </option>
+                    {activePrograms.map((program) => (
+                      <option key={program.id} value={program.id}>
+                        {program.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Pacote
+                  <select
+                    value={form.packageId}
+                    onChange={(event) => {
+                      const packageId = event.target.value;
+                      const pkg = activePackages.find((item) => item.id === packageId) ?? null;
+                      const serviceStillValid =
+                        !form.serviceId ||
+                        !pkg ||
+                        pkg.services.some((service) => service.serviceId === form.serviceId);
+                      const nextAmount =
+                        form.billingMode === 'none'
+                          ? form.billingAmount
+                          : centsToCurrencyInput(
+                              getSuggestedBillingAmountCents(
+                                { packageId, serviceId: serviceStillValid ? form.serviceId : '' },
+                                commercialCatalog
+                              )
+                            );
+                      onChange({
+                        packageId,
+                        serviceId: serviceStillValid ? form.serviceId : '',
+                        billingAmount: nextAmount,
+                        billingDescription: pkg?.name ?? form.billingDescription,
+                      });
+                    }}
+                    className="input-base text-sm"
+                    disabled={commercialCatalogLoading || programPackages.length === 0}
+                  >
+                    <option value="">
+                      {commercialCatalogLoading
+                        ? 'Carregando...'
+                        : programPackages.length === 0
+                          ? 'Sem pacote ativo'
+                          : 'Sem pacote'}
+                    </option>
+                    {programPackages.map((pkg) => (
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.name} - {formatMoneyFromCents(pkg.priceCents)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Servico
+                  <select
+                    value={form.serviceId}
+                    onChange={(event) => {
+                      const serviceId = event.target.value;
+                      const service = activeServices.find((item) => item.id === serviceId);
+                      const nextAmountCents =
+                        service?.basePriceCents ??
+                        activePackages.find((pkg) => pkg.id === form.packageId)?.priceCents ??
+                        0;
+                      onChange({
+                        serviceId,
+                        durationMinutes:
+                          service?.durationMinutes && !Number.isNaN(service.durationMinutes)
+                            ? String(service.durationMinutes)
+                            : form.durationMinutes,
+                        billingAmount:
+                          form.billingMode === 'none'
+                            ? form.billingAmount
+                            : centsToCurrencyInput(nextAmountCents),
+                        billingDescription: service?.name ?? form.billingDescription,
+                      });
+                    }}
+                    className="input-base text-sm"
+                    disabled={commercialCatalogLoading || packageServices.length === 0}
+                  >
+                    <option value="">
+                      {commercialCatalogLoading
+                        ? 'Carregando...'
+                        : packageServices.length === 0
+                          ? 'Sem servico ativo'
+                          : 'Sem servico'}
+                    </option>
+                    {packageServices.map((service) => (
+                      <option key={service.id} value={service.id}>
+                        {service.name} - {formatMoneyFromCents(service.basePriceCents)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3 md:col-span-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                <CreditCard size={14} />
+                Financeiro local
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Modo
+                  <select
+                    value={form.billingMode}
+                    onChange={(event) => {
+                      const billingMode = event.target.value as AgendaBillingMode;
+                      onChange({
+                        billingMode,
+                        billingAmount:
+                          billingMode === 'none'
+                            ? ''
+                            : form.billingAmount || centsToCurrencyInput(suggestedAmountCents),
+                        billingDueDate: form.billingDueDate || form.date,
+                      });
+                    }}
+                    className="input-base text-sm"
+                  >
+                    {Object.entries(billingModeLabel).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Valor
+                  <input
+                    value={form.billingAmount}
+                    onChange={(event) => onChange({ billingAmount: event.target.value })}
+                    className="input-base text-sm"
+                    placeholder="0,00"
+                    disabled={form.billingMode === 'none'}
+                    required={form.billingMode !== 'none'}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                  Vencimento
+                  <input
+                    type="date"
+                    value={form.billingDueDate}
+                    onChange={(event) => onChange({ billingDueDate: event.target.value })}
+                    className="input-base text-sm"
+                    disabled={form.billingMode === 'none'}
+                    required={form.billingMode !== 'none'}
+                  />
+                </label>
+                {form.billingMode === 'manual_paid' ? (
+                  <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                    Metodo
+                    <select
+                      value={form.paymentMethod}
+                      onChange={(event) =>
+                        onChange({ paymentMethod: event.target.value as AgendaManualPaymentMethod })
+                      }
+                      className="input-base text-sm"
+                    >
+                      {Object.entries(manualPaymentMethodLabel).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
+                  Descricao
+                  <input
+                    value={form.billingDescription}
+                    onChange={(event) => onChange({ billingDescription: event.target.value })}
+                    className="input-base text-sm"
+                    placeholder="Descricao da cobranca local"
+                    disabled={form.billingMode === 'none'}
+                  />
+                </label>
+              </div>
+              {form.billingMode !== 'none' ? (
+                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <ReceiptText size={13} />
+                  Cobranca e pagamento ficam locais; nenhum provider externo sera chamado.
+                </div>
+              ) : null}
+            </div>
             <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
               Observacoes
               <textarea
@@ -1300,7 +1699,7 @@ function KanbanColumn({
                 className="bg-card rounded-xl border border-border p-3 shadow-sm transition-all duration-150 group"
               >
                 <Link
-                  href={`/clinic/patients/${appt.patientId}/encounter`}
+                  href={`/clinic/patients/${appt.patientId}/encounter?appointmentId=${appt.id}`}
                   className="block hover:text-primary"
                 >
                   {/* Patient name */}
@@ -1318,6 +1717,12 @@ function KanbanColumn({
                   <p className="text-xs text-muted-foreground mb-2 leading-tight">
                     {appointmentTypeLabel[appt.type]}
                   </p>
+
+                  {(appt.serviceName || appt.packageName || appt.programName) && (
+                    <p className="mb-2 line-clamp-2 text-xs font-medium text-foreground">
+                      {appt.serviceName ?? appt.packageName ?? appt.programName}
+                    </p>
+                  )}
 
                   {/* Time + professional */}
                   <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
@@ -1337,6 +1742,20 @@ function KanbanColumn({
                   {appt.roomName && (
                     <div className="mt-1.5 text-xs text-muted-foreground/70 truncate">
                       {appt.roomName}
+                    </div>
+                  )}
+
+                  {appt.financialStatus && appt.financialStatus !== 'not_required' && (
+                    <div
+                      className={[
+                        'mt-2 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold',
+                        appointmentFinancialStatusClass[appt.financialStatus],
+                      ].join(' ')}
+                    >
+                      {appointmentFinancialStatusLabel[appt.financialStatus]}
+                      {appt.financialAmountCents
+                        ? ` - ${formatMoneyFromCents(appt.financialAmountCents)}`
+                        : ''}
                     </div>
                   )}
                 </Link>
@@ -1450,10 +1869,25 @@ function DaySchedule({
                   <p className="text-xs text-muted-foreground truncate">
                     {appointmentTypeLabel[appt.type]} · {appt.professionalName}
                   </p>
+                  {(appt.serviceName || appt.packageName || appt.programName) && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {appt.serviceName ?? appt.packageName ?? appt.programName}
+                    </p>
+                  )}
                 </div>
 
                 {/* Status badge */}
                 <StatusBadge status={appt.status} size="xs" />
+                {appt.financialStatus && appt.financialStatus !== 'not_required' ? (
+                  <span
+                    className={[
+                      'hidden rounded-full border px-2 py-0.5 text-xs font-semibold md:inline-flex',
+                      appointmentFinancialStatusClass[appt.financialStatus],
+                    ].join(' ')}
+                  >
+                    {appointmentFinancialStatusLabel[appt.financialStatus]}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => onEditAppointment(appt)}
@@ -1535,7 +1969,11 @@ function WaitingQueuePanel({ queue, isLoading, onRefresh }: WaitingQueuePanelPro
             {activeQueue.map((entry) => (
               <Link
                 key={entry.id}
-                href={`/clinic/patients/${entry.patientId}/encounter`}
+                href={
+                  entry.appointmentId
+                    ? `/clinic/patients/${entry.patientId}/encounter?appointmentId=${entry.appointmentId}`
+                    : `/clinic/patients/${entry.patientId}/encounter`
+                }
                 className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/40 border border-border hover:border-primary/30 transition-colors cursor-pointer"
               >
                 {/* Avatar placeholder */}
@@ -2007,6 +2445,19 @@ function PatientOperationalDrawer({
             <p className="text-xs text-muted-foreground">
               {appointmentTypeLabel[target.item.type]} · {formatDateTime(target.item.scheduledAt)}
             </p>
+            {(target.item.serviceName || target.item.packageName || target.item.programName) && (
+              <p className="mt-1 text-xs font-medium text-foreground">
+                {target.item.serviceName ?? target.item.packageName ?? target.item.programName}
+              </p>
+            )}
+            {target.item.financialStatus && target.item.financialStatus !== 'not_required' ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {appointmentFinancialStatusLabel[target.item.financialStatus]}
+                {target.item.financialAmountCents
+                  ? ` - ${formatMoneyFromCents(target.item.financialAmountCents)}`
+                  : ''}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -2175,6 +2626,11 @@ export default function AgendaContent() {
   const [appointmentFormSubmitting, setAppointmentFormSubmitting] = useState(false);
   const [patientOptions, setPatientOptions] = useState<PatientListRow[]>([]);
   const [patientOptionsLoading, setPatientOptionsLoading] = useState(false);
+  const [commercialCatalog, setCommercialCatalog] = useState<CommercialCatalogState>(() =>
+    createEmptyCommercialCatalog()
+  );
+  const [commercialCatalogLoading, setCommercialCatalogLoading] = useState(false);
+  const [commercialCatalogError, setCommercialCatalogError] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<AppointmentSummary | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -2353,6 +2809,27 @@ export default function AgendaContent() {
     }
   }, []);
 
+  const loadCommercialCatalog = useCallback(async () => {
+    setCommercialCatalogLoading(true);
+    setCommercialCatalogError(null);
+
+    const result = await getClinicCommercialCatalog();
+    if (result.error || !result.data) {
+      setCommercialCatalog(createEmptyCommercialCatalog());
+      setCommercialCatalogError(
+        result.error?.message ?? 'Nao foi possivel carregar catalogo comercial.'
+      );
+    } else {
+      setCommercialCatalog({
+        services: result.data.services,
+        packages: result.data.packages,
+        programs: result.data.programs,
+      });
+    }
+
+    setCommercialCatalogLoading(false);
+  }, []);
+
   const handleSaveRoom = async () => {
     const code = roomForm.code.trim();
     const name = roomForm.name.trim();
@@ -2445,6 +2922,7 @@ export default function AgendaContent() {
     setAppointmentForm(createEmptyAppointmentForm(selectedDate));
     setAppointmentFormError(null);
     void loadPatientOptions();
+    void loadCommercialCatalog();
   };
 
   const openScheduleReturn = (item: PatientReturnSummary) => {
@@ -2460,6 +2938,7 @@ export default function AgendaContent() {
     setAppointmentFormError(null);
     setPatientDrawerTarget(null);
     void loadPatientOptions();
+    void loadCommercialCatalog();
   };
 
   const openEditAppointment = (appointment: AppointmentSummary) => {
@@ -2469,9 +2948,34 @@ export default function AgendaContent() {
     setAppointmentForm(appointmentToForm(appointment));
     setAppointmentFormError(null);
     void loadPatientOptions();
+    void loadCommercialCatalog();
   };
 
   const handleSubmitAppointmentForm = async () => {
+    const activeAllocations = scheduleOptions.allocations.filter(
+      (allocation) => allocation.status === 'available' || allocation.status === 'scheduled'
+    );
+    if (activeAllocations.length > 0 && !appointmentForm.professionalProfileId) {
+      setAppointmentFormError('Selecione um profissional da escala do dia.');
+      return;
+    }
+
+    if (appointmentForm.billingMode !== 'none') {
+      const amountCents = parseCurrencyToCents(appointmentForm.billingAmount);
+      if (amountCents <= 0) {
+        setAppointmentFormError('Informe um valor maior que zero para a cobranca local.');
+        return;
+      }
+      if (!appointmentForm.billingDueDate) {
+        setAppointmentFormError('Informe o vencimento da cobranca local.');
+        return;
+      }
+      if (appointmentForm.billingMode === 'manual_paid' && !appointmentForm.paymentMethod) {
+        setAppointmentFormError('Informe o metodo do pagamento manual.');
+        return;
+      }
+    }
+
     setAppointmentFormSubmitting(true);
     setAppointmentFormError(null);
 
@@ -2488,6 +2992,13 @@ export default function AgendaContent() {
       return;
     }
 
+    const financialWarning =
+      result.data.financialStatus === 'failed'
+        ? result.data.financialError
+          ? `Consulta salva, mas o financeiro ficou parcial: ${result.data.financialError}.`
+          : 'Consulta salva, mas o financeiro ficou parcial.'
+        : null;
+
     if (schedulingReturnId) {
       const returnResult = await recordPatientReturnAction(schedulingReturnId, 'scheduled', {
         appointmentId: result.data.id,
@@ -2502,6 +3013,7 @@ export default function AgendaContent() {
 
     const nextDate = appointmentForm.date;
     closeAppointmentForm();
+    if (financialWarning) setLoadError(financialWarning);
     if (nextDate !== selectedDate) {
       setSelectedDate(nextDate);
     } else {
@@ -2570,6 +3082,9 @@ export default function AgendaContent() {
           form={appointmentForm}
           patients={patientOptions}
           patientsLoading={patientOptionsLoading}
+          commercialCatalog={commercialCatalog}
+          commercialCatalogLoading={commercialCatalogLoading}
+          commercialCatalogError={commercialCatalogError}
           scheduleOptions={scheduleOptions}
           scheduleOptionsLoading={scheduleOptionsLoading}
           error={appointmentFormError}

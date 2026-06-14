@@ -35,6 +35,34 @@ export interface AppointmentMutationInput {
   professionalProfileId?: string | null;
   roomId?: string | null;
   unitId?: string | null;
+  commercialContext?: AppointmentCommercialContext | null;
+  billingContext?: AppointmentBillingContext | null;
+}
+
+export type AgendaBillingMode = 'none' | 'local_invoice' | 'manual_paid';
+
+export type AgendaManualPaymentMethod =
+  | 'pix'
+  | 'cartao_credito'
+  | 'cartao_debito'
+  | 'boleto'
+  | 'dinheiro'
+  | 'transferencia';
+
+export interface AppointmentCommercialContext {
+  programId?: string | null;
+  packageId?: string | null;
+  serviceId?: string | null;
+  enrollmentId?: string | null;
+}
+
+export interface AppointmentBillingContext {
+  mode: AgendaBillingMode;
+  amountCents?: number | null;
+  dueDate?: string | null;
+  paymentMethod?: AgendaManualPaymentMethod | null;
+  paidAt?: string | null;
+  description?: string | null;
 }
 
 export type AgendaRoomType =
@@ -147,11 +175,11 @@ interface AgendaProvider {
     nextStatus: AppointmentStatus,
     reason?: string | null
   ): Promise<void>;
-  createAppointment(input: AppointmentMutationInput): Promise<{ id: string }>;
+  createAppointment(input: AppointmentMutationInput): Promise<AppointmentMutationResult>;
   updateAppointment(
     appointmentId: string,
     input: AppointmentMutationInput
-  ): Promise<{ id: string }>;
+  ): Promise<AppointmentMutationResult>;
   cancelAppointment(appointmentId: string, reason?: string | null): Promise<void>;
   callAttendanceQueue(queueId: string): Promise<void>;
   startAttendanceEncounter(input: {
@@ -163,6 +191,14 @@ interface AgendaProvider {
     action: PatientReturnAction,
     options?: { appointmentId?: string | null; notes?: string | null }
   ): Promise<void>;
+}
+
+export interface AppointmentMutationResult {
+  id: string;
+  invoiceId?: string | null;
+  paymentId?: string | null;
+  financialStatus?: AppointmentSummary['financialStatus'];
+  financialError?: string | null;
 }
 
 export type PatientReturnAction = 'contacted' | 'scheduled' | 'dismissed' | 'cancelled';
@@ -293,10 +329,10 @@ function getMockAgendaProvider(): Promise<AgendaProvider> {
       return undefined;
     },
     async createAppointment() {
-      return { id: 'mock-appointment' };
+      return { id: 'mock-appointment', financialStatus: 'not_required' };
     },
     async updateAppointment(appointmentId) {
-      return { id: appointmentId };
+      return { id: appointmentId, financialStatus: 'not_required' };
     },
     async cancelAppointment() {
       return undefined;
@@ -381,6 +417,52 @@ function assertAppointmentMutationInput(input: AppointmentMutationInput) {
 function normalizeOptionalText(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function normalizeOptionalId(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function toCommercialRpcPayload(input?: AppointmentCommercialContext | null) {
+  return {
+    programId: normalizeOptionalId(input?.programId),
+    packageId: normalizeOptionalId(input?.packageId),
+    serviceId: normalizeOptionalId(input?.serviceId),
+    enrollmentId: normalizeOptionalId(input?.enrollmentId),
+  };
+}
+
+function toBillingRpcPayload(input?: AppointmentBillingContext | null) {
+  if (!input || input.mode === 'none') {
+    return { mode: 'none' };
+  }
+
+  return {
+    mode: input.mode,
+    amountCents:
+      input.amountCents === null || input.amountCents === undefined
+        ? null
+        : Math.max(0, Math.round(input.amountCents)),
+    dueDate: normalizeOptionalText(input.dueDate),
+    paymentMethod: normalizeOptionalText(input.paymentMethod),
+    paidAt: normalizeOptionalText(input.paidAt),
+    description: normalizeOptionalText(input.description),
+  };
+}
+
+function normalizeMutationResult(payload: unknown, fallbackId?: string): AppointmentMutationResult {
+  const record = asRecord(payload);
+  const id = asString(record.id, fallbackId ?? '');
+  if (!id) throw new Error('Contrato invalido ao salvar consulta.');
+
+  return {
+    id,
+    invoiceId: asString(record.invoiceId) || null,
+    paymentId: asString(record.paymentId) || null,
+    financialStatus: normalizeFinancialStatus(record.financialStatus),
+    financialError: asString(record.financialError) || null,
+  };
 }
 
 async function getPatientNames(tenantId: string, patientIds: string[]) {
@@ -489,9 +571,25 @@ const patientReturnStatusValues = new Set<PatientReturnStatus>([
   'cancelado',
 ]);
 
+const financialStatusValues = new Set<NonNullable<AppointmentSummary['financialStatus']>>([
+  'not_required',
+  'pending_local_invoice',
+  'manual_paid',
+  'failed',
+]);
+
 function normalizeAttendanceQueueStatus(value: unknown): AttendanceQueueStatus | undefined {
   const normalized = asString(value).toLowerCase() as AttendanceQueueStatus;
   return attendanceQueueStatusValues.has(normalized) ? normalized : undefined;
+}
+
+function normalizeFinancialStatus(
+  value: unknown
+): NonNullable<AppointmentSummary['financialStatus']> | undefined {
+  const normalized = asString(value).toLowerCase() as NonNullable<
+    AppointmentSummary['financialStatus']
+  >;
+  return financialStatusValues.has(normalized) ? normalized : undefined;
 }
 
 function normalizePatientReturnStatus(value: unknown): PatientReturnStatus {
@@ -657,6 +755,23 @@ function normalizeAppointmentSummary(value: unknown): AppointmentSummary | null 
     roomCode: asString(record.roomCode) || undefined,
     unitId: asString(record.unitId) || undefined,
     unitName: asString(record.unitName) || undefined,
+    programId: asString(record.programId) || undefined,
+    programName: asString(record.programName) || undefined,
+    packageId: asString(record.packageId) || undefined,
+    packageName: asString(record.packageName) || undefined,
+    serviceId: asString(record.serviceId) || undefined,
+    serviceName: asString(record.serviceName) || undefined,
+    enrollmentId: asString(record.enrollmentId) || undefined,
+    invoiceId: asString(record.invoiceId) || undefined,
+    paymentId: asString(record.paymentId) || undefined,
+    financialStatus: normalizeFinancialStatus(record.financialStatus),
+    financialAmountCents:
+      record.financialAmountCents === null || record.financialAmountCents === undefined
+        ? undefined
+        : Math.max(0, Math.round(asNumber(record.financialAmountCents))),
+    financialDueDate: asString(record.financialDueDate) || undefined,
+    financialPaymentMethod: asString(record.financialPaymentMethod) || undefined,
+    financialError: asString(record.financialError) || undefined,
     notes: asString(record.notes) || undefined,
     attendanceLink: asString(record.attendanceLink) || undefined,
     attendanceQueueId: asString(record.attendanceQueueId) || undefined,
@@ -694,6 +809,15 @@ function normalizeWaitingQueueEntry(value: unknown): WaitingQueueEntry | null {
     professionalName: asString(record.professionalName, 'Equipe clinica'),
     roomId: asString(record.roomId) || undefined,
     room: asString(record.room) || undefined,
+    programId: asString(record.programId) || undefined,
+    programName: asString(record.programName) || undefined,
+    packageId: asString(record.packageId) || undefined,
+    packageName: asString(record.packageName) || undefined,
+    serviceId: asString(record.serviceId) || undefined,
+    serviceName: asString(record.serviceName) || undefined,
+    invoiceId: asString(record.invoiceId) || undefined,
+    paymentId: asString(record.paymentId) || undefined,
+    financialStatus: normalizeFinancialStatus(record.financialStatus),
     encounterId: asString(record.encounterId) || undefined,
     attendanceLink: asString(record.attendanceLink) || undefined,
   };
@@ -891,12 +1015,12 @@ const supabaseAgendaProvider: AgendaProvider = {
       p_professional_profile_id: normalizeOptionalText(input.professionalProfileId),
       p_room_id: normalizeOptionalText(input.roomId),
       p_unit_id: normalizeOptionalText(input.unitId),
+      p_commercial_context: toCommercialRpcPayload(input.commercialContext),
+      p_billing_context: toBillingRpcPayload(input.billingContext),
     });
 
     if (error) throw error;
-    const id = asString(asRecord(data).id);
-    if (!id) throw new Error('Contrato invalido ao criar consulta.');
-    return { id };
+    return normalizeMutationResult(data);
   },
 
   async updateAppointment(appointmentId, input) {
@@ -914,11 +1038,12 @@ const supabaseAgendaProvider: AgendaProvider = {
       p_professional_profile_id: normalizeOptionalText(input.professionalProfileId),
       p_room_id: normalizeOptionalText(input.roomId),
       p_unit_id: normalizeOptionalText(input.unitId),
+      p_commercial_context: toCommercialRpcPayload(input.commercialContext),
+      p_billing_context: toBillingRpcPayload(input.billingContext),
     });
 
     if (error) throw error;
-    const id = asString(asRecord(data).id, appointmentId);
-    return { id };
+    return normalizeMutationResult(data, appointmentId);
   },
 
   async cancelAppointment(appointmentId, reason) {
@@ -1075,7 +1200,7 @@ export async function updateAppointmentStatus(
 
 export async function createAppointment(
   input: AppointmentMutationInput
-): Promise<{ data: { id: string } | null; error: SafeServiceError | null }> {
+): Promise<{ data: AppointmentMutationResult | null; error: SafeServiceError | null }> {
   try {
     return {
       data: await runAgendaOperation((provider) => provider.createAppointment(input)),
@@ -1089,7 +1214,7 @@ export async function createAppointment(
 export async function updateAppointment(
   appointmentId: string,
   input: AppointmentMutationInput
-): Promise<{ data: { id: string } | null; error: SafeServiceError | null }> {
+): Promise<{ data: AppointmentMutationResult | null; error: SafeServiceError | null }> {
   try {
     return {
       data: await runAgendaOperation((provider) =>
