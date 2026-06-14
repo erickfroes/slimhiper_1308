@@ -236,3 +236,93 @@ When a webhook maps to `signed`, the expected timeline event is
 because the provider cannot send a Supabase JWT. Keep this setting limited to
 webhook handlers that validate their own token/HMAC, and document the target
 project deployment command without printing secrets.
+
+## Safe Validation Without Real Data
+
+Use this flow to validate generation, signed URL authorization, D4Sign sandbox
+readiness, and webhook handling without exposing real patients or calling Asaas.
+Prefer a disposable local Supabase project or a dedicated staging tenant seeded
+only with synthetic fixtures.
+
+### 1. Pre-flight isolation
+
+- Confirm all test identities, patients, guardians, templates, generated
+  documents, and emails are synthetic and non-deliverable.
+- Leave Asaas secrets unset; document validation must not call billing provider
+  functions.
+- Leave D4Sign send disabled by default. Do not set
+  `RUN_D4SIGN_SANDBOX_SEND=true` unless the test objective is an explicitly
+  approved D4Sign sandbox send.
+- Use `supabase/tests/document_security_rls_checklist.sql` as the RLS/audit
+  acceptance checklist for `document_templates`, `generated_documents`,
+  patient/guardian release reads, restricted document blocking, and minimized
+  audit events.
+
+### 2. Generation validation with synthetic fixtures
+
+1. Seed a synthetic tenant, authorized clinic staff user, patient, active
+   guardian/contact, and an active document template in a disposable database.
+2. Invoke only the local/staging `generate-document` path with the synthetic
+   staff token and fixture variables. Do not include real identifiers, CPF,
+   phone, address, clinical notes, provider IDs, or storage objects from
+   production.
+3. Verify the generated row belongs to the fixture tenant and patient, the
+   template ID matches the active fixture template, protected variables were not
+   overridden by the caller, and the stored PDF path uses the expected private
+   document bucket/path convention.
+4. Verify `document_audit_events` contains `document.generated` with minimized
+   summary fields and no raw payloads, signed URLs, tokens, cookies,
+   authorization headers, storage paths, CPF, or real email addresses.
+
+### 3. Signed URL and portal access validation
+
+1. Create two synthetic generated documents for the same patient: one with
+   `released_to_patient=true` and one with `released_to_patient=false`.
+2. As authorized clinic staff, verify metadata access for both documents through
+   the expected clinic read path.
+3. As the patient and as the active guardian, verify metadata access only for
+   the released document.
+4. Request a signed URL only through `document-signed-url` for the released
+   document and confirm the response is short-lived and permission-checked.
+5. Confirm direct storage access remains blocked and `document-signed-url`
+   rejects the restricted document for patient/guardian actors.
+6. Verify release/hide actions create `document.released_to_patient` and
+   `document.hidden_from_patient` audit events with minimized summaries.
+
+### 4. D4Sign sandbox validation boundaries
+
+- Default local and CI checks must stop before the real D4Sign send. Use local
+  fixtures and mapper/status tests first.
+- If an approved sandbox send is required, use only a dedicated D4Sign sandbox
+  account/cofre/folder and synthetic signers. Set `RUN_D4SIGN_SANDBOX_SEND=true`
+  only for that single run, and unset it immediately after.
+- Never use production cofre UUIDs, provider document IDs, tokens, crypt keys,
+  webhook secrets, real signer emails, or real patient documents in sandbox
+  validation.
+- Sandbox send validation must not call Asaas and must not reuse production
+  webhook endpoints.
+
+### 5. Webhook validation with local payloads
+
+1. Run fixture-only webhook checks before any environment test:
+
+```bash
+node scripts/supabase/test-d4sign-fixtures.mjs
+```
+
+2. Use placeholder fixture secrets only. Do not print or commit real webhook
+   tokens, HMAC secrets, raw provider bodies, or provider document IDs.
+3. Validate fail-closed behavior for missing token/signature configuration,
+   missing or mismatched HMAC signatures, duplicate idempotency keys, and
+   unsupported statuses.
+4. Verify status changes create `document.status_changed` or
+   `document.signature_status_changed` audit events and sanitized timeline/UI
+   states without exposing raw provider payloads.
+
+### 6. Mapper fixture coverage
+
+`src/services/__fixtures__/clinicDocumentsApi.mapper-fixtures.json` documents
+pure, offline expectations for `mapSignatureStatus`, `getStatusKind`, and
+`buildCategories`. Unit tests that consume this fixture must import only pure
+mapper/status modules and local assertion libraries; they must not instantiate
+Supabase clients, invoke Edge Functions, or call D4Sign/Asaas.

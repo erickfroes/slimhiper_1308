@@ -1,0 +1,148 @@
+{
+  "description": "Offline fixtures for clinicDocumentsApi mapper expectations. These fixtures are safe to load in unit tests and must never call D4Sign, Asaas, Supabase, or Edge Functions.",
+  "mapSignatureStatus": [
+    {
+      "name": "no signature request",
+      "signatureRequests": null,
+      "expected": "nao_requerido"
+    },
+    {
+      "name": "pending provider status",
+      "signatureRequests": [
+        {
+          "status": "sent"
+        }
+      ],
+      "expected": "pendente"
+    },
+    {
+      "name": "viewed provider status",
+      "signatureRequests": [
+        {
+          "status": "viewed"
+        }
+      ],
+      "expected": "pendente"
+    },
+    {
+      "name": "signed provider status",
+      "signatureRequests": [
+        {
+          "status": "signed"
+        }
+      ],
+      "expected": "assinado"
+    },
+    {
+      "name": "rejected provider status",
+      "signatureRequests": [
+        {
+          "status": "rejected"
+        }
+      ],
+      "expected": "recusado"
+    },
+    {
+      "name": "unknown existing request",
+      "signatureRequests": [
+        {
+          "status": "provider_custom_state"
+        }
+      ],
+      "expected": "pendente"
+    }
+  ],
+  "getStatusKind": [
+    {
+      "name": "released generated document",
+      "status": "generated",
+      "signatureStatus": "nao_requerido",
+      "releasedToPatient": true,
+      "expected": "available"
+    },
+    {
+      "name": "pending signature wins over unreleased generated",
+      "status": "generated",
+      "signatureStatus": "pendente",
+      "releasedToPatient": false,
+      "expected": "pending_signature"
+    },
+    {
+      "name": "signed document",
+      "status": "signed",
+      "signatureStatus": "assinado",
+      "releasedToPatient": false,
+      "expected": "signed"
+    },
+    {
+      "name": "failed document",
+      "status": "failed",
+      "signatureStatus": "pendente",
+      "releasedToPatient": false,
+      "expected": "failed"
+    }
+  ],
+  "buildCategories": {
+    "templates": [
+      {
+        "id": "tpl-1",
+        "category": "contratos",
+        "status": "active"
+      },
+      {
+        "id": "tpl-2",
+        "category": "contratos",
+        "status": "draft"
+      },
+      {
+        "id": "tpl-3",
+        "category": "termos",
+        "status": "active"
+      }
+    ],
+    "documents": [
+      {
+        "id": "doc-1",
+        "category": "contratos"
+      },
+      {
+        "id": "doc-2",
+        "category": "atestados"
+      },
+      {
+        "id": "doc-3",
+        "category": "termos"
+      }
+    ],
+    "expectedById": {
+      "contratos": {
+        "templates": 2,
+        "activeTemplates": 1,
+        "documents": 1
+      },
+      "termos": {
+        "templates": 1,
+        "activeTemplates": 1,
+        "documents": 1
+      },
+      "atestados": {
+        "templates": 0,
+        "activeTemplates": 0,
+        "documents": 1
+      }
+    }
+  },
+  "providerIsolation": {
+    "mustNotCall": [
+      "D4Sign",
+      "Asaas",
+      "Supabase Edge Functions",
+      "Supabase network APIs"
+    ],
+    "allowed": [
+      "pure mapper imports",
+      "local JSON fixtures",
+      "local assertion library"
+    ]
+  }
+}
