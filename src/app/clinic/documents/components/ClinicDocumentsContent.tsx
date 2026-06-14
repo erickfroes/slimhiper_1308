@@ -21,6 +21,7 @@ import {
   LayoutTemplate,
   Lock,
   PenSquare,
+  RotateCcw,
   RefreshCw,
   Search,
   Send,
@@ -29,6 +30,7 @@ import {
   Unlock,
 } from 'lucide-react';
 import {
+  acknowledgeClinicD4SignEventFailure,
   archiveClinicDocumentTemplate,
   createClinicDocumentTemplate,
   duplicateClinicDocumentTemplate,
@@ -38,13 +40,16 @@ import {
   getTemplatePlaceholders,
   publishClinicDocumentTemplate,
   PROTECTED_TEMPLATE_VARIABLES,
+  requestClinicD4SignEventReprocess,
   requestClinicDocumentSignature,
   setClinicDocumentPatientRelease,
+  type ClinicDocumentMonitorEvent,
   type ClinicDocumentAuditEvent,
   type ClinicDocumentCategory,
   type ClinicDocumentRow,
   type ClinicDocumentSigner,
   type ClinicDocumentTemplate,
+  updateClinicDocumentSignatureStatus,
   updateClinicDocumentTemplate,
   validateTemplateVariables,
   type ClinicDocumentsWorkspace,
@@ -442,6 +447,7 @@ function DocumentActions({
   onDownload,
   onSetRelease,
   onSignature,
+  onUpdateSignatureStatus,
   canCreateSignedUrls,
   canRequestD4Sign,
 }: {
@@ -453,6 +459,7 @@ function DocumentActions({
   onDownload: (document: ClinicDocumentRow) => void;
   onSetRelease: (document: ClinicDocumentRow, released: boolean) => void;
   onSignature: (document: ClinicDocumentRow) => void;
+  onUpdateSignatureStatus: (document: ClinicDocumentRow) => void;
   canCreateSignedUrls: boolean;
   canRequestD4Sign: boolean;
 }) {
@@ -506,6 +513,16 @@ function DocumentActions({
       >
         <PenSquare size={13} aria-hidden="true" />
         {documentSignatureActionLabel(document)}
+      </button>
+      <button
+        type="button"
+        onClick={() => onUpdateSignatureStatus(document)}
+        disabled={!document.signatureEnabled || busyAction === `status-${document.id}`}
+        title={document.signatureEnabled ? undefined : 'Documento sem assinatura digital'}
+        className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <RefreshCw size={13} aria-hidden="true" />
+        Atualizar status
       </button>
     </div>
   );
@@ -816,6 +833,7 @@ function DocumentDetailDialog({
   onDownload,
   onSetRelease,
   onSignature,
+  onUpdateSignatureStatus,
   canCreateSignedUrls,
   canRequestD4Sign,
 }: {
@@ -827,6 +845,7 @@ function DocumentDetailDialog({
   onDownload: (document: ClinicDocumentRow) => void;
   onSetRelease: (document: ClinicDocumentRow, released: boolean) => void;
   onSignature: (document: ClinicDocumentRow) => void;
+  onUpdateSignatureStatus: (document: ClinicDocumentRow) => void;
   canCreateSignedUrls: boolean;
   canRequestD4Sign: boolean;
 }) {
@@ -876,6 +895,7 @@ function DocumentDetailDialog({
             onDownload={onDownload}
             onSetRelease={onSetRelease}
             onSignature={onSignature}
+            onUpdateSignatureStatus={onUpdateSignatureStatus}
             canCreateSignedUrls={canCreateSignedUrls}
             canRequestD4Sign={canRequestD4Sign}
           />
@@ -1789,6 +1809,130 @@ function TemplateEditorDialog({
   );
 }
 
+function MonitorStatusPill({ event }: { event: ClinicDocumentMonitorEvent }) {
+  const failed = event.status === 'failed';
+  const acknowledged = event.status === 'acknowledged';
+  return (
+    <Pill
+      icon={failed ? AlertTriangle : acknowledged ? CheckCircle2 : Activity}
+      label={`${event.severity} · ${event.status}`}
+      classes={
+        failed
+          ? 'border-red-200 bg-red-50 text-red-700'
+          : event.severity === 'warning'
+            ? 'border-amber-200 bg-amber-50 text-amber-700'
+            : 'border-blue-200 bg-blue-50 text-blue-700'
+      }
+    />
+  );
+}
+
+function OperationalMonitor({
+  events,
+  busyAction,
+  onAcknowledge,
+  onReprocess,
+}: {
+  events: ClinicDocumentMonitorEvent[];
+  busyAction: string | null;
+  onAcknowledge: (event: ClinicDocumentMonitorEvent) => void;
+  onReprocess: (event: ClinicDocumentMonitorEvent) => void;
+}) {
+  const bySeverity = events.reduce<Record<string, number>>((acc, event) => {
+    acc[event.severity] = (acc[event.severity] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <Activity size={16} aria-hidden="true" />
+            Monitor operacional de documentos
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Eventos agrupados por severidade com vinculo de documento/paciente quando disponivel.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-red-700">
+            Criticos {bySeverity.critical ?? 0}
+          </span>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
+            Alertas {bySeverity.warning ?? 0}
+          </span>
+          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-blue-700">
+            Info {bySeverity.info ?? 0}
+          </span>
+        </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        {events.length === 0 ? (
+          <DataState
+            kind="empty"
+            title="Monitor sem eventos"
+            description="Nenhum documento pendente/falhado ou evento D4Sign recente."
+            className="min-h-32 border-0 bg-transparent"
+          />
+        ) : (
+          events.map((event) => (
+            <article key={event.id} className="rounded-lg border border-border px-3 py-3 text-sm">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <p className="font-medium text-foreground">{event.title}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {event.createdAt} · tipo {event.eventType ?? 'status'} · tentativas{' '}
+                    {event.retryCount}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Documento: {event.documentName ?? event.documentId ?? 'nao vinculado'} ·
+                    Paciente: {event.patientName ?? event.patientId ?? 'nao vinculado'}
+                  </p>
+                  {event.acknowledgedAt ? (
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Reconhecido em {event.acknowledgedAt}
+                    </p>
+                  ) : null}
+                  {event.error ? <p className="mt-1 text-xs text-red-600">{event.error}</p> : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <MonitorStatusPill event={event} />
+                  {event.status === 'failed' ? (
+                    <button
+                      type="button"
+                      onClick={() => onAcknowledge(event)}
+                      disabled={busyAction === `ack-${event.id}`}
+                      className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <CheckCircle2 size={13} aria-hidden="true" />
+                      Reconhecer
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => onReprocess(event)}
+                    disabled={busyAction === `reprocess-${event.id}` || event.id.startsWith('doc-')}
+                    title={
+                      event.id.startsWith('doc-')
+                        ? 'Reprocesso disponivel apenas para eventos D4Sign'
+                        : undefined
+                    }
+                    className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <RotateCcw size={13} aria-hidden="true" />
+                    Reprocessar
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function ClinicDocumentsContent() {
   const [workspace, setWorkspace] = useState<ClinicDocumentsWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2000,6 +2144,72 @@ export default function ClinicDocumentsContent() {
 
     setActionMessage('Documento enviado para assinatura digital.');
     setSignatureDocument(null);
+    await loadWorkspace();
+  }
+
+  async function handleUpdateSignatureStatus(document: ClinicDocumentRow) {
+    const status = window.prompt(
+      'Informe o status seguro (pending, sent, viewed, signed, rejected, canceled, expired, failed):',
+      document.signatureStatus === 'assinado' ? 'signed' : 'sent'
+    );
+    if (!status) return;
+    const reason = window.prompt('Justificativa de reconciliacao (minimo 8 caracteres):');
+    if (!reason) return;
+
+    setBusyAction(`status-${document.id}`);
+    setActionError(null);
+    setActionMessage(null);
+    const result = await updateClinicDocumentSignatureStatus(
+      document.id,
+      document.patientId,
+      status,
+      reason
+    );
+    setBusyAction(null);
+
+    if (result.error || !result.data) {
+      setActionError(result.error?.message ?? 'Nao foi possivel atualizar status de assinatura.');
+      return;
+    }
+
+    setActionMessage('Status de assinatura reconciliado com auditoria local.');
+    await loadWorkspace();
+  }
+
+  async function handleAcknowledgeD4SignEvent(event: ClinicDocumentMonitorEvent) {
+    const note = window.prompt('Nota de reconhecimento (opcional, sem dados sensiveis):') ?? '';
+    setBusyAction(`ack-${event.id}`);
+    setActionError(null);
+    setActionMessage(null);
+    const result = await acknowledgeClinicD4SignEventFailure(event.id, note);
+    setBusyAction(null);
+
+    if (result.error || !result.data) {
+      setActionError(result.error?.message ?? 'Nao foi possivel reconhecer falha.');
+      return;
+    }
+
+    setActionMessage('Falha D4Sign reconhecida com auditoria.');
+    await loadWorkspace();
+  }
+
+  async function handleReprocessD4SignEvent(event: ClinicDocumentMonitorEvent) {
+    const reason = window.prompt(
+      'Justificativa para reprocessamento local (minimo 12 caracteres; nao chama D4Sign):'
+    );
+    if (!reason) return;
+    setBusyAction(`reprocess-${event.id}`);
+    setActionError(null);
+    setActionMessage(null);
+    const result = await requestClinicD4SignEventReprocess(event.id, reason);
+    setBusyAction(null);
+
+    if (result.error || !result.data) {
+      setActionError(result.error?.message ?? 'Nao foi possivel solicitar reprocesso.');
+      return;
+    }
+
+    setActionMessage('Reprocessamento local enfileirado sem chamada automatica ao D4Sign.');
     await loadWorkspace();
   }
 
@@ -2447,6 +2657,7 @@ export default function ClinicDocumentsContent() {
                               void handlePatientRelease(doc, released)
                             }
                             onSignature={(doc) => void handleSignature(doc)}
+                            onUpdateSignatureStatus={(doc) => void handleUpdateSignatureStatus(doc)}
                             canCreateSignedUrls={canCreateSignedUrls}
                             canRequestD4Sign={canRequestD4Sign}
                           />
@@ -2482,6 +2693,7 @@ export default function ClinicDocumentsContent() {
                         onDownload={(doc) => void handleDownload(doc)}
                         onSetRelease={(doc, released) => void handlePatientRelease(doc, released)}
                         onSignature={(doc) => void handleSignature(doc)}
+                        onUpdateSignatureStatus={(doc) => void handleUpdateSignatureStatus(doc)}
                         canCreateSignedUrls={canCreateSignedUrls}
                         canRequestD4Sign={canRequestD4Sign}
                       />
@@ -2494,41 +2706,12 @@ export default function ClinicDocumentsContent() {
         </section>
       </section>
 
-      <section className="rounded-lg border border-border bg-card p-5">
-        <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
-          <Activity size={16} aria-hidden="true" />
-          Monitor operacional de documentos
-        </h2>
-        <div className="mt-4 space-y-2">
-          {workspace.monitorEvents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhum documento pendente/falhado ou evento de assinatura recente.
-            </p>
-          ) : (
-            workspace.monitorEvents.map((event) => (
-              <div
-                key={event.id}
-                className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2 text-sm md:flex-row md:items-center md:justify-between"
-              >
-                <div>
-                  <p className="font-medium text-foreground">{event.title}</p>
-                  <p className="text-xs text-muted-foreground">{event.createdAt}</p>
-                  {event.error ? <p className="mt-1 text-xs text-red-600">{event.error}</p> : null}
-                </div>
-                <Pill
-                  icon={event.status === 'failed' ? AlertTriangle : Activity}
-                  label={event.status}
-                  classes={
-                    event.status === 'failed'
-                      ? 'border-red-200 bg-red-50 text-red-700'
-                      : 'border-blue-200 bg-blue-50 text-blue-700'
-                  }
-                />
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+      <OperationalMonitor
+        events={workspace.monitorEvents}
+        busyAction={busyAction}
+        onAcknowledge={(event) => void handleAcknowledgeD4SignEvent(event)}
+        onReprocess={(event) => void handleReprocessD4SignEvent(event)}
+      />
 
       <DocumentWizard
         open={wizardOpen}
@@ -2596,6 +2779,7 @@ export default function ClinicDocumentsContent() {
           onDownload={(document) => void handleDownload(document)}
           onSetRelease={(document, released) => void handlePatientRelease(document, released)}
           onSignature={(document) => void handleSignature(document)}
+          onUpdateSignatureStatus={(document) => void handleUpdateSignatureStatus(document)}
           canCreateSignedUrls={canCreateSignedUrls}
           canRequestD4Sign={canRequestD4Sign}
         />

@@ -76,11 +76,24 @@ export interface ClinicDocumentRow {
 export interface ClinicDocumentMonitorEvent {
   id: string;
   title: string;
-  status: 'pending' | 'failed' | 'signed' | 'processed';
+  status: 'pending' | 'failed' | 'signed' | 'processed' | 'acknowledged';
+  severity: 'info' | 'warning' | 'critical';
   createdAt: string;
   patientId?: string;
+  patientName?: string;
   documentId?: string;
+  documentName?: string;
+  eventType?: string;
+  retryCount: number;
+  acknowledgedAt?: string | null;
   error?: string | null;
+}
+
+export interface ClinicDocumentMonitorPage {
+  events: ClinicDocumentMonitorEvent[];
+  count: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface ClinicDocumentAuditEvent {
@@ -198,6 +211,19 @@ type ProviderEventRow = {
   created_at: string | null;
   processed_at: string | null;
   payload_summary: unknown;
+  signature_requests?:
+    | {
+        generated_document_id: string | null;
+        patient_id: string | null;
+        generated_documents?: { name: string | null } | Array<{ name: string | null }> | null;
+      }
+    | Array<{
+        generated_document_id: string | null;
+        patient_id: string | null;
+        generated_documents?: { name: string | null } | Array<{ name: string | null }> | null;
+      }>
+    | null;
+  acknowledged_at?: string | null;
 };
 
 type AuditEventRow = {
@@ -385,7 +411,20 @@ function mapTemplate(row: TemplateRow, generatedCount: number): ClinicDocumentTe
   };
 }
 
-function getProviderEventSummary(row: ProviderEventRow): ClinicDocumentMonitorEvent {
+function redactOperationalError(value: string | null | undefined) {
+  if (!value) return null;
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email-redigido]')
+    .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[cpf-redigido]')
+    .replace(/([?&](?:token|key|secret|crypt_key|password)=)[^&\s]+/gi, '$1[redigido]')
+    .slice(0, 220);
+}
+
+function getProviderEventSummary(
+  row: ProviderEventRow,
+  patientNameById: Map<string, string> = new Map(),
+  documentNameById: Map<string, string> = new Map()
+): ClinicDocumentMonitorEvent {
   const payload = asRecord(row.payload_summary);
   const status = String(row.status ?? '').toLowerCase();
   const normalizedStatus = String(payload.status ?? '').toLowerCase();
@@ -393,12 +432,41 @@ function getProviderEventSummary(row: ProviderEventRow): ClinicDocumentMonitorEv
   const signed = normalizedStatus === 'signed';
   const pending = ['pending', 'sent', 'viewed'].includes(normalizedStatus);
 
+  const request = Array.isArray(row.signature_requests)
+    ? (row.signature_requests[0] ?? null)
+    : (row.signature_requests ?? null);
+  const document = Array.isArray(request?.generated_documents)
+    ? (request?.generated_documents[0] ?? null)
+    : (request?.generated_documents ?? null);
+  const documentId = request?.generated_document_id ?? undefined;
+  const patientId = request?.patient_id ?? undefined;
+  const acknowledged = Boolean(row.acknowledged_at);
+  const mappedStatus = acknowledged
+    ? 'acknowledged'
+    : failed
+      ? 'failed'
+      : signed
+        ? 'signed'
+        : pending
+          ? 'pending'
+          : 'processed';
+
   return {
     id: row.id,
-    title: `Evento de assinatura digital: ${row.event_type ?? 'status'}`,
-    status: failed ? 'failed' : signed ? 'signed' : pending ? 'pending' : 'processed',
+    title: `Evento D4Sign: ${row.event_type ?? 'status'}`,
+    status: mappedStatus,
+    severity: failed && !acknowledged ? 'critical' : pending ? 'warning' : 'info',
     createdAt: formatDate(row.created_at),
-    error: row.error_message ? row.error_message.slice(0, 180) : null,
+    patientId,
+    patientName: patientId ? patientNameById.get(patientId) : undefined,
+    documentId,
+    documentName: documentId
+      ? (documentNameById.get(documentId) ?? document?.name ?? undefined)
+      : undefined,
+    eventType: row.event_type ?? undefined,
+    retryCount: Number(row.retry_count ?? 0),
+    acknowledgedAt: row.acknowledged_at ? formatDate(row.acknowledged_at) : null,
+    error: redactOperationalError(row.error_message),
   };
 }
 
@@ -492,7 +560,7 @@ export async function getClinicDocumentsWorkspace(): Promise<{
       supabase
         .from('d4sign_events')
         .select(
-          'id,event_type,status,retry_count,error_message,created_at,processed_at,payload_summary'
+          'id,event_type,status,retry_count,error_message,created_at,processed_at,payload_summary,acknowledged_at,signature_requests(generated_document_id,patient_id,generated_documents(name))'
         )
         .order('created_at', { ascending: false })
         .limit(25),
@@ -593,6 +661,8 @@ export async function getClinicDocumentsWorkspace(): Promise<{
     const documents = documentRows.map((row) => mapDocument(row, patientNameById));
     const categories = buildCategories(templates, documents);
 
+    const documentNameById = new Map(documents.map((doc) => [doc.id, doc.name]));
+
     const monitorEvents = [
       ...documents
         .filter(
@@ -609,11 +679,21 @@ export async function getClinicDocumentsWorkspace(): Promise<{
           createdAt: doc.updatedAt,
           patientId: doc.patientId,
           documentId: doc.id,
+          severity: DOCUMENT_FAILED_STATUSES.has(doc.status.toLowerCase())
+            ? ('critical' as const)
+            : ('warning' as const),
+          patientName: doc.patientName,
+          documentName: doc.name,
+          eventType: 'generated_document_status',
+          retryCount: 0,
+          acknowledgedAt: null,
           error: DOCUMENT_FAILED_STATUSES.has(doc.status.toLowerCase())
             ? `Documento em status ${doc.status}`
             : null,
         })),
-      ...((eventsRes.data ?? []) as ProviderEventRow[]).map(getProviderEventSummary),
+      ...((eventsRes.data ?? []) as ProviderEventRow[]).map((row) =>
+        getProviderEventSummary(row, patientNameById, documentNameById)
+      ),
     ].slice(0, 25);
 
     const primaryContactByPatientId = new Map<string, PatientContactRow>();
@@ -936,5 +1016,91 @@ export async function setClinicDocumentPatientRelease(
     };
   } catch (error) {
     return { data: null, error: safeError(error, 'Nao foi possivel atualizar liberacao.') };
+  }
+}
+
+export async function getClinicDocumentMonitorEvents({
+  page = 0,
+  pageSize = 25,
+}: {
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<{ data: ClinicDocumentMonitorPage | null; error: SafeServiceError | null }> {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const from = Math.max(0, page) * pageSize;
+    const to = from + Math.max(1, pageSize) - 1;
+    const { data, error, count } = await supabase
+      .from('d4sign_events')
+      .select(
+        'id,event_type,status,retry_count,error_message,created_at,processed_at,payload_summary,acknowledged_at,signature_requests(generated_document_id,patient_id,generated_documents(name))',
+        { count: 'exact' }
+      )
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (error) return { data: null, error: safeError(error, 'Eventos D4Sign indisponiveis.') };
+    return {
+      data: {
+        events: ((data ?? []) as ProviderEventRow[]).map((row) => getProviderEventSummary(row)),
+        count: count ?? 0,
+        page,
+        pageSize,
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Eventos D4Sign indisponiveis.') };
+  }
+}
+
+export async function updateClinicDocumentSignatureStatus(
+  documentId: string,
+  patientId: string,
+  status: string,
+  reason: string
+) {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('update_document_signature_status', {
+      p_generated_document_id: documentId,
+      p_patient_id: patientId,
+      p_status: status,
+      p_reason: reason,
+    });
+    if (error)
+      return { data: null, error: safeError(error, 'Nao foi possivel atualizar assinatura.') };
+    return { data: asRecord(data), error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel atualizar assinatura.') };
+  }
+}
+
+export async function acknowledgeClinicD4SignEventFailure(eventId: string, note: string) {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('acknowledge_d4sign_event_failure', {
+      p_event_id: eventId,
+      p_note: note,
+    });
+    if (error) return { data: null, error: safeError(error, 'Nao foi possivel reconhecer falha.') };
+    return { data: asRecord(data), error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel reconhecer falha.') };
+  }
+}
+
+export async function requestClinicD4SignEventReprocess(eventId: string, reason: string) {
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('request_clinic_d4sign_event_reprocess', {
+      p_event_id: eventId,
+      p_reason: reason,
+    });
+    if (error)
+      return { data: null, error: safeError(error, 'Nao foi possivel solicitar reprocesso.') };
+    return { data: asRecord(data), error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Nao foi possivel solicitar reprocesso.') };
   }
 }
