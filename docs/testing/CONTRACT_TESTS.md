@@ -54,6 +54,12 @@ For documentation-only changes:
 git diff --check
 ```
 
+For clinical-flow P0 contract work, update
+`docs/CLINICAL_FLOW_CONTRACTS_P0.md` and the affected runbooks before UI or
+schema work. Docs-only verification remains `git diff --check`; Supabase
+migrations, bootstraps, provider calls, and mutating smokes require explicit
+authorization for the exact command and environment.
+
 ## Core RBAC Smoke Tests
 
 Manual SQL checklist:
@@ -265,8 +271,9 @@ Validated behavior:
 
 1. Core auth and Patient 360 demo seeds are present.
 2. `get_clinic_programs()` returns seeded programs for a clinic admin.
-3. `get_program_builder_options()` returns active tenant team members and
-   check-in template options.
+3. `get_program_builder_options()` returns active `tenant_professionals` team
+   members with profile metadata, validates a clinic admin RBAC user with a
+   physician professional profile, and returns check-in template options.
 4. `upsert_program_from_builder()` saves a draft and publishes it.
 5. `clone_program()` creates a draft clone.
 6. `update_program_status()` archives the clone.
@@ -280,6 +287,34 @@ Validated behavior:
 
 The script refuses non-local targets unless
 `ALLOW_REMOTE_PROGRAMS_SMOKE=true` is set for an approved sandbox.
+
+## Agenda Rooms And Professional Schedule Contract Checks
+
+Manual/local contract for P1:
+
+```bash
+npx supabase migration up --local --include-all
+```
+
+Validated behavior:
+
+1. `clinic_rooms` and `professional_day_allocations` exist with RLS enabled.
+2. `get_agenda_schedule_options()` returns units, active professionals, rooms,
+   and allocations for the selected date.
+3. `upsert_clinic_room()` creates or updates a tenant-scoped room and writes an
+   `agenda.room_upserted` audit event.
+4. `upsert_professional_day_allocation()` associates an active
+   `tenant_professionals` record with a room and time range for the day.
+5. Overlapping allocation for the same professional raises
+   `professional_allocation_conflict`.
+6. Overlapping allocation for the same room raises `room_allocation_conflict`.
+7. `create_agenda_appointment()` and `update_agenda_appointment()` accept
+   `professional_profile_id`, `room_id` and `unit_id`, require a covering
+   professional allocation when a structured professional is provided, and
+   reject appointment conflicts by patient, room or professional.
+8. `get_agenda_day_snapshot()` returns persisted `professionalProfileId`,
+   `professionalUserId`, `roomId`, `roomCode` and `unitId`; the attendance queue
+   mirrors those IDs from the appointment trigger.
 
 ## Documents Contract Test
 

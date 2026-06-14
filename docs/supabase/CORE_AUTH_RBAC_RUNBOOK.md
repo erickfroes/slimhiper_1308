@@ -117,6 +117,26 @@ Using placeholder emails:
    `clinic_admin` includes `packages.read` and `packages.write` for the
    programs/packages MVP contract.
 
+## Patient Portal Activation Contract
+
+The clinical-flow P0 contract is documented in
+[../CLINICAL_FLOW_CONTRACTS_P0.md](../CLINICAL_FLOW_CONTRACTS_P0.md).
+The patient portal exists and must remain fail-closed until operational linkage
+is explicit.
+
+Minimum activation sequence:
+
+1. Create or identify the patient.
+2. Create or invite the patient/guardian auth user.
+3. Create an active tenant membership with patient/guardian role semantics and
+   `patient_portal.access`.
+4. Create the active `patient_accounts` or `guardian_links` row.
+5. Audit the activation, suspension, revocation, or resend action.
+
+Do not expose broad `patient_pii` or clinical data to `/patient` from a profile
+alone. Linkage rows and permission checks remain the source of truth for portal
+access.
+
 ## Manual Flow
 
 If you prefer manual setup in Supabase Dashboard:

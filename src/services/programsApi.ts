@@ -8,6 +8,7 @@ import type {
   ProgramBuilderTeamMember,
   ProgramPaymentModel,
   ProgramPhase,
+  ProfessionalType,
   ProgramRequiredDocument,
   ProgramService,
   ProgramStatus,
@@ -84,6 +85,10 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
+function asNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
 function asProgramType(value: unknown): ProgramType {
   const raw = asString(value, 'saude_metabolica');
   return [
@@ -107,6 +112,16 @@ function asPaymentModel(value: unknown): ProgramPaymentModel {
   return raw === 'avista' || raw === 'parcelado' || raw === 'assinatura' || raw === 'hibrido'
     ? raw
     : 'parcelado';
+}
+
+function asProfessionalType(value: unknown): ProfessionalType | null {
+  const raw = asString(value);
+  return raw === 'physician' ||
+    raw === 'nutritionist' ||
+    raw === 'fitness_professional' ||
+    raw === 'external_professional'
+    ? raw
+    : null;
 }
 
 function normalizePhase(item: unknown): ProgramPhase {
@@ -164,6 +179,20 @@ function normalizeTeamMember(item: unknown): ProgramBuilderTeamMember {
     name: asString(raw.name, 'Profissional'),
     role: asString(raw.role, 'Equipe'),
     specialty: asString(raw.specialty),
+    email: asNullableString(raw.email) ?? undefined,
+    roleCode: asNullableString(raw.roleCode) ?? undefined,
+    professionalProfileId: asNullableString(raw.professionalProfileId),
+    professionalType: asProfessionalType(raw.professionalType),
+    licenseNumber: asNullableString(raw.licenseNumber),
+    licenseState: asNullableString(raw.licenseState),
+    unitId: asNullableString(raw.unitId),
+    unitName: asNullableString(raw.unitName),
+    status: asString(raw.status, 'active'),
+    membershipStatus: asNullableString(raw.membershipStatus) ?? undefined,
+    profileStatus: asNullableString(raw.profileStatus) ?? undefined,
+    isActive: asBoolean(raw.isActive, true),
+    source: asNullableString(raw.source) ?? undefined,
+    countsAsDoctor: asBoolean(raw.countsAsDoctor),
   };
 }
 
@@ -254,6 +283,26 @@ function sanitizeDraft(draft: ProgramBuilderDraft): ProgramBuilderDraft {
       name: sanitizeText(member.name, 120),
       role: sanitizeOptionalText(member.role, 120),
       specialty: sanitizeOptionalText(member.specialty, 120),
+      email: member.email ? sanitizeOptionalText(member.email, 160) : undefined,
+      roleCode: member.roleCode ? sanitizeOptionalText(member.roleCode, 80) : undefined,
+      professionalProfileId: member.professionalProfileId
+        ? sanitizeText(member.professionalProfileId, 80)
+        : null,
+      professionalType: member.professionalType ?? null,
+      licenseNumber: member.licenseNumber ? sanitizeOptionalText(member.licenseNumber, 80) : null,
+      licenseState: member.licenseState ? sanitizeOptionalText(member.licenseState, 2) : null,
+      unitId: member.unitId ? sanitizeText(member.unitId, 80) : null,
+      unitName: member.unitName ? sanitizeOptionalText(member.unitName, 120) : null,
+      status: member.status ? sanitizeOptionalText(member.status, 40) : undefined,
+      membershipStatus: member.membershipStatus
+        ? sanitizeOptionalText(member.membershipStatus, 40)
+        : undefined,
+      profileStatus: member.profileStatus
+        ? sanitizeOptionalText(member.profileStatus, 40)
+        : undefined,
+      isActive: member.isActive,
+      source: member.source ? sanitizeOptionalText(member.source, 80) : undefined,
+      countsAsDoctor: member.countsAsDoctor,
     }))
     .filter((member) => member.id !== '' || member.name !== '');
 

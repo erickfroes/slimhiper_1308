@@ -32,10 +32,116 @@ export interface AppointmentMutationInput {
   durationMinutes?: number | null;
   location?: string | null;
   notes?: string | null;
+  professionalProfileId?: string | null;
+  roomId?: string | null;
+  unitId?: string | null;
+}
+
+export type AgendaRoomType =
+  | 'consulting'
+  | 'triage'
+  | 'bioimpedance'
+  | 'procedure'
+  | 'admin'
+  | 'other';
+
+export type AgendaRoomStatus = 'active' | 'inactive' | 'maintenance';
+
+export interface AgendaRoom {
+  id: string;
+  unitId?: string;
+  unitName?: string;
+  code: string;
+  name: string;
+  roomType: AgendaRoomType;
+  status: AgendaRoomStatus;
+  capacity: number;
+}
+
+export interface AgendaProfessionalOption {
+  id: string;
+  userId: string;
+  unitId?: string;
+  unitName?: string;
+  name: string;
+  email?: string;
+  professionalType: string;
+  specialty?: string;
+  licenseNumber?: string;
+  licenseState?: string;
+  isActive: boolean;
+}
+
+export type ProfessionalDayAllocationStatus = 'scheduled' | 'available' | 'blocked' | 'cancelled';
+
+export interface ProfessionalDayAllocation {
+  id: string;
+  unitId?: string;
+  unitName?: string;
+  workDate: string;
+  startsAt: string;
+  endsAt: string;
+  startTime: string;
+  endTime: string;
+  status: ProfessionalDayAllocationStatus;
+  notes?: string;
+  professionalProfileId: string;
+  professionalUserId: string;
+  professionalName: string;
+  professionalType?: string;
+  professionalSpecialty?: string;
+  roomId?: string;
+  roomName?: string;
+  roomCode?: string;
+  roomType?: AgendaRoomType;
+}
+
+export interface AgendaScheduleUnit {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+}
+
+export interface AgendaScheduleOptions {
+  date: string;
+  timezone?: string;
+  units: AgendaScheduleUnit[];
+  rooms: AgendaRoom[];
+  professionals: AgendaProfessionalOption[];
+  allocations: ProfessionalDayAllocation[];
+}
+
+export interface AgendaRoomInput {
+  id?: string | null;
+  unitId?: string | null;
+  code: string;
+  name: string;
+  roomType: AgendaRoomType;
+  status: AgendaRoomStatus;
+  capacity?: number | null;
+}
+
+export interface ProfessionalDayAllocationInput {
+  id?: string | null;
+  unitId?: string | null;
+  professionalProfileId: string;
+  roomId?: string | null;
+  workDate: string;
+  startTime: string;
+  endTime: string;
+  status?: ProfessionalDayAllocationStatus;
+  notes?: string | null;
 }
 
 interface AgendaProvider {
   getAgendaDay(date: string): Promise<AgendaDayData>;
+  getScheduleOptions(date: string): Promise<AgendaScheduleOptions>;
+  saveClinicRoom(input: AgendaRoomInput): Promise<AgendaRoom>;
+  saveProfessionalDayAllocation(
+    input: ProfessionalDayAllocationInput
+  ): Promise<ProfessionalDayAllocation>;
+  cancelProfessionalDayAllocation(allocationId: string, reason?: string | null): Promise<void>;
   updateAppointmentStatus(
     appointmentId: string,
     nextStatus: AppointmentStatus,
@@ -84,6 +190,9 @@ type AppointmentRow = {
   arrived_at: string | null;
   duration_minutes: number | null;
   practitioner_id: string | null;
+  professional_profile_id?: string | null;
+  room_id?: string | null;
+  unit_id?: string | null;
   location: string | null;
   notes: string | null;
 };
@@ -139,6 +248,46 @@ function getMockAgendaProvider(): Promise<AgendaProvider> {
         blockedSlots: [],
         calendarEvents: { [date]: appointments.length },
       };
+    },
+    async getScheduleOptions(date) {
+      return {
+        date,
+        rooms: [],
+        professionals: [],
+        allocations: [],
+        units: [],
+      };
+    },
+    async saveClinicRoom(input) {
+      return {
+        id: input.id ?? 'mock-room',
+        unitId: input.unitId ?? undefined,
+        code: input.code,
+        name: input.name,
+        roomType: input.roomType,
+        status: input.status,
+        capacity: input.capacity ?? 1,
+      };
+    },
+    async saveProfessionalDayAllocation(input) {
+      return {
+        id: input.id ?? 'mock-allocation',
+        unitId: input.unitId ?? undefined,
+        workDate: input.workDate,
+        startsAt: `${input.workDate}T${input.startTime}:00`,
+        endsAt: `${input.workDate}T${input.endTime}:00`,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        status: input.status ?? 'available',
+        notes: input.notes ?? undefined,
+        professionalProfileId: input.professionalProfileId,
+        professionalUserId: 'mock-professional-user',
+        professionalName: 'Profissional mock',
+        roomId: input.roomId ?? undefined,
+      };
+    },
+    async cancelProfessionalDayAllocation() {
+      return undefined;
     },
     async updateAppointmentStatus() {
       return undefined;
@@ -262,9 +411,12 @@ function toAppointmentSummary(row: AppointmentRow, names: Map<string, string>): 
     status: mapAppointmentStatus(row.status),
     scheduledAt: row.scheduled_at,
     durationMinutes: row.duration_minutes ?? 30,
+    professionalProfileId: row.professional_profile_id ?? undefined,
     professionalName: 'Equipe clinica',
     professionalRole: 'Profissional',
+    roomId: row.room_id ?? undefined,
     roomName: row.location ?? undefined,
+    unitId: row.unit_id ?? undefined,
     notes: row.notes ?? undefined,
   };
 }
@@ -298,6 +450,24 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+const roomTypeValues = new Set<AgendaRoomType>([
+  'consulting',
+  'triage',
+  'bioimpedance',
+  'procedure',
+  'admin',
+  'other',
+]);
+
+const roomStatusValues = new Set<AgendaRoomStatus>(['active', 'inactive', 'maintenance']);
+
+const allocationStatusValues = new Set<ProfessionalDayAllocationStatus>([
+  'scheduled',
+  'available',
+  'blocked',
+  'cancelled',
+]);
+
 const attendanceQueueStatusValues = new Set<AttendanceQueueStatus>([
   'scheduled',
   'waiting',
@@ -329,6 +499,138 @@ function normalizePatientReturnStatus(value: unknown): PatientReturnStatus {
   return patientReturnStatusValues.has(normalized) ? normalized : 'pendente';
 }
 
+function normalizeRoomType(value: unknown): AgendaRoomType {
+  const normalized = asString(value).toLowerCase() as AgendaRoomType;
+  return roomTypeValues.has(normalized) ? normalized : 'consulting';
+}
+
+function normalizeRoomStatus(value: unknown): AgendaRoomStatus {
+  const normalized = asString(value).toLowerCase() as AgendaRoomStatus;
+  return roomStatusValues.has(normalized) ? normalized : 'active';
+}
+
+function normalizeAllocationStatus(value: unknown): ProfessionalDayAllocationStatus {
+  const normalized = asString(value).toLowerCase() as ProfessionalDayAllocationStatus;
+  return allocationStatusValues.has(normalized) ? normalized : 'available';
+}
+
+function normalizeAgendaRoom(value: unknown): AgendaRoom | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const code = asString(record.code);
+  const name = asString(record.name);
+  if (!id || !code || !name) return null;
+
+  return {
+    id,
+    unitId: asString(record.unitId) || undefined,
+    unitName: asString(record.unitName) || undefined,
+    code,
+    name,
+    roomType: normalizeRoomType(record.roomType),
+    status: normalizeRoomStatus(record.status),
+    capacity: Math.max(1, Math.round(asNumber(record.capacity, 1))),
+  };
+}
+
+function normalizeAgendaProfessional(value: unknown): AgendaProfessionalOption | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const userId = asString(record.userId);
+  if (!id || !userId) return null;
+
+  return {
+    id,
+    userId,
+    unitId: asString(record.unitId) || undefined,
+    unitName: asString(record.unitName) || undefined,
+    name: asString(record.name, 'Profissional sem nome'),
+    email: asString(record.email) || undefined,
+    professionalType: asString(record.professionalType, 'professional'),
+    specialty: asString(record.specialty) || undefined,
+    licenseNumber: asString(record.licenseNumber) || undefined,
+    licenseState: asString(record.licenseState) || undefined,
+    isActive: record.isActive !== false,
+  };
+}
+
+function normalizeProfessionalAllocation(value: unknown): ProfessionalDayAllocation | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const professionalProfileId = asString(record.professionalProfileId);
+  const professionalUserId = asString(record.professionalUserId);
+  const workDate = asString(record.workDate);
+  const startsAt = asString(record.startsAt);
+  const endsAt = asString(record.endsAt);
+  if (!id || !professionalProfileId || !professionalUserId || !workDate || !startsAt || !endsAt) {
+    return null;
+  }
+
+  return {
+    id,
+    unitId: asString(record.unitId) || undefined,
+    unitName: asString(record.unitName) || undefined,
+    workDate,
+    startsAt,
+    endsAt,
+    startTime: asString(record.startTime) || toLocalTimeFromIso(startsAt),
+    endTime: asString(record.endTime) || toLocalTimeFromIso(endsAt),
+    status: normalizeAllocationStatus(record.status),
+    notes: asString(record.notes) || undefined,
+    professionalProfileId,
+    professionalUserId,
+    professionalName: asString(record.professionalName, 'Profissional sem nome'),
+    professionalType: asString(record.professionalType) || undefined,
+    professionalSpecialty: asString(record.professionalSpecialty) || undefined,
+    roomId: asString(record.roomId) || undefined,
+    roomName: asString(record.roomName) || undefined,
+    roomCode: asString(record.roomCode) || undefined,
+    roomType: record.roomType ? normalizeRoomType(record.roomType) : undefined,
+  };
+}
+
+function normalizeAgendaUnit(value: unknown): AgendaScheduleUnit | null {
+  const record = asRecord(value);
+  const id = asString(record.id);
+  const name = asString(record.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    code: asString(record.code),
+    name,
+    status: asString(record.status, 'active'),
+  };
+}
+
+function normalizeScheduleOptionsPayload(payload: unknown): AgendaScheduleOptions {
+  const record = asRecord(payload);
+  const date = asString(record.date);
+  return {
+    date,
+    timezone: asString(record.timezone) || undefined,
+    units: asArray(record.units)
+      .map(normalizeAgendaUnit)
+      .filter((item): item is AgendaScheduleUnit => Boolean(item)),
+    rooms: asArray(record.rooms)
+      .map(normalizeAgendaRoom)
+      .filter((item): item is AgendaRoom => Boolean(item)),
+    professionals: asArray(record.professionals)
+      .map(normalizeAgendaProfessional)
+      .filter((item): item is AgendaProfessionalOption => Boolean(item)),
+    allocations: asArray(record.allocations)
+      .map(normalizeProfessionalAllocation)
+      .filter((item): item is ProfessionalDayAllocation => Boolean(item)),
+  };
+}
+
+function toLocalTimeFromIso(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 function normalizeAppointmentSummary(value: unknown): AppointmentSummary | null {
   const record = asRecord(value);
   const id = asString(record.id);
@@ -346,9 +648,15 @@ function normalizeAppointmentSummary(value: unknown): AppointmentSummary | null 
     status: mapAppointmentStatus(asString(record.status)),
     scheduledAt: asString(record.scheduledAt),
     durationMinutes: Math.max(1, Math.round(asNumber(record.durationMinutes, 30))),
+    professionalProfileId: asString(record.professionalProfileId) || undefined,
+    professionalUserId: asString(record.professionalUserId) || undefined,
     professionalName: asString(record.professionalName, 'Equipe clinica'),
     professionalRole: asString(record.professionalRole, 'Profissional'),
+    roomId: asString(record.roomId) || undefined,
     roomName: asString(record.roomName) || undefined,
+    roomCode: asString(record.roomCode) || undefined,
+    unitId: asString(record.unitId) || undefined,
+    unitName: asString(record.unitName) || undefined,
     notes: asString(record.notes) || undefined,
     attendanceLink: asString(record.attendanceLink) || undefined,
     attendanceQueueId: asString(record.attendanceQueueId) || undefined,
@@ -381,7 +689,10 @@ function normalizeWaitingQueueEntry(value: unknown): WaitingQueueEntry | null {
     startedAt: asString(record.startedAt) || undefined,
     completedAt: asString(record.completedAt) || undefined,
     waitingMinutes: Math.max(0, Math.round(asNumber(record.waitingMinutes))),
+    professionalProfileId: asString(record.professionalProfileId) || undefined,
+    professionalUserId: asString(record.professionalUserId) || undefined,
     professionalName: asString(record.professionalName, 'Equipe clinica'),
+    roomId: asString(record.roomId) || undefined,
     room: asString(record.room) || undefined,
     encounterId: asString(record.encounterId) || undefined,
     attendanceLink: asString(record.attendanceLink) || undefined,
@@ -428,6 +739,8 @@ function normalizeBlockedSlot(value: unknown): BlockedSlotSummary | null {
     status: asString(record.status) === 'cancelled' ? 'cancelled' : 'active',
     reason: asString(record.reason, 'Horario bloqueado'),
     location: asString(record.location) || undefined,
+    roomId: asString(record.roomId) || undefined,
+    roomName: asString(record.roomName) || undefined,
   };
 }
 
@@ -491,6 +804,68 @@ const supabaseAgendaProvider: AgendaProvider = {
     return normalizeAgendaDayPayload(data);
   },
 
+  async getScheduleOptions(date) {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('get_agenda_schedule_options', {
+      p_target_date: date,
+    });
+
+    if (error) throw error;
+    return normalizeScheduleOptionsPayload(data);
+  },
+
+  async saveClinicRoom(input) {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('upsert_clinic_room', {
+      p_room_id: input.id ?? null,
+      p_payload: {
+        unitId: input.unitId ?? null,
+        code: input.code,
+        name: input.name,
+        roomType: input.roomType,
+        status: input.status,
+        capacity: input.capacity ?? 1,
+      },
+    });
+
+    if (error) throw error;
+    const room = normalizeAgendaRoom(data);
+    if (!room) throw new Error('Contrato invalido ao salvar sala.');
+    return room;
+  },
+
+  async saveProfessionalDayAllocation(input) {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('upsert_professional_day_allocation', {
+      p_allocation_id: input.id ?? null,
+      p_payload: {
+        unitId: input.unitId ?? null,
+        professionalProfileId: input.professionalProfileId,
+        roomId: input.roomId ?? null,
+        workDate: input.workDate,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        status: input.status ?? 'available',
+        notes: normalizeOptionalText(input.notes),
+      },
+    });
+
+    if (error) throw error;
+    const allocation = normalizeProfessionalAllocation(data);
+    if (!allocation) throw new Error('Contrato invalido ao salvar escala.');
+    return allocation;
+  },
+
+  async cancelProfessionalDayAllocation(allocationId, reason) {
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.rpc('cancel_professional_day_allocation', {
+      p_allocation_id: allocationId,
+      p_reason: reason ?? null,
+    });
+
+    if (error) throw error;
+  },
+
   async updateAppointmentStatus(appointmentId, nextStatus, reason) {
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.rpc('update_appointment_status', {
@@ -513,6 +888,9 @@ const supabaseAgendaProvider: AgendaProvider = {
       p_duration_minutes: input.durationMinutes ?? 30,
       p_location: normalizeOptionalText(input.location),
       p_notes: normalizeOptionalText(input.notes),
+      p_professional_profile_id: normalizeOptionalText(input.professionalProfileId),
+      p_room_id: normalizeOptionalText(input.roomId),
+      p_unit_id: normalizeOptionalText(input.unitId),
     });
 
     if (error) throw error;
@@ -533,6 +911,9 @@ const supabaseAgendaProvider: AgendaProvider = {
       p_duration_minutes: input.durationMinutes ?? 30,
       p_location: normalizeOptionalText(input.location),
       p_notes: normalizeOptionalText(input.notes),
+      p_professional_profile_id: normalizeOptionalText(input.professionalProfileId),
+      p_room_id: normalizeOptionalText(input.roomId),
+      p_unit_id: normalizeOptionalText(input.unitId),
     });
 
     if (error) throw error;
@@ -597,6 +978,50 @@ export async function getAgendaDay(date: string): Promise<AgendaDayData> {
   return runAgendaOperation((provider) => provider.getAgendaDay(date));
 }
 
+export async function getAgendaScheduleOptions(date: string): Promise<AgendaScheduleOptions> {
+  return runAgendaOperation((provider) => provider.getScheduleOptions(date));
+}
+
+export async function saveClinicRoom(
+  input: AgendaRoomInput
+): Promise<{ data: AgendaRoom | null; error: SafeServiceError | null }> {
+  try {
+    return {
+      data: await runAgendaOperation((provider) => provider.saveClinicRoom(input)),
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Nao foi possivel salvar sala.') };
+  }
+}
+
+export async function saveProfessionalDayAllocation(
+  input: ProfessionalDayAllocationInput
+): Promise<{ data: ProfessionalDayAllocation | null; error: SafeServiceError | null }> {
+  try {
+    return {
+      data: await runAgendaOperation((provider) => provider.saveProfessionalDayAllocation(input)),
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Nao foi possivel salvar escala.') };
+  }
+}
+
+export async function cancelProfessionalDayAllocation(
+  allocationId: string,
+  reason?: string | null
+): Promise<{ error: SafeServiceError | null }> {
+  try {
+    await runAgendaOperation((provider) =>
+      provider.cancelProfessionalDayAllocation(allocationId, reason)
+    );
+    return { error: null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Nao foi possivel cancelar escala.') };
+  }
+}
+
 export async function getPatientAppointments(
   patientId: string
 ): Promise<{ data: AppointmentSummary[]; error: SafeServiceError | null }> {
@@ -614,7 +1039,7 @@ export async function getPatientAppointments(
     const { data, error } = await supabase
       .from('appointments')
       .select(
-        'id,tenant_id,patient_id,type,status,scheduled_at,arrived_at,duration_minutes,practitioner_id,location,notes'
+        'id,tenant_id,patient_id,type,status,scheduled_at,arrived_at,duration_minutes,practitioner_id,professional_profile_id,room_id,unit_id,location,notes'
       )
       .eq('patient_id', patientId)
       .order('scheduled_at', { ascending: false })

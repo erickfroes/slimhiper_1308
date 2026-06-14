@@ -132,6 +132,24 @@ timeline, and audit rows.
 The scripted checks may report additional skipped/optional checks when optional
 environment variables are missing.
 
+## Clinical Flow P0 Alignment
+
+The cross-module contract is documented in
+[../CLINICAL_FLOW_CONTRACTS_P0.md](../CLINICAL_FLOW_CONTRACTS_P0.md).
+Patient 360 remains the longitudinal read-model, not the owner of agenda,
+billing, prescription, lab, bioimpedance, or task mutations.
+
+P0 decisions for downstream Patient 360 work:
+
+- `patient_tasks` remains the canonical short-term task table.
+- `lab_orders`, `bioimpedance_results`, and `prescriptions` can be linked to an
+  encounter, but can also be created outside SOAP when the mutation writes an
+  audited source payload.
+- Agenda-originated service/package/program/invoice/payment context must be
+  reflected through timeline payloads and summary read-models with local IDs.
+- New timeline payloads should follow the `clinical-flow-p0` metadata shape and
+  must not include provider secrets, raw Asaas/D4Sign bodies, or unnecessary PII.
+
 ## Frontend And Edge Function Contract
 
 The frontend service in `src/services/patient360Api.ts` calls:

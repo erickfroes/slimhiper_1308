@@ -19,6 +19,7 @@ Migration:
 - `supabase/migrations/20260531180000_140_programs_builder_contract.sql`
 - `supabase/migrations/20260531181000_141_program_checkin_template_fk_fix.sql`
 - `supabase/migrations/20260531182000_142_program_enrollment_operational_reflections.sql`
+- `supabase/migrations/20260614100000_450_program_builder_professionals_contract.sql`
 
 Tables added or extended:
 
@@ -32,8 +33,10 @@ RPCs:
 - `get_clinic_programs()`: read program list, phases, services, app
   entitlements, required documents, check-in templates, team and active patient
   counts. Requires `packages.read`.
-- `get_program_builder_options()`: read active tenant team members and reusable
-  check-in templates. Requires `packages.read`.
+- `get_program_builder_options()`: read active clinical professionals from
+  `tenant_professionals`, with legacy role fallback only when no professional
+  profiles exist, plus reusable check-in templates. Requires `packages.read`
+  for the caller; returned professionals do not need `packages.read`.
 - `upsert_program_from_builder(p_draft, p_publish)`: transactional builder
   save/publish. Requires `packages.write`.
 - `update_program_status(p_program_id, p_status)`: publish/archive/draft status
@@ -59,6 +62,11 @@ RPCs:
 
 Production paths must show backend/RLS errors instead of silently replacing
 them with mock success.
+
+Builder team options now return `professionalProfileId`, `professionalType`,
+license, unit, status, role code and source metadata. The `id` field remains
+the `profiles.id` value because `program_team_members.profile_id` is still the
+saved relation.
 
 ## Local Smoke
 
@@ -95,3 +103,20 @@ git diff --check
 - Enrollment creates local invoice and required-document task rows only. Asaas
   provider calls remain gated by billing Edge Functions, and D4Sign/document PDF
   generation remains gated by the documents module.
+
+## Clinical Flow P0 Alignment
+
+See [../CLINICAL_FLOW_CONTRACTS_P0.md](../CLINICAL_FLOW_CONTRACTS_P0.md) for
+the agenda/finance/Paciente 360 integration contract before new UI work.
+
+Program enrollment already creates local operational reflections: enrollment,
+initial appointment, local pending invoice when priced, required-document tasks,
+check-ins, audit, and timeline. Agenda-originated program, package, or service
+selection should reuse the same local-reflection pattern and write stable IDs
+for `appointment`, `program`, `enrollment`, `package`, `service`, `invoice`, and
+`payment` before Patient 360 or finance screens consume the data.
+
+Provider calls remain outside this automatic flow. A program/package/service
+selected in agenda may create local billing context, but Asaas and D4Sign calls
+must continue to go through their dedicated gated functions after explicit
+authorization and permission checks.

@@ -302,9 +302,15 @@ export interface AppointmentSummary {
   status: AppointmentStatus;
   scheduledAt: string;
   durationMinutes: number;
+  professionalProfileId?: string;
+  professionalUserId?: string;
   professionalName: string;
   professionalRole: string;
+  roomId?: string;
   roomName?: string;
+  roomCode?: string;
+  unitId?: string;
+  unitName?: string;
   notes?: string;
   attendanceLink?: string;
   attendanceQueueId?: string;
@@ -944,7 +950,10 @@ export interface WaitingQueueEntry {
   startedAt?: string;
   completedAt?: string;
   waitingMinutes: number;
+  professionalProfileId?: string;
+  professionalUserId?: string;
   professionalName: string;
+  roomId?: string;
   room?: string;
   encounterId?: string;
   attendanceLink?: string;
@@ -984,6 +993,8 @@ export interface BlockedSlotSummary {
   status: 'active' | 'cancelled';
   reason: string;
   location?: string;
+  roomId?: string;
+  roomName?: string;
 }
 
 // Patient list row
@@ -1363,6 +1374,20 @@ export interface ProgramBuilderTeamMember {
   name: string;
   role: string;
   specialty: string;
+  email?: string;
+  roleCode?: string;
+  professionalProfileId?: string | null;
+  professionalType?: ProfessionalType | null;
+  licenseNumber?: string | null;
+  licenseState?: string | null;
+  unitId?: string | null;
+  unitName?: string | null;
+  status?: 'active' | 'inactive' | string;
+  membershipStatus?: string;
+  profileStatus?: string;
+  isActive?: boolean;
+  source?: 'tenant_professionals' | 'legacy_role' | string;
+  countsAsDoctor?: boolean;
 }
 
 export interface ProgramBuilderCheckinTemplate {

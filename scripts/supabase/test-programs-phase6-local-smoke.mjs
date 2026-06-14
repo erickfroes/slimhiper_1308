@@ -100,6 +100,34 @@ async function signInClinicAdmin() {
   return client;
 }
 
+async function ensureClinicAdminProfessionalProfile(tenantId) {
+  const { data: membership, error: membershipError } = await admin
+    .from('tenant_memberships')
+    .select('id, tenant_id, user_id, unit_id, role_code, status')
+    .eq('tenant_id', tenantId)
+    .eq('role_code', 'clinic_admin')
+    .eq('status', 'active')
+    .limit(1)
+    .single();
+  if (membershipError) throw membershipError;
+
+  const { error } = await admin.from('tenant_professionals').upsert(
+    {
+      tenant_id: membership.tenant_id,
+      user_id: membership.user_id,
+      membership_id: membership.id,
+      unit_id: membership.unit_id,
+      professional_type: 'physician',
+      license_number: 'CRM-P0-SMOKE',
+      license_state: 'SP',
+      specialty: 'Medicina integrativa',
+      is_active: true,
+    },
+    { onConflict: 'tenant_id,user_id,professional_type' }
+  );
+  if (error) throw error;
+}
+
 async function cleanupSmokeProgram(tenantId) {
   const { data: programs, error: listError } = await admin
     .from('programs')
@@ -197,6 +225,7 @@ async function run() {
   currentStep = 'preparing local smoke data';
   const tenant = await ensureTenant(process.env.SUPABASE_BOOTSTRAP_TENANT_SLUG ?? 'demo-clinic');
   await cleanupSmokeProgram(tenant.id);
+  await ensureClinicAdminProfessionalProfile(tenant.id);
   const client = await signInClinicAdmin();
 
   currentStep = 'checking programs list/options RPCs';
@@ -208,6 +237,30 @@ async function run() {
   ok(
     Array.isArray(options?.teamMembers) && options.teamMembers.length >= 1,
     'get_program_builder_options: expected team members.'
+  );
+  const professionalMembers = options.teamMembers.filter(
+    (member) => member.source === 'tenant_professionals'
+  );
+  ok(
+    professionalMembers.length >= 1,
+    'get_program_builder_options: expected tenant_professionals-backed team members.'
+  );
+  ok(
+    professionalMembers.every((member) => member.professionalProfileId && member.professionalType),
+    'get_program_builder_options: expected professional profile metadata.'
+  );
+  ok(
+    professionalMembers.some(
+      (member) =>
+        member.roleCode === 'clinic_admin' &&
+        member.professionalType === 'physician' &&
+        member.licenseNumber === 'CRM-P0-SMOKE'
+    ),
+    'get_program_builder_options: expected clinic admin RBAC with physician professional profile.'
+  );
+  ok(
+    professionalMembers.every((member) => member.status === 'active' && member.isActive === true),
+    'get_program_builder_options: expected active professional status.'
   );
   ok(
     Array.isArray(options?.checkinTemplates),

@@ -24,6 +24,8 @@ import {
   UserCheck,
   ClipboardCheck,
   Ban,
+  Building2,
+  Save,
 } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
 import PageHeader from '@/components/PageHeader';
@@ -43,14 +45,22 @@ import type {
 import {
   callAttendanceQueue,
   cancelAppointment,
+  cancelProfessionalDayAllocation,
   createAppointment,
   getAgendaDay,
+  getAgendaScheduleOptions,
   getNextAppointmentStatus,
   recordPatientReturnAction,
+  saveClinicRoom,
+  saveProfessionalDayAllocation,
   startAttendanceEncounter,
   updateAppointment,
   updateAppointmentStatus,
+  type AgendaRoomStatus,
+  type AgendaRoomType,
+  type AgendaScheduleOptions,
   type AppointmentMutationInput,
+  type ProfessionalDayAllocationStatus,
 } from '@/services/agendaApi';
 import { getPatientList } from '@/services/patientsApi';
 
@@ -304,7 +314,28 @@ type AppointmentFormState = {
   date: string;
   time: string;
   durationMinutes: string;
+  allocationId: string;
+  professionalProfileId: string;
+  roomId: string;
+  unitId: string;
   location: string;
+  notes: string;
+};
+
+type RoomFormState = {
+  code: string;
+  name: string;
+  roomType: AgendaRoomType;
+  status: AgendaRoomStatus;
+  capacity: string;
+};
+
+type AllocationFormState = {
+  professionalProfileId: string;
+  roomId: string;
+  startTime: string;
+  endTime: string;
+  status: ProfessionalDayAllocationStatus;
   notes: string;
 };
 
@@ -315,7 +346,32 @@ function createEmptyAppointmentForm(date: string): AppointmentFormState {
     date,
     time: '09:00',
     durationMinutes: '30',
+    allocationId: '',
+    professionalProfileId: '',
+    roomId: '',
+    unitId: '',
     location: '',
+    notes: '',
+  };
+}
+
+function createEmptyRoomForm(): RoomFormState {
+  return {
+    code: '',
+    name: '',
+    roomType: 'consulting',
+    status: 'active',
+    capacity: '1',
+  };
+}
+
+function createEmptyAllocationForm(): AllocationFormState {
+  return {
+    professionalProfileId: '',
+    roomId: '',
+    startTime: '08:00',
+    endTime: '12:00',
+    status: 'available',
     notes: '',
   };
 }
@@ -328,6 +384,10 @@ function appointmentToForm(appointment: AppointmentSummary): AppointmentFormStat
     date: parts.date,
     time: parts.time,
     durationMinutes: String(appointment.durationMinutes || 30),
+    allocationId: '',
+    professionalProfileId: appointment.professionalProfileId ?? '',
+    roomId: appointment.roomId ?? '',
+    unitId: appointment.unitId ?? '',
     location: appointment.roomName ?? '',
     notes: appointment.notes ?? '',
   };
@@ -341,6 +401,29 @@ function toAppointmentMutationInput(form: AppointmentFormState): AppointmentMuta
     durationMinutes: Number(form.durationMinutes) || 30,
     location: form.location,
     notes: form.notes,
+    professionalProfileId: form.professionalProfileId || null,
+    roomId: form.roomId || null,
+    unitId: form.unitId || null,
+  };
+}
+
+function slugRoomCode(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 24)
+    .toUpperCase();
+}
+
+function createEmptyScheduleOptions(date: string): AgendaScheduleOptions {
+  return {
+    date,
+    units: [],
+    rooms: [],
+    professionals: [],
+    allocations: [],
   };
 }
 
@@ -353,6 +436,8 @@ function AppointmentFormModal({
   form,
   patients,
   patientsLoading,
+  scheduleOptions,
+  scheduleOptionsLoading,
   error,
   submitting,
   onChange,
@@ -363,12 +448,19 @@ function AppointmentFormModal({
   form: AppointmentFormState;
   patients: PatientListRow[];
   patientsLoading: boolean;
+  scheduleOptions: AgendaScheduleOptions;
+  scheduleOptionsLoading: boolean;
   error: string | null;
   submitting: boolean;
   onChange: (patch: Partial<AppointmentFormState>) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const activeRooms = scheduleOptions.rooms.filter((room) => room.status === 'active');
+  const activeAllocations = scheduleOptions.allocations.filter(
+    (allocation) => allocation.status === 'available' || allocation.status === 'scheduled'
+  );
+
   return (
     <Dialog
       open
@@ -453,7 +545,94 @@ function AppointmentFormModal({
               />
             </label>
             <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
-              Sala/local
+              Escala do dia
+              <select
+                value={form.allocationId}
+                onChange={(event) => {
+                  const allocationId = event.target.value;
+                  const allocation = activeAllocations.find((item) => item.id === allocationId);
+                  onChange({
+                    allocationId,
+                    professionalProfileId: allocation?.professionalProfileId ?? '',
+                    roomId: allocation?.roomId ?? '',
+                    unitId: allocation?.unitId ?? '',
+                    location: allocation?.roomName ?? form.location,
+                  });
+                }}
+                className="input-base text-sm"
+                disabled={scheduleOptionsLoading || activeAllocations.length === 0}
+              >
+                <option value="">
+                  {scheduleOptionsLoading
+                    ? 'Carregando escala...'
+                    : activeAllocations.length === 0
+                      ? 'Nenhuma escala criada para o dia'
+                      : 'Selecione profissional e sala'}
+                </option>
+                {activeAllocations.map((allocation) => (
+                  <option key={allocation.id} value={allocation.id}>
+                    {allocation.startTime}-{allocation.endTime} · {allocation.professionalName}
+                    {allocation.roomName ? ` · ${allocation.roomName}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+              Profissional
+              <select
+                value={form.professionalProfileId}
+                onChange={(event) => {
+                  const professionalProfileId = event.target.value;
+                  const professional = scheduleOptions.professionals.find(
+                    (item) => item.id === professionalProfileId
+                  );
+                  onChange({
+                    allocationId: '',
+                    professionalProfileId,
+                    unitId: professional?.unitId ?? form.unitId,
+                  });
+                }}
+                className="input-base text-sm"
+                disabled={scheduleOptionsLoading}
+              >
+                <option value="">Sem profissional estruturado</option>
+                {scheduleOptions.professionals.map((professional) => (
+                  <option key={professional.id} value={professional.id}>
+                    {professional.name}
+                    {professional.specialty ? ` · ${professional.specialty}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+              Sala
+              <select
+                value={form.roomId}
+                onChange={(event) => {
+                  const roomId = event.target.value;
+                  const room = activeRooms.find((item) => item.id === roomId);
+                  onChange({
+                    allocationId: '',
+                    roomId,
+                    unitId: room?.unitId ?? form.unitId,
+                    location: room?.name ?? form.location,
+                  });
+                }}
+                className="input-base text-sm"
+                disabled={scheduleOptionsLoading || activeRooms.length === 0}
+              >
+                <option value="">
+                  {activeRooms.length === 0 ? 'Sem sala ativa' : 'Sem sala estruturada'}
+                </option>
+                {activeRooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    {room.name} · {room.code}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
+              Sala/local legado
               <input
                 value={form.location}
                 onChange={(event) => onChange({ location: event.target.value })}
@@ -778,6 +957,290 @@ function BlockedSlotsPanel({ slots }: { slots: BlockedSlotSummary[] }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const roomTypeLabel: Record<AgendaRoomType, string> = {
+  consulting: 'Consulta',
+  triage: 'Triagem',
+  bioimpedance: 'Bioimpedancia',
+  procedure: 'Procedimento',
+  admin: 'Administrativo',
+  other: 'Outro',
+};
+
+const roomStatusLabel: Record<AgendaRoomStatus, string> = {
+  active: 'Ativa',
+  inactive: 'Inativa',
+  maintenance: 'Manutencao',
+};
+
+const allocationStatusLabel: Record<ProfessionalDayAllocationStatus, string> = {
+  scheduled: 'Agendada',
+  available: 'Disponivel',
+  blocked: 'Bloqueada',
+  cancelled: 'Cancelada',
+};
+
+function AgendaSchedulePanel({
+  selectedDate,
+  options,
+  isLoading,
+  error,
+  roomForm,
+  allocationForm,
+  submitting,
+  onRoomChange,
+  onAllocationChange,
+  onSaveRoom,
+  onSaveAllocation,
+  onCancelAllocation,
+  onRefresh,
+}: {
+  selectedDate: string;
+  options: AgendaScheduleOptions;
+  isLoading: boolean;
+  error: string | null;
+  roomForm: RoomFormState;
+  allocationForm: AllocationFormState;
+  submitting: string | null;
+  onRoomChange: (patch: Partial<RoomFormState>) => void;
+  onAllocationChange: (patch: Partial<AllocationFormState>) => void;
+  onSaveRoom: () => void;
+  onSaveAllocation: () => void;
+  onCancelAllocation: (allocationId: string) => void;
+  onRefresh: () => void;
+}) {
+  const activeRooms = options.rooms.filter((room) => room.status === 'active');
+  const activeProfessionals = options.professionals.filter((professional) => professional.isActive);
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Salas e escala</h3>
+          <p className="text-xs text-muted-foreground">{formatDate(selectedDate)}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isLoading}
+          className="btn-ghost h-8 w-8 p-0 disabled:opacity-50"
+          title="Atualizar salas e escala"
+        >
+          <RefreshCw size={14} className={isLoading ? 'animate-spin' : undefined} />
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <form
+          className="space-y-2 border-b border-border pb-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSaveRoom();
+          }}
+        >
+          <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+            <Building2 size={14} />
+            Nova sala
+          </div>
+          <input
+            value={roomForm.name}
+            onChange={(event) => {
+              const name = event.target.value;
+              onRoomChange({
+                name,
+                code: roomForm.code || slugRoomCode(name),
+              });
+            }}
+            className="input-base text-sm"
+            placeholder="Nome da sala"
+          />
+          <div className="grid grid-cols-[1fr_4.5rem] gap-2">
+            <input
+              value={roomForm.code}
+              onChange={(event) => onRoomChange({ code: slugRoomCode(event.target.value) })}
+              className="input-base text-sm"
+              placeholder="Codigo"
+            />
+            <input
+              type="number"
+              min={1}
+              value={roomForm.capacity}
+              onChange={(event) => onRoomChange({ capacity: event.target.value })}
+              className="input-base text-sm"
+              aria-label="Capacidade"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={roomForm.roomType}
+              onChange={(event) => onRoomChange({ roomType: event.target.value as AgendaRoomType })}
+              className="input-base text-sm"
+            >
+              {Object.entries(roomTypeLabel).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={roomForm.status}
+              onChange={(event) => onRoomChange({ status: event.target.value as AgendaRoomStatus })}
+              className="input-base text-sm"
+            >
+              {Object.entries(roomStatusLabel).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            disabled={submitting === 'room' || !roomForm.name.trim() || !roomForm.code.trim()}
+            className="btn-secondary w-full justify-center text-xs disabled:opacity-60"
+          >
+            <Save size={13} />
+            {submitting === 'room' ? 'Salvando...' : 'Salvar sala'}
+          </button>
+        </form>
+
+        <form
+          className="space-y-2 border-b border-border pb-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSaveAllocation();
+          }}
+        >
+          <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+            <UserCheck size={14} />
+            Associar profissional
+          </div>
+          <select
+            value={allocationForm.professionalProfileId}
+            onChange={(event) => onAllocationChange({ professionalProfileId: event.target.value })}
+            className="input-base text-sm"
+            disabled={activeProfessionals.length === 0}
+          >
+            <option value="">
+              {activeProfessionals.length === 0 ? 'Sem profissional ativo' : 'Profissional'}
+            </option>
+            {activeProfessionals.map((professional) => (
+              <option key={professional.id} value={professional.id}>
+                {professional.name}
+                {professional.specialty ? ` · ${professional.specialty}` : ''}
+              </option>
+            ))}
+          </select>
+          <select
+            value={allocationForm.roomId}
+            onChange={(event) => onAllocationChange({ roomId: event.target.value })}
+            className="input-base text-sm"
+            disabled={activeRooms.length === 0}
+          >
+            <option value="">{activeRooms.length === 0 ? 'Sem sala ativa' : 'Sala'}</option>
+            {activeRooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.name} · {room.code}
+              </option>
+            ))}
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="time"
+              value={allocationForm.startTime}
+              onChange={(event) => onAllocationChange({ startTime: event.target.value })}
+              className="input-base text-sm"
+              aria-label="Inicio"
+            />
+            <input
+              type="time"
+              value={allocationForm.endTime}
+              onChange={(event) => onAllocationChange({ endTime: event.target.value })}
+              className="input-base text-sm"
+              aria-label="Fim"
+            />
+          </div>
+          <select
+            value={allocationForm.status}
+            onChange={(event) =>
+              onAllocationChange({ status: event.target.value as ProfessionalDayAllocationStatus })
+            }
+            className="input-base text-sm"
+          >
+            {Object.entries(allocationStatusLabel)
+              .filter(([value]) => value !== 'cancelled')
+              .map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+          </select>
+          <button
+            type="submit"
+            disabled={
+              submitting === 'allocation' ||
+              !allocationForm.professionalProfileId ||
+              !allocationForm.roomId
+            }
+            className="btn-secondary w-full justify-center text-xs disabled:opacity-60"
+          >
+            <Save size={13} />
+            {submitting === 'allocation' ? 'Salvando...' : 'Salvar escala'}
+          </button>
+        </form>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground">Escala do dia</span>
+            <span className="text-xs text-muted-foreground">{options.allocations.length}</span>
+          </div>
+          {isLoading ? (
+            <div className="rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+              Carregando...
+            </div>
+          ) : options.allocations.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+              Nenhuma escala cadastrada.
+            </div>
+          ) : (
+            <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+              {options.allocations.map((allocation) => (
+                <div key={allocation.id} className="rounded-xl border border-border px-3 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-foreground">
+                        {allocation.professionalName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {allocation.startTime}-{allocation.endTime}
+                        {allocation.roomName ? ` · ${allocation.roomName}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onCancelAllocation(allocation.id)}
+                      disabled={submitting === allocation.id}
+                      className="btn-ghost h-7 w-7 p-0 text-red-600 disabled:opacity-50"
+                      title="Cancelar escala"
+                    >
+                      <XCircle size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1685,6 +2148,16 @@ export default function AgendaContent() {
   const [waitingQueue, setWaitingQueue] = useState<WaitingQueueEntry[]>([]);
   const [returns, setReturns] = useState<PatientReturnSummary[]>([]);
   const [blockedSlots, setBlockedSlots] = useState<BlockedSlotSummary[]>([]);
+  const [scheduleOptions, setScheduleOptions] = useState<AgendaScheduleOptions>(() =>
+    createEmptyScheduleOptions(getLocalDateValue())
+  );
+  const [scheduleOptionsLoading, setScheduleOptionsLoading] = useState(true);
+  const [scheduleOptionsError, setScheduleOptionsError] = useState<string | null>(null);
+  const [roomForm, setRoomForm] = useState<RoomFormState>(() => createEmptyRoomForm());
+  const [allocationForm, setAllocationForm] = useState<AllocationFormState>(() =>
+    createEmptyAllocationForm()
+  );
+  const [scheduleSubmitting, setScheduleSubmitting] = useState<string | null>(null);
   const [calendarEvents, setCalendarEvents] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1730,9 +2203,30 @@ export default function AgendaContent() {
     }
   }, [selectedDate]);
 
+  const loadScheduleOptions = useCallback(async () => {
+    setScheduleOptionsLoading(true);
+    setScheduleOptionsError(null);
+
+    try {
+      const data = await getAgendaScheduleOptions(selectedDate);
+      setScheduleOptions(data);
+    } catch (error) {
+      setScheduleOptions(createEmptyScheduleOptions(selectedDate));
+      setScheduleOptionsError(
+        error instanceof Error ? error.message : 'Nao foi possivel carregar salas e escala.'
+      );
+    } finally {
+      setScheduleOptionsLoading(false);
+    }
+  }, [selectedDate]);
+
   useEffect(() => {
     void loadAgenda();
   }, [loadAgenda]);
+
+  useEffect(() => {
+    void loadScheduleOptions();
+  }, [loadScheduleOptions]);
 
   useEffect(() => {
     const tab = searchParams.get('tab');
@@ -1859,6 +2353,83 @@ export default function AgendaContent() {
     }
   }, []);
 
+  const handleSaveRoom = async () => {
+    const code = roomForm.code.trim();
+    const name = roomForm.name.trim();
+
+    if (!code || !name) {
+      setScheduleOptionsError('Informe nome e codigo da sala.');
+      return;
+    }
+
+    setScheduleSubmitting('room');
+    setScheduleOptionsError(null);
+
+    const result = await saveClinicRoom({
+      code,
+      name,
+      roomType: roomForm.roomType,
+      status: roomForm.status,
+      capacity: Number(roomForm.capacity) || 1,
+    });
+
+    setScheduleSubmitting(null);
+
+    if (result.error) {
+      setScheduleOptionsError(result.error.message);
+      return;
+    }
+
+    setRoomForm(createEmptyRoomForm());
+    await loadScheduleOptions();
+  };
+
+  const handleSaveAllocation = async () => {
+    if (!allocationForm.professionalProfileId || !allocationForm.roomId) {
+      setScheduleOptionsError('Selecione profissional e sala para a escala.');
+      return;
+    }
+
+    setScheduleSubmitting('allocation');
+    setScheduleOptionsError(null);
+
+    const result = await saveProfessionalDayAllocation({
+      professionalProfileId: allocationForm.professionalProfileId,
+      roomId: allocationForm.roomId,
+      workDate: selectedDate,
+      startTime: allocationForm.startTime,
+      endTime: allocationForm.endTime,
+      status: allocationForm.status,
+      notes: allocationForm.notes,
+    });
+
+    setScheduleSubmitting(null);
+
+    if (result.error) {
+      setScheduleOptionsError(result.error.message);
+      return;
+    }
+
+    setAllocationForm(createEmptyAllocationForm());
+    await loadScheduleOptions();
+  };
+
+  const handleCancelAllocation = async (allocationId: string) => {
+    setScheduleSubmitting(allocationId);
+    setScheduleOptionsError(null);
+
+    const result = await cancelProfessionalDayAllocation(allocationId, 'Cancelado pela agenda.');
+
+    setScheduleSubmitting(null);
+
+    if (result.error) {
+      setScheduleOptionsError(result.error.message);
+      return;
+    }
+
+    await loadScheduleOptions();
+  };
+
   const closeAppointmentForm = () => {
     if (appointmentFormSubmitting) return;
     setAppointmentFormMode(null);
@@ -1929,9 +2500,14 @@ export default function AgendaContent() {
       }
     }
 
+    const nextDate = appointmentForm.date;
     closeAppointmentForm();
-    setSelectedDate(appointmentForm.date);
-    await loadAgenda();
+    if (nextDate !== selectedDate) {
+      setSelectedDate(nextDate);
+    } else {
+      await loadAgenda();
+      await loadScheduleOptions();
+    }
   };
 
   const handleCancelAppointment = (appointment: AppointmentSummary) => {
@@ -1994,6 +2570,8 @@ export default function AgendaContent() {
           form={appointmentForm}
           patients={patientOptions}
           patientsLoading={patientOptionsLoading}
+          scheduleOptions={scheduleOptions}
+          scheduleOptionsLoading={scheduleOptionsLoading}
           error={appointmentFormError}
           submitting={appointmentFormSubmitting}
           onChange={(patch) => setAppointmentForm((current) => ({ ...current, ...patch }))}
@@ -2099,6 +2677,23 @@ export default function AgendaContent() {
             />
             <WaitingQueuePanel queue={waitingQueue} isLoading={isLoading} onRefresh={loadAgenda} />
             <BlockedSlotsPanel slots={blockedSlots} />
+            <AgendaSchedulePanel
+              selectedDate={selectedDate}
+              options={scheduleOptions}
+              isLoading={scheduleOptionsLoading}
+              error={scheduleOptionsError}
+              roomForm={roomForm}
+              allocationForm={allocationForm}
+              submitting={scheduleSubmitting}
+              onRoomChange={(patch) => setRoomForm((current) => ({ ...current, ...patch }))}
+              onAllocationChange={(patch) =>
+                setAllocationForm((current) => ({ ...current, ...patch }))
+              }
+              onSaveRoom={handleSaveRoom}
+              onSaveAllocation={handleSaveAllocation}
+              onCancelAllocation={handleCancelAllocation}
+              onRefresh={loadScheduleOptions}
+            />
           </div>
 
           {/* RIGHT COLUMN: Workflow + Schedule */}

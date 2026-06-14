@@ -214,6 +214,24 @@ Current local-safe contract:
   invoice, and subscription all returned 200 through Edge Functions without
   exposing provider IDs to the browser contract.
 
+## Agenda And Program Local Billing Contract
+
+The clinical-flow P0 contract is documented in
+[../CLINICAL_FLOW_CONTRACTS_P0.md](../CLINICAL_FLOW_CONTRACTS_P0.md).
+Agenda/program/package/service flows may create local invoices or manual-payment
+records only after permission checks and audit metadata are defined. They must
+not call Asaas automatically.
+
+Required local metadata for agenda-originated finance rows includes
+`contractVersion`, `sourceModule`, `sourceAction`, `patientId`,
+`appointmentId`, and any available `programId`, `enrollmentId`, `packageId`,
+`serviceId`, `roomId`, `professionalProfileId`, and `idempotencyKey`.
+
+Asaas provider calls remain gated by the billing Edge Functions in this runbook.
+Those functions must continue to derive tenant/patient server-side, require
+`financial.write`, redact provider errors, and return only safe local IDs/status
+to the browser.
+
 ## M13 Receipts, Refunds, And Sync
 
 Migration `20260607110000_340_finance_m13_receipts_refunds_reconciliation.sql`
