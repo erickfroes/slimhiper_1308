@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Activity,
   AlertTriangle,
@@ -53,6 +54,7 @@ import {
   updateClinicDocumentTemplate,
   validateTemplateVariables,
   type ClinicDocumentsWorkspace,
+  type ClinicDocumentsWorkspaceFilters,
 } from '@/services/clinicDocumentsApi';
 import { getPatientDocumentEvidence, type DocumentEvidenceResult } from '@/services/documentsApi';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
@@ -84,6 +86,35 @@ function renderTemplatePreview(templateBody: string, allowedVariables: string[])
     if (key in PREVIEW_PROTECTED_VALUES) return PREVIEW_PROTECTED_VALUES[key];
     return manualValues[key] ?? `{{${key}}}`;
   });
+}
+
+const DOCUMENT_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
+function readDocumentFilters(searchParams: URLSearchParams): ClinicDocumentsWorkspaceFilters {
+  const released = searchParams.get('portal');
+  return {
+    page: Number(searchParams.get('page') || 1),
+    pageSize: Number(searchParams.get('pageSize') || 25),
+    search: searchParams.get('q') || undefined,
+    category: searchParams.get('category') || undefined,
+    status: searchParams.get('status') || undefined,
+    patientId: searchParams.get('patient') || undefined,
+    periodStart: searchParams.get('from') || undefined,
+    periodEnd: searchParams.get('to') || undefined,
+    signature: searchParams.get('signature') || undefined,
+    releasedToPatient:
+      released === 'released' ? true : released === 'restricted' ? false : undefined,
+  };
+}
+
+function writeFilterParam(
+  params: URLSearchParams,
+  key: string,
+  value: string | number | undefined
+) {
+  const nextValue = String(value ?? '').trim();
+  if (!nextValue || nextValue === 'all') params.delete(key);
+  else params.set(key, nextValue);
 }
 
 const wizardSteps = [
@@ -1934,6 +1965,11 @@ function OperationalMonitor({
 }
 
 export default function ClinicDocumentsContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const documentFilters = useMemo(() => readDocumentFilters(searchParams), [searchParams]);
+
   const [workspace, setWorkspace] = useState<ClinicDocumentsWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1965,12 +2001,12 @@ export default function ClinicDocumentsContent() {
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const result = await getClinicDocumentsWorkspace();
+    const result = await getClinicDocumentsWorkspace(documentFilters);
     setWorkspace(result.data);
     setError(result.error?.message ?? null);
     setLoading(false);
     return result.data;
-  }, []);
+  }, [documentFilters]);
 
   useEffect(() => {
     void loadWorkspace();
@@ -2024,6 +2060,35 @@ export default function ClinicDocumentsContent() {
         ? (workspace?.documents ?? []).filter((document) => document.id === documentFilterId)
         : (workspace?.documents ?? []),
     [documentFilterId, workspace?.documents]
+  );
+
+  const updateDocumentFilters = useCallback(
+    (nextFilters: Partial<ClinicDocumentsWorkspaceFilters>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      const merged = { ...documentFilters, ...nextFilters };
+      writeFilterParam(params, 'page', merged.page && merged.page > 1 ? merged.page : undefined);
+      writeFilterParam(params, 'pageSize', merged.pageSize);
+      writeFilterParam(params, 'q', merged.search);
+      writeFilterParam(params, 'category', merged.category);
+      writeFilterParam(params, 'status', merged.status);
+      writeFilterParam(params, 'patient', merged.patientId);
+      writeFilterParam(params, 'from', merged.periodStart);
+      writeFilterParam(params, 'to', merged.periodEnd);
+      writeFilterParam(params, 'signature', merged.signature);
+      writeFilterParam(
+        params,
+        'portal',
+        merged.releasedToPatient === true
+          ? 'released'
+          : merged.releasedToPatient === false
+            ? 'restricted'
+            : undefined
+      );
+      router.replace(`${pathname}${params.toString() ? `?${params.toString()}` : ''}`, {
+        scroll: false,
+      });
+    },
+    [documentFilters, pathname, router, searchParams]
   );
 
   useEffect(() => {
@@ -2567,8 +2632,153 @@ export default function ClinicDocumentsContent() {
             </h2>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Filter size={14} aria-hidden="true" />
-              {filteredDocuments.length} de {workspace.documents.length} registros
+              {filteredDocuments.length} nesta pagina · {workspace.pagination.total} no total
             </div>
+          </div>
+
+          <div className="grid gap-3 border-b border-border bg-muted/20 px-4 py-3 md:grid-cols-3 xl:grid-cols-6">
+            <label className="block text-xs font-medium text-muted-foreground md:col-span-2">
+              Busca
+              <input
+                value={documentFilters.search ?? ''}
+                onChange={(event) => updateDocumentFilters({ search: event.target.value, page: 1 })}
+                placeholder="Documento, categoria ou status"
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              />
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Categoria
+              <select
+                value={documentFilters.category ?? 'all'}
+                onChange={(event) =>
+                  updateDocumentFilters({ category: event.target.value, page: 1 })
+                }
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              >
+                <option value="all">Todas</option>
+                {workspace.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Status
+              <select
+                value={documentFilters.status ?? 'all'}
+                onChange={(event) => updateDocumentFilters({ status: event.target.value, page: 1 })}
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              >
+                <option value="all">Todos</option>
+                <option value="draft">Rascunho</option>
+                <option value="generated">Gerado</option>
+                <option value="sent_for_signature">Enviado para assinatura</option>
+                <option value="signed">Assinado</option>
+                <option value="failed">Falhou</option>
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Paciente
+              <select
+                value={documentFilters.patientId ?? 'all'}
+                onChange={(event) =>
+                  updateDocumentFilters({ patientId: event.target.value, page: 1 })
+                }
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              >
+                <option value="all">Todos</option>
+                {workspace.patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Assinatura
+              <select
+                value={documentFilters.signature ?? 'all'}
+                onChange={(event) =>
+                  updateDocumentFilters({ signature: event.target.value, page: 1 })
+                }
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              >
+                <option value="all">Todas</option>
+                <option value="pending">Pendente</option>
+                <option value="sent">Enviada</option>
+                <option value="viewed">Visualizada</option>
+                <option value="signed">Assinada</option>
+                <option value="failed">Falhou</option>
+                <option value="expired">Expirada</option>
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Portal
+              <select
+                value={
+                  documentFilters.releasedToPatient === true
+                    ? 'released'
+                    : documentFilters.releasedToPatient === false
+                      ? 'restricted'
+                      : 'all'
+                }
+                onChange={(event) =>
+                  updateDocumentFilters({
+                    releasedToPatient:
+                      event.target.value === 'released'
+                        ? true
+                        : event.target.value === 'restricted'
+                          ? false
+                          : undefined,
+                    page: 1,
+                  })
+                }
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              >
+                <option value="all">Todos</option>
+                <option value="released">Liberados</option>
+                <option value="restricted">Restritos</option>
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              De
+              <input
+                type="date"
+                value={documentFilters.periodStart ?? ''}
+                onChange={(event) =>
+                  updateDocumentFilters({ periodStart: event.target.value, page: 1 })
+                }
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              />
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Ate
+              <input
+                type="date"
+                value={documentFilters.periodEnd ?? ''}
+                onChange={(event) =>
+                  updateDocumentFilters({ periodEnd: event.target.value, page: 1 })
+                }
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              />
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Tamanho
+              <select
+                value={documentFilters.pageSize ?? 25}
+                onChange={(event) =>
+                  updateDocumentFilters({ pageSize: Number(event.target.value), page: 1 })
+                }
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+              >
+                {DOCUMENT_PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size} por pagina
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {documentFilterId ? (
@@ -2587,11 +2797,17 @@ export default function ClinicDocumentsContent() {
           {filteredDocuments.length === 0 ? (
             <DataState
               kind="empty"
-              title="Nenhum documento gerado"
+              title={
+                documentFilterId || workspace.pagination.total > 0
+                  ? 'Nenhum documento neste filtro'
+                  : 'Nenhum documento gerado'
+              }
               description={
                 documentFilterId
                   ? 'Limpe o filtro para ver todos os documentos emitidos.'
-                  : 'Use o wizard para gerar um documento por template.'
+                  : workspace.pagination.total > 0
+                    ? 'Ajuste busca, categoria, status, paciente, periodo, assinatura ou portal para ampliar os resultados.'
+                    : 'Use o wizard para gerar um documento por template.'
               }
               className="min-h-64 border-0 bg-transparent"
             />
@@ -2700,6 +2916,32 @@ export default function ClinicDocumentsContent() {
                     </div>
                   </article>
                 ))}
+              </div>
+              <div className="flex flex-col gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  Pagina {workspace.pagination.page} de {workspace.pagination.totalPages} ·{' '}
+                  {workspace.pagination.hasNextPage ? 'ha proxima pagina' : 'sem proxima pagina'}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateDocumentFilters({ page: workspace.pagination.page - 1 })}
+                    disabled={!workspace.pagination.hasPreviousPage}
+                    className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <ChevronLeft size={13} aria-hidden="true" />
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateDocumentFilters({ page: workspace.pagination.page + 1 })}
+                    disabled={!workspace.pagination.hasNextPage}
+                    className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Proxima
+                    <ChevronRight size={13} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
             </>
           )}
