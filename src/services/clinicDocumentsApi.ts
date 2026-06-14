@@ -106,6 +106,28 @@ export interface ClinicDocumentAuditEvent {
   templateId?: string;
 }
 
+export interface ClinicDocumentsPagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+export interface ClinicDocumentsWorkspaceFilters {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  category?: string;
+  status?: string;
+  patientId?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  signature?: string;
+  releasedToPatient?: boolean | 'all';
+}
+
 export interface ClinicDocumentsWorkspace {
   templates: ClinicDocumentTemplate[];
   categories: ClinicDocumentCategory[];
@@ -114,6 +136,9 @@ export interface ClinicDocumentsWorkspace {
   monitorEvents: ClinicDocumentMonitorEvent[];
   auditEvents: ClinicDocumentAuditEvent[];
   professionalSigners: ClinicDocumentProfessionalSigner[];
+  pagination: ClinicDocumentsPagination;
+  filters: Required<Pick<ClinicDocumentsWorkspaceFilters, 'page' | 'pageSize'>> &
+    Omit<ClinicDocumentsWorkspaceFilters, 'page' | 'pageSize'>;
   warnings: SafeServiceError[];
   metrics: {
     templates: number;
@@ -532,12 +557,73 @@ function buildCategories(
   return [...categories.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
-export async function getClinicDocumentsWorkspace(): Promise<{
+function normalizeWorkspaceFilters(
+  filters: ClinicDocumentsWorkspaceFilters = {}
+): Required<Pick<ClinicDocumentsWorkspaceFilters, 'page' | 'pageSize'>> &
+  Omit<ClinicDocumentsWorkspaceFilters, 'page' | 'pageSize'> {
+  const page = Math.max(1, Math.trunc(Number(filters.page) || 1));
+  const pageSize = Math.min(100, Math.max(5, Math.trunc(Number(filters.pageSize) || 25)));
+  return {
+    ...filters,
+    page,
+    pageSize,
+    search: filters.search?.trim() || undefined,
+    category: filters.category && filters.category !== 'all' ? filters.category : undefined,
+    status: filters.status && filters.status !== 'all' ? filters.status : undefined,
+    patientId: filters.patientId && filters.patientId !== 'all' ? filters.patientId : undefined,
+    signature: filters.signature && filters.signature !== 'all' ? filters.signature : undefined,
+    releasedToPatient: filters.releasedToPatient === 'all' ? undefined : filters.releasedToPatient,
+  };
+}
+
+export async function getClinicDocumentsWorkspace(
+  filters: ClinicDocumentsWorkspaceFilters = {}
+): Promise<{
   data: ClinicDocumentsWorkspace | null;
   error: SafeServiceError | null;
 }> {
   try {
     const supabase = createBrowserSupabaseClient();
+    const normalizedFilters = normalizeWorkspaceFilters(filters);
+    const from = (normalizedFilters.page - 1) * normalizedFilters.pageSize;
+    const to = from + normalizedFilters.pageSize - 1;
+
+    const signatureSelect = normalizedFilters.signature
+      ? 'signature_requests!inner(id,status,created_at)'
+      : 'signature_requests(id,status,created_at)';
+    let documentsQuery = supabase
+      .from('generated_documents')
+      .select(
+        `id,patient_id,template_id,name,category,status,released_to_patient,generated_at,created_at,updated_at,document_templates!generated_documents_template_same_tenant(name,d4sign_enabled),${signatureSelect}`,
+        { count: 'exact' }
+      );
+
+    if (normalizedFilters.search) {
+      const escapedSearch = normalizedFilters.search.replace(/[%_]/g, '\\$&');
+      documentsQuery = documentsQuery.or(
+        `name.ilike.%${escapedSearch}%,category.ilike.%${escapedSearch}%,status.ilike.%${escapedSearch}%`
+      );
+    }
+    if (normalizedFilters.category)
+      documentsQuery = documentsQuery.eq('category', normalizedFilters.category);
+    if (normalizedFilters.status)
+      documentsQuery = documentsQuery.eq('status', normalizedFilters.status);
+    if (normalizedFilters.patientId)
+      documentsQuery = documentsQuery.eq('patient_id', normalizedFilters.patientId);
+    if (normalizedFilters.periodStart)
+      documentsQuery = documentsQuery.gte('generated_at', normalizedFilters.periodStart);
+    if (normalizedFilters.periodEnd)
+      documentsQuery = documentsQuery.lte('generated_at', normalizedFilters.periodEnd);
+    if (typeof normalizedFilters.releasedToPatient === 'boolean') {
+      documentsQuery = documentsQuery.eq(
+        'released_to_patient',
+        normalizedFilters.releasedToPatient
+      );
+    }
+    if (normalizedFilters.signature) {
+      documentsQuery = documentsQuery.eq('signature_requests.status', normalizedFilters.signature);
+    }
+
     const [templatesRes, documentsRes, patientsRes, eventsRes, auditRes] = await Promise.all([
       supabase
         .from('document_templates')
@@ -545,13 +631,7 @@ export async function getClinicDocumentsWorkspace(): Promise<{
           'id,name,category,status,d4sign_enabled,variables,template_body,current_version,updated_at'
         )
         .order('name', { ascending: true }),
-      supabase
-        .from('generated_documents')
-        .select(
-          'id,patient_id,template_id,name,category,status,released_to_patient,generated_at,created_at,updated_at,document_templates!generated_documents_template_same_tenant(name,d4sign_enabled),signature_requests(id,status,created_at)'
-        )
-        .order('created_at', { ascending: false })
-        .limit(100),
+      documentsQuery.order('created_at', { ascending: false }).range(from, to),
       supabase
         .from('patients')
         .select('id,preferred_name')
@@ -588,6 +668,7 @@ export async function getClinicDocumentsWorkspace(): Promise<{
     }
 
     const documentRows = (documentsRes.data ?? []) as GeneratedDocumentRow[];
+    const documentsTotal = documentsRes.count ?? documentRows.length;
     const patientRows = patientsRes.error ? [] : ((patientsRes.data ?? []) as PatientRow[]);
     const patientIds = [
       ...new Set([
@@ -748,10 +829,19 @@ export async function getClinicDocumentsWorkspace(): Promise<{
         monitorEvents,
         auditEvents,
         professionalSigners,
+        pagination: {
+          page: normalizedFilters.page,
+          pageSize: normalizedFilters.pageSize,
+          total: documentsTotal,
+          totalPages: Math.max(1, Math.ceil(documentsTotal / normalizedFilters.pageSize)),
+          hasNextPage: normalizedFilters.page * normalizedFilters.pageSize < documentsTotal,
+          hasPreviousPage: normalizedFilters.page > 1,
+        },
+        filters: normalizedFilters,
         warnings,
         metrics: {
           templates: templates.filter((template) => template.status === 'active').length,
-          generated: documents.length,
+          generated: documentsTotal,
           pendingSignature: documents.filter((doc) => doc.signatureStatus === 'pendente').length,
           signed: documents.filter((doc) => doc.signatureStatus === 'assinado').length,
           failed: documents.filter((doc) => DOCUMENT_FAILED_STATUSES.has(doc.status.toLowerCase()))
