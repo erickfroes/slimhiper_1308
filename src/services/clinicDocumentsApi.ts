@@ -108,6 +108,8 @@ export interface ClinicDocumentAuditEvent {
   patientId?: string;
   documentId?: string;
   templateId?: string;
+  detail?: string;
+  scopeLabel?: string;
 }
 
 export interface ClinicDocumentsPagination {
@@ -497,11 +499,14 @@ function mapAuditEvent(row: AuditEventRow): ClinicDocumentAuditEvent {
     'document.hidden_from_patient': 'Documento ocultado do paciente',
     'document_template.duplicated': 'Template duplicado',
     'document_template.created': 'Template criado',
-    'document_template.updated': 'Template atualizado',
+    'document_template.updated': 'Template editado',
     'document_template.archived': 'Template arquivado',
     'document_template.restored': 'Template restaurado',
     'document_template.published': 'Template publicado',
   };
+
+  const summary = asRecord(row.summary);
+  const safeDetail = getSafeAuditDetail(summary);
 
   return {
     id: row.id,
@@ -511,7 +516,32 @@ function mapAuditEvent(row: AuditEventRow): ClinicDocumentAuditEvent {
     patientId: row.patient_id ?? undefined,
     documentId: row.generated_document_id ?? undefined,
     templateId: row.template_id ?? undefined,
+    detail: safeDetail,
+    scopeLabel: row.generated_document_id ? 'Documento' : row.template_id ? 'Template' : 'Evento',
   };
+}
+
+const SENSITIVE_AUDIT_KEY_PATTERN =
+  /(payload|raw|body|storage|path|url|token|secret|key|signed|cookie|authorization|provider)/i;
+
+function stringifySafeAuditValue(value: unknown) {
+  if (typeof value === 'string') return redactOperationalError(value);
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
+}
+
+function getSafeAuditDetail(summary: Record<string, unknown>) {
+  const entries = Object.entries(summary)
+    .filter(([key]) => !SENSITIVE_AUDIT_KEY_PATTERN.test(key))
+    .map(([key, value]) => [key, stringifySafeAuditValue(value)] as const)
+    .filter((entry): entry is readonly [string, string] => Boolean(entry[1]));
+
+  if (entries.length === 0) return undefined;
+  return entries
+    .slice(0, 4)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(' · ')
+    .slice(0, 260);
 }
 
 function buildCategories(
@@ -1132,6 +1162,87 @@ export async function getClinicDocumentMonitorEvents({
     };
   } catch (error) {
     return { data: null, error: safeError(error, 'Eventos D4Sign indisponiveis.') };
+  }
+}
+
+export async function getClinicDocumentAuditEvents({
+  documentId,
+  patientId,
+  templateId,
+  limit = 80,
+}: {
+  documentId: string;
+  patientId?: string;
+  templateId?: string | null;
+  limit?: number;
+}): Promise<{ data: ClinicDocumentAuditEvent[]; error: SafeServiceError | null }> {
+  if (!documentId.trim()) return { data: [], error: { message: 'Documento obrigatorio.' } };
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const auditFilters = [`generated_document_id.eq.${documentId}`];
+    if (templateId) auditFilters.push(`template_id.eq.${templateId}`);
+
+    const [auditRes, signatureEventsRes] = await Promise.all([
+      supabase
+        .from('document_audit_events')
+        .select('id,action,created_at,patient_id,generated_document_id,template_id,summary')
+        .or(auditFilters.join(','))
+        .order('created_at', { ascending: false })
+        .limit(Math.min(100, Math.max(10, limit))),
+      supabase
+        .from('d4sign_events')
+        .select(
+          'id,event_type,status,retry_count,error_message,created_at,processed_at,payload_summary,acknowledged_at,signature_requests!inner(generated_document_id,patient_id)'
+        )
+        .eq('signature_requests.generated_document_id', documentId)
+        .order('created_at', { ascending: false })
+        .limit(30),
+    ]);
+
+    if (auditRes.error) {
+      return { data: [], error: safeError(auditRes.error, 'Auditoria documental indisponivel.') };
+    }
+
+    const auditEvents = ((auditRes.data ?? []) as AuditEventRow[]).map((row) => ({
+      event: mapAuditEvent(row),
+      sortKey: row.created_at ?? '',
+    }));
+    const signatureEvents = signatureEventsRes.error
+      ? []
+      : ((signatureEventsRes.data ?? []) as ProviderEventRow[]).map((row) => {
+          const eventType = row.event_type ?? 'signature_return';
+          const payload = asRecord(row.payload_summary);
+          const status = String(payload.status ?? row.status ?? '').toLowerCase();
+          return {
+            event: {
+              id: `d4sign-${row.id}`,
+              action: `document.signature_return.${status || 'processed'}`,
+              title:
+                status === 'signed'
+                  ? 'Retorno de assinatura confirmado'
+                  : 'Retorno de assinatura recebido',
+              createdAt: formatDate(row.created_at),
+              patientId,
+              documentId,
+              detail: `tipo: ${redactOperationalError(eventType) ?? 'evento'}${status ? ` · status: ${redactOperationalError(status)}` : ''}`,
+              scopeLabel: 'Assinatura',
+            },
+            sortKey: row.created_at ?? '',
+          };
+        });
+
+    return {
+      data: [...auditEvents, ...signatureEvents]
+        .sort((a, b) => Date.parse(b.sortKey) - Date.parse(a.sortKey))
+        .map(({ event }) => event)
+        .slice(0, Math.min(100, Math.max(10, limit))),
+      error: signatureEventsRes.error
+        ? safeError(signatureEventsRes.error, 'Retornos de assinatura indisponiveis.')
+        : null,
+    };
+  } catch (error) {
+    return { data: [], error: safeError(error, 'Auditoria documental indisponivel.') };
   }
 }
 

@@ -30,7 +30,6 @@ import {
   UploadCloud,
   Unlock,
 } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
 import {
   acknowledgeClinicD4SignEventFailure,
   archiveClinicDocumentTemplate,
@@ -38,6 +37,7 @@ import {
   duplicateClinicDocumentTemplate,
   generateClinicDocument,
   getClinicDocumentSignedUrl,
+  getClinicDocumentAuditEvents,
   getClinicDocumentsWorkspace,
   getTemplatePlaceholders,
   publishClinicDocumentTemplate,
@@ -62,6 +62,7 @@ import { getPatientDocumentEvidence, type DocumentEvidenceResult } from '@/servi
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
 import DataState from '@/components/ui/DataState';
 import Dialog from '@/components/ui/Dialog';
+import DocumentAuditTimeline from './DocumentAuditTimeline';
 
 type WizardStep = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -801,7 +802,13 @@ function DetailField({ label, value }: { label: string; value?: React.ReactNode 
 }
 
 function EvidenceSummary({ evidence }: { evidence: DocumentEvidenceResult }) {
-  const entries = Object.entries(evidence.summary ?? {});
+  const safeSummaryKeyPattern =
+    /(payload|raw|body|storage|path|url|token|secret|key|signed|cookie|authorization|provider)/i;
+  const entries = Object.entries(evidence.summary ?? {}).filter(
+    ([key, value]) =>
+      !safeSummaryKeyPattern.test(key) &&
+      (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+  );
   return (
     <div className="space-y-3">
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -829,13 +836,7 @@ function EvidenceSummary({ evidence }: { evidence: DocumentEvidenceResult }) {
             {entries.map(([key, value]) => (
               <div key={key} className="rounded bg-card px-2 py-1.5">
                 <dt className="font-medium text-muted-foreground">{key}</dt>
-                <dd className="mt-1 break-words text-foreground">
-                  {typeof value === 'string' ||
-                  typeof value === 'number' ||
-                  typeof value === 'boolean'
-                    ? String(value)
-                    : JSON.stringify(value)}
-                </dd>
+                <dd className="mt-1 break-words text-foreground">{String(value)}</dd>
               </div>
             ))}
           </dl>
@@ -847,7 +848,6 @@ function EvidenceSummary({ evidence }: { evidence: DocumentEvidenceResult }) {
 
 function DocumentDetailDialog({
   document,
-  auditEvents,
   templates,
   busyAction,
   onClose,
@@ -859,7 +859,6 @@ function DocumentDetailDialog({
   canRequestD4Sign,
 }: {
   document: ClinicDocumentRow;
-  auditEvents: ClinicDocumentAuditEvent[];
   templates: ClinicDocumentTemplate[];
   busyAction: string | null;
   onClose: () => void;
@@ -873,10 +872,10 @@ function DocumentDetailDialog({
   const [evidence, setEvidence] = useState<DocumentEvidenceResult | null>(null);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [auditEvents, setAuditEvents] = useState<ClinicDocumentAuditEvent[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const auditSectionId = `document-audit-${document.id}`;
-  const relatedAudit = auditEvents.filter(
-    (event) => event.documentId === document.id || event.templateId === document.templateId
-  );
   const template = templates.find((item) => item.id === document.templateId);
 
   const loadEvidence = useCallback(async () => {
@@ -888,10 +887,25 @@ function DocumentDetailDialog({
     setEvidenceLoading(false);
   }, [document.id, document.patientId]);
 
+  const loadAuditEvents = useCallback(async () => {
+    setAuditLoading(true);
+    setAuditError(null);
+    const result = await getClinicDocumentAuditEvents({
+      documentId: document.id,
+      patientId: document.patientId,
+      templateId: document.templateId,
+    });
+    setAuditEvents(result.data);
+    setAuditError(result.error?.message ?? null);
+    setAuditLoading(false);
+  }, [document.id, document.patientId, document.templateId]);
+
   useEffect(() => {
     setEvidence(null);
+    setAuditEvents([]);
     void loadEvidence();
-  }, [loadEvidence]);
+    void loadAuditEvents();
+  }, [loadEvidence, loadAuditEvents]);
 
   const canRequestSignatureNow = canRequestD4Sign && document.canRequestSignature;
 
@@ -1050,24 +1064,47 @@ function DocumentDetailDialog({
         </section>
 
         <section id={auditSectionId} className="rounded-lg border border-border p-4">
-          <h3 className="text-sm font-semibold text-foreground">Auditoria relacionada</h3>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Auditoria do documento</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Eventos carregados por documento selecionado, com retornos de assinatura e template
+                vinculado.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadAuditEvents()}
+              className="btn-secondary text-xs"
+              disabled={auditLoading}
+            >
+              <RefreshCw
+                size={13}
+                className={auditLoading ? 'animate-spin' : undefined}
+                aria-hidden="true"
+              />
+              Recarregar
+            </button>
+          </div>
           <div className="mt-3 space-y-2">
-            {relatedAudit.length === 0 ? (
+            {auditLoading ? (
               <DataState
-                kind="empty"
-                title="Auditoria vazia"
-                description="Nenhum evento recente foi encontrado para este documento ou template."
+                kind="loading"
+                title="Carregando auditoria"
+                description="Buscando eventos auditaveis do documento selecionado."
+                className="min-h-32"
+              />
+            ) : auditError ? (
+              <DataState
+                kind="error"
+                title="Nao foi possivel carregar auditoria"
+                description={auditError}
+                actionLabel="Tentar novamente"
+                onAction={() => void loadAuditEvents()}
                 className="min-h-32"
               />
             ) : (
-              relatedAudit.slice(0, 12).map((event) => (
-                <div key={event.id} className="rounded-lg bg-muted/40 px-3 py-2">
-                  <p className="text-sm font-medium text-foreground">{event.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {event.action} · {event.createdAt}
-                  </p>
-                </div>
-              ))
+              <DocumentAuditTimeline events={auditEvents} />
             )}
           </div>
         </section>
@@ -3024,7 +3061,6 @@ export default function ClinicDocumentsContent() {
       {selectedDocument ? (
         <DocumentDetailDialog
           document={selectedDocument}
-          auditEvents={workspace.auditEvents}
           templates={workspace.templates}
           busyAction={busyAction}
           onClose={() => setSelectedDocument(null)}
