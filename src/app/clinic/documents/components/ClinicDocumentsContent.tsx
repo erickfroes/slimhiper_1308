@@ -35,7 +35,9 @@ import {
   generateClinicDocument,
   getClinicDocumentSignedUrl,
   getClinicDocumentsWorkspace,
+  getTemplatePlaceholders,
   publishClinicDocumentTemplate,
+  PROTECTED_TEMPLATE_VARIABLES,
   requestClinicDocumentSignature,
   setClinicDocumentPatientRelease,
   type ClinicDocumentAuditEvent,
@@ -51,6 +53,31 @@ import DataState from '@/components/ui/DataState';
 import Dialog from '@/components/ui/Dialog';
 
 type WizardStep = 0 | 1 | 2 | 3 | 4 | 5;
+
+const PREVIEW_PROTECTED_VALUES: Record<string, string> = {
+  patient_id: 'paciente-mock-seguro',
+  patient_name: 'Paciente Exemplo',
+  patient_email: 'paciente@example.invalid',
+  patient_phone: '(00) 00000-0000',
+  patient_cpf_masked: '***.***.***-00',
+  patient_birth_date: '1990-01-01',
+  patient_sex_gender: 'Nao informado',
+  clinic_name: 'Clinica Exemplo',
+  date: '2026-06-14',
+  generated_at: '2026-06-14T12:00:00Z',
+  generated_by_user_id: 'usuario-mock-seguro',
+  professional_name: 'Profissional Exemplo',
+};
+
+function renderTemplatePreview(templateBody: string, allowedVariables: string[]) {
+  const manualValues = Object.fromEntries(
+    allowedVariables.map((key) => [key, `Exemplo de ${key}`])
+  );
+  return templateBody.replace(/{{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*}}/g, (_match, key: string) => {
+    if (key in PREVIEW_PROTECTED_VALUES) return PREVIEW_PROTECTED_VALUES[key];
+    return manualValues[key] ?? `{{${key}}}`;
+  });
+}
 
 const wizardSteps = [
   'Paciente',
@@ -975,7 +1002,16 @@ function TemplateEditorDialog({
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean);
-  const validationError = validateTemplateVariables(form.templateBody, allowedVariables)?.message;
+  const protectedVariables = [...PROTECTED_TEMPLATE_VARIABLES].sort((a, b) => a.localeCompare(b));
+  const placeholders = getTemplatePlaceholders(form.templateBody);
+  const protectedPlaceholders = placeholders.filter((key) => PROTECTED_TEMPLATE_VARIABLES.has(key));
+  const freePlaceholders = placeholders.filter((key) => !PROTECTED_TEMPLATE_VARIABLES.has(key));
+  const validationError = validateTemplateVariables(form.templateBody, allowedVariables, {
+    name: form.name,
+    category: form.category,
+    status: form.status,
+  })?.message;
+  const preview = renderTemplatePreview(form.templateBody, allowedVariables);
   const saving = busyAction === 'template-save';
 
   return (
@@ -1050,27 +1086,74 @@ function TemplateEditorDialog({
           />
           Exigir assinatura digital D4Sign para documentos gerados deste template
         </label>
-        <label className="block text-xs font-medium text-muted-foreground">
-          Conteudo/modelo
-          <textarea
-            value={form.templateBody}
-            onChange={(event) => onChange({ ...form, templateBody: event.target.value })}
-            className="mt-1 min-h-56 w-full rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm text-foreground"
-            placeholder="Use {{variavel_livre}}. Variaveis protegidas sao preenchidas pelo sistema."
-          />
-        </label>
-        <label className="block text-xs font-medium text-muted-foreground">
-          Variaveis livres permitidas (uma por linha ou separadas por virgula)
-          <textarea
-            value={form.allowedVariablesText}
-            onChange={(event) => onChange({ ...form, allowedVariablesText: event.target.value })}
-            className="mt-1 min-h-28 w-full rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm text-foreground"
-            placeholder="exames_solicitados\nobservacoes"
-          />
-        </label>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          Variaveis protegidas como patient_id, patient_name, clinic_name e generated_at nao podem
-          ser salvas na configuracao editavel; elas continuam resolvidas pelo sistema.
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="space-y-4">
+            <label className="block text-xs font-medium text-muted-foreground">
+              Conteudo/modelo
+              <textarea
+                value={form.templateBody}
+                onChange={(event) => onChange({ ...form, templateBody: event.target.value })}
+                className="mt-1 min-h-64 w-full rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm text-foreground"
+                placeholder="Use {{patient_name}}, {{date}}, {{professional_name}} e variaveis livres como {{observacoes}}."
+              />
+            </label>
+            <label className="block text-xs font-medium text-muted-foreground">
+              Variaveis livres permitidas (uma por linha ou separadas por virgula)
+              <textarea
+                value={form.allowedVariablesText}
+                onChange={(event) =>
+                  onChange({ ...form, allowedVariablesText: event.target.value })
+                }
+                className="mt-1 min-h-28 w-full rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm text-foreground"
+                placeholder="exames_solicitados\nobservacoes"
+              />
+            </label>
+            <section className="rounded-lg border border-border bg-muted/30 p-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Preview seguro
+              </h3>
+              <pre className="mt-2 max-h-72 whitespace-pre-wrap rounded-md bg-card p-3 text-sm text-foreground">
+                {preview || 'O preview aparece aqui com dados mockados e sem PII real.'}
+              </pre>
+            </section>
+          </div>
+          <aside className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+            <div>
+              <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Lock size={13} aria-hidden="true" />
+                Variaveis protegidas
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Use no conteudo, mas nao cadastre como entrada manual. Sao preenchidas pelo sistema.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {protectedVariables.map((variable) => (
+                  <code
+                    key={variable}
+                    className="rounded bg-card px-1.5 py-1 text-[11px] text-foreground"
+                  >
+                    {`{{${variable}}}`}
+                  </code>
+                ))}
+              </div>
+            </div>
+            <div className="border-t border-border pt-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Detectadas no conteudo
+              </h3>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Protegidas:{' '}
+                {protectedPlaceholders.length ? protectedPlaceholders.join(', ') : 'nenhuma'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Livres: {freePlaceholders.length ? freePlaceholders.join(', ') : 'nenhuma'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Placeholders desconhecidos precisam estar na lista de variaveis livres antes de
+              salvar.
+            </div>
+          </aside>
         </div>
         {validationError ? (
           <div

@@ -596,10 +596,26 @@ function extractTemplateVariables(templateBody: string) {
   return [...templateBody.matchAll(TEMPLATE_VARIABLE_PATTERN)].map((match) => match[1] ?? '');
 }
 
+export function getTemplatePlaceholders(templateBody: string) {
+  return [...new Set(extractTemplateVariables(templateBody))].sort((a, b) => a.localeCompare(b));
+}
+
 export function validateTemplateVariables(
   templateBody: string,
-  allowedVariables: string[]
+  allowedVariables: string[],
+  options: {
+    name?: string;
+    category?: string;
+    status?: ClinicDocumentTemplatePayload['status'];
+  } = {}
 ): SafeServiceError | null {
+  if (options.status === 'active') {
+    if (!options.name?.trim()) return { message: 'Informe o nome antes de publicar o template.' };
+    if (!options.category?.trim())
+      return { message: 'Informe a categoria antes de publicar o template.' };
+    if (!templateBody.trim()) return { message: 'Informe um conteudo valido antes de publicar.' };
+  }
+
   const uniqueAllowed = new Set(allowedVariables.map((item) => item.trim()).filter(Boolean));
   for (const variable of uniqueAllowed) {
     if (PROTECTED_TEMPLATE_VARIABLES.has(variable)) {
@@ -645,7 +661,11 @@ export async function createClinicDocumentTemplate(
   data: { id: string; name: string; status: string; currentVersion: number } | null;
   error: SafeServiceError | null;
 }> {
-  const validationError = validateTemplateVariables(payload.templateBody, payload.allowedVariables);
+  const validationError = validateTemplateVariables(
+    payload.templateBody,
+    payload.allowedVariables,
+    payload
+  );
   if (validationError) return { data: null, error: validationError };
 
   try {
@@ -673,7 +693,11 @@ export async function updateClinicDocumentTemplate(
   data: { id: string; name: string; status: string; currentVersion: number } | null;
   error: SafeServiceError | null;
 }> {
-  const validationError = validateTemplateVariables(payload.templateBody, payload.allowedVariables);
+  const validationError = validateTemplateVariables(
+    payload.templateBody,
+    payload.allowedVariables,
+    payload
+  );
   if (validationError) return { data: null, error: validationError };
 
   try {

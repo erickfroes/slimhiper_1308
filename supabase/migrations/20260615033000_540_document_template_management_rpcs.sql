@@ -124,6 +124,16 @@ begin
     raise exception 'invalid_template_status' using errcode = '22023';
   end if;
 
+  if coalesce(p_status, 'draft') = 'active' then
+    if nullif(trim(coalesce(p_category, '')), '') is null then
+      raise exception 'template_category_required' using errcode = '22023';
+    end if;
+
+    if nullif(trim(coalesce(p_template_body, '')), '') is null then
+      raise exception 'template_body_required' using errcode = '22023';
+    end if;
+  end if;
+
   perform public.validate_document_template_variables(p_template_body, coalesce(p_variables, '{}'::jsonb));
 
   insert into public.document_templates (
@@ -190,6 +200,16 @@ begin
 
   if coalesce(p_status, 'draft') not in ('draft', 'active', 'archived') then
     raise exception 'invalid_template_status' using errcode = '22023';
+  end if;
+
+  if coalesce(p_status, 'draft') = 'active' then
+    if nullif(trim(coalesce(p_category, '')), '') is null then
+      raise exception 'template_category_required' using errcode = '22023';
+    end if;
+
+    if nullif(trim(coalesce(p_template_body, '')), '') is null then
+      raise exception 'template_body_required' using errcode = '22023';
+    end if;
   end if;
 
   perform public.validate_document_template_variables(p_template_body, coalesce(p_variables, '{}'::jsonb));
@@ -289,6 +309,18 @@ begin
 
   if not security.has_permission(v_template.tenant_id, 'documents.write', false) then
     raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  if nullif(trim(v_template.name), '') is null then
+    raise exception 'template_name_required' using errcode = '22023';
+  end if;
+
+  if nullif(trim(coalesce(v_template.category, '')), '') is null then
+    raise exception 'template_category_required' using errcode = '22023';
+  end if;
+
+  if nullif(trim(coalesce(v_template.template_body, '')), '') is null then
+    raise exception 'template_body_required' using errcode = '22023';
   end if;
 
   perform public.validate_document_template_variables(v_template.template_body, coalesce(v_template.variables, '{}'::jsonb));
