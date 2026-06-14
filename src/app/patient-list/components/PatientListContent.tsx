@@ -28,6 +28,7 @@ import {
   ArrowRight,
   Activity,
   LockKeyhole,
+  Camera,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import StatusBadge from '@/components/StatusBadge';
@@ -371,6 +372,26 @@ type PatientFormState = {
   emergencyContactName: string;
   emergencyContactPhone: string;
   internalNotes: string;
+  addressPostalCode: string;
+  addressStreet: string;
+  addressNumber: string;
+  addressComplement: string;
+  addressDistrict: string;
+  addressCity: string;
+  addressState: string;
+  addressCountry: string;
+  secondaryDocument: string;
+  alternatePhone: string;
+  profession: string;
+  preferenceNotes: string;
+  consentDataProcessing: boolean;
+  consentClinicalCommunication: boolean;
+  consentImageUse: boolean;
+  consentPortalAccess: boolean;
+  primaryGuardianName: string;
+  primaryGuardianPhone: string;
+  profilePhotoFile: File | null;
+  profilePhotoPreviewUrl: string;
 };
 
 function emptyPatientForm(): PatientFormState {
@@ -390,6 +411,26 @@ function emptyPatientForm(): PatientFormState {
     emergencyContactName: '',
     emergencyContactPhone: '',
     internalNotes: '',
+    addressPostalCode: '',
+    addressStreet: '',
+    addressNumber: '',
+    addressComplement: '',
+    addressDistrict: '',
+    addressCity: '',
+    addressState: '',
+    addressCountry: 'Brasil',
+    secondaryDocument: '',
+    alternatePhone: '',
+    profession: '',
+    preferenceNotes: '',
+    consentDataProcessing: false,
+    consentClinicalCommunication: false,
+    consentImageUse: false,
+    consentPortalAccess: false,
+    primaryGuardianName: '',
+    primaryGuardianPhone: '',
+    profilePhotoFile: null,
+    profilePhotoPreviewUrl: '',
   };
 }
 
@@ -415,6 +456,29 @@ function toPatientMutationInput(form: PatientFormState): PatientMutationInput {
     emergencyContactName: form.emergencyContactName,
     emergencyContactPhone: form.emergencyContactPhone,
     internalNotes: form.internalNotes,
+    address: {
+      postalCode: form.addressPostalCode,
+      street: form.addressStreet,
+      number: form.addressNumber,
+      complement: form.addressComplement,
+      district: form.addressDistrict,
+      city: form.addressCity,
+      state: form.addressState,
+      country: form.addressCountry,
+    },
+    secondaryDocument: form.secondaryDocument,
+    alternatePhone: form.alternatePhone,
+    profession: form.profession,
+    preferenceNotes: form.preferenceNotes,
+    consents: {
+      dataProcessing: form.consentDataProcessing,
+      clinicalCommunication: form.consentClinicalCommunication,
+      imageUse: form.consentImageUse,
+      portalAccess: form.consentPortalAccess,
+    },
+    primaryGuardianName: form.primaryGuardianName,
+    primaryGuardianPhone: form.primaryGuardianPhone,
+    profilePhotoFile: form.profilePhotoFile,
   };
 }
 
@@ -608,6 +672,221 @@ function PatientFormModal({
                     className="input-base text-sm"
                   />
                 </label>
+                <div className="md:col-span-2 rounded-xl border border-border bg-muted/20 p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Camera size={16} />
+                    Foto privada e dados complementares
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Foto do paciente
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null;
+                          onChange({
+                            profilePhotoFile: file,
+                            profilePhotoPreviewUrl: file
+                              ? URL.createObjectURL(file)
+                              : form.profilePhotoPreviewUrl,
+                          });
+                        }}
+                        className="input-base text-sm"
+                      />
+                      <span className="text-[11px] font-normal text-muted-foreground">
+                        Bucket privado com URL assinada curta.
+                      </span>
+                    </label>
+                    <div className="flex items-center gap-3 md:col-span-2">
+                      <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-border bg-card text-sm font-semibold text-muted-foreground">
+                        {form.profilePhotoPreviewUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={form.profilePhotoPreviewUrl}
+                            alt="Foto do paciente"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          'Sem foto'
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        A imagem nao e publica; a interface usa fallback quando nao houver foto.
+                      </p>
+                    </div>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Documento secundario
+                      <input
+                        value={form.secondaryDocument}
+                        onChange={(event) => onChange({ secondaryDocument: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Telefone alternativo
+                      <input
+                        value={form.alternatePhone}
+                        onChange={(event) => onChange({ alternatePhone: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Profissao
+                      <input
+                        value={form.profession}
+                        onChange={(event) => onChange({ profession: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Responsavel principal
+                      <input
+                        value={form.primaryGuardianName}
+                        onChange={(event) => onChange({ primaryGuardianName: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Telefone do responsavel
+                      <input
+                        value={form.primaryGuardianPhone}
+                        onChange={(event) => onChange({ primaryGuardianPhone: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2 rounded-xl border border-border bg-muted/20 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-foreground">
+                    Endereco estruturado
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      CEP
+                      <input
+                        value={form.addressPostalCode}
+                        onChange={(event) => onChange({ addressPostalCode: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
+                      Logradouro
+                      <input
+                        value={form.addressStreet}
+                        onChange={(event) => onChange({ addressStreet: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Numero
+                      <input
+                        value={form.addressNumber}
+                        onChange={(event) => onChange({ addressNumber: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Complemento
+                      <input
+                        value={form.addressComplement}
+                        onChange={(event) => onChange({ addressComplement: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Bairro
+                      <input
+                        value={form.addressDistrict}
+                        onChange={(event) => onChange({ addressDistrict: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Cidade
+                      <input
+                        value={form.addressCity}
+                        onChange={(event) => onChange({ addressCity: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      UF
+                      <input
+                        value={form.addressState}
+                        onChange={(event) =>
+                          onChange({ addressState: event.target.value.toUpperCase().slice(0, 2) })
+                        }
+                        className="input-base text-sm"
+                        maxLength={2}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                      Pais
+                      <input
+                        value={form.addressCountry}
+                        onChange={(event) => onChange({ addressCountry: event.target.value })}
+                        className="input-base text-sm"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2 rounded-xl border border-border bg-muted/20 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-foreground">
+                    Consentimentos e preferencias
+                  </h3>
+                  <div className="grid grid-cols-1 gap-3 text-xs font-semibold text-foreground md:grid-cols-2">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.consentDataProcessing}
+                        onChange={(event) =>
+                          onChange({ consentDataProcessing: event.target.checked })
+                        }
+                      />{' '}
+                      Tratamento de dados
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.consentClinicalCommunication}
+                        onChange={(event) =>
+                          onChange({ consentClinicalCommunication: event.target.checked })
+                        }
+                      />{' '}
+                      Comunicacao clinica
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.consentImageUse}
+                        onChange={(event) => onChange({ consentImageUse: event.target.checked })}
+                      />{' '}
+                      Uso de imagem
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.consentPortalAccess}
+                        onChange={(event) =>
+                          onChange({ consentPortalAccess: event.target.checked })
+                        }
+                      />{' '}
+                      Liberacao para portal
+                    </label>
+                  </div>
+                  <label className="mt-4 flex flex-col gap-1.5 text-xs font-semibold text-foreground">
+                    Observacoes de preferencia
+                    <textarea
+                      value={form.preferenceNotes}
+                      onChange={(event) => onChange({ preferenceNotes: event.target.value })}
+                      className="input-base min-h-16 resize-y text-sm"
+                    />
+                  </label>
+                </div>
+
                 <label className="flex flex-col gap-1.5 text-xs font-semibold text-foreground md:col-span-2">
                   Observacoes internas
                   <textarea
@@ -889,6 +1168,26 @@ export default function PatientListContent() {
       emergencyContactName: result.data.emergencyContactName,
       emergencyContactPhone: result.data.emergencyContactPhone,
       internalNotes: result.data.internalNotes,
+      addressPostalCode: result.data.address.postalCode,
+      addressStreet: result.data.address.street,
+      addressNumber: result.data.address.number,
+      addressComplement: result.data.address.complement,
+      addressDistrict: result.data.address.district,
+      addressCity: result.data.address.city,
+      addressState: result.data.address.state,
+      addressCountry: result.data.address.country,
+      secondaryDocument: result.data.secondaryDocument,
+      alternatePhone: result.data.alternatePhone,
+      profession: result.data.profession,
+      preferenceNotes: result.data.preferenceNotes,
+      consentDataProcessing: result.data.consents.dataProcessing,
+      consentClinicalCommunication: result.data.consents.clinicalCommunication,
+      consentImageUse: result.data.consents.imageUse,
+      consentPortalAccess: result.data.consents.portalAccess,
+      primaryGuardianName: result.data.primaryGuardianName,
+      primaryGuardianPhone: result.data.primaryGuardianPhone,
+      profilePhotoFile: null,
+      profilePhotoPreviewUrl: result.data.profilePhotoUrl ?? '',
     });
   };
 
@@ -1439,26 +1738,37 @@ export default function PatientListContent() {
             paginated.map((patient) => (
               <article key={patient.id} className="space-y-4 p-4">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">
-                    {patient.name
-                      .split(' ')
-                      .map((namePart) => namePart[0])
-                      .slice(0, 2)
-                      .join('')}
-                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <Link
-                          href={`/clinic/patients/${patient.id}`}
-                          className="block truncate text-sm font-semibold text-foreground"
-                        >
-                          {patient.name}
-                        </Link>
-                        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                          <Phone size={11} />
-                          {patient.phone}
-                        </p>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10 text-xs font-bold text-primary">
+                          {patient.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={patient.avatarUrl}
+                              alt={`Foto de ${patient.name}`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            patient.name
+                              .split(' ')
+                              .map((n) => n[0])
+                              .slice(0, 2)
+                              .join('')
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <Link
+                            href={`/clinic/patients/${patient.id}`}
+                            className="block truncate text-sm font-semibold text-foreground"
+                          >
+                            {patient.name}
+                          </Link>
+                          <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                            <Phone size={11} />
+                            {patient.phone}
+                          </p>
+                        </div>
                       </div>
                       <PriorityBadge band={patient.priorityBand} score={patient.priorityScore} />
                     </div>
@@ -1725,12 +2035,21 @@ export default function PatientListContent() {
                     {/* Name + avatar */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
-                          {patient.name
-                            .split(' ')
-                            .map((n) => n[0])
-                            .slice(0, 2)
-                            .join('')}
+                        <div className="w-8 h-8 overflow-hidden rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 text-xs font-bold text-primary">
+                          {patient.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={patient.avatarUrl}
+                              alt={`Foto de ${patient.name}`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            patient.name
+                              .split(' ')
+                              .map((n) => n[0])
+                              .slice(0, 2)
+                              .join('')
+                          )}
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-foreground truncate max-w-[140px]">

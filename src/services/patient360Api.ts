@@ -108,6 +108,30 @@ function normalizeTimelineEvent(event: unknown): PatientTimelineEvent | null {
   };
 }
 
+async function getPatientProfilePhotoSignedUrl(path: string | null | undefined) {
+  if (!path) return undefined;
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.storage
+    .from('patient-profile-photos')
+    .createSignedUrl(path, 60 * 10);
+  if (error) return undefined;
+  return data?.signedUrl || undefined;
+}
+
+async function attachPatientProfileAvatar(summary: Patient360Summary): Promise<Patient360Summary> {
+  if (summary.profile.avatarUrl) return summary;
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase
+    .from('patient_pii')
+    .select('profile_photo_path')
+    .eq('patient_id', summary.profile.id)
+    .maybeSingle();
+  if (error) return summary;
+  const path = asString(asRecord(data)?.profile_photo_path);
+  const avatarUrl = await getPatientProfilePhotoSignedUrl(path);
+  return avatarUrl ? { ...summary, profile: { ...summary.profile, avatarUrl } } : summary;
+}
+
 function normalizeSummary(payload: unknown): Patient360Summary {
   return normalizePatient360Summary(payload);
 }
@@ -846,7 +870,9 @@ async function getPatient360SummaryFallback(
         .maybeSingle(),
       supabase
         .from('patient_pii')
-        .select('patient_id,full_name,email,phone,cpf_masked,birth_date,sex_gender')
+        .select(
+          'patient_id,full_name,email,phone,cpf_masked,birth_date,sex_gender,profile_photo_path'
+        )
         .eq('patient_id', patientId)
         .maybeSingle(),
       supabase
@@ -866,10 +892,12 @@ async function getPatient360SummaryFallback(
     if (appointmentsResult.error) throw appointmentsResult.error;
 
     return {
-      data: buildFallbackSummary(
-        patientResult.data as Record<string, unknown>,
-        (piiResult.data as Record<string, unknown> | null) ?? null,
-        appointmentsResult.data ?? []
+      data: await attachPatientProfileAvatar(
+        buildFallbackSummary(
+          patientResult.data as Record<string, unknown>,
+          (piiResult.data as Record<string, unknown> | null) ?? null,
+          appointmentsResult.data ?? []
+        )
       ),
       error: null,
     };
@@ -900,7 +928,7 @@ export async function getPatient360Summary(
   try {
     if (isMockEnabled()) {
       const summary = await getMockPatient360(patientId);
-      return { data: summary, error: null };
+      return { data: summary ? await attachPatientProfileAvatar(summary) : null, error: null };
     }
 
     const supabase = await getSupabaseClient();
@@ -933,7 +961,10 @@ export async function getPatient360Summary(
       return fallback.data ? fallback : { data: null, error: patientSummaryContractError() };
     }
 
-    return { data: normalizeSummary(unwrapped.data), error: null };
+    return {
+      data: await attachPatientProfileAvatar(normalizeSummary(unwrapped.data)),
+      error: null,
+    };
   } catch (error) {
     return { data: null, error: safeError(error, 'Unable to load patient summary right now.') };
   }
