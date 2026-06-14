@@ -745,7 +745,8 @@ export type PatientDocumentCategory =
   | 'contrato'
   | 'consentimento'
   | 'orientacao'
-  | 'pacote_evidencia';
+  | 'pacote_evidencia'
+  | 'outros';
 
 export type PatientDocumentSignatureStatus = 'assinado' | 'pendente' | 'nao_requerido';
 

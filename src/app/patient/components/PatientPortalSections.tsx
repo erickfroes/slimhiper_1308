@@ -18,6 +18,10 @@ import {
   ChatInput,
 } from '@/components/chat/ChatPrimitives';
 import DataState from '@/components/ui/DataState';
+import {
+  getDocumentCategoryLabel,
+  getPatientDocumentStatusLabel,
+} from '@/services/documentPresentation';
 import type { PatientPortalSnapshot } from '@/services/patientPortalApi';
 import { getChatAttachmentSignedUrl } from '@/services/chatApi';
 import type { PatientChatAttachment } from '@/domain/types';
@@ -284,7 +288,9 @@ export function PortalDocumentsSection({
             <div>
               <h3 className="font-semibold text-foreground">{document.name}</h3>
               <p className="text-sm text-muted-foreground">
-                {document.category} - {document.status} - {formatDate(document.generatedAt)}
+                {getDocumentCategoryLabel(document.category)} -{' '}
+                {getPatientDocumentStatusLabel(document.status)} -{' '}
+                {formatDate(document.generatedAt)}
               </p>
             </div>
             <button

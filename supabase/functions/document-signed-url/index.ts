@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
 
     const { data: doc, error: documentError } = await supabase
       .from('generated_documents')
-      .select('id, tenant_id, patient_id, storage_bucket, storage_path')
+      .select('id, tenant_id, patient_id, storage_bucket, storage_path, released_to_patient')
       .eq('id', generatedDocumentId)
       .eq('patient_id', patientId)
       .maybeSingle();
@@ -242,7 +242,9 @@ Deno.serve(async (req) => {
     );
     if (ownDocumentError) throw ownDocumentError;
 
-    if (!canReadAsStaff && canReadOwnDocument !== true) {
+    const canReadAsPatient = canReadOwnDocument === true && doc.released_to_patient === true;
+
+    if (!canReadAsStaff && !canReadAsPatient) {
       return jsonResponse(req, 403, {
         ok: false,
         error: { code: 'forbidden' },

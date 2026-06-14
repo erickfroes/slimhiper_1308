@@ -4,6 +4,10 @@ import {
   getDocumentSignedUrl,
   sendDocumentForSignature,
 } from '@/services/documentsApi';
+import {
+  getDocumentCategoryLabel,
+  normalizeDocumentCategory,
+} from '@/services/documentPresentation';
 
 export interface SafeServiceError {
   message: string;
@@ -256,19 +260,6 @@ const TEMPLATE_VARIABLE_PATTERN = /{{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*}}/g;
 
 const DOCUMENT_FAILED_STATUSES = new Set(['failed', 'expired', 'cancelled', 'canceled']);
 
-const CATEGORY_LABELS: Record<string, string> = {
-  consent: 'Consentimento',
-  consentimento: 'Consentimento',
-  contract: 'Contrato',
-  contrato: 'Contrato',
-  termo: 'Termo',
-  orientacao: 'Orientacao',
-  orientation: 'Orientacao',
-  prescricao: 'Prescricao',
-  prescription: 'Prescricao',
-  outros: 'Outros',
-};
-
 function safeError(error: unknown, fallback: string): SafeServiceError {
   if (error && typeof error === 'object' && 'message' in error) {
     return { message: String((error as { message?: unknown }).message ?? fallback) };
@@ -292,11 +283,11 @@ function normalizeCategory(value: string | null | undefined) {
   const normalized = String(value ?? 'outros')
     .trim()
     .toLowerCase();
-  return normalized || 'outros';
+  return normalizeDocumentCategory(normalized);
 }
 
 function getCategoryLabel(category: string) {
-  return CATEGORY_LABELS[category] ?? category.replace(/_/g, ' ');
+  return getDocumentCategoryLabel(category);
 }
 
 function formatDate(value: string | null | undefined) {

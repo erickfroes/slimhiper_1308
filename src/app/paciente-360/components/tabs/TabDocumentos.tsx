@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { PatientDocument360Item, PatientDocumentCategory } from '@/domain/types';
 import EmptyState from '@/components/EmptyState';
 import {
@@ -9,6 +10,10 @@ import {
   getPatientDocuments,
   sendDocumentForSignature,
 } from '@/services/documentsApi';
+import {
+  getDocumentCategoryLabel,
+  getPatientDocumentStatusLabel,
+} from '@/services/documentPresentation';
 import {
   FileText,
   Download,
@@ -24,6 +29,7 @@ import {
   AlertCircle,
   XCircle,
   Search,
+  FilePlus2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
@@ -38,7 +44,7 @@ const CATEGORIES: { key: DocFilterKey; label: string }[] = [
   { key: 'contrato', label: 'Contratos' },
   { key: 'consentimento', label: 'Consentimentos' },
   { key: 'orientacao', label: 'Orientacoes' },
-  { key: 'pacote_evidencia', label: 'Pacotes de Evidencia' },
+  { key: 'pacote_evidencia', label: 'Pacotes de evidencia' },
   { key: 'assinado', label: 'Documentos assinados' },
   { key: 'pendente', label: 'Documentos pendentes' },
 ];
@@ -49,32 +55,32 @@ function StatusBadge({ status }: { status: PatientDocument360Item['status'] }) {
     { label: string; icon: React.ReactNode; cls: string }
   > = {
     assinado: {
-      label: 'Assinado',
+      label: getPatientDocumentStatusLabel('assinado'),
       icon: <CheckCircle2 size={11} />,
       cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
     },
     pendente_assinatura: {
-      label: 'Pendente assinatura',
+      label: getPatientDocumentStatusLabel('pendente_assinatura'),
       icon: <Clock size={11} />,
       cls: 'bg-amber-50 text-amber-700 border border-amber-200',
     },
     em_analise: {
-      label: 'Em analise',
+      label: getPatientDocumentStatusLabel('em_analise'),
       icon: <AlertCircle size={11} />,
       cls: 'bg-blue-50 text-blue-700 border border-blue-200',
     },
     vencido: {
-      label: 'Vencido',
+      label: getPatientDocumentStatusLabel('vencido'),
       icon: <XCircle size={11} />,
       cls: 'bg-red-50 text-red-700 border border-red-200',
     },
     cancelado: {
-      label: 'Cancelado',
+      label: getPatientDocumentStatusLabel('cancelado'),
       icon: <XCircle size={11} />,
       cls: 'bg-gray-100 text-gray-500 border border-gray-200',
     },
     disponivel: {
-      label: 'Disponivel',
+      label: getPatientDocumentStatusLabel('disponivel'),
       icon: <CheckCircle2 size={11} />,
       cls: 'bg-sky-50 text-sky-700 border border-sky-200',
     },
@@ -320,6 +326,13 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm font-semibold text-foreground">Documentos ({documents360.length})</p>
         <div className="flex items-center gap-2">
+          <Link
+            href={`/clinic/documents?patientId=${encodeURIComponent(patientId)}&newDocument=1`}
+            className="btn-secondary text-xs"
+          >
+            <FilePlus2 size={13} aria-hidden="true" />
+            Gerar documento
+          </Link>
           <div className="relative">
             <Search
               size={13}
@@ -441,7 +454,7 @@ export default function TabDocumentos({ patientId }: TabDocumentosProps) {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {doc.tipo}
+                        {getDocumentCategoryLabel(doc.category)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
