@@ -183,6 +183,11 @@ export interface InvoiceSummary {
   dueDate: string;
   paidAt?: string;
   status: 'pago' | 'pendente' | 'vencido' | 'cancelado';
+  sourceModule?: string;
+  appointmentId?: string;
+  packageId?: string;
+  programId?: string;
+  serviceId?: string;
 }
 
 export interface PatientPaymentRecord {
@@ -193,6 +198,12 @@ export interface PatientPaymentRecord {
   method: 'pix' | 'cartao_credito' | 'cartao_debito' | 'boleto' | 'dinheiro' | 'transferencia';
   registeredBy: string;
   receiptId?: string;
+  sourceModule?: string;
+  appointmentId?: string;
+  packageId?: string;
+  programId?: string;
+  serviceId?: string;
+  invoiceId?: string;
 }
 
 export interface PatientCharge {
@@ -403,7 +414,10 @@ export type TimelineEventType =
   | 'pagamento_recebido'
   | 'pagamento_atrasado'
   | 'mensagem_enviada'
-  | 'checkin_semanal_enviado';
+  | 'checkin_semanal_enviado'
+  | 'tarefa_atribuida'
+  | 'tarefa_concluida'
+  | 'tarefa_reaberta';
 
 export type TimelineEventCategory =
   | 'clinical'

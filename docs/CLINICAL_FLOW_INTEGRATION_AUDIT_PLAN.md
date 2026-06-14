@@ -452,15 +452,31 @@ Implementacao P1 registrada:
 
 ### P2 - Read models, timeline e auditoria
 
-- [ ] Atualizar Patient 360 summary para refletir novos vinculos de agenda,
+- [x] Atualizar Patient 360 summary para refletir novos vinculos de agenda,
       sala, profissional, servico, programa, invoice e pagamento.
-- [ ] Atualizar timeline para eventos de sala/profissional, cobranca local,
+- [x] Atualizar timeline para eventos de sala/profissional, cobranca local,
       pagamento manual, triagem, bioimpedancia, exame, prescricao e tarefa.
-- [ ] Atualizar financeiro para reconhecer origem do agendamento e do pacote.
-- [ ] Atualizar encounter para carregar contexto comercial/financeiro do
+- [x] Atualizar financeiro para reconhecer origem do agendamento e do pacote.
+- [x] Atualizar encounter para carregar contexto comercial/financeiro do
       appointment.
 - [ ] Adicionar testes fixture para contratos de Patient 360 e agenda.
 - [ ] Adicionar smokes locais somente apos autorizacao para ambiente Supabase.
+
+Implementacao P2 registrada:
+
+- Edge Function `patient-360-summary` passa a enriquecer proximas consultas com
+  `professionalProfileId`, sala estruturada, unidade, programa, pacote, servico,
+  enrollment, invoice, pagamento e status financeiro persistidos no appointment.
+- Timeline passa a preservar tipos de tarefa clinica (`tarefa_atribuida`,
+  `tarefa_concluida`, `tarefa_reaberta`) alem dos eventos ja gravados por agenda,
+  cobranca local, pagamento manual, medidas/bioimpedancia, exames e prescricoes,
+  mantendo payload auditavel quando autorizado.
+- `get_patient_financial_summary()` passa a expor `sourceModule`, `appointmentId`,
+  programa, pacote e servico em invoices e pagamentos para explicar a origem no
+  Paciente 360 e em `/clinic/financeiro`.
+- O contexto comercial/financeiro do encounter ja estava carregado por
+  `src/services/encounterApi.ts`; P2 manteve esse contrato e alinhou o read-model
+  longitudinal do Paciente 360.
 
 Criterios de aceite:
 
@@ -501,14 +517,14 @@ Criterios de aceite:
 
 ### Checks minimos por entrega
 
-- [ ] Docs-only: `git diff --check`.
+- [x] Docs-only: `git diff --check`.
 - [x] Codigo TypeScript/frontend: `git diff --check`, `npm run type-check`,
       `npm run lint`, `npm run build`.
 - [ ] UI: alem dos checks de codigo, `npm run dev` e browser smoke na rota
       afetada quando praticavel.
 - [ ] Supabase: migrations/smokes apenas com autorizacao explicita e comando
       nominal.
-- [ ] Evidencia registrada no PR ou runbook com comandos executados, comandos
+- [x] Evidencia registrada no PR ou runbook com comandos executados, comandos
       pulados e motivo.
 
 ## Sequencia Recomendada

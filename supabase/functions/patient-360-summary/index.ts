@@ -41,7 +41,10 @@ type TimelineEventType =
   | 'pagamento_recebido'
   | 'pagamento_atrasado'
   | 'mensagem_enviada'
-  | 'checkin_semanal_enviado';
+  | 'checkin_semanal_enviado'
+  | 'tarefa_atribuida'
+  | 'tarefa_concluida'
+  | 'tarefa_reaberta';
 
 type TimelineEventCategory =
   | 'clinical'
@@ -87,6 +90,9 @@ const VALID_EVENT_TYPES: Set<TimelineEventType> = new Set([
   'pagamento_atrasado',
   'mensagem_enviada',
   'checkin_semanal_enviado',
+  'tarefa_atribuida',
+  'tarefa_concluida',
+  'tarefa_reaberta',
 ]);
 
 const VALID_EVENT_CATEGORIES: Set<TimelineEventCategory> = new Set([
@@ -124,7 +130,14 @@ function mapEventDate(eventAt: unknown, createdAt: unknown): string {
 
 const corsHeaders = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': (Deno.env.get('APP_ALLOWED_ORIGINS') ?? Deno.env.get('SITE_URL') ?? Deno.env.get('NEXT_PUBLIC_SITE_URL') ?? 'http://localhost:4028').split(',')[0].trim(),
+  'Access-Control-Allow-Origin': (
+    Deno.env.get('APP_ALLOWED_ORIGINS') ??
+    Deno.env.get('SITE_URL') ??
+    Deno.env.get('NEXT_PUBLIC_SITE_URL') ??
+    'http://localhost:4028'
+  )
+    .split(',')[0]
+    .trim(),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -344,7 +357,7 @@ function mapPrescriptionSummary(row: Record<string, unknown>, patientId: string)
       asString(row.title) ||
       (typeof row.medication_name === 'string' && row.medication_name.trim()
         ? row.medication_name
-        : firstItem?.label ?? 'Prescricao registrada'),
+        : (firstItem?.label ?? 'Prescricao registrada')),
     dosage:
       firstItem?.dosage ||
       (typeof row.dosage === 'string' && row.dosage.trim()
@@ -360,9 +373,9 @@ function mapPrescriptionSummary(row: Record<string, unknown>, patientId: string)
         ? row.issue_date
         : typeof row.start_date === 'string'
           ? row.start_date
-        : typeof row.created_at === 'string'
-          ? row.created_at
-          : new Date(0).toISOString(),
+          : typeof row.created_at === 'string'
+            ? row.created_at
+            : new Date(0).toISOString(),
     endDate:
       typeof row.valid_until === 'string'
         ? row.valid_until
@@ -419,7 +432,7 @@ function mapPrescriptionSummary(row: Record<string, unknown>, patientId: string)
             status: asString(reminderRow.status, 'active'),
           };
         })
-        : undefined,
+      : undefined,
   };
 }
 
@@ -851,6 +864,7 @@ async function buildAndReturnSummary({
     latestChatMessageRes,
     dailySummaryRes,
     nutritionPlanRes,
+    financialSummaryRes,
   ] = await Promise.all([
     supabase
       .from('patient_pii')
@@ -878,7 +892,7 @@ async function buildAndReturnSummary({
     supabase
       .from('appointments')
       .select(
-        'id, scheduled_at, duration_minutes, status, location, practitioner_id, notes, updated_at'
+        'id, scheduled_at, duration_minutes, status, location, practitioner_id, professional_profile_id, room_id, unit_id, notes, updated_at, commercial_program_id, commercial_package_id, commercial_service_id, commercial_enrollment_id, financial_invoice_id, financial_payment_id, financial_status, financial_amount_cents, financial_due_date, financial_payment_method, financial_error'
       )
       .eq('patient_id', patientId)
       .eq('tenant_id', patient.tenant_id)
@@ -964,6 +978,9 @@ async function buildAndReturnSummary({
           .limit(1)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    tenantPermissions.has('financial.read')
+      ? supabase.rpc('get_patient_financial_summary', { p_patient_id: patientId })
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   const queryErrors = [
@@ -979,6 +996,7 @@ async function buildAndReturnSummary({
     latestChatMessageRes.error,
     dailySummaryRes.error,
     nutritionPlanRes.error,
+    financialSummaryRes.error,
   ].filter(Boolean);
   if (queryErrors.length) throw queryErrors[0];
 
@@ -1116,7 +1134,8 @@ async function buildAndReturnSummary({
     } else {
       const snapshot = asRecord(recordSnapshot);
       const record = asRecord(snapshot.record);
-      recordLastUpdate = asString(record.updatedAt ?? record.lastWrittenAt ?? record.lastAccessedAt) || null;
+      recordLastUpdate =
+        asString(record.updatedAt ?? record.lastWrittenAt ?? record.lastAccessedAt) || null;
       recordCareTeam = asArray(snapshot.careTeam)
         .map((member) => {
           const item = asRecord(member);
@@ -1172,19 +1191,125 @@ async function buildAndReturnSummary({
         ? 'Paciente'
         : 'Equipe';
 
-  const upcomingAppointments = (appointmentsRes.data ?? []).map((appointment) => ({
-    id: appointment.id,
-    patientId,
-    patientName: piiRes.data?.full_name ?? patient.preferred_name ?? 'Paciente',
-    type: mapAppointmentType(appointment.type),
-    status: mapAppointmentStatus(appointment.status),
-    scheduledAt: appointment.scheduled_at,
-    durationMinutes: appointment.duration_minutes ?? 30,
-    professionalName: 'Equipe SlimHiper',
-    professionalRole: 'Profissional de saude',
-    roomName: appointment.location ?? undefined,
-    notes: appointment.notes ?? undefined,
-  }));
+  const appointments = appointmentsRes.data ?? [];
+  const professionalIds = [
+    ...new Set(appointments.map((a) => a.professional_profile_id).filter(Boolean)),
+  ];
+  const roomIds = [...new Set(appointments.map((a) => a.room_id).filter(Boolean))];
+  const programIds = [...new Set(appointments.map((a) => a.commercial_program_id).filter(Boolean))];
+  const packageIds = [...new Set(appointments.map((a) => a.commercial_package_id).filter(Boolean))];
+  const serviceIds = [...new Set(appointments.map((a) => a.commercial_service_id).filter(Boolean))];
+  const [professionalsRes, roomsRes, programsRes, packagesRes, servicesRes] = await Promise.all([
+    professionalIds.length
+      ? supabase
+          .from('tenant_professionals')
+          .select(
+            'id,user_id,professional_type,specialty,license_number,license_state,profiles(full_name,email)'
+          )
+          .eq('tenant_id', patient.tenant_id)
+          .in('id', professionalIds)
+      : Promise.resolve({ data: [], error: null }),
+    roomIds.length
+      ? supabase
+          .from('clinic_rooms')
+          .select('id,name,code,unit_id')
+          .eq('tenant_id', patient.tenant_id)
+          .in('id', roomIds)
+      : Promise.resolve({ data: [], error: null }),
+    programIds.length
+      ? supabase
+          .from('programs')
+          .select('id,name')
+          .eq('tenant_id', patient.tenant_id)
+          .in('id', programIds)
+      : Promise.resolve({ data: [], error: null }),
+    packageIds.length
+      ? supabase
+          .from('packages')
+          .select('id,name')
+          .eq('tenant_id', patient.tenant_id)
+          .in('id', packageIds)
+      : Promise.resolve({ data: [], error: null }),
+    serviceIds.length
+      ? supabase
+          .from('services')
+          .select('id,name')
+          .eq('tenant_id', patient.tenant_id)
+          .in('id', serviceIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (
+    professionalsRes.error ||
+    roomsRes.error ||
+    programsRes.error ||
+    packagesRes.error ||
+    servicesRes.error
+  ) {
+    throw (
+      professionalsRes.error ||
+      roomsRes.error ||
+      programsRes.error ||
+      packagesRes.error ||
+      servicesRes.error
+    );
+  }
+  const byId = (rows: unknown[] | null | undefined) =>
+    new Map(
+      (rows ?? []).map((row) => [
+        String((row as Record<string, unknown>).id),
+        row as Record<string, unknown>,
+      ])
+    );
+  const professionalsById = byId(professionalsRes.data as unknown[]);
+  const roomsById = byId(roomsRes.data as unknown[]);
+  const programsById = byId(programsRes.data as unknown[]);
+  const packagesById = byId(packagesRes.data as unknown[]);
+  const servicesById = byId(servicesRes.data as unknown[]);
+
+  const upcomingAppointments = appointments.map((appointment) => {
+    const professional = professionalsById.get(String(appointment.professional_profile_id));
+    const professionalProfile = asRecord(professional?.profiles);
+    const room = roomsById.get(String(appointment.room_id));
+    const program = programsById.get(String(appointment.commercial_program_id));
+    const commercialPackage = packagesById.get(String(appointment.commercial_package_id));
+    const service = servicesById.get(String(appointment.commercial_service_id));
+    return {
+      id: appointment.id,
+      patientId,
+      patientName: piiRes.data?.full_name ?? patient.preferred_name ?? 'Paciente',
+      type: mapAppointmentType(appointment.type),
+      status: mapAppointmentStatus(appointment.status),
+      scheduledAt: appointment.scheduled_at,
+      durationMinutes: appointment.duration_minutes ?? 30,
+      professionalProfileId: appointment.professional_profile_id ?? undefined,
+      professionalUserId: professional?.user_id ?? appointment.practitioner_id ?? undefined,
+      professionalName: asString(professionalProfile.full_name, 'Equipe SlimHiper'),
+      professionalRole: asString(
+        professional?.specialty,
+        asString(professional?.professional_type, 'Profissional de saude')
+      ),
+      roomId: appointment.room_id ?? undefined,
+      roomName: asString(room?.name, appointment.location ?? '') || undefined,
+      roomCode: asString(room?.code) || undefined,
+      unitId: appointment.unit_id ?? room?.unit_id ?? undefined,
+      programId: appointment.commercial_program_id ?? undefined,
+      programName: asString(program?.name) || undefined,
+      packageId: appointment.commercial_package_id ?? undefined,
+      packageName: asString(commercialPackage?.name) || undefined,
+      serviceId: appointment.commercial_service_id ?? undefined,
+      serviceName: asString(service?.name) || undefined,
+      enrollmentId: appointment.commercial_enrollment_id ?? undefined,
+      invoiceId: appointment.financial_invoice_id ?? undefined,
+      paymentId: appointment.financial_payment_id ?? undefined,
+      financialStatus: appointment.financial_status ?? undefined,
+      financialAmountCents: appointment.financial_amount_cents ?? undefined,
+      financialDueDate: appointment.financial_due_date ?? undefined,
+      financialPaymentMethod: appointment.financial_payment_method ?? undefined,
+      financialError: appointment.financial_error ?? undefined,
+      notes: appointment.notes ?? undefined,
+      attendanceLink: `/clinic/patients/${patientId}/encounter?appointmentId=${appointment.id}`,
+    };
+  });
 
   const recentTimeline = (timelineRes.data ?? []).map((event) => {
     const payload = safeTimelinePayload(event.payload);
@@ -1325,15 +1450,17 @@ async function buildAndReturnSummary({
       weightHistory: [],
       adherenceHistory: [],
     },
-    financial: {
-      status: 'em_dia',
-      financialState: 'em_dia',
-      totalContractValue: 0,
-      totalPaid: 0,
-      totalPending: 0,
-      totalOverdue: 0,
-      invoices: [],
-    },
+    financial: asRecord(financialSummaryRes.data).status
+      ? financialSummaryRes.data
+      : {
+          status: 'em_dia',
+          financialState: 'em_dia',
+          totalContractValue: 0,
+          totalPaid: 0,
+          totalPending: 0,
+          totalOverdue: 0,
+          invoices: [],
+        },
     alerts: (alertsRes.data ?? []).map((alert) => ({
       id: alert.id,
       patientId,
