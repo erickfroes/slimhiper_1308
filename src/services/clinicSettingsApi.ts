@@ -132,6 +132,7 @@ export interface ClinicUnit {
 export interface TeamMember {
   id: string;
   userId: string;
+  tenantId: string;
   unitId: string | null;
   unitName: string | null;
   fullName: string;
@@ -140,6 +141,10 @@ export interface TeamMember {
   status: string;
   isActive: boolean;
   initials: string;
+  phone: string;
+  avatarUrl: string | null;
+  avatarPath: string | null;
+  privateProfile: UserPrivateProfile;
   professionalProfile: ProfessionalProfile | null;
   createdAt: string | null;
 }
@@ -152,6 +157,32 @@ export interface ProfessionalProfile {
   specialty: string;
   isActive: boolean;
   countsAsDoctor: boolean;
+  professionalAddress: ProfessionalAddress;
+  attendanceUnitIds: string[];
+  signatureFooter: string;
+  publicProfile: ProfessionalPublicProfile;
+}
+
+export interface UserPrivateProfile {
+  personalAddress: ProfessionalAddress;
+  emergencyContact: string;
+  privateNotes: string;
+}
+
+export interface ProfessionalAddress {
+  zipCode: string;
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
+  city: string;
+  state: string;
+  country: string;
+}
+
+export interface ProfessionalPublicProfile {
+  bio: string;
+  displayPhone: string;
 }
 
 export interface ProfessionalProfileInput {
@@ -160,6 +191,17 @@ export interface ProfessionalProfileInput {
   licenseNumber?: string;
   licenseState?: string;
   specialty?: string;
+  reason?: string;
+}
+
+export interface TeamMemberPersonalProfileInput {
+  phone: string;
+  avatarFile?: File | null;
+  privateProfile: UserPrivateProfile;
+  professionalAddress: ProfessionalAddress;
+  attendanceUnitIds: string[];
+  signatureFooter: string;
+  publicProfile: ProfessionalPublicProfile;
   reason?: string;
 }
 
@@ -391,6 +433,37 @@ function initialsFrom(name: string, email: string) {
     .join('');
 }
 
+function mapAddress(value: unknown): ProfessionalAddress {
+  const record = asRecord(value);
+  return {
+    zipCode: asString(record.zipCode),
+    street: asString(record.street),
+    number: asString(record.number),
+    complement: asString(record.complement),
+    district: asString(record.district),
+    city: asString(record.city),
+    state: asString(record.state),
+    country: asString(record.country, 'Brasil'),
+  };
+}
+
+function mapPrivateProfile(value: unknown): UserPrivateProfile {
+  const record = asRecord(value);
+  return {
+    personalAddress: mapAddress(record.personalAddress),
+    emergencyContact: asString(record.emergencyContact),
+    privateNotes: asString(record.privateNotes),
+  };
+}
+
+function mapPublicProfile(value: unknown): ProfessionalPublicProfile {
+  const record = asRecord(value);
+  return {
+    bio: asString(record.bio),
+    displayPhone: asString(record.displayPhone),
+  };
+}
+
 function normalizeUnitStatus(value: unknown): ClinicUnitStatus {
   if (value === 'inactive' || value === 'archived') return value;
   return 'active';
@@ -506,6 +579,7 @@ function mapTeamMember(value: unknown): TeamMember {
   return {
     id: asString(record.id),
     userId: asString(record.userId),
+    tenantId: asString(record.tenantId),
     unitId: asString(record.unitId) || null,
     unitName: asString(record.unitName) || null,
     fullName,
@@ -514,6 +588,10 @@ function mapTeamMember(value: unknown): TeamMember {
     status: asString(record.status, 'invited'),
     isActive: asBoolean(record.isActive),
     initials: initialsFrom(fullName, email),
+    phone: asString(record.phone),
+    avatarUrl: asString(record.avatarUrl) || null,
+    avatarPath: asString(record.avatarPath) || null,
+    privateProfile: mapPrivateProfile(record.privateProfile),
     professionalProfile,
     createdAt: asString(record.createdAt) || null,
   };
@@ -532,6 +610,12 @@ function mapProfessionalProfile(value: unknown): ProfessionalProfile | null {
     specialty: asString(record.specialty),
     isActive: asBoolean(record.isActive),
     countsAsDoctor: asBoolean(record.countsAsDoctor),
+    professionalAddress: mapAddress(record.professionalAddress),
+    attendanceUnitIds: asArray(record.attendanceUnitIds)
+      .map((id) => asString(id))
+      .filter(Boolean),
+    signatureFooter: asString(record.signatureFooter),
+    publicProfile: mapPublicProfile(record.publicProfile),
   };
 }
 
@@ -771,26 +855,84 @@ function mapSnapshot(value: unknown, operationalValue: unknown = null): ClinicSe
   };
 }
 
+function mergeTeamPersonalProfiles(snapshotValue: unknown, teamPersonalValue: unknown) {
+  const snapshot = asRecord(snapshotValue);
+  const extrasByMembership = new Map(
+    asArray(teamPersonalValue).map((item) => {
+      const record = asRecord(item);
+      return [asString(record.membershipId), record] as const;
+    })
+  );
+  return {
+    ...snapshot,
+    team: asArray(snapshot.team).map((item) => {
+      const member = asRecord(item);
+      const extra = extrasByMembership.get(asString(member.id));
+      if (!extra) return member;
+      const professionalProfile = asRecord(member.professionalProfile);
+      return {
+        ...member,
+        tenantId: extra.tenantId,
+        phone: extra.phone,
+        avatarPath: extra.avatarPath,
+        privateProfile: extra.privateProfile,
+        professionalProfile: professionalProfile.id
+          ? {
+              ...professionalProfile,
+              professionalAddress: extra.professionalAddress,
+              attendanceUnitIds: extra.attendanceUnitIds,
+              signatureFooter: extra.signatureFooter,
+              publicProfile: extra.publicProfile,
+            }
+          : member.professionalProfile,
+      };
+    }),
+  };
+}
+
+async function hydrateTeamAvatars(
+  supabase: ReturnType<typeof createBrowserSupabaseClient>,
+  snapshot: ClinicSettingsSnapshot
+) {
+  const team = await Promise.all(
+    snapshot.team.map(async (member) => {
+      if (!member.avatarPath) return member;
+      const { data } = await supabase.storage
+        .from('user-profile-avatars')
+        .createSignedUrl(member.avatarPath, 300);
+      return { ...member, avatarUrl: data?.signedUrl ?? null };
+    })
+  );
+  return { ...snapshot, team };
+}
+
 export async function getClinicSettings() {
   try {
     const supabase = createBrowserSupabaseClient();
-    const [baseResult, operationalResult] = await Promise.all([
+    const [baseResult, operationalResult, teamPersonalResult] = await Promise.all([
       supabase.rpc('get_clinic_settings_snapshot'),
       supabase.rpc('get_clinic_operational_settings_snapshot'),
+      supabase.rpc('get_clinic_team_personal_profiles'),
     ]);
 
-    if (baseResult.error || operationalResult.error) {
+    if (baseResult.error || operationalResult.error || teamPersonalResult.error) {
       return {
         data: null as ClinicSettingsSnapshot | null,
         error: asServiceError(
-          baseResult.error ?? operationalResult.error,
+          baseResult.error ?? operationalResult.error ?? teamPersonalResult.error,
           'Nao foi possivel carregar configuracoes.'
         ),
       };
     }
 
     return {
-      data: mapSnapshot(baseResult.data, operationalResult.data),
+      data: await hydrateTeamAvatars(
+        supabase,
+        mapSnapshot(
+          mergeTeamPersonalProfiles(baseResult.data, teamPersonalResult.data),
+          operationalResult.data
+        )
+      ),
       error: null as SafeServiceError | null,
     };
   } catch (error) {
@@ -1179,6 +1321,91 @@ export async function inviteClinicMember(input: {
     return {
       data: null as ClinicSettingsSnapshot | null,
       error: asServiceError(error, 'Nao foi possivel convidar membro.'),
+    };
+  }
+}
+
+function normalizeAddressPayload(address: ProfessionalAddress) {
+  return {
+    zipCode: address.zipCode.trim(),
+    street: address.street.trim(),
+    number: address.number.trim(),
+    complement: address.complement.trim(),
+    district: address.district.trim(),
+    city: address.city.trim(),
+    state: address.state.trim().toUpperCase().slice(0, 2),
+    country: address.country.trim() || 'Brasil',
+  };
+}
+
+export async function updateClinicMemberPersonalProfile(
+  member: TeamMember,
+  input: TeamMemberPersonalProfileInput
+) {
+  if (!member.id.trim()) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: { message: 'Membro invalido.' } as SafeServiceError,
+    };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    let avatar: { path: string; mimeType: string; sizeBytes: number } | null = null;
+
+    if (input.avatarFile) {
+      const extension =
+        input.avatarFile.type === 'image/png'
+          ? 'png'
+          : input.avatarFile.type === 'image/webp'
+            ? 'webp'
+            : 'jpg';
+      const path = `${member.tenantId}/${member.userId}/${Date.now()}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from('user-profile-avatars')
+        .upload(path, input.avatarFile, { upsert: true, contentType: input.avatarFile.type });
+      if (uploadError) {
+        return {
+          data: null as ClinicSettingsSnapshot | null,
+          error: asServiceError(uploadError, 'Nao foi possivel enviar avatar privado.'),
+        };
+      }
+      avatar = { path, mimeType: input.avatarFile.type, sizeBytes: input.avatarFile.size };
+    }
+
+    const { error } = await supabase.rpc('update_clinic_member_personal_profile', {
+      p_membership_id: member.id,
+      p_payload: {
+        phone: input.phone.trim(),
+        avatar,
+        privateProfile: {
+          personalAddress: normalizeAddressPayload(input.privateProfile.personalAddress),
+          emergencyContact: input.privateProfile.emergencyContact.trim(),
+          privateNotes: input.privateProfile.privateNotes.trim(),
+        },
+        professionalAddress: normalizeAddressPayload(input.professionalAddress),
+        attendanceUnitIds: input.attendanceUnitIds,
+        signatureFooter: input.signatureFooter.trim(),
+        publicProfile: {
+          bio: input.publicProfile.bio.trim(),
+          displayPhone: input.publicProfile.displayPhone.trim(),
+        },
+      },
+      p_reason: input.reason?.trim() || null,
+    });
+
+    if (error) {
+      return {
+        data: null as ClinicSettingsSnapshot | null,
+        error: asServiceError(error, 'Nao foi possivel salvar dados pessoais/profissionais.'),
+      };
+    }
+
+    return getClinicSettings();
+  } catch (error) {
+    return {
+      data: null as ClinicSettingsSnapshot | null,
+      error: asServiceError(error, 'Nao foi possivel salvar dados pessoais/profissionais.'),
     };
   }
 }

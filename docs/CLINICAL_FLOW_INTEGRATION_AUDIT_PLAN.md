@@ -374,15 +374,15 @@ Implementacao P1 registrada:
 
 ### P1 - Dados pessoais de usuarios e profissionais
 
-- [ ] Definir se dados de usuario ficam em `profiles`, `tenant_memberships`
+- [x] Definir se dados de usuario ficam em `profiles`, `tenant_memberships`
       metadata, tabela nova de user profile ou `tenant_professionals`.
-- [ ] Adicionar telefone, foto, endereco profissional, conselho/registro,
+- [x] Adicionar telefone, foto, endereco profissional, conselho/registro,
       especialidade, unidades de atendimento e assinatura/rodape profissional quando
       aplicavel.
-- [ ] Separar dados de identidade profissional de dados pessoais privados.
-- [ ] Criar upload privado/controlado para avatar do usuario.
-- [ ] Atualizar Settings/Equipe para editar esses campos.
-- [ ] Garantir que prescricoes/documentos usem nome/registro profissional
+- [x] Separar dados de identidade profissional de dados pessoais privados.
+- [x] Criar upload privado/controlado para avatar do usuario.
+- [x] Atualizar Settings/Equipe para editar esses campos.
+- [x] Garantir que prescricoes/documentos usem nome/registro profissional
       correto.
 
 Criterios de aceite:
@@ -391,6 +391,24 @@ Criterios de aceite:
 - Profissional ativo aparece em builder, agenda e prescricoes com os mesmos
   dados.
 - Dados pessoais privados nao aparecem para pacientes sem regra explicita.
+
+Implementacao P1 registrada:
+
+- Migration `20260614230000_510_user_professional_personal_data.sql` define o
+  contrato: contato/avatar/endereco pessoal privado em `profiles.private_profile`
+  e identidade profissional controlada em `tenant_professionals`, sem mover RBAC
+  de `tenant_memberships`.
+- Bucket privado `user-profile-avatars` usa path por tenant/usuario, politicas
+  restritas a dono ou equipe autorizada e signed URL curta no frontend.
+- RPCs `get_clinic_team_personal_profiles()` e
+  `update_clinic_member_personal_profile()` expõem leitura/edicao auditada sem
+  publicar dados privados para o portal do paciente.
+- `src/services/clinicSettingsApi.ts` normaliza o novo contrato, envia avatar
+  privado e recarrega signed URLs curtas para a equipe.
+- `ClinicSettingsContent.tsx` adiciona edicao em Settings/Equipe para telefone,
+  avatar, endereco pessoal, endereco profissional, unidades de atendimento,
+  bio/telefone exibivel e assinatura/rodape, mantendo papel RBAC separado do
+  perfil clinico.
 
 ### P1 - Portal do paciente e ativacao de acesso
 
@@ -434,11 +452,11 @@ Criterios de aceite:
 
 ### Dados e seguranca
 
-- [ ] Nenhum segredo, `.env`, token, cookie, payload bruto de provider ou signed
+- [x] Nenhum segredo, `.env`, token, cookie, payload bruto de provider ou signed
       URL sensivel foi impresso.
 - [ ] Nenhuma chamada Asaas ou D4Sign foi feita sem autorizacao explicita.
-- [ ] Nenhuma migration antiga foi editada.
-- [ ] Novas tabelas com dados clinicos/financeiros/documentos tem RLS, grants,
+- [x] Nenhuma migration antiga foi editada.
+- [x] Novas tabelas com dados clinicos/financeiros/documentos tem RLS, grants,
       indices e analise de tenant.
 - [x] Campos de foto usam storage privado ou URL assinada curta quando aplicavel.
 - [ ] Dados do portal continuam escopados por `patient_accounts` e
@@ -450,7 +468,7 @@ Criterios de aceite:
 - [x] RPCs novas validam tenant, permissao e ownership.
 - [x] Mutacoes escrevem `audit_logs` ou evento equivalente.
 - [x] Read-models do Paciente 360 aceitam estados vazios.
-- [ ] Agenda nao depende de texto livre para sala/profissional quando IDs estao
+- [x] Agenda nao depende de texto livre para sala/profissional quando IDs estao
       disponiveis.
 
 ### UX operacional
@@ -464,7 +482,7 @@ Criterios de aceite:
 ### Checks minimos por entrega
 
 - [ ] Docs-only: `git diff --check`.
-- [ ] Codigo TypeScript/frontend: `git diff --check`, `npm run type-check`,
+- [x] Codigo TypeScript/frontend: `git diff --check`, `npm run type-check`,
       `npm run lint`, `npm run build`.
 - [ ] UI: alem dos checks de codigo, `npm run dev` e browser smoke na rota
       afetada quando praticavel.
