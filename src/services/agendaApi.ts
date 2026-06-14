@@ -4,6 +4,8 @@ import type {
   AppointmentStatus,
   AppointmentType,
   BlockedSlotSummary,
+  OperationalClinicalStage,
+  OperationalClinicalWorkflow,
   PatientReturnStatus,
   PatientReturnSummary,
   WaitingQueueEntry,
@@ -162,6 +164,31 @@ export interface ProfessionalDayAllocationInput {
   notes?: string | null;
 }
 
+export type OperationalClinicalStageAction = 'start' | 'complete';
+
+export interface OperationalClinicalStageInput {
+  appointmentId?: string | null;
+  queueId?: string | null;
+  patientId?: string | null;
+  stage: OperationalClinicalStage;
+  action: OperationalClinicalStageAction;
+  roomId?: string | null;
+  professionalProfileId?: string | null;
+  notes?: string | null;
+  occurredAt?: string | null;
+}
+
+export interface OperationalClinicalStageResult {
+  appointmentId: string;
+  queueId: string;
+  patientId: string;
+  stage: OperationalClinicalStage;
+  action: OperationalClinicalStageAction;
+  status: AppointmentStatus;
+  queueStatus?: AttendanceQueueStatus;
+  occurredAt: string;
+}
+
 interface AgendaProvider {
   getAgendaDay(date: string): Promise<AgendaDayData>;
   getScheduleOptions(date: string): Promise<AgendaScheduleOptions>;
@@ -175,6 +202,9 @@ interface AgendaProvider {
     nextStatus: AppointmentStatus,
     reason?: string | null
   ): Promise<void>;
+  recordOperationalClinicalStage(
+    input: OperationalClinicalStageInput
+  ): Promise<OperationalClinicalStageResult>;
   createAppointment(input: AppointmentMutationInput): Promise<AppointmentMutationResult>;
   updateAppointment(
     appointmentId: string,
@@ -247,6 +277,12 @@ const APPOINTMENT_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = 
   falta: [],
   cancelado: [],
 };
+
+function getNextStatusForOperationalStage(stage: OperationalClinicalStage): AppointmentStatus {
+  if (stage === 'triagem') return 'medidas';
+  if (stage === 'medidas') return 'bioimpedancia';
+  return 'aguardando_medico';
+}
 
 function isMockExplicitlyEnabled(): boolean {
   return isMockDataEnabled();
@@ -327,6 +363,19 @@ function getMockAgendaProvider(): Promise<AgendaProvider> {
     },
     async updateAppointmentStatus() {
       return undefined;
+    },
+    async recordOperationalClinicalStage(input) {
+      return {
+        appointmentId: input.appointmentId ?? 'mock-appointment',
+        queueId: input.queueId ?? 'mock-queue',
+        patientId: input.patientId ?? 'patient-001',
+        stage: input.stage,
+        action: input.action,
+        status:
+          input.action === 'complete' ? getNextStatusForOperationalStage(input.stage) : input.stage,
+        queueStatus: 'waiting',
+        occurredAt: input.occurredAt ?? new Date().toISOString(),
+      };
     },
     async createAppointment() {
       return { id: 'mock-appointment', financialStatus: 'not_required' };
@@ -578,6 +627,17 @@ const financialStatusValues = new Set<NonNullable<AppointmentSummary['financialS
   'failed',
 ]);
 
+const operationalClinicalStageValues = new Set<OperationalClinicalStage>([
+  'triagem',
+  'medidas',
+  'bioimpedancia',
+]);
+
+const operationalClinicalStageActionValues = new Set<OperationalClinicalStageAction>([
+  'start',
+  'complete',
+]);
+
 function normalizeAttendanceQueueStatus(value: unknown): AttendanceQueueStatus | undefined {
   const normalized = asString(value).toLowerCase() as AttendanceQueueStatus;
   return attendanceQueueStatusValues.has(normalized) ? normalized : undefined;
@@ -590,6 +650,18 @@ function normalizeFinancialStatus(
     AppointmentSummary['financialStatus']
   >;
   return financialStatusValues.has(normalized) ? normalized : undefined;
+}
+
+function normalizeOperationalStage(value: unknown): OperationalClinicalStage | undefined {
+  const normalized = asString(value).toLowerCase() as OperationalClinicalStage;
+  return operationalClinicalStageValues.has(normalized) ? normalized : undefined;
+}
+
+function normalizeOperationalStageAction(
+  value: unknown
+): OperationalClinicalStageAction | undefined {
+  const normalized = asString(value).toLowerCase() as OperationalClinicalStageAction;
+  return operationalClinicalStageActionValues.has(normalized) ? normalized : undefined;
 }
 
 function normalizePatientReturnStatus(value: unknown): PatientReturnStatus {
@@ -780,6 +852,84 @@ function normalizeAppointmentSummary(value: unknown): AppointmentSummary | null 
   };
 }
 
+function normalizeOperationalClinicalWorkflow(value: unknown): OperationalClinicalWorkflow {
+  const record = asRecord(value);
+  const workflow: OperationalClinicalWorkflow = {};
+
+  for (const stage of operationalClinicalStageValues) {
+    const rawStage = asRecord(record[stage]);
+    const startedAt = asString(rawStage.startedAt);
+    const completedAt = asString(rawStage.completedAt);
+    const actorId = asString(rawStage.actorId);
+    const roomId = asString(rawStage.roomId);
+    const professionalProfileId = asString(rawStage.professionalProfileId);
+    const notes = asString(rawStage.notes);
+
+    if (startedAt || completedAt || actorId || roomId || professionalProfileId || notes) {
+      workflow[stage] = {
+        startedAt: startedAt || undefined,
+        completedAt: completedAt || undefined,
+        actorId: actorId || undefined,
+        roomId: roomId || undefined,
+        professionalProfileId: professionalProfileId || undefined,
+        notes: notes || undefined,
+      };
+    }
+  }
+
+  return workflow;
+}
+
+function normalizeOperationalClinicalStageResult(value: unknown): OperationalClinicalStageResult {
+  const record = asRecord(value);
+  const appointmentId = asString(record.appointmentId);
+  const queueId = asString(record.queueId);
+  const patientId = asString(record.patientId);
+  const stage = normalizeOperationalStage(record.stage);
+  const action = normalizeOperationalStageAction(record.action);
+
+  if (!appointmentId || !queueId || !patientId || !stage || !action) {
+    throw new Error('Contrato invalido ao registrar etapa operacional.');
+  }
+
+  return {
+    appointmentId,
+    queueId,
+    patientId,
+    stage,
+    action,
+    status: mapAppointmentStatus(asString(record.status)),
+    queueStatus: normalizeAttendanceQueueStatus(record.queueStatus),
+    occurredAt: asString(record.occurredAt) || new Date().toISOString(),
+  };
+}
+
+function mergeOperationalQueueWorkflow(
+  day: AgendaDayData,
+  operationalPayload: unknown
+): AgendaDayData {
+  const workflowByQueueId = new Map<string, OperationalClinicalWorkflow>();
+
+  for (const item of asArray(operationalPayload)) {
+    const record = asRecord(item);
+    const queueId = asString(record.queueId);
+    if (queueId) {
+      workflowByQueueId.set(queueId, normalizeOperationalClinicalWorkflow(record.clinicalWorkflow));
+    }
+  }
+
+  if (workflowByQueueId.size === 0) return day;
+
+  return {
+    ...day,
+    waitingQueue: day.waitingQueue.map((entry) => {
+      const queueId = entry.queueId ?? entry.id;
+      const clinicalWorkflow = workflowByQueueId.get(queueId);
+      return clinicalWorkflow ? { ...entry, clinicalWorkflow } : entry;
+    }),
+  };
+}
+
 function normalizeWaitingQueueEntry(value: unknown): WaitingQueueEntry | null {
   const record = asRecord(value);
   const id = asString(record.id);
@@ -820,6 +970,7 @@ function normalizeWaitingQueueEntry(value: unknown): WaitingQueueEntry | null {
     financialStatus: normalizeFinancialStatus(record.financialStatus),
     encounterId: asString(record.encounterId) || undefined,
     attendanceLink: asString(record.attendanceLink) || undefined,
+    clinicalWorkflow: normalizeOperationalClinicalWorkflow(record.clinicalWorkflow),
   };
 }
 
@@ -920,12 +1071,22 @@ function normalizeStartAttendancePayload(payload: unknown): StartAttendanceEncou
 const supabaseAgendaProvider: AgendaProvider = {
   async getAgendaDay(date) {
     const supabase = createBrowserSupabaseClient();
-    const { data, error } = await supabase.rpc('get_agenda_day_snapshot', {
-      p_target_date: date,
-    });
+    const [dayResult, operationalResult] = await Promise.all([
+      supabase.rpc('get_agenda_day_snapshot', {
+        p_target_date: date,
+      }),
+      supabase.rpc('get_agenda_operational_queue', {
+        p_target_date: date,
+      }),
+    ]);
 
-    if (error) throw error;
-    return normalizeAgendaDayPayload(data);
+    if (dayResult.error) throw dayResult.error;
+    if (operationalResult.error) throw operationalResult.error;
+
+    return mergeOperationalQueueWorkflow(
+      normalizeAgendaDayPayload(dayResult.data),
+      operationalResult.data
+    );
   },
 
   async getScheduleOptions(date) {
@@ -999,6 +1160,26 @@ const supabaseAgendaProvider: AgendaProvider = {
     });
 
     if (error) throw error;
+  },
+
+  async recordOperationalClinicalStage(input) {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('record_operational_clinical_stage', {
+      p_payload: {
+        appointmentId: normalizeOptionalId(input.appointmentId),
+        queueId: normalizeOptionalId(input.queueId),
+        patientId: normalizeOptionalId(input.patientId),
+        stage: input.stage,
+        action: input.action,
+        roomId: normalizeOptionalId(input.roomId),
+        professionalProfileId: normalizeOptionalId(input.professionalProfileId),
+        notes: normalizeOptionalText(input.notes),
+        occurredAt: normalizeOptionalText(input.occurredAt),
+      },
+    });
+
+    if (error) throw error;
+    return normalizeOperationalClinicalStageResult(data);
   },
 
   async createAppointment(input) {
@@ -1196,6 +1377,22 @@ export async function updateAppointmentStatus(
   return runAgendaOperation((provider) =>
     provider.updateAppointmentStatus(appointmentId, nextStatus, reason)
   );
+}
+
+export async function recordOperationalClinicalStage(
+  input: OperationalClinicalStageInput
+): Promise<{ data: OperationalClinicalStageResult | null; error: SafeServiceError | null }> {
+  try {
+    return {
+      data: await runAgendaOperation((provider) => provider.recordOperationalClinicalStage(input)),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: asServiceError(error, 'Nao foi possivel registrar etapa operacional.'),
+    };
+  }
 }
 
 export async function createAppointment(

@@ -259,22 +259,43 @@ Implementacao P1 registrada:
 
 ### P1 - Triagem, medidas e bioimpedancia fora do encounter
 
-- [ ] Criar painel operacional na agenda/fila para pacientes em `triagem`,
+- [x] Criar painel operacional na agenda/fila para pacientes em `triagem`,
       `medidas` e `bioimpedancia`.
-- [ ] Permitir iniciar e concluir triagem com responsavel, sala e timestamps.
-- [ ] Permitir registrar medidas sem precisar abrir SOAP.
-- [ ] Permitir registrar bioimpedancia sem precisar abrir SOAP.
-- [ ] Permitir anexar os registros a appointment/encounter quando houver.
-- [ ] Permitir que registros avulsos aparecam no prontuario, evolucao e timeline.
-- [ ] Criar transicoes claras da fila: chegou -> triagem -> medidas ->
+- [x] Permitir iniciar e concluir triagem com responsavel, sala e timestamps.
+- [x] Permitir registrar medidas sem precisar abrir SOAP.
+- [x] Permitir registrar bioimpedancia sem precisar abrir SOAP.
+- [x] Permitir anexar os registros a appointment/encounter quando houver.
+- [x] Permitir que registros avulsos aparecam no prontuario, evolucao e timeline.
+- [x] Criar transicoes claras da fila: chegou -> triagem -> medidas ->
       bioimpedancia -> aguardando medico.
-- [ ] Criar empty/error/forbidden states para cada painel.
+- [x] Criar empty/error/forbidden states para cada painel.
 
 Criterios de aceite:
 
 - Recepcao/equipe consegue tratar triagem/bioimpedancia a partir da agenda.
 - O medico ve os registros no encounter e no Paciente 360.
 - Registros fora do encounter aparecem com origem auditavel.
+
+Implementacao P1 registrada:
+
+- Migration `20260614170000_480_agenda_operational_triage_measurements.sql`
+  adiciona origem operacional em `measurements` e `bioimpedance_results`
+  (`appointment_id`, `queue_id`, `source_module`, sala, profissional e
+  metadata), mantendo `encounter_id` opcional.
+- `record_patient_measurement()` e `record_patient_bioimpedance()` aceitam
+  payload de agenda/fila, validam paciente, appointment, encounter, sala e
+  profissional, escrevem `audit_logs` e timeline com origem auditavel.
+- RPC `record_operational_clinical_stage()` registra inicio/conclusao de
+  `triagem`, `medidas` e `bioimpedancia` em `attendance_queue.metadata`, com
+  actor, sala, profissional e timestamps, e aplica a transicao da consulta.
+- RPC `get_agenda_operational_queue()` expõe o workflow operacional para a UI
+  da agenda sem alterar o snapshot principal.
+- `src/services/agendaApi.ts` e `src/services/clinicalRecordsApi.ts` enviam e
+  normalizam o novo contrato.
+- A aba Fila de `AgendaContent.tsx` ganhou painel operacional para iniciar
+  etapa, concluir triagem, registrar medidas e registrar bioimpedancia fora do
+  SOAP, com empty/error states e avancos para `medidas`, `bioimpedancia` e
+  `aguardando_medico`.
 
 ### P1 - Exames, prescricoes e tarefas como acoes unificadas
 

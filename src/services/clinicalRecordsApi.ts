@@ -6,6 +6,11 @@ export interface BioimpedanceSummary {
   id: string;
   patientId: string;
   measuredAt: string;
+  appointmentId?: string;
+  queueId?: string;
+  sourceModule?: string;
+  roomId?: string;
+  professionalProfileId?: string;
   leanMassKg?: number;
   fatMassKg?: number;
   bodyWaterLiters?: number;
@@ -69,6 +74,11 @@ export interface ClinicalRecordsData {
 export interface MeasurementInput {
   patientId: string;
   encounterId?: string | null;
+  appointmentId?: string | null;
+  queueId?: string | null;
+  sourceModule?: string | null;
+  roomId?: string | null;
+  professionalProfileId?: string | null;
   measuredAt?: string;
   heightCm?: number | null;
   weightKg?: number | null;
@@ -77,14 +87,21 @@ export interface MeasurementInput {
   waistCm?: number | null;
   hipCm?: number | null;
   notes?: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface BioimpedanceInput {
   patientId: string;
   encounterId?: string | null;
+  appointmentId?: string | null;
+  queueId?: string | null;
+  sourceModule?: string | null;
+  roomId?: string | null;
+  professionalProfileId?: string | null;
   measuredAt?: string;
   payload: Record<string, unknown>;
   status?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface LabOrderInput {
@@ -142,6 +159,11 @@ type MeasurementRow = {
   id: string;
   patient_id: string;
   measured_at: string;
+  appointment_id?: string | null;
+  queue_id?: string | null;
+  source_module?: string | null;
+  room_id?: string | null;
+  professional_profile_id?: string | null;
   height_cm: unknown;
   weight_kg: unknown;
   bmi: unknown;
@@ -155,6 +177,11 @@ type BioimpedanceRow = {
   id: string;
   patient_id: string;
   measured_at: string;
+  appointment_id?: string | null;
+  queue_id?: string | null;
+  source_module?: string | null;
+  room_id?: string | null;
+  professional_profile_id?: string | null;
   result_payload: Record<string, unknown> | null;
 };
 
@@ -303,6 +330,11 @@ function toMeasurement(row: MeasurementRow): PatientMeasurementSummary {
     id: row.id,
     patientId: row.patient_id,
     measuredAt: row.measured_at,
+    appointmentId: row.appointment_id ?? undefined,
+    queueId: row.queue_id ?? undefined,
+    sourceModule: row.source_module ?? undefined,
+    roomId: row.room_id ?? undefined,
+    professionalProfileId: row.professional_profile_id ?? undefined,
     weightKg,
     heightCm,
     bmi: asNumber(row.bmi) ?? calculateBmi(weightKg, heightCm) ?? 0,
@@ -320,6 +352,11 @@ function toBioimpedance(row: BioimpedanceRow): BioimpedanceSummary {
     id: row.id,
     patientId: row.patient_id,
     measuredAt: row.measured_at,
+    appointmentId: row.appointment_id ?? undefined,
+    queueId: row.queue_id ?? undefined,
+    sourceModule: row.source_module ?? undefined,
+    roomId: row.room_id ?? undefined,
+    professionalProfileId: row.professional_profile_id ?? undefined,
     leanMassKg: asNumber(payload.lean_mass_kg),
     fatMassKg: asNumber(payload.fat_mass_kg),
     bodyWaterLiters: asNumber(payload.total_body_water_l),
@@ -367,6 +404,11 @@ function toMeasurementFromRecord(record: Record<string, unknown>): PatientMeasur
     id: asString(record.id) ?? '',
     patientId: asString(record.patientId ?? record.patient_id) ?? '',
     measuredAt: asString(record.measuredAt ?? record.measured_at) ?? '',
+    appointmentId: asString(record.appointmentId ?? record.appointment_id),
+    queueId: asString(record.queueId ?? record.queue_id),
+    sourceModule: asString(record.sourceModule ?? record.source_module),
+    roomId: asString(record.roomId ?? record.room_id),
+    professionalProfileId: asString(record.professionalProfileId ?? record.professional_profile_id),
     weightKg,
     heightCm,
     bmi: asNumber(record.bmi) ?? calculateBmi(weightKg || undefined, heightCm || undefined) ?? 0,
@@ -384,6 +426,11 @@ function toBioimpedanceFromRecord(record: Record<string, unknown>): Bioimpedance
     id: asString(record.id) ?? '',
     patientId: asString(record.patientId ?? record.patient_id) ?? '',
     measuredAt: asString(record.measuredAt ?? record.measured_at) ?? '',
+    appointmentId: asString(record.appointmentId ?? record.appointment_id),
+    queueId: asString(record.queueId ?? record.queue_id),
+    sourceModule: asString(record.sourceModule ?? record.source_module),
+    roomId: asString(record.roomId ?? record.room_id),
+    professionalProfileId: asString(record.professionalProfileId ?? record.professional_profile_id),
     leanMassKg: asNumber(payload.lean_mass_kg),
     fatMassKg: asNumber(payload.fat_mass_kg),
     bodyWaterLiters: asNumber(payload.total_body_water_l),
@@ -483,7 +530,23 @@ export async function getPatientClinicalRecords(
         supabase
           .from('measurements')
           .select(
-            'id,patient_id,measured_at,height_cm,weight_kg,bmi,body_fat_pct,waist_cm,hip_cm,notes'
+            [
+              'id',
+              'patient_id',
+              'measured_at',
+              'appointment_id',
+              'queue_id',
+              'source_module',
+              'room_id',
+              'professional_profile_id',
+              'height_cm',
+              'weight_kg',
+              'bmi',
+              'body_fat_pct',
+              'waist_cm',
+              'hip_cm',
+              'notes',
+            ].join(',')
           )
           .eq('tenant_id', tenantId)
           .eq('patient_id', patientId)
@@ -491,7 +554,19 @@ export async function getPatientClinicalRecords(
           .limit(10),
         supabase
           .from('bioimpedance_results')
-          .select('id,patient_id,measured_at,result_payload')
+          .select(
+            [
+              'id',
+              'patient_id',
+              'measured_at',
+              'appointment_id',
+              'queue_id',
+              'source_module',
+              'room_id',
+              'professional_profile_id',
+              'result_payload',
+            ].join(',')
+          )
           .eq('tenant_id', tenantId)
           .eq('patient_id', patientId)
           .order('measured_at', { ascending: false })
@@ -521,8 +596,12 @@ export async function getPatientClinicalRecords(
       if (result.error) throw result.error;
     }
 
-    const measurements = ((measurementsResult.data ?? []) as MeasurementRow[]).map(toMeasurement);
-    const bioimpedance = ((bioimpedanceResult.data ?? []) as BioimpedanceRow[]).map(toBioimpedance);
+    const measurements = ((measurementsResult.data ?? []) as unknown as MeasurementRow[]).map(
+      toMeasurement
+    );
+    const bioimpedance = ((bioimpedanceResult.data ?? []) as unknown as BioimpedanceRow[]).map(
+      toBioimpedance
+    );
 
     return {
       data: {
@@ -619,6 +698,11 @@ export async function createMeasurement(
       p_payload: {
         patientId: input.patientId,
         encounterId: input.encounterId ?? null,
+        appointmentId: input.appointmentId ?? null,
+        queueId: input.queueId ?? null,
+        sourceModule: input.sourceModule ?? null,
+        roomId: input.roomId ?? null,
+        professionalProfileId: input.professionalProfileId ?? null,
         measuredAt: input.measuredAt ?? new Date().toISOString(),
         heightCm: input.heightCm ?? null,
         weightKg: input.weightKg ?? null,
@@ -627,6 +711,7 @@ export async function createMeasurement(
         waistCm: input.waistCm ?? null,
         hipCm: input.hipCm ?? null,
         notes: input.notes ?? null,
+        metadata: input.metadata ?? {},
       },
     });
     if (error) throw error;
@@ -700,9 +785,15 @@ export async function createBioimpedanceResult(
       p_payload: {
         patientId: input.patientId,
         encounterId: input.encounterId ?? null,
+        appointmentId: input.appointmentId ?? null,
+        queueId: input.queueId ?? null,
+        sourceModule: input.sourceModule ?? null,
+        roomId: input.roomId ?? null,
+        professionalProfileId: input.professionalProfileId ?? null,
         status: input.status ?? 'final',
         measuredAt: input.measuredAt ?? new Date().toISOString(),
         payload: input.payload,
+        metadata: input.metadata ?? {},
       },
     });
     if (error) throw error;

@@ -121,6 +121,11 @@ export interface PatientMeasurementSummary {
   id: string;
   patientId: string;
   measuredAt: string;
+  appointmentId?: string;
+  queueId?: string;
+  sourceModule?: string;
+  roomId?: string;
+  professionalProfileId?: string;
   weightKg: number;
   heightCm: number;
   bmi: number;
@@ -281,6 +286,21 @@ export type AppointmentStatus =
   | 'concluido'
   | 'falta'
   | 'cancelado';
+
+export type OperationalClinicalStage = 'triagem' | 'medidas' | 'bioimpedancia';
+
+export interface OperationalClinicalStageState {
+  startedAt?: string;
+  completedAt?: string;
+  actorId?: string;
+  roomId?: string;
+  professionalProfileId?: string;
+  notes?: string;
+}
+
+export type OperationalClinicalWorkflow = Partial<
+  Record<OperationalClinicalStage, OperationalClinicalStageState>
+>;
 
 export type AppointmentType =
   | 'consulta_medica'
@@ -980,6 +1000,7 @@ export interface WaitingQueueEntry {
   financialStatus?: 'not_required' | 'pending_local_invoice' | 'manual_paid' | 'failed';
   encounterId?: string;
   attendanceLink?: string;
+  clinicalWorkflow?: OperationalClinicalWorkflow;
 }
 
 export type PatientReturnStatus =

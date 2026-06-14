@@ -28,6 +28,8 @@ import {
   Save,
   CreditCard,
   ReceiptText,
+  Activity,
+  Ruler,
 } from 'lucide-react';
 import StatusBadge from '@/components/StatusBadge';
 import PageHeader from '@/components/PageHeader';
@@ -46,6 +48,7 @@ import type {
   CommercialPackage,
   CommercialProgramOption,
   CommercialService,
+  OperationalClinicalStage,
 } from '@/domain/types';
 import {
   callAttendanceQueue,
@@ -55,6 +58,7 @@ import {
   getAgendaDay,
   getAgendaScheduleOptions,
   getNextAppointmentStatus,
+  recordOperationalClinicalStage,
   recordPatientReturnAction,
   saveClinicRoom,
   saveProfessionalDayAllocation,
@@ -70,6 +74,7 @@ import {
   type ProfessionalDayAllocationStatus,
 } from '@/services/agendaApi';
 import { getClinicCommercialCatalog } from '@/services/commercialApi';
+import { createBioimpedanceResult, createMeasurement } from '@/services/clinicalRecordsApi';
 import { getPatientList } from '@/services/patientsApi';
 
 // ─── WORKFLOW STAGES ──────────────────────────────────────────────────────────
@@ -194,6 +199,32 @@ const appointmentStatusLabel: Record<AppointmentStatus, string> = {
   cancelado: 'Cancelado',
 };
 
+const operationalStageLabel: Record<OperationalClinicalStage, string> = {
+  triagem: 'Triagem',
+  medidas: 'Medidas',
+  bioimpedancia: 'Bioimpedancia',
+};
+
+const operationalStageIcon: Record<OperationalClinicalStage, React.ElementType> = {
+  triagem: ClipboardCheck,
+  medidas: Ruler,
+  bioimpedancia: Activity,
+};
+
+type OperationalClinicalFormState = {
+  roomId: string;
+  notes: string;
+  weightKg: string;
+  heightCm: string;
+  bodyFatPercent: string;
+  waistCm: string;
+  hipCm: string;
+  leanMassKg: string;
+  fatMassKg: string;
+  bodyWaterLiters: string;
+  phaseAngleDeg: string;
+};
+
 type AgendaTab = 'agenda' | 'fila' | 'retornos';
 
 type PatientDrawerTarget =
@@ -301,6 +332,13 @@ function parseCurrencyToCents(value: string) {
     .replace(/[^\d.]/g, '');
   const numeric = Number(normalized);
   return Number.isFinite(numeric) ? Math.max(0, Math.round(numeric * 100)) : 0;
+}
+
+function parseDecimalInput(value: string) {
+  if (!value.trim()) return null;
+  const normalized = value.replace(',', '.').replace(/[^\d.-]/g, '');
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function getWeekDates(selectedDate: string) {
@@ -577,6 +615,22 @@ function createEmptyScheduleOptions(date: string): AgendaScheduleOptions {
     rooms: [],
     professionals: [],
     allocations: [],
+  };
+}
+
+function createOperationalClinicalForm(entry?: WaitingQueueEntry): OperationalClinicalFormState {
+  return {
+    roomId: entry?.roomId ?? '',
+    notes: '',
+    weightKg: '',
+    heightCm: '',
+    bodyFatPercent: '',
+    waistCm: '',
+    hipCm: '',
+    leanMassKg: '',
+    fatMassKg: '',
+    bodyWaterLiters: '',
+    phaseAngleDeg: '',
   };
 }
 
@@ -2052,6 +2106,324 @@ function WaitingQueuePanel({ queue, isLoading, onRefresh }: WaitingQueuePanelPro
 
 // ─── WORKFLOW PROGRESS BAR ────────────────────────────────────────────────────
 
+type OperationalClinicalHandler = (
+  entry: WaitingQueueEntry,
+  stage: OperationalClinicalStage,
+  form: OperationalClinicalFormState
+) => Promise<string | null>;
+
+interface OperationalClinicalPanelProps {
+  queue: WaitingQueueEntry[];
+  rooms: AgendaScheduleOptions['rooms'];
+  actionId: string | null;
+  onStartStage: OperationalClinicalHandler;
+  onCompleteTriage: OperationalClinicalHandler;
+  onRecordMeasurements: OperationalClinicalHandler;
+  onRecordBioimpedance: OperationalClinicalHandler;
+}
+
+const operationalStages: OperationalClinicalStage[] = ['triagem', 'medidas', 'bioimpedancia'];
+
+function OperationalClinicalPanel({
+  queue,
+  rooms,
+  actionId,
+  onStartStage,
+  onCompleteTriage,
+  onRecordMeasurements,
+  onRecordBioimpedance,
+}: OperationalClinicalPanelProps) {
+  const [forms, setForms] = useState<Record<string, OperationalClinicalFormState>>({});
+  const [error, setError] = useState<string | null>(null);
+  const activeRooms = rooms.filter((room) => room.status === 'active');
+
+  const getForm = (entry: WaitingQueueEntry) =>
+    forms[entry.id] ?? createOperationalClinicalForm(entry);
+  const updateForm = (entry: WaitingQueueEntry, patch: Partial<OperationalClinicalFormState>) => {
+    setForms((current) => ({
+      ...current,
+      [entry.id]: {
+        ...(current[entry.id] ?? createOperationalClinicalForm(entry)),
+        ...patch,
+      },
+    }));
+  };
+
+  const runAction = async (
+    entry: WaitingQueueEntry,
+    action: (form: OperationalClinicalFormState) => Promise<string | null>,
+    resetOnSuccess = false
+  ) => {
+    setError(null);
+    const message = await action(getForm(entry));
+    if (message) {
+      setError(message);
+      return;
+    }
+    if (resetOnSuccess) {
+      setForms((current) => ({ ...current, [entry.id]: createOperationalClinicalForm(entry) }));
+    }
+  };
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Triagem e bioimpedancia</h2>
+          <p className="text-xs text-muted-foreground">
+            {queue.length} pacientes nas etapas operacionais
+          </p>
+        </div>
+        <span className="inline-flex w-fit rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+          Fila clinica
+        </span>
+      </div>
+
+      {error ? (
+        <DataState kind="error" title="Nao foi possivel concluir a etapa" description={error} />
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+        {operationalStages.map((stage) => {
+          const items = queue.filter((entry) => entry.status === stage);
+          const Icon = operationalStageIcon[stage];
+
+          return (
+            <div key={stage} className="space-y-2">
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Icon size={15} className="text-primary" />
+                  <span className="text-xs font-semibold text-foreground">
+                    {operationalStageLabel[stage]}
+                  </span>
+                </div>
+                <span className="text-xs font-semibold text-muted-foreground">{items.length}</span>
+              </div>
+
+              {items.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                  Sem pacientes.
+                </div>
+              ) : (
+                items.map((entry) => {
+                  const form = getForm(entry);
+                  const stageState = entry.clinicalWorkflow?.[stage];
+                  const started = Boolean(stageState?.startedAt);
+                  const busy = actionId === entry.id || actionId === entry.queueId;
+                  const roomValue = form.roomId || entry.roomId || '';
+
+                  return (
+                    <article
+                      key={entry.id}
+                      className="rounded-2xl border border-border bg-card p-3 shadow-sm"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
+                          {getInitials(entry.patientName)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-foreground">
+                            {entry.patientName}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {entry.professionalName} - {entry.room ?? 'Sala a definir'}
+                          </p>
+                        </div>
+                        <StatusBadge status={entry.status} size="xs" />
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-xl bg-muted/40 px-3 py-2">
+                          <span className="block font-semibold text-foreground">Inicio</span>
+                          <span className="text-muted-foreground">
+                            {stageState?.startedAt
+                              ? formatDateTime(stageState.startedAt)
+                              : 'Pendente'}
+                          </span>
+                        </div>
+                        <div className="rounded-xl bg-muted/40 px-3 py-2">
+                          <span className="block font-semibold text-foreground">Espera</span>
+                          <span className="text-muted-foreground">{entry.waitingMinutes} min</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        <label className="block text-xs font-semibold text-foreground">
+                          Sala
+                          <select
+                            value={roomValue}
+                            onChange={(event) => updateForm(entry, { roomId: event.target.value })}
+                            className="input-base mt-1 text-sm"
+                          >
+                            <option value="">A definir</option>
+                            {activeRooms.map((room) => (
+                              <option key={room.id} value={room.id}>
+                                {room.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        {stage === 'triagem' ? (
+                          <textarea
+                            value={form.notes}
+                            onChange={(event) => updateForm(entry, { notes: event.target.value })}
+                            className="input-base min-h-[76px] text-sm"
+                            placeholder="Observacoes de triagem"
+                          />
+                        ) : null}
+
+                        {stage === 'medidas' ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              ['weightKg', 'Peso kg'],
+                              ['heightCm', 'Altura cm'],
+                              ['bodyFatPercent', 'Gordura %'],
+                              ['waistCm', 'Cintura cm'],
+                              ['hipCm', 'Quadril cm'],
+                            ].map(([key, label]) => (
+                              <label
+                                key={key}
+                                className="block text-xs font-semibold text-foreground"
+                              >
+                                {label}
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={form[key as keyof OperationalClinicalFormState]}
+                                  onChange={(event) =>
+                                    updateForm(entry, {
+                                      [key]: event.target.value,
+                                    } as Partial<OperationalClinicalFormState>)
+                                  }
+                                  className="input-base mt-1 text-sm"
+                                />
+                              </label>
+                            ))}
+                            <textarea
+                              value={form.notes}
+                              onChange={(event) => updateForm(entry, { notes: event.target.value })}
+                              className="input-base col-span-2 min-h-[64px] text-sm"
+                              placeholder="Observacoes"
+                            />
+                          </div>
+                        ) : null}
+
+                        {stage === 'bioimpedancia' ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              ['leanMassKg', 'Massa magra kg'],
+                              ['fatMassKg', 'Massa gorda kg'],
+                              ['bodyWaterLiters', 'Agua L'],
+                              ['phaseAngleDeg', 'Angulo fase'],
+                            ].map(([key, label]) => (
+                              <label
+                                key={key}
+                                className="block text-xs font-semibold text-foreground"
+                              >
+                                {label}
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={form[key as keyof OperationalClinicalFormState]}
+                                  onChange={(event) =>
+                                    updateForm(entry, {
+                                      [key]: event.target.value,
+                                    } as Partial<OperationalClinicalFormState>)
+                                  }
+                                  className="input-base mt-1 text-sm"
+                                />
+                              </label>
+                            ))}
+                            <textarea
+                              value={form.notes}
+                              onChange={(event) => updateForm(entry, { notes: event.target.value })}
+                              className="input-base col-span-2 min-h-[64px] text-sm"
+                              placeholder="Observacoes"
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void runAction(entry, (currentForm) =>
+                              onStartStage(entry, stage, currentForm)
+                            )
+                          }
+                          disabled={busy || started}
+                          className="btn-secondary text-xs disabled:opacity-60"
+                        >
+                          <PlayCircle size={13} />
+                          {started ? 'Iniciado' : 'Iniciar'}
+                        </button>
+
+                        {stage === 'triagem' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void runAction(entry, (currentForm) =>
+                                onCompleteTriage(entry, stage, currentForm)
+                              )
+                            }
+                            disabled={busy || !started}
+                            className="btn-primary text-xs disabled:opacity-60"
+                          >
+                            <ArrowRight size={13} />
+                            Concluir
+                          </button>
+                        ) : null}
+
+                        {stage === 'medidas' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void runAction(
+                                entry,
+                                (currentForm) => onRecordMeasurements(entry, stage, currentForm),
+                                true
+                              )
+                            }
+                            disabled={busy || !started}
+                            className="btn-primary text-xs disabled:opacity-60"
+                          >
+                            <Save size={13} />
+                            Salvar medidas
+                          </button>
+                        ) : null}
+
+                        {stage === 'bioimpedancia' ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void runAction(
+                                entry,
+                                (currentForm) => onRecordBioimpedance(entry, stage, currentForm),
+                                true
+                              )
+                            }
+                            disabled={busy || !started}
+                            className="btn-primary text-xs disabled:opacity-60"
+                          >
+                            <Save size={13} />
+                            Salvar bio
+                          </button>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function QueueStatusBadge({ status }: { status?: AttendanceQueueStatus }) {
   const normalized = status ?? 'waiting';
   const classes: Record<AttendanceQueueStatus, string> = {
@@ -2080,20 +2452,30 @@ function QueueStatusBadge({ status }: { status?: AttendanceQueueStatus }) {
 
 function QueueWorkspace({
   queue,
+  rooms,
   isLoading,
   actionId,
   onRefresh,
   onCall,
   onStart,
   onOpenPatient,
+  onStartStage,
+  onCompleteTriage,
+  onRecordMeasurements,
+  onRecordBioimpedance,
 }: {
   queue: WaitingQueueEntry[];
+  rooms: AgendaScheduleOptions['rooms'];
   isLoading: boolean;
   actionId: string | null;
   onRefresh: () => void;
   onCall: (entry: WaitingQueueEntry) => void;
   onStart: (entry: WaitingQueueEntry) => void;
   onOpenPatient: (entry: WaitingQueueEntry) => void;
+  onStartStage: OperationalClinicalHandler;
+  onCompleteTriage: OperationalClinicalHandler;
+  onRecordMeasurements: OperationalClinicalHandler;
+  onRecordBioimpedance: OperationalClinicalHandler;
 }) {
   const activeQueue = queue.filter(
     (entry) => !['completed', 'cancelled', 'no_show'].includes(entry.queueStatus ?? 'waiting')
@@ -2105,6 +2487,9 @@ function QueueWorkspace({
   const inAttendanceCount = activeQueue.filter((entry) =>
     ['in_attendance', 'checkout'].includes(entry.queueStatus ?? 'waiting')
   ).length;
+  const operationalQueue = activeQueue.filter((entry) =>
+    operationalStages.includes(entry.status as OperationalClinicalStage)
+  );
 
   if (isLoading) {
     return (
@@ -2118,18 +2503,39 @@ function QueueWorkspace({
 
   if (activeQueue.length === 0) {
     return (
-      <DataState
-        kind="empty"
-        title="Fila vazia"
-        description="Consultas confirmadas ou pacientes com check-in aparecem aqui."
-        actionLabel="Atualizar"
-        onAction={onRefresh}
-      />
+      <div className="space-y-4">
+        <OperationalClinicalPanel
+          queue={[]}
+          rooms={rooms}
+          actionId={actionId}
+          onStartStage={onStartStage}
+          onCompleteTriage={onCompleteTriage}
+          onRecordMeasurements={onRecordMeasurements}
+          onRecordBioimpedance={onRecordBioimpedance}
+        />
+        <DataState
+          kind="empty"
+          title="Fila vazia"
+          description="Consultas confirmadas ou pacientes com check-in aparecem aqui."
+          actionLabel="Atualizar"
+          onAction={onRefresh}
+        />
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      <OperationalClinicalPanel
+        queue={operationalQueue}
+        rooms={rooms}
+        actionId={actionId}
+        onStartStage={onStartStage}
+        onCompleteTriage={onCompleteTriage}
+        onRecordMeasurements={onRecordMeasurements}
+        onRecordBioimpedance={onRecordBioimpedance}
+      />
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {[
           { label: 'Aguardando', value: waitingCount, icon: Users },
@@ -2773,6 +3179,214 @@ export default function AgendaContent() {
     [handleStartAttendance]
   );
 
+  const handleStartOperationalStage = useCallback(
+    async (
+      entry: WaitingQueueEntry,
+      stage: OperationalClinicalStage,
+      form: OperationalClinicalFormState
+    ) => {
+      const queueId = entry.queueId ?? entry.id;
+      setQueueActionId(entry.id);
+      setLoadError(null);
+
+      const result = await recordOperationalClinicalStage({
+        appointmentId: entry.appointmentId,
+        queueId,
+        patientId: entry.patientId,
+        stage,
+        action: 'start',
+        roomId: form.roomId || entry.roomId || null,
+        professionalProfileId: entry.professionalProfileId ?? null,
+        notes: form.notes,
+      });
+
+      setQueueActionId(null);
+
+      if (result.error) {
+        setLoadError(result.error.message);
+        return result.error.message;
+      }
+
+      await loadAgenda();
+      return null;
+    },
+    [loadAgenda]
+  );
+
+  const handleCompleteTriage = useCallback(
+    async (
+      entry: WaitingQueueEntry,
+      stage: OperationalClinicalStage,
+      form: OperationalClinicalFormState
+    ) => {
+      const queueId = entry.queueId ?? entry.id;
+      setQueueActionId(entry.id);
+      setLoadError(null);
+
+      const result = await recordOperationalClinicalStage({
+        appointmentId: entry.appointmentId,
+        queueId,
+        patientId: entry.patientId,
+        stage,
+        action: 'complete',
+        roomId: form.roomId || entry.roomId || null,
+        professionalProfileId: entry.professionalProfileId ?? null,
+        notes: form.notes,
+      });
+
+      setQueueActionId(null);
+
+      if (result.error) {
+        setLoadError(result.error.message);
+        return result.error.message;
+      }
+
+      await loadAgenda();
+      return null;
+    },
+    [loadAgenda]
+  );
+
+  const handleRecordOperationalMeasurements = useCallback(
+    async (
+      entry: WaitingQueueEntry,
+      stage: OperationalClinicalStage,
+      form: OperationalClinicalFormState
+    ) => {
+      const values = [form.weightKg, form.heightCm, form.bodyFatPercent, form.waistCm, form.hipCm];
+      if (values.every((value) => !value.trim())) {
+        return 'Informe pelo menos uma medida.';
+      }
+
+      const queueId = entry.queueId ?? entry.id;
+      setQueueActionId(entry.id);
+      setLoadError(null);
+
+      const measurementResult = await createMeasurement({
+        patientId: entry.patientId,
+        encounterId: entry.encounterId ?? null,
+        appointmentId: entry.appointmentId ?? null,
+        queueId,
+        sourceModule: 'attendance_queue',
+        roomId: form.roomId || entry.roomId || null,
+        professionalProfileId: entry.professionalProfileId ?? null,
+        weightKg: parseDecimalInput(form.weightKg),
+        heightCm: parseDecimalInput(form.heightCm),
+        bodyFatPercent: parseDecimalInput(form.bodyFatPercent),
+        waistCm: parseDecimalInput(form.waistCm),
+        hipCm: parseDecimalInput(form.hipCm),
+        notes: form.notes,
+        metadata: {
+          sourceAction: 'agenda_operational_panel',
+          stage,
+        },
+      });
+
+      if (measurementResult.error || !measurementResult.data) {
+        const message =
+          measurementResult.error?.details ??
+          measurementResult.error?.message ??
+          'Nao foi possivel registrar medidas.';
+        setQueueActionId(null);
+        setLoadError(message);
+        return message;
+      }
+
+      const stageResult = await recordOperationalClinicalStage({
+        appointmentId: entry.appointmentId,
+        queueId,
+        patientId: entry.patientId,
+        stage,
+        action: 'complete',
+        roomId: form.roomId || entry.roomId || null,
+        professionalProfileId: entry.professionalProfileId ?? null,
+        notes: form.notes,
+      });
+
+      setQueueActionId(null);
+
+      if (stageResult.error) {
+        setLoadError(stageResult.error.message);
+        return stageResult.error.message;
+      }
+
+      await loadAgenda();
+      return null;
+    },
+    [loadAgenda]
+  );
+
+  const handleRecordOperationalBioimpedance = useCallback(
+    async (
+      entry: WaitingQueueEntry,
+      stage: OperationalClinicalStage,
+      form: OperationalClinicalFormState
+    ) => {
+      const values = [form.leanMassKg, form.fatMassKg, form.bodyWaterLiters, form.phaseAngleDeg];
+      if (values.every((value) => !value.trim())) {
+        return 'Informe pelo menos um indicador de bioimpedancia.';
+      }
+
+      const queueId = entry.queueId ?? entry.id;
+      setQueueActionId(entry.id);
+      setLoadError(null);
+
+      const bioimpedanceResult = await createBioimpedanceResult({
+        patientId: entry.patientId,
+        encounterId: entry.encounterId ?? null,
+        appointmentId: entry.appointmentId ?? null,
+        queueId,
+        sourceModule: 'attendance_queue',
+        roomId: form.roomId || entry.roomId || null,
+        professionalProfileId: entry.professionalProfileId ?? null,
+        payload: {
+          lean_mass_kg: parseDecimalInput(form.leanMassKg),
+          fat_mass_kg: parseDecimalInput(form.fatMassKg),
+          total_body_water_l: parseDecimalInput(form.bodyWaterLiters),
+          phase_angle_deg: parseDecimalInput(form.phaseAngleDeg),
+          notes: form.notes || null,
+          source: 'attendance_queue',
+        },
+        metadata: {
+          sourceAction: 'agenda_operational_panel',
+          stage,
+        },
+      });
+
+      if (bioimpedanceResult.error || !bioimpedanceResult.data) {
+        const message =
+          bioimpedanceResult.error?.details ??
+          bioimpedanceResult.error?.message ??
+          'Nao foi possivel registrar bioimpedancia.';
+        setQueueActionId(null);
+        setLoadError(message);
+        return message;
+      }
+
+      const stageResult = await recordOperationalClinicalStage({
+        appointmentId: entry.appointmentId,
+        queueId,
+        patientId: entry.patientId,
+        stage,
+        action: 'complete',
+        roomId: form.roomId || entry.roomId || null,
+        professionalProfileId: entry.professionalProfileId ?? null,
+        notes: form.notes,
+      });
+
+      setQueueActionId(null);
+
+      if (stageResult.error) {
+        setLoadError(stageResult.error.message);
+        return stageResult.error.message;
+      }
+
+      await loadAgenda();
+      return null;
+    },
+    [loadAgenda]
+  );
+
   const handleReturnAction = useCallback(
     async (
       item: PatientReturnSummary,
@@ -3298,12 +3912,17 @@ export default function AgendaContent() {
       {activeTab === 'fila' ? (
         <QueueWorkspace
           queue={waitingQueue}
+          rooms={scheduleOptions.rooms}
           isLoading={isLoading}
           actionId={queueActionId}
           onRefresh={loadAgenda}
           onCall={handleCallQueue}
           onStart={handleStartQueueEntry}
           onOpenPatient={(entry) => setPatientDrawerTarget({ kind: 'queue', item: entry })}
+          onStartStage={handleStartOperationalStage}
+          onCompleteTriage={handleCompleteTriage}
+          onRecordMeasurements={handleRecordOperationalMeasurements}
+          onRecordBioimpedance={handleRecordOperationalBioimpedance}
         />
       ) : null}
 
