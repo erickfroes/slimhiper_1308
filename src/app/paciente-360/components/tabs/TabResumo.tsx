@@ -25,6 +25,7 @@ import {
   Dumbbell,
 } from 'lucide-react';
 import type { Patient360Summary } from '@/domain/types';
+import UnifiedClinicalActions from '@/components/UnifiedClinicalActions';
 import AlertPanel from '@/components/AlertPanel';
 
 import PackageProgressCard from '@/components/PackageProgressCard';
@@ -293,6 +294,8 @@ export default function TabResumo({
 
   return (
     <div className="space-y-5">
+      <UnifiedClinicalActions patientId={data.profile.id} sourceModule="patient360" />
+
       {/* ── Row 1: 8 compact KPI cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
         {/* Peso atual */}

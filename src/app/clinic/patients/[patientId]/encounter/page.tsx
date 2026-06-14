@@ -3,6 +3,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import DashboardShell from '@/components/DashboardShell';
+import UnifiedClinicalActions, {
+  type UnifiedClinicalAction,
+} from '@/components/UnifiedClinicalActions';
 import {
   finalizeEncounterSoap,
   getEncounterContext,
@@ -324,6 +327,7 @@ export default function EncounterPage() {
   const [clinicalActionSaving, setClinicalActionSaving] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>('soap');
   const [contextDrawerOpen, setContextDrawerOpen] = useState(false);
+  const [unifiedAction, setUnifiedAction] = useState<UnifiedClinicalAction | null>(null);
   const [finalizeReviewOpen, setFinalizeReviewOpen] = useState(false);
   const [measurementForm, setMeasurementForm] = useState<MeasurementFormState>(() =>
     emptyMeasurementForm()
@@ -795,43 +799,28 @@ export default function EncounterPage() {
               <PanelRightOpen size={13} />
               Contexto
             </button>
-            <button
-              type="button"
-              onClick={() =>
-                document.getElementById('encounter-clinical-records')?.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'start',
-                })
-              }
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
-            >
-              <FlaskConical size={13} />
-              Solicitar Exames
-            </button>
-            <button
-              disabled
-              title="Prescricoes serao habilitadas apos contrato backend."
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground opacity-60 cursor-not-allowed"
-            >
-              <Pill size={13} />
-              Criar Prescrição
-            </button>
-            <button
-              disabled
-              title="Atualizacao de plano sera habilitada apos contrato backend."
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground opacity-60 cursor-not-allowed"
-            >
-              <RefreshCw size={13} />
-              Atualizar Plano
-            </button>
-            <button
-              disabled
-              title="Atribuicao de tarefas sera habilitada apos contrato backend."
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground opacity-60 cursor-not-allowed"
-            >
-              <UserPlus size={13} />
-              Atribuir Tarefa
-            </button>
+            {[
+              ['lab', 'Solicitar Exames', FlaskConical],
+              ['prescription', 'Criar Prescrição', Pill],
+              ['task', 'Atribuir Tarefa', UserPlus],
+            ].map(([key, label, Icon]) => (
+              <button
+                key={key as string}
+                type="button"
+                onClick={() => {
+                  setUnifiedAction(key as UnifiedClinicalAction);
+                  document.getElementById('encounter-unified-actions')?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                  });
+                }}
+                disabled={finalized}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Icon size={13} />
+                {label as string}
+              </button>
+            ))}
             <button
               onClick={handleSaveDraft}
               disabled={saving || finalized}
@@ -1105,6 +1094,25 @@ export default function EncounterPage() {
                 placeholder="Conduta, prescrições, solicitação de exames, orientações, retorno, encaminhamentos, ajustes no programa..."
                 rows={6}
                 disabled={finalized}
+              />
+            </div>
+
+            <div
+              id="encounter-unified-actions"
+              className={mobilePanel === 'soap' ? 'space-y-5' : 'hidden xl:block xl:space-y-5'}
+            >
+              <UnifiedClinicalActions
+                patientId={patientId}
+                encounterId={encounterId}
+                appointmentId={appointmentId}
+                sourceModule="encounter"
+                initialAction={unifiedAction}
+                onActionChange={setUnifiedAction}
+                disabled={finalized}
+                onSuccess={async (successMessage) => {
+                  setClinicalActionSuccess(successMessage);
+                  await reloadClinicalRecords();
+                }}
               />
             </div>
 
