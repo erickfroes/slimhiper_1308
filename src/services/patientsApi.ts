@@ -1503,6 +1503,41 @@ export async function getPatientPortalAccessStatus(
   }
 }
 
+export async function invitePatientPortalAccess(
+  patientId: string,
+  input: Omit<PatientPortalAccessMutationInput, 'action'>
+): Promise<{ data: PatientPortalAccessStatus | null; error: SafeServiceError | null }> {
+  try {
+    const response = await fetch(
+      `/api/clinic/patients/${encodeURIComponent(patientId)}/portal-invite`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inviteeType: input.inviteeType ?? 'patient',
+          email: normalizeOptionalText(input.email),
+          phone: normalizeOptionalText(input.phone),
+          relationship: normalizeOptionalText(input.relationship),
+        }),
+      }
+    );
+    const payload = (await response.json().catch(() => null)) as {
+      error?: SafeServiceError | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        data: null,
+        error: payload?.error ?? { message: 'Falha ao enviar convite do portal.' },
+      };
+    }
+
+    return getPatientPortalAccessStatus(patientId);
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao enviar convite do portal.') };
+  }
+}
+
 export async function managePatientPortalAccess(
   patientId: string,
   input: PatientPortalAccessMutationInput

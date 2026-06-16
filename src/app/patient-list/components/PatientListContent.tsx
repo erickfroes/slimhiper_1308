@@ -43,6 +43,7 @@ import {
   getPatientFormSnapshot,
   getPatientPortalAccessStatus,
   getPatientWalletSnapshot,
+  invitePatientPortalAccess,
   managePatientPortalAccess,
   updatePatient,
   type PatientMutationInput,
@@ -1425,20 +1426,30 @@ export default function PatientListContent() {
     if (!portalPatient) return;
     setPortalSubmitting(true);
     setPortalError(null);
-    const result = await managePatientPortalAccess(portalPatient.id, {
-      action,
-      inviteeType: portalInvite.inviteeType,
-      email: portalInvite.inviteEmail,
-      phone: portalInvite.invitePhone,
-      relationship: portalInvite.relationship,
-    });
+    const result =
+      action === 'invite'
+        ? await invitePatientPortalAccess(portalPatient.id, {
+            inviteeType: portalInvite.inviteeType,
+            email: portalInvite.inviteEmail,
+            phone: portalInvite.invitePhone,
+            relationship: portalInvite.relationship,
+          })
+        : await managePatientPortalAccess(portalPatient.id, {
+            action,
+            inviteeType: portalInvite.inviteeType,
+            email: portalInvite.inviteEmail,
+            phone: portalInvite.invitePhone,
+            relationship: portalInvite.relationship,
+          });
     setPortalSubmitting(false);
     if (result.error || !result.data) {
       setPortalError(result.error?.message ?? 'Falha ao atualizar portal.');
       return;
     }
     setPortalStatus(result.data);
-    toast.success(action === 'invite' ? 'Convite registrado.' : 'Acesso do portal atualizado.');
+    toast.success(
+      action === 'invite' ? 'Convite enviado por e-mail.' : 'Acesso do portal atualizado.'
+    );
   };
 
   const handleSubmitPatientForm = async () => {
@@ -2460,6 +2471,18 @@ export default function PatientListContent() {
                           title="Editar paciente"
                         >
                           <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void openPortalAccess(patient);
+                          }}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                          aria-label={`Gerenciar portal de ${patient.name}`}
+                          title="Portal do paciente"
+                        >
+                          <UserPlus size={14} />
                         </button>
                         <Link
                           href={`/clinic/inbox?tab=conversas&patientId=${patient.id}`}
