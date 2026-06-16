@@ -35,6 +35,7 @@ export interface AppSession {
   activeTenant: { id: string } | null;
   tenantMemberships: AppTenantMembership[];
   activeTenantRole: string | null;
+  activeTenantRoles: string[];
   featureFlags: string[];
   permissions: string[];
   planEntitlements: PlanEntitlements;
@@ -69,6 +70,14 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function normalizeString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function normalizeStringArray(values: Array<string | null | undefined>): string[] {
+  const normalized = values
+    .map((value) => normalizeString(value))
+    .filter((value): value is string => Boolean(value))
+    .map((value) => value.toLowerCase());
+  return Array.from(new Set(normalized));
 }
 
 export async function getCurrentAppSession(
@@ -141,49 +150,71 @@ export async function getCurrentAppSession(
 
   const tenantMemberships: AppTenantMembership[] = memberships;
 
-  const activeMembership = activeTenantId
-    ? (tenantMemberships.find((membership) => membership.tenantId === activeTenantId) ?? null)
-    : null;
+  const activeTenantMemberships = activeTenantId
+    ? tenantMemberships.filter(
+        (membership) => membership.tenantId === activeTenantId && membership.status === 'active'
+      )
+    : [];
+  const activeMembership = activeTenantMemberships[0] ?? null;
   const activeTenantRole = activeMembership?.roleKey ?? null;
+  const activeTenantRoles = normalizeStringArray(
+    activeTenantMemberships.map((membership) => membership.roleKey)
+  );
+  const hasActiveClinicRole = activeTenantRoles.some(
+    (role) => role.length > 0 && !['patient', 'guardian'].includes(role)
+  );
+  const hasPatientPortalRole = activeTenantRoles.some((role) =>
+    ['patient', 'guardian'].includes(role)
+  );
 
   let permissions: string[] = [];
-  for (const membership of activeMembership ? [activeMembership] : []) {
-    const roleName = membership.roleCode ?? membership.legacyRole;
-    if (!membership.tenantId || !roleName) continue;
-
-    const { data: roleRow } = await supabase
+  const activeRoleNames = normalizeStringArray(
+    activeTenantMemberships.flatMap((membership) => [membership.roleCode, membership.legacyRole])
+  );
+  if (activeTenantId && activeRoleNames.length > 0) {
+    const { data: roleRows, error: roleRowsError } = await supabase
       .from('roles')
       .select('id')
-      .eq('tenant_id', membership.tenantId)
-      .eq('name', roleName)
-      .maybeSingle();
+      .eq('tenant_id', activeTenantId)
+      .in('name', activeRoleNames);
 
-    const roleId = normalizeString(asRecord(roleRow).id);
-    if (!roleId) continue;
+    if (roleRowsError) {
+      console.error('[getCurrentAppSession] role query failed', roleRowsError);
+    } else {
+      const roleIds = (roleRows ?? [])
+        .map((row: unknown) => normalizeString(asRecord(row).id))
+        .filter((value): value is string => Boolean(value));
 
-    const { data: rolePermissionRows } = await supabase
-      .from('role_permissions')
-      .select('permissions!inner(id, code)')
-      .eq('role_id', roleId);
+      if (roleIds.length > 0) {
+        const { data: rolePermissionRows, error: rolePermissionError } = await supabase
+          .from('role_permissions')
+          .select('permissions!inner(id, code, key, slug, name)')
+          .in('role_id', roleIds);
 
-    permissions = Array.from(
-      new Set(
-        (rolePermissionRows ?? [])
-          .map((row: unknown) => {
-            const raw = asRecord(row);
-            const permission = asRecord(raw.permissions);
-            return (
-              normalizeString(permission.key) ??
-              normalizeString(permission.code) ??
-              normalizeString(permission.slug) ??
-              normalizeString(permission.name)
-            );
-          })
-          .filter((permission): permission is string => Boolean(permission))
-      )
-    );
-
-    if (permissions.length > 0) break;
+        if (rolePermissionError) {
+          console.error(
+            '[getCurrentAppSession] role_permissions query failed',
+            rolePermissionError
+          );
+        } else {
+          permissions = Array.from(
+            new Set(
+              (rolePermissionRows ?? [])
+                .map((row: unknown) => asRecord(row))
+                .map((row) => asRecord(row.permissions))
+                .map(
+                  (permission) =>
+                    normalizeString(permission.key) ??
+                    normalizeString(permission.code) ??
+                    normalizeString(permission.slug) ??
+                    normalizeString(permission.name)
+                )
+                .filter((permission): permission is string => Boolean(permission))
+            )
+          );
+        }
+      }
+    }
   }
 
   const [featureFlagsResult, tenantSettingsResult] = activeTenantId
@@ -217,13 +248,6 @@ export async function getCurrentAppSession(
   }
 
   const permissionSet = new Set(permissions);
-  const normalizedActiveRole = (activeTenantRole ?? '').toLowerCase();
-  const isActiveClinicRole =
-    normalizedActiveRole.length > 0 && !['patient', 'guardian'].includes(normalizedActiveRole);
-  const canManageByRole = ['tenant_owner', 'clinic_admin'].includes(normalizedActiveRole);
-  const canViewRxByRole = ['physician', 'clinic_admin', 'tenant_owner'].includes(
-    normalizedActiveRole
-  );
   const canOpenPatientPortalByPlan = isPlanPathAllowed('/patient', planEntitlements, permissions);
 
   const session: AppSession = {
@@ -234,6 +258,7 @@ export async function getCurrentAppSession(
     activeTenant,
     tenantMemberships,
     activeTenantRole,
+    activeTenantRoles,
     featureFlags,
     permissions,
     planEntitlements,
@@ -246,16 +271,22 @@ export async function getCurrentAppSession(
       isPlatformAdminRole(platformRole) ||
       isPlatformSupportRole(platformRole) ||
       hasAnyPermission(permissionSet, PERMISSIONS.PLATFORM_ADMIN_ACCESS),
-    canAccessClinicWorkspace: () => activeMembership?.status === 'active' && isActiveClinicRole,
-    canViewFinancial: () => hasAnyPermission(permissionSet, ['financial.read', 'financial.write']),
+    canAccessClinicWorkspace: () =>
+      activeTenantMemberships[0] !== undefined &&
+      (hasActiveClinicRole || hasAnyPermission(permissionSet, PERMISSIONS.CLINIC_WORKSPACE_ACCESS)),
+    canViewFinancial: () =>
+      hasAnyPermission(permissionSet, [
+        ...PERMISSIONS.FINANCIAL_VIEW,
+        'financial.read',
+        'financial.write',
+      ]),
     canViewMedicalPrescriptions: () =>
-      canViewRxByRole &&
-      hasAnyPermission(permissionSet, ['prescriptions.read', 'prescriptions.write']),
+      hasAnyPermission(permissionSet, PERMISSIONS.MEDICAL_PRESCRIPTIONS_VIEW),
     canManageTenantUsers: () =>
-      canManageByRole || hasAnyPermission(permissionSet, ['tenant.users.manage', 'settings.write']),
+      hasAnyPermission(permissionSet, [...PERMISSIONS.TENANT_USERS_MANAGE, 'settings.write']),
     canAccessPatientPortal: () =>
-      activeMembership?.status === 'active' &&
-      ['patient', 'guardian'].includes(normalizedActiveRole) &&
+      activeTenantMemberships[0] !== undefined &&
+      hasPatientPortalRole &&
       canOpenPatientPortalByPlan &&
       hasAnyPermission(permissionSet, PERMISSIONS.PATIENT_PORTAL_ACCESS),
   };

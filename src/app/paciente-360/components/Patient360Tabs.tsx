@@ -82,6 +82,12 @@ const TAB_PERMISSION_RULES: Partial<
   },
 };
 
+const ROLE_TAB_ACCESS: Record<string, Patient360TabId[]> = {
+  physician: ['prontuario', 'consultas', 'prescricoes'],
+  nutritionist: ['prontuario', 'nutricao'],
+  fitness_professional: ['nutricao'],
+};
+
 function isPatient360TabId(value: string | null): value is Patient360TabId {
   return Boolean(value && TAB_IDS.has(value));
 }
@@ -91,9 +97,24 @@ function hasAnyPermission(permissions: string[], expected: string[]) {
   return expected.some((permission) => permissionSet.has(permission));
 }
 
+function hasRoleBasedAccess(tabId: Patient360TabId, userContext: UserContext | null): boolean {
+  const activeRoles = (userContext?.activeTenantRoles ?? []).map((role) => role.toLowerCase());
+  const roleSet = new Set(activeRoles);
+  const allowedFromRole = Array.from(roleSet).some((role) =>
+    (ROLE_TAB_ACCESS[role] ?? []).includes(tabId)
+  );
+  return (
+    allowedFromRole ||
+    roleSet.has('tenant_owner') ||
+    roleSet.has('clinic_admin') ||
+    roleSet.has('platform_admin')
+  );
+}
+
 function canAccessTab(tabId: Patient360TabId, userContext: UserContext | null) {
   const rule = TAB_PERMISSION_RULES[tabId];
   if (!rule) return true;
+  if (hasRoleBasedAccess(tabId, userContext)) return true;
   return hasAnyPermission(userContext?.permissions ?? [], rule.permissions);
 }
 
@@ -235,7 +256,6 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
             patientId={patientId}
             data={data}
             permissions={userContext?.permissions ?? []}
-            currentRole={userContext?.activeTenantRole ?? null}
           />
         )}
         {!isActiveTabForbidden && activeTab === 'consultas' && (
@@ -249,7 +269,6 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
             patientId={patientId}
             prescriptions={data.prescriptions}
             canViewMedicalPrescriptions={userContext?.canViewMedicalPrescriptions ?? false}
-            currentRole={userContext?.activeTenantRole ?? null}
           />
         )}
         {!isActiveTabForbidden && activeTab === 'documentos' && (

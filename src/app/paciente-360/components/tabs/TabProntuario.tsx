@@ -61,7 +61,6 @@ interface TabProntuarioProps {
   patientId: string;
   data: Patient360Summary;
   permissions: string[];
-  currentRole?: string | null;
 }
 
 type TeamDraft = {
@@ -107,12 +106,8 @@ function statusLabel(value: string) {
   return value || '-';
 }
 
-function canAskForAudit(permissions: string[], currentRole?: string | null) {
-  return (
-    permissions.includes('timeline.sensitive.read') ||
-    currentRole === 'clinic_admin' ||
-    currentRole === 'tenant_owner'
-  );
+function canAskForAudit(permissions: string[]) {
+  return permissions.includes('timeline.sensitive.read');
 }
 
 function EmptyPanel({ title, description }: { title: string; description: string }) {
@@ -307,12 +302,7 @@ function AttachmentRow({
   );
 }
 
-export default function TabProntuario({
-  patientId,
-  data,
-  permissions,
-  currentRole,
-}: TabProntuarioProps) {
+export default function TabProntuario({ patientId, data, permissions }: TabProntuarioProps) {
   const [snapshot, setSnapshot] = useState<MedicalRecordSnapshot | null>(null);
   const [clinicalRecords, setClinicalRecords] = useState<ClinicalRecordsData | null>(null);
   const [activeSubtab, setActiveSubtab] = useState<RecordSubtab>('evolucao');
@@ -326,7 +316,7 @@ export default function TabProntuario({
     specialty: '',
     isPrimary: false,
   });
-  const includeAudit = canAskForAudit(permissions, currentRole);
+  const includeAudit = canAskForAudit(permissions);
 
   const loadRecord = useCallback(async () => {
     setLoading(true);

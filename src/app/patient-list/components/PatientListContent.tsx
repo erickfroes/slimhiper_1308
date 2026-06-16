@@ -393,6 +393,7 @@ type PatientFormState = {
   consentClinicalCommunication: boolean;
   consentImageUse: boolean;
   consentPortalAccess: boolean;
+  invitePortalAccount: boolean;
   primaryGuardianName: string;
   primaryGuardianPhone: string;
   profilePhotoFile: File | null;
@@ -432,6 +433,7 @@ function emptyPatientForm(): PatientFormState {
     consentClinicalCommunication: false,
     consentImageUse: false,
     consentPortalAccess: false,
+    invitePortalAccount: false,
     primaryGuardianName: '',
     primaryGuardianPhone: '',
     profilePhotoFile: null,
@@ -487,26 +489,124 @@ function toPatientMutationInput(form: PatientFormState): PatientMutationInput {
   };
 }
 
+function isValidEmail(value: string) {
+  const normalized = value.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
+const DEFAULT_PORTAL_INVITE_MESSAGE =
+  'Informe o e-mail do paciente e ative "Liberacao para portal".';
+
+function toInvitePayload(form: PatientFormState): PendingPortalInvite {
+  return {
+    patientId: '',
+    inviteEmail: form.email.trim().toLowerCase(),
+    invitePhone: form.phone.trim(),
+    inviteeType: 'patient',
+    relationship: '',
+  };
+}
+
+function describePortalAccessError(
+  rawError: string,
+  action: 'invite' | 'activate' | 'suspend' | 'revoke',
+  inviteeType: 'patient' | 'guardian'
+) {
+  const message = rawError.toLowerCase();
+  if (
+    message.includes('permissao') ||
+    message.includes('permission') ||
+    message.includes('sem permiss')
+  ) {
+    return `Sem permissao para ${action === 'invite' ? 'convidar' : 'atualizar'} acesso do ${inviteeType}.`;
+  }
+  if (message.includes('email') || message.includes('e-mail')) {
+    return 'Informe um e-mail valido e tente novamente.';
+  }
+  if (message.includes('papel do portal') || message.includes('nao configurado')) {
+    return 'Papel de portal (patient/guardian) nao esta configurado no tenant.';
+  }
+  if (message.includes('ja vinculado') || message.includes('other profile')) {
+    return 'Este e-mail ja esta vinculado a outro perfil no mesmo tenant.';
+  }
+  if (message.includes('limite') || message.includes('rate') || message.includes('429')) {
+    return 'Limite de envio de convite atingido. Aguarde alguns minutos e tente novamente.';
+  }
+  return rawError;
+}
+
+type PendingPortalInvite = {
+  patientId: string;
+  inviteEmail: string;
+  invitePhone: string;
+  inviteeType: 'patient' | 'guardian';
+  relationship: string;
+  lastError?: string | null;
+};
+
+type PortalInvitePrerequisites = {
+  missingEmail: boolean;
+  invalidEmail: boolean;
+  missingConsent: boolean;
+  canInvite: boolean;
+  message: string | null;
+};
+
+function validateInvitePrerequisites(form: PatientFormState): PortalInvitePrerequisites {
+  const email = form.email.trim();
+  const missingEmail = email.length === 0;
+  const invalidEmail = email.length > 0 && !isValidEmail(email);
+  const missingConsent = !form.consentPortalAccess;
+  const canInvite = !missingEmail && !invalidEmail && !missingConsent;
+  const messageParts: string[] = [];
+  if (missingEmail) {
+    messageParts.push('Informe o e-mail do paciente.');
+  } else if (invalidEmail) {
+    messageParts.push('Informe um e-mail válido para convite.');
+  }
+  if (missingConsent) {
+    messageParts.push('Habilite "Liberacao para portal".');
+  }
+  return {
+    missingEmail,
+    invalidEmail,
+    missingConsent,
+    canInvite,
+    message: messageParts.length > 0 ? messageParts.join(' ') : null,
+  };
+}
+
 function PatientFormModal({
   mode,
   form,
   error,
+  inviteRetryError,
   submitting,
   loading,
+  invitePrerequisite,
+  inviteRetry,
+  inviteSubmitting,
   onChange,
   onClose,
   onSubmit,
+  onRetryInvite,
 }: {
   mode: 'create' | 'edit';
   form: PatientFormState;
   error: string | null;
+  inviteRetryError: string | null;
   submitting: boolean;
   loading: boolean;
+  invitePrerequisite: PortalInvitePrerequisites;
+  inviteRetry: PendingPortalInvite | null;
+  inviteSubmitting: boolean;
   onChange: (patch: Partial<PatientFormState>) => void;
   onClose: () => void;
   onSubmit: () => void;
+  onRetryInvite: () => void;
 }) {
   const title = mode === 'create' ? 'Novo paciente' : 'Editar paciente';
+  const isSubmitDisabled = loading || submitting || (mode === 'create' && !!inviteRetry);
 
   return (
     <Dialog
@@ -881,6 +981,24 @@ function PatientFormModal({
                       />{' '}
                       Liberacao para portal
                     </label>
+                    {mode === 'create' && (
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={form.invitePortalAccount}
+                          disabled={!invitePrerequisite.canInvite && !form.invitePortalAccount}
+                          title={
+                            invitePrerequisite.message
+                              ? `${invitePrerequisite.message} ${DEFAULT_PORTAL_INVITE_MESSAGE}`.trim()
+                              : undefined
+                          }
+                          onChange={(event) =>
+                            onChange({ invitePortalAccount: event.target.checked })
+                          }
+                        />{' '}
+                        Convidar no cadastro
+                      </label>
+                    )}
                   </div>
                   <label className="mt-4 flex flex-col gap-1.5 text-xs font-semibold text-foreground">
                     Observacoes de preferencia
@@ -902,6 +1020,25 @@ function PatientFormModal({
                   />
                 </label>
               </div>
+              {mode === 'create' && invitePrerequisite.message ? (
+                <p className="text-xs text-amber-700">{invitePrerequisite.message}</p>
+              ) : null}
+              {mode === 'create' && inviteRetry && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <p className="mb-2">
+                    O paciente foi criado, mas o convite do portal falhou.
+                    {inviteRetryError ? ` Motivo: ${inviteRetryError}` : ''}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onRetryInvite()}
+                    disabled={inviteSubmitting}
+                    className="btn-secondary text-xs disabled:opacity-60"
+                  >
+                    {inviteSubmitting ? 'Reenviando convite...' : 'Tentar convidar novamente'}
+                  </button>
+                </div>
+              )}
 
               {error && (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -922,10 +1059,16 @@ function PatientFormModal({
             </button>
             <button
               type="submit"
-              disabled={loading || submitting}
+              disabled={isSubmitDisabled}
               className="btn-primary text-sm disabled:opacity-60"
             >
-              {submitting ? 'Salvando...' : mode === 'create' ? 'Cadastrar paciente' : 'Salvar'}
+              {submitting
+                ? 'Salvando...'
+                : mode === 'create'
+                  ? inviteRetry
+                    ? 'Conclua o convite para sair'
+                    : 'Cadastrar paciente'
+                  : 'Salvar'}
             </button>
           </div>
         </form>
@@ -1198,6 +1341,9 @@ export default function PatientListContent() {
   const [patientFormError, setPatientFormError] = useState<string | null>(null);
   const [patientFormLoading, setPatientFormLoading] = useState(false);
   const [patientFormSubmitting, setPatientFormSubmitting] = useState(false);
+  const [patientInviteRetry, setPatientInviteRetry] = useState<PendingPortalInvite | null>(null);
+  const [patientInviteRetrySubmitting, setPatientInviteRetrySubmitting] = useState(false);
+  const [patientInviteRetryError, setPatientInviteRetryError] = useState<string | null>(null);
   const [reviewActionPatientId, setReviewActionPatientId] = useState<string | null>(null);
   const [contextPatient, setContextPatient] = useState<PatientWalletRow | null>(null);
   const [portalPatient, setPortalPatient] = useState<PatientWalletRow | null>(null);
@@ -1335,6 +1481,9 @@ export default function PatientListContent() {
     setEditingPatientId(null);
     setPatientForm(emptyPatientForm());
     setPatientFormError(null);
+    setPatientInviteRetry(null);
+    setPatientInviteRetryError(null);
+    setPatientInviteRetrySubmitting(false);
     setPatientFormLoading(false);
   };
 
@@ -1343,6 +1492,9 @@ export default function PatientListContent() {
     setEditingPatientId(null);
     setPatientForm(emptyPatientForm());
     setPatientFormError(null);
+    setPatientInviteRetry(null);
+    setPatientInviteRetryError(null);
+    setPatientInviteRetrySubmitting(false);
     setPatientFormLoading(false);
   };
 
@@ -1393,11 +1545,15 @@ export default function PatientListContent() {
       consentClinicalCommunication: result.data.consents.clinicalCommunication,
       consentImageUse: result.data.consents.imageUse,
       consentPortalAccess: result.data.consents.portalAccess,
+      invitePortalAccount: false,
       primaryGuardianName: result.data.primaryGuardianName,
       primaryGuardianPhone: result.data.primaryGuardianPhone,
       profilePhotoFile: null,
       profilePhotoPreviewUrl: result.data.profilePhotoUrl ?? '',
     });
+    setPatientInviteRetry(null);
+    setPatientInviteRetryError(null);
+    setPatientInviteRetrySubmitting(false);
   };
 
   const openPortalAccess = async (patient: PatientWalletRow) => {
@@ -1424,26 +1580,36 @@ export default function PatientListContent() {
 
   const handlePortalAction = async (action: 'invite' | 'activate' | 'suspend' | 'revoke') => {
     if (!portalPatient) return;
+    const normalizedInviteEmail = portalInvite.inviteEmail.trim().toLowerCase();
+    if (action === 'invite' && !isValidEmail(normalizedInviteEmail)) {
+      setPortalError('Informe um e-mail válido para enviar o convite.');
+      return;
+    }
+
     setPortalSubmitting(true);
     setPortalError(null);
+    const payload = {
+      inviteeType: portalInvite.inviteeType,
+      email: normalizedInviteEmail,
+      phone: portalInvite.invitePhone.trim(),
+      relationship: portalInvite.relationship.trim(),
+    };
     const result =
       action === 'invite'
-        ? await invitePatientPortalAccess(portalPatient.id, {
-            inviteeType: portalInvite.inviteeType,
-            email: portalInvite.inviteEmail,
-            phone: portalInvite.invitePhone,
-            relationship: portalInvite.relationship,
-          })
+        ? await invitePatientPortalAccess(portalPatient.id, payload)
         : await managePatientPortalAccess(portalPatient.id, {
             action,
-            inviteeType: portalInvite.inviteeType,
-            email: portalInvite.inviteEmail,
-            phone: portalInvite.invitePhone,
-            relationship: portalInvite.relationship,
+            ...payload,
           });
     setPortalSubmitting(false);
     if (result.error || !result.data) {
-      setPortalError(result.error?.message ?? 'Falha ao atualizar portal.');
+      setPortalError(
+        describePortalAccessError(
+          result.error?.message ?? 'Falha ao atualizar portal.',
+          action,
+          payload.inviteeType
+        )
+      );
       return;
     }
     setPortalStatus(result.data);
@@ -1452,9 +1618,77 @@ export default function PatientListContent() {
     );
   };
 
+  const toPendingInvite = (): PendingPortalInvite => {
+    const invite = toInvitePayload(patientForm);
+    return {
+      ...invite,
+      patientId: '',
+      inviteeType: 'patient',
+      relationship: '',
+      lastError: null,
+    };
+  };
+
+  const invitePatientFromCreate = async (
+    patientId: string,
+    invite: PendingPortalInvite
+  ): Promise<string | null> => {
+    const normalizedEmail = invite.inviteEmail.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail)) {
+      return 'Informe um e-mail válido para enviar o convite.';
+    }
+    if (!patientForm.consentPortalAccess) {
+      return 'Habilite "Liberacao para portal" para enviar o convite.';
+    }
+
+    const payload = {
+      inviteeType: invite.inviteeType,
+      email: normalizedEmail,
+      phone: invite.invitePhone.trim(),
+      relationship: invite.relationship.trim(),
+    };
+    const result = await invitePatientPortalAccess(patientId, payload);
+    if (result.error || !result.data) {
+      return describePortalAccessError(
+        result.error?.message ?? 'Falha ao enviar convite do portal.',
+        'invite',
+        payload.inviteeType
+      );
+    }
+    return null;
+  };
+
+  const handleInviteRetry = async () => {
+    if (!patientInviteRetry) return;
+
+    setPatientInviteRetrySubmitting(true);
+    const editedInvite = {
+      ...patientInviteRetry,
+      inviteEmail: patientForm.email.trim().toLowerCase(),
+      invitePhone: patientForm.phone.trim(),
+    };
+    const inviteError = await invitePatientFromCreate(editedInvite.patientId, editedInvite);
+    setPatientInviteRetrySubmitting(false);
+
+    if (inviteError) {
+      setPatientInviteRetry(editedInvite);
+      setPatientInviteRetryError(inviteError);
+      setPatientFormError('Paciente criado, mas ainda houve falha ao convidar acesso do portal.');
+      return;
+    }
+
+    setPatientInviteRetry(null);
+    setPatientInviteRetryError(null);
+    setPatientFormError(null);
+    toast.success('Convite do portal enviado com sucesso.');
+    closePatientForm();
+    await loadPatients();
+  };
+
   const handleSubmitPatientForm = async () => {
     setPatientFormSubmitting(true);
     setPatientFormError(null);
+    setPatientInviteRetryError(null);
 
     const input = toPatientMutationInput(patientForm);
     const result =
@@ -1469,8 +1703,33 @@ export default function PatientListContent() {
       return;
     }
 
-    toast.success(patientFormMode === 'edit' ? 'Paciente atualizado.' : 'Paciente cadastrado.');
-    closePatientForm();
+    if (patientFormMode === 'create' && patientForm.invitePortalAccount) {
+      const createdInvite = toPendingInvite();
+      const invitePayload = {
+        ...createdInvite,
+        patientId: result.data.id,
+      };
+      const inviteError = await invitePatientFromCreate(result.data.id, invitePayload);
+      if (inviteError) {
+        setPatientInviteRetry({
+          ...invitePayload,
+          lastError: inviteError,
+        });
+        setPatientInviteRetryError(inviteError);
+        setPatientFormError(
+          'Paciente cadastrado, mas o convite do portal falhou. Use o botao para tentar novamente.'
+        );
+      } else {
+        setPatientInviteRetry(null);
+        setPatientInviteRetryError(null);
+        toast.success('Paciente cadastrado e convite enviado.');
+        closePatientForm();
+      }
+    } else {
+      toast.success(patientFormMode === 'edit' ? 'Paciente atualizado.' : 'Paciente cadastrado.');
+      closePatientForm();
+    }
+
     await loadPatients();
   };
 
@@ -1590,6 +1849,17 @@ export default function PatientListContent() {
     [filterAdherence, filterFinancial, filterPriority, filterProgram, filterStatus, search]
   );
 
+  const invitePrerequisite =
+    patientFormMode === 'create'
+      ? validateInvitePrerequisites(patientForm)
+      : {
+          missingEmail: false,
+          invalidEmail: false,
+          missingConsent: false,
+          canInvite: true,
+          message: null,
+        };
+
   const activeFilters = activeFilterChips.length;
   const localWalletSummary = useMemo(
     () => ({
@@ -1627,11 +1897,16 @@ export default function PatientListContent() {
           mode={patientFormMode}
           form={patientForm}
           error={patientFormError}
+          inviteRetryError={patientInviteRetryError}
           submitting={patientFormSubmitting}
           loading={patientFormLoading}
+          invitePrerequisite={invitePrerequisite}
+          inviteRetry={patientFormMode === 'create' ? patientInviteRetry : null}
+          inviteSubmitting={patientInviteRetrySubmitting}
           onChange={(patch) => setPatientForm((current) => ({ ...current, ...patch }))}
           onClose={closePatientForm}
           onSubmit={handleSubmitPatientForm}
+          onRetryInvite={() => void handleInviteRetry()}
         />
       )}
       {portalPatient && (
@@ -2158,11 +2433,12 @@ export default function PatientListContent() {
                   <button
                     type="button"
                     onClick={() => void openPortalAccess(patient)}
-                    className="rounded-lg border border-border p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
                     aria-label={`Gerenciar portal de ${patient.name}`}
-                    title="Portal do paciente"
+                    title="Convidar portal do paciente"
                   >
                     <UserPlus size={15} />
+                    Convidar portal do paciente
                   </button>
                   <Link
                     href={`/clinic/inbox?tab=conversas&patientId=${patient.id}`}
@@ -2478,11 +2754,14 @@ export default function PatientListContent() {
                             event.stopPropagation();
                             void openPortalAccess(patient);
                           }}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                          className="rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
                           aria-label={`Gerenciar portal de ${patient.name}`}
-                          title="Portal do paciente"
+                          title="Convidar portal do paciente"
                         >
-                          <UserPlus size={14} />
+                          <span className="inline-flex items-center gap-1.5">
+                            <UserPlus size={14} />
+                            <span>Convidar portal</span>
+                          </span>
                         </button>
                         <Link
                           href={`/clinic/inbox?tab=conversas&patientId=${patient.id}`}
