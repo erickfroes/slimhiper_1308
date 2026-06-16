@@ -22,6 +22,7 @@ export type UserContext = AppSessionWithoutComputedBooleans & {
   canAccessPatientPortal: boolean;
   canViewFinancial: boolean;
   canViewMedicalPrescriptions: boolean;
+  canManageTenantUsers: boolean;
 };
 
 export async function getCurrentUserContext(): Promise<UserContext | null> {
@@ -39,7 +40,7 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
     canAccessPatientPortal,
     canViewFinancial,
     canViewMedicalPrescriptions,
-    canManageTenantUsers: _canManageTenantUsers,
+    canManageTenantUsers: canManageTenantUsers,
     ...rest
   } = session;
 
@@ -52,5 +53,6 @@ export async function getCurrentUserContext(): Promise<UserContext | null> {
     canAccessPatientPortal: canAccessPatientPortal(),
     canViewFinancial: canViewFinancial(),
     canViewMedicalPrescriptions: canViewMedicalPrescriptions(),
+    canManageTenantUsers: canManageTenantUsers(),
   };
 }

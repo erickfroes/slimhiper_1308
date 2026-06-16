@@ -48,7 +48,6 @@ interface TabPrescricoesProps {
   patientId: string;
   prescriptions: PatientPrescriptionSummary[];
   canViewMedicalPrescriptions: boolean;
-  currentRole: string | null;
 }
 
 type PrescCategory = NonNullable<PatientPrescriptionSummary['category']>;
@@ -1100,7 +1099,6 @@ export default function TabPrescricoes({
   patientId,
   prescriptions,
   canViewMedicalPrescriptions,
-  currentRole,
 }: TabPrescricoesProps) {
   const [items, setItems] = useState(prescriptions);
   const [draftForm, setDraftForm] = useState<DraftForm | null>(null);
@@ -1116,9 +1114,7 @@ export default function TabPrescricoes({
     Record<string, string | undefined>
   >({});
 
-  const normalizedRole = currentRole?.trim().toLowerCase() ?? null;
-  const isNutritionist = normalizedRole === 'nutritionist';
-  const canIssueMedical = canViewMedicalPrescriptions && !isNutritionist;
+  const canIssueMedical = canViewMedicalPrescriptions;
 
   useEffect(() => {
     setItems(prescriptions);
