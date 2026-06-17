@@ -188,7 +188,7 @@ export async function getCurrentAppSession(
       if (roleIds.length > 0) {
         const { data: rolePermissionRows, error: rolePermissionError } = await supabase
           .from('role_permissions')
-          .select('permissions!inner(id, code, key, slug, name)')
+          .select('permissions!inner(id, code)')
           .in('role_id', roleIds);
 
         if (rolePermissionError) {
@@ -204,10 +204,7 @@ export async function getCurrentAppSession(
                 .map((row) => asRecord(row.permissions))
                 .map(
                   (permission) =>
-                    normalizeString(permission.key) ??
-                    normalizeString(permission.code) ??
-                    normalizeString(permission.slug) ??
-                    normalizeString(permission.name)
+                    normalizeString(permission.code)
                 )
                 .filter((permission): permission is string => Boolean(permission))
             )
