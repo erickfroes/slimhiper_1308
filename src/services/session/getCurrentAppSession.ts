@@ -202,10 +202,7 @@ export async function getCurrentAppSession(
               (rolePermissionRows ?? [])
                 .map((row: unknown) => asRecord(row))
                 .map((row) => asRecord(row.permissions))
-                .map(
-                  (permission) =>
-                    normalizeString(permission.code)
-                )
+                .map((permission) => normalizeString(permission.code))
                 .filter((permission): permission is string => Boolean(permission))
             )
           );
