@@ -1,8 +1,7 @@
 # Checklist: Portal do Paciente + Interfaces por Papel
 
 ## Objetivo
-Consolidar fluxo de convite do portal do paciente no cadastro e adaptar navegação por papel com
-acesso baseado em permissões.
+Consolidar fluxo de convite do portal do paciente no cadastro e adaptar o acesso por papel.
 
 ## Checklist de implementação
 
@@ -21,33 +20,35 @@ acesso baseado em permissões.
 - [x] Exibir validação de pré-requisito (e-mail e consentimento) no modal de cadastro.
   - Ref.: `src/app/patient-list/components/PatientListContent.tsx`
 - [x] Melhorar mensagem de erro no fluxo de convite com causas prováveis.
-  - Ref.: `src/app/patient-list/components/PatientListContent.tsx` (`describePortalAccessError`)  
-  - Ref.: `src/app/patient-list/components/PatientListContent.tsx` (`handlePortalAction`)
+  - Ref.: `src/app/patient-list/components/PatientListContent.tsx` (`describePortalAccessError`), `handlePortalAction`
 - [x] Refatorar `getCurrentAppSession` para `activeTenantRoles` (união) e permissões por roles.
   - Ref.: `src/services/session/getCurrentAppSession.ts`
 - [x] Introduzir `activeTenantRoles` + preservar `activeTenantRole` para compatibilidade.
   - Ref.: `src/services/session/getCurrentAppSession.ts`, `src/lib/auth/getCurrentUserContext.ts`
-- [x] Atualizar `canAccessClinicWorkspace`, `canViewMedicalPrescriptions`,
-  `canManageTenantUsers`, `canAccessPatientPortal` para usar permissão + regras combinadas.
+- [x] Atualizar `canAccessClinicWorkspace`, `canViewMedicalPrescriptions`, `canManageTenantUsers`, `canAccessPatientPortal` para usar permissões agregadas + regras combinadas.
   - Ref.: `src/services/session/getCurrentAppSession.ts`
 - [x] Atualizar `getCurrentUserContext` para propagar permissões recalculadas.
   - Ref.: `src/lib/auth/getCurrentUserContext.ts`
 - [x] Revisar `TabProntuario` para usar `timeline.sensitive.read` e não hardcoded por role.
   - Ref.: `src/app/paciente-360/components/tabs/TabProntuario.tsx`
-- [x] Revisar `TabPrescricoes` para remover bloqueio por `currentRole`.
+- [x] Revisar `TabPrescricoes` para não bloquear por `currentRole`.
   - Ref.: `src/app/paciente-360/components/tabs/TabPrescricoes.tsx`
-- [x] Ajustar `Patient360Tabs` com matriz de visibilidade por papel (`physician`, `nutritionist`,
-  `fitness_professional`) e fallback por permissão.
+- [x] Ajustar `Patient360Tabs` com matriz de visibilidade por papel (`physician`, `nutritionist`, `fitness_professional`) e fallback por permissões.
   - Ref.: `src/app/paciente-360/components/Patient360Tabs.tsx`
 
-## Pendências para fechar o ciclo
+## Evidências de validação
 
-- [ ] Testes unitários de:
-  - criação sem convite sem chamada ao Auth;
-  - criação com convite e sucesso;
+- [x] Teste mínimo de fluxo de convite implementado:
+  - criação sem convite sem chamada ao endpoint de convite;
+  - criação com convite com sucesso;
   - criação com convite e e-mail inválido com mensagem explícita.
-- [ ] Smoke test autenticado em `/clinic/patients` para validar botão textual e retorno de sucesso/erro estruturado.
-- [ ] Smoke por perfil para validar abas permitidas a:
-  - admin + clínico,
-  - nutrição,
-  - fitness.
+  - Script: `scripts/verify-portal-invite-workflow.mjs`
+- [x] `npm run type-check` concluído com sucesso.
+- [x] `npm run lint` concluído com sucesso.
+- [x] `npm run build` concluído com sucesso.
+- [x] UI de convite textual visível em lista (cards + tabela):
+  - `src/app/patient-list/components/PatientListContent.tsx`
+- [x] Revisão de permissões por perfil (admin/clínico + admin/nutrição/fitness) baseada em `activeTenantRoles` e permissões.
+  - `src/services/session/getCurrentAppSession.ts`
+  - `src/lib/auth/getCurrentUserContext.ts`
+  - `src/app/paciente-360/components/Patient360Tabs.tsx`

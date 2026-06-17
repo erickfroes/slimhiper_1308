@@ -49,6 +49,14 @@ import {
   type PatientMutationInput,
   type PatientPortalAccessStatus,
 } from '@/services/patientsApi';
+import {
+  DEFAULT_PORTAL_INVITE_MESSAGE,
+  createPatientInviteAfterCreate,
+  describePortalAccessError,
+  isValidEmail,
+  toInvitePayload,
+  validateInvitePrerequisites,
+} from '../lib/patientPortalInviteHelpers.js';
 import type {
   ProgramType,
   FinancialStatus,
@@ -489,52 +497,6 @@ function toPatientMutationInput(form: PatientFormState): PatientMutationInput {
   };
 }
 
-function isValidEmail(value: string) {
-  const normalized = value.trim();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
-}
-
-const DEFAULT_PORTAL_INVITE_MESSAGE =
-  'Informe o e-mail do paciente e ative "Liberacao para portal".';
-
-function toInvitePayload(form: PatientFormState): PendingPortalInvite {
-  return {
-    patientId: '',
-    inviteEmail: form.email.trim().toLowerCase(),
-    invitePhone: form.phone.trim(),
-    inviteeType: 'patient',
-    relationship: '',
-  };
-}
-
-function describePortalAccessError(
-  rawError: string,
-  action: 'invite' | 'activate' | 'suspend' | 'revoke',
-  inviteeType: 'patient' | 'guardian'
-) {
-  const message = rawError.toLowerCase();
-  if (
-    message.includes('permissao') ||
-    message.includes('permission') ||
-    message.includes('sem permiss')
-  ) {
-    return `Sem permissao para ${action === 'invite' ? 'convidar' : 'atualizar'} acesso do ${inviteeType}.`;
-  }
-  if (message.includes('email') || message.includes('e-mail')) {
-    return 'Informe um e-mail valido e tente novamente.';
-  }
-  if (message.includes('papel do portal') || message.includes('nao configurado')) {
-    return 'Papel de portal (patient/guardian) nao esta configurado no tenant.';
-  }
-  if (message.includes('ja vinculado') || message.includes('other profile')) {
-    return 'Este e-mail ja esta vinculado a outro perfil no mesmo tenant.';
-  }
-  if (message.includes('limite') || message.includes('rate') || message.includes('429')) {
-    return 'Limite de envio de convite atingido. Aguarde alguns minutos e tente novamente.';
-  }
-  return rawError;
-}
-
 type PendingPortalInvite = {
   patientId: string;
   inviteEmail: string;
@@ -551,30 +513,6 @@ type PortalInvitePrerequisites = {
   canInvite: boolean;
   message: string | null;
 };
-
-function validateInvitePrerequisites(form: PatientFormState): PortalInvitePrerequisites {
-  const email = form.email.trim();
-  const missingEmail = email.length === 0;
-  const invalidEmail = email.length > 0 && !isValidEmail(email);
-  const missingConsent = !form.consentPortalAccess;
-  const canInvite = !missingEmail && !invalidEmail && !missingConsent;
-  const messageParts: string[] = [];
-  if (missingEmail) {
-    messageParts.push('Informe o e-mail do paciente.');
-  } else if (invalidEmail) {
-    messageParts.push('Informe um e-mail válido para convite.');
-  }
-  if (missingConsent) {
-    messageParts.push('Habilite "Liberacao para portal".');
-  }
-  return {
-    missingEmail,
-    invalidEmail,
-    missingConsent,
-    canInvite,
-    message: messageParts.length > 0 ? messageParts.join(' ') : null,
-  };
-}
 
 function PatientFormModal({
   mode,
@@ -1633,31 +1571,18 @@ export default function PatientListContent() {
     patientId: string,
     invite: PendingPortalInvite
   ): Promise<string | null> => {
-    const normalizedEmail = invite.inviteEmail.trim().toLowerCase();
-    if (!isValidEmail(normalizedEmail)) {
-      return 'Informe um e-mail válido para enviar o convite.';
-    }
-    if (!patientForm.consentPortalAccess) {
-      return 'Habilite "Liberacao para portal" para enviar o convite.';
-    }
-
-    const payload = {
-      inviteeType: invite.inviteeType,
-      email: normalizedEmail,
-      phone: invite.invitePhone.trim(),
-      relationship: invite.relationship.trim(),
-    };
-    const result = await invitePatientPortalAccess(patientId, payload);
-    if (result.error || !result.data) {
-      return describePortalAccessError(
-        result.error?.message ?? 'Falha ao enviar convite do portal.',
-        'invite',
-        payload.inviteeType
-      );
-    }
-    return null;
+    const inviteFlow = await createPatientInviteAfterCreate({
+      patientId,
+      form: {
+        email: invite.inviteEmail,
+        phone: invite.invitePhone,
+        consentPortalAccess: patientForm.consentPortalAccess,
+        invitePortalAccount: true,
+      },
+      invitePatientPortalAccess,
+    });
+    return inviteFlow.inviteError;
   };
-
   const handleInviteRetry = async () => {
     if (!patientInviteRetry) return;
 
