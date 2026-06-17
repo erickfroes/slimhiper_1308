@@ -180,6 +180,18 @@
     background-color: var(--border);
     border-radius: 2px;
   }
+
+  .app-page-padding {
+    @apply p-4 sm:p-6 xl:p-8;
+  }
+
+  .app-shell-main {
+    @apply flex-1 min-w-0 min-h-0 bg-background;
+  }
+
+  .app-topbar {
+    @apply flex items-center gap-3 border-b border-border bg-card px-4 sm:px-6 py-3 sm:py-4;
+  }
 }
 
 @layer components {
@@ -211,6 +223,10 @@
 
   .card-base {
     @apply rounded-lg border border-border bg-card card-shadow;
+  }
+
+  .page-shell {
+    @apply rounded-lg border border-border bg-card p-4 sm:p-6 xl:p-8;
   }
 
   .stat-card {

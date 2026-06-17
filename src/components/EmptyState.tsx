@@ -6,17 +6,31 @@ interface EmptyStateProps {
   title: string;
   description: string;
   action?: React.ReactNode;
+  className?: string;
 }
 
-export default function EmptyState({ icon: Icon, title, description, action }: EmptyStateProps) {
+export default function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  className,
+}: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-      <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
+    <section
+      className={`mx-auto flex w-full max-w-2xl flex-col items-center justify-center text-center rounded-lg border border-dashed border-border bg-card px-6 py-12 ${className ?? ''}`}
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
         <Icon size={24} className="text-muted-foreground" />
       </div>
-      <h3 className="text-base font-semibold text-foreground mb-1">{title}</h3>
-      <p className="text-sm text-muted-foreground max-w-sm mb-4">{description}</p>
-      {action && action}
-    </div>
+      <h3 className="text-base font-semibold text-foreground">{title}</h3>
+      <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
+      {action ? (
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">{action}</div>
+      ) : null}
+    </section>
   );
 }

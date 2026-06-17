@@ -132,6 +132,8 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   const cachedSummaryRef = useRef<CommunicationsSummary | null>(null);
   const messagesPanelId = useId();
   const notificationsPanelId = useId();
+  const messagesPanelTitleId = useId();
+  const notificationsPanelTitleId = useId();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -187,8 +189,8 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         if (result.error) {
           setCommunicationsError(
             cachedSummaryRef.current
-              ? 'Comunicacoes temporariamente indisponiveis. Ultimo resumo mantido.'
-              : 'Nao foi possivel carregar inbox e notificacoes.'
+              ? 'Comunicações temporariamente indisponíveis. Último resumo mantido.'
+              : 'Não foi possível carregar inbox e notificações.'
           );
         } else {
           setCommunicationsError(null);
@@ -199,8 +201,8 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         if (!mounted || communicationsRequestIdRef.current !== requestId) return;
         setCommunicationsError(
           cachedSummaryRef.current
-            ? 'Comunicacoes temporariamente indisponiveis. Ultimo resumo mantido.'
-            : 'Comunicacoes temporariamente indisponiveis.'
+            ? 'Comunicações temporariamente indisponíveis. Último resumo mantido.'
+            : 'Comunicações temporariamente indisponíveis.'
         );
       } finally {
         if (mounted && communicationsRequestIdRef.current === requestId) {
@@ -286,9 +288,9 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         setSummary(result.data);
         setCommunicationsError(null);
       }
-      if (result.error) setCommunicationsError('Nao foi possivel atualizar a conversa.');
+      if (result.error) setCommunicationsError('Não foi possível atualizar a conversa.');
     } catch {
-      setCommunicationsError('Nao foi possivel atualizar a conversa.');
+      setCommunicationsError('Não foi possível atualizar a conversa.');
     }
   }
 
@@ -300,9 +302,9 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         setSummary(result.data);
         setCommunicationsError(null);
       }
-      if (result.error) setCommunicationsError('Nao foi possivel atualizar a notificacao.');
+      if (result.error) setCommunicationsError('Não foi possível atualizar a notificação.');
     } catch {
-      setCommunicationsError('Nao foi possivel atualizar a notificacao.');
+      setCommunicationsError('Não foi possível atualizar a notificação.');
     }
   }
 
@@ -320,7 +322,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
       <aside
         className={[
           'flex flex-col bg-card border-r border-border sidebar-transition z-50 flex-shrink-0',
-          collapsed ? 'w-60 lg:w-16' : 'w-60',
+          collapsed ? 'w-64 lg:w-16' : 'w-64',
           'fixed lg:relative h-full',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         ].join(' ')}
@@ -358,6 +360,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
               <Link
                 key={item.key}
                 href={item.href}
+                aria-current={active ? 'page' : undefined}
                 title={collapsed ? item.label : undefined}
                 onClick={() => setMobileOpen(false)}
                 className={[
@@ -367,7 +370,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                     : 'gap-3 px-3 py-2.5',
                   active
                     ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-primary/10 hover:text-primary',
+                    : 'text-muted-foreground hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                 ].join(' ')}
               >
                 <Icon size={18} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
@@ -393,7 +396,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center gap-2 px-3 py-2 rounded-xl hover:bg-muted transition-colors cursor-pointer mb-1 text-left"
+              className="flex w-full items-center gap-2 px-3 py-2 rounded-xl hover:bg-muted transition-colors cursor-pointer mb-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               title="Sair"
             >
               <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -411,7 +414,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden items-center justify-center w-full py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 lg:flex"
+            className="hidden items-center justify-center w-full py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 lg:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             title={collapsed ? 'Expandir menu' : 'Recolher menu'}
           >
             {collapsed ? (
@@ -429,12 +432,12 @@ export default function DashboardShell({ children }: DashboardShellProps) {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
-        <header className="flex items-center gap-3 px-4 lg:px-6 py-3 bg-card border-b border-border flex-shrink-0">
+        <header className="app-topbar flex-shrink-0">
           <button
             type="button"
             className="lg:hidden btn-ghost p-2"
             onClick={() => setMobileOpen(true)}
-            aria-label="Abrir menu da clinica"
+            aria-label="Abrir menu da clínica"
             aria-expanded={mobileOpen}
           >
             <LayoutDashboard size={18} aria-hidden="true" />
@@ -456,7 +459,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             />
             <button
               type="submit"
-              className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="btn-ghost absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
               aria-label="Executar busca de pacientes"
             >
               <Search size={14} aria-hidden="true" />
@@ -469,8 +472,8 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 ref={messagesButtonRef}
                 type="button"
                 className="relative btn-ghost p-2"
-                aria-label={`Abrir inbox de conversas${totalUnreadMessages ? `, ${totalUnreadMessages} nao lidas` : ''}`}
-                aria-haspopup="dialog"
+                aria-label={`Abrir inbox de conversas${totalUnreadMessages ? `, ${totalUnreadMessages} não lidas` : ''}`}
+                aria-haspopup="menu"
                 aria-controls={messagesPanelId}
                 aria-expanded={openMenu === 'messages'}
                 onClick={() =>
@@ -490,15 +493,16 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 <div
                   id={messagesPanelId}
                   ref={messagesPanelRef}
+                  aria-labelledby={messagesPanelTitleId}
                   role="dialog"
                   aria-label="Conversas recentes"
                   className="absolute right-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-lg border border-border bg-card shadow-lg sm:w-80"
                 >
                   <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                    <div>
+                    <div id={messagesPanelTitleId}>
                       <p className="text-sm font-semibold text-foreground">Conversas</p>
                       <p className="text-xs text-muted-foreground">
-                        Conversas recentes da clinica.
+                        Conversas recentes da clínica.
                       </p>
                     </div>
                     <Link
@@ -530,7 +534,10 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                       </div>
                     ) : (
                       topMessages.map((message) => (
-                        <div key={message.id} className="rounded-xl p-2 hover:bg-muted/60">
+                        <div
+                          key={message.id}
+                          className="rounded-xl p-2 hover:bg-muted/60 focus-within:bg-muted/60"
+                        >
                           <div className="flex items-start gap-2">
                             <Link
                               href={message.href}
@@ -545,7 +552,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                               </span>
                               <span className="mt-1 block text-[11px] text-muted-foreground">
                                 {formatRelativeTimestamp(message.createdAt)} · {message.unreadCount}{' '}
-                                nao lidas
+                                não lidas
                               </span>
                             </Link>
                             {message.unreadCount > 0 && (
@@ -571,8 +578,8 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 ref={notificationsButtonRef}
                 type="button"
                 className="relative btn-ghost p-2"
-                aria-label={`Abrir notificacoes${totalUnreadNotifications ? `, ${totalUnreadNotifications} nao lidas` : ''}`}
-                aria-haspopup="dialog"
+                aria-label={`Abrir notificações${totalUnreadNotifications ? `, ${totalUnreadNotifications} não lidas` : ''}`}
+                aria-haspopup="menu"
                 aria-controls={notificationsPanelId}
                 aria-expanded={openMenu === 'notifications'}
                 onClick={() =>
@@ -592,15 +599,16 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 <div
                   id={notificationsPanelId}
                   ref={notificationsPanelRef}
+                  aria-labelledby={notificationsPanelTitleId}
                   role="dialog"
-                  aria-label="Notificacoes recentes"
+                  aria-label="Notificações recentes"
                   className="absolute right-0 z-50 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-lg border border-border bg-card shadow-lg sm:w-80"
                 >
                   <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Notificacoes</p>
+                    <div id={notificationsPanelTitleId}>
+                      <p className="text-sm font-semibold text-foreground">Notificações</p>
                       <p className="text-xs text-muted-foreground">
-                        Itens autorizados para sua sessao.
+                        Itens autorizados para sua sessão.
                       </p>
                     </div>
                     <Link
@@ -621,18 +629,21 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                       </div>
                     ) : null}
                     {communicationsLoading && topNotifications.length === 0 ? (
-                      <div className="space-y-2 p-2" aria-label="Carregando notificacoes">
+                      <div className="space-y-2 p-2" aria-label="Carregando Notificações">
                         {[0, 1, 2].map((item) => (
                           <div key={item} className="h-14 animate-pulse rounded-xl bg-muted" />
                         ))}
                       </div>
                     ) : topNotifications.length === 0 && !communicationsError ? (
                       <div className="rounded-xl p-4 text-center text-xs text-muted-foreground">
-                        Nenhuma notificacao pendente.
+                        Nenhuma notificação pendente.
                       </div>
                     ) : (
                       topNotifications.map((notification) => (
-                        <div key={notification.id} className="rounded-xl p-2 hover:bg-muted/60">
+                        <div
+                          key={notification.id}
+                          className="rounded-xl p-2 hover:bg-muted/60 focus-within:bg-muted/60"
+                        >
                           <div className="flex items-start gap-2">
                             <Link
                               href={notification.href}
@@ -657,7 +668,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                                   void handleMarkNotificationRead(notification.notificationId)
                                 }
                                 className="btn-ghost p-1.5"
-                                aria-label={`Marcar notificacao ${notification.title} como lida`}
+                                aria-label={`Marcar notificação ${notification.title} como lida`}
                               >
                                 <Check size={14} />
                               </button>
@@ -673,16 +684,17 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             <button
               type="button"
               onClick={handleLogout}
-              className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center cursor-pointer"
+              className="btn-ghost h-7 w-7 rounded-full p-0 bg-primary/10"
+              aria-label="Sair da conta"
               title="Sair"
             >
-              <User size={14} className="text-primary" />
+              <User size={14} className="text-primary" aria-hidden="true" />
             </button>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto scrollbar-thin">{children}</main>
+        <main className="app-shell-main overflow-y-auto scrollbar-thin">{children}</main>
       </div>
     </div>
   );

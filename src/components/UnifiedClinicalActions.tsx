@@ -109,7 +109,7 @@ export default function UnifiedClinicalActions({
       sourceModule,
     });
     if (result.error || !result.data)
-      throw new Error(result.error?.message ?? 'Nao foi possivel solicitar exames.');
+      throw new Error(result.error?.message ?? 'Não foi possível solicitar exames.');
     setLab(emptyLab());
     return 'Exames solicitados e registrados na timeline.';
   };
@@ -128,9 +128,9 @@ export default function UnifiedClinicalActions({
       finalize: true,
     });
     if (result.error || !result.data)
-      throw new Error(result.error?.message ?? 'Nao foi possivel criar prescricao.');
+      throw new Error(result.error?.message ?? 'Não foi possível criar prescrição.');
     setPrescription(emptyPrescription());
-    return 'Prescricao emitida e vinculada ao paciente.';
+    return 'Prescrição emitida e vinculada ao paciente.';
   };
 
   const submitTask = async () => {
@@ -147,7 +147,7 @@ export default function UnifiedClinicalActions({
       appointmentId: appointmentId ?? null,
     });
     if (result.error || !result.data)
-      throw new Error(result.error?.message ?? 'Nao foi possivel atribuir tarefa.');
+      throw new Error(result.error?.message ?? 'Não foi possível atribuir tarefa.');
     setTask(emptyTask());
     return 'Tarefa atribuida e registrada na timeline.';
   };
@@ -168,7 +168,7 @@ export default function UnifiedClinicalActions({
       setMessage(success);
       await onSuccess?.(success);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nao foi possivel concluir a acao.');
+      setError(err instanceof Error ? err.message : 'Não foi possível concluir a ação.');
     } finally {
       setSaving(false);
     }
@@ -178,17 +178,21 @@ export default function UnifiedClinicalActions({
     <div className="rounded-2xl border border-border bg-card p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Acoes clinicas unificadas</h3>
+          <h3 className="text-sm font-semibold text-foreground">Ações clínicas unificadas</h3>
           <p className="text-xs text-muted-foreground">
-            Solicite exames, emita prescricoes e atribua tarefas com origem auditavel.
+            Solicite exames, emita prescrições e atribua tarefas com origem auditável.
           </p>
         </div>
-        {saving && <span className="text-xs text-muted-foreground">Salvando...</span>}
+        {saving && (
+          <span className="text-xs text-muted-foreground" aria-live="polite">
+            Salvando...
+          </span>
+        )}
       </div>
       <div className="mb-4 grid gap-2 sm:grid-cols-3">
         {[
           ['lab', 'Solicitar exames', FlaskConical],
-          ['prescription', 'Criar prescricao', Pill],
+          ['prescription', 'Criar prescrição', Pill],
           ['task', 'Atribuir tarefa', UserPlus],
         ].map(([key, label, Icon]) => (
           <button
@@ -196,7 +200,8 @@ export default function UnifiedClinicalActions({
             type="button"
             disabled={disabled || saving}
             onClick={() => chooseAction(key as UnifiedClinicalAction)}
-            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-60 ${action === key ? 'border-primary bg-primary/5 text-primary' : 'border-border text-muted-foreground hover:border-primary/40 hover:text-primary'}`}
+            aria-pressed={action === key}
+            className={`inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60 ${action === key ? 'border-primary bg-primary/5 text-primary' : 'border-border text-muted-foreground hover:border-primary/40 hover:text-primary active:scale-95'}`}
           >
             <Icon size={14} />
             {label as string}
@@ -204,12 +209,18 @@ export default function UnifiedClinicalActions({
         ))}
       </div>
       {error && (
-        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div
+          role="alert"
+          className="mb-3 rounded-xl border border-negative/30 bg-negative/10 px-3 py-2 text-xs text-negative"
+        >
           {error}
         </div>
       )}
       {message && (
-        <div className="mb-3 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+        <div
+          role="status"
+          className="mb-3 rounded-xl border border-positive/30 bg-positive/10 px-3 py-2 text-xs text-positive"
+        >
           {message}
         </div>
       )}
@@ -239,7 +250,7 @@ export default function UnifiedClinicalActions({
               </select>
               <input
                 className="input-base text-sm"
-                placeholder="Observacao"
+                placeholder="Observação"
                 value={lab.note}
                 onChange={(e) => setLab((c) => ({ ...c, note: e.target.value }))}
               />
@@ -257,11 +268,11 @@ export default function UnifiedClinicalActions({
                   }))
                 }
               >
-                <option value="prescricao_medica">Prescricao medica</option>
-                <option value="suplementacao">Suplementacao</option>
-                <option value="orientacoes_nutricionais">Orientacoes nutricionais</option>
+                <option value="prescricao_medica">Prescrição médica</option>
+                <option value="suplementacao">Suplementação</option>
+                <option value="orientacoes_nutricionais">Orientações nutricionais</option>
                 <option value="plano_alimentar">Plano alimentar</option>
-                <option value="orientacoes_gerais">Orientacoes gerais</option>
+                <option value="orientacoes_gerais">Orientações gerais</option>
               </select>
               <input
                 className="input-base text-sm"
@@ -289,7 +300,7 @@ export default function UnifiedClinicalActions({
               />
               <input
                 className="input-base text-sm"
-                placeholder="Orientacoes"
+                placeholder="Orientações"
                 value={prescription.instructions}
                 onChange={(e) => setPrescription((c) => ({ ...c, instructions: e.target.value }))}
               />
@@ -306,7 +317,7 @@ export default function UnifiedClinicalActions({
               />
               <input
                 className="input-base text-sm"
-                placeholder="Responsavel (UUID opcional)"
+                placeholder="Responsável (UUID opcional)"
                 value={task.assignedTo}
                 onChange={(e) => setTask((c) => ({ ...c, assignedTo: e.target.value }))}
               />
@@ -320,7 +331,7 @@ export default function UnifiedClinicalActions({
                 <option value="clinico">Clinico</option>
                 <option value="financeiro">Financeiro</option>
                 <option value="documento">Documento</option>
-                <option value="comunicacao">Comunicacao</option>
+                <option value="comunicacao">Comunicação</option>
               </select>
               <select
                 className="input-base text-sm"
@@ -330,7 +341,7 @@ export default function UnifiedClinicalActions({
                 }
               >
                 <option value="alta">Alta</option>
-                <option value="media">Media</option>
+                <option value="media">Média</option>
                 <option value="baixa">Baixa</option>
               </select>
               <input
@@ -350,10 +361,11 @@ export default function UnifiedClinicalActions({
           <button
             type="submit"
             disabled={disabled || saving}
-            className="btn-primary justify-center px-4 py-2 text-sm disabled:opacity-60"
+            className="btn-primary justify-center px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            aria-busy={saving}
           >
             <ClipboardList size={14} />
-            {saving ? 'Salvando...' : 'Registrar acao'}
+            {saving ? 'Salvando...' : 'Registrar ação'}
           </button>
         </form>
       )}

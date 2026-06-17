@@ -26,6 +26,7 @@ import AlertPanel from '@/components/AlertPanel';
 import { SkeletonCard } from '@/components/LoadingSkeleton';
 import QuickActionsCard from '@/components/QuickActionsCard';
 import StatusBadge from '@/components/StatusBadge';
+import DataState from '@/components/ui/DataState';
 import { getDashboardSnapshot } from '@/services/dashboardApi';
 import type {
   AppointmentSummary,
@@ -279,10 +280,10 @@ function ActionQueuePanel({ actions }: { actions: DashboardActionItem[] }) {
           type="button"
           onClick={() => setSelectedCategory('todos')}
           className={[
-            'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+            'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
             selectedCategory === 'todos'
               ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-border bg-card text-muted-foreground hover:bg-muted',
+              : 'border-border bg-card text-muted-foreground hover:bg-muted focus-visible:bg-muted',
           ].join(' ')}
         >
           Todos {actions.length}
@@ -295,10 +296,10 @@ function ActionQueuePanel({ actions }: { actions: DashboardActionItem[] }) {
               key={category}
               onClick={() => setSelectedCategory(category)}
               className={[
-                'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                 selectedCategory === category
                   ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-card text-muted-foreground hover:bg-muted',
+                  : 'border-border bg-card text-muted-foreground hover:bg-muted focus-visible:bg-muted',
               ].join(' ')}
             >
               {config.label} {count}
@@ -364,7 +365,7 @@ function ActionQueuePanel({ actions }: { actions: DashboardActionItem[] }) {
                   </div>
                   <Link
                     href={action.href}
-                    className="btn-secondary justify-center text-xs sm:min-w-36"
+                    className="btn-secondary justify-center text-xs sm:min-w-36 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   >
                     {action.ctaLabel}
                     <ChevronRight size={13} />
@@ -408,7 +409,10 @@ function SectionSignalCard({
             </p>
           </div>
         </div>
-        <Link href={href} className="text-xs font-semibold text-primary hover:underline">
+        <Link
+          href={href}
+          className="text-xs font-semibold text-primary hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
           Abrir
         </Link>
       </div>
@@ -449,7 +453,7 @@ function OperationalSignalsPanel({ sections }: { sections: DashboardOperationalS
               <Link
                 key={item.id}
                 href={item.href}
-                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs hover:bg-muted"
+                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span className="font-semibold text-foreground">{item.patientName}</span>
                 <span className="mt-0.5 block text-muted-foreground">
@@ -472,7 +476,7 @@ function OperationalSignalsPanel({ sections }: { sections: DashboardOperationalS
               <Link
                 key={item.id}
                 href={item.href}
-                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs hover:bg-muted"
+                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span className="font-semibold text-foreground">{item.patientName}</span>
                 <span className="mt-0.5 block text-muted-foreground">
@@ -495,7 +499,7 @@ function OperationalSignalsPanel({ sections }: { sections: DashboardOperationalS
               <Link
                 key={item.id}
                 href={item.href}
-                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs hover:bg-muted"
+                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span className="font-semibold text-foreground">{item.name}</span>
                 <span className="mt-0.5 block text-muted-foreground">{item.patientName}</span>
@@ -516,7 +520,7 @@ function OperationalSignalsPanel({ sections }: { sections: DashboardOperationalS
               <Link
                 key={item.id}
                 href={item.href}
-                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs hover:bg-muted"
+                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span className="font-semibold text-foreground">{item.patientName}</span>
                 <span className="mt-0.5 block text-muted-foreground">
@@ -539,7 +543,7 @@ function OperationalSignalsPanel({ sections }: { sections: DashboardOperationalS
               <Link
                 key={item.id}
                 href={item.href}
-                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs hover:bg-muted"
+                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span className="font-semibold text-foreground">{item.patientName}</span>
                 <span className="mt-0.5 block text-muted-foreground">
@@ -562,7 +566,7 @@ function OperationalSignalsPanel({ sections }: { sections: DashboardOperationalS
               <Link
                 key={item.id}
                 href={item.href}
-                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs hover:bg-muted"
+                className="block rounded-lg bg-muted/40 px-3 py-2 text-xs transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span className="font-semibold text-foreground">{item.label}</span>
                 <span className="mt-0.5 block text-muted-foreground">
@@ -643,7 +647,7 @@ export default function DashboardContent() {
 
   if (loading) {
     return (
-      <div className="space-y-6 p-6 xl:p-8">
+      <div className="mx-auto max-w-screen-2xl space-y-6 app-page-padding">
         <div className="mb-2 flex items-center justify-between">
           <div className="h-7 w-48 animate-pulse rounded-xl bg-muted" />
           <div className="h-8 w-28 animate-pulse rounded-xl bg-muted" />
@@ -663,23 +667,14 @@ export default function DashboardContent() {
 
   if (!stats) {
     return (
-      <div className="p-6 xl:p-8">
-        <div className="card-base mx-auto max-w-xl p-8 text-center">
-          <AlertTriangle size={28} className="mx-auto text-red-600" />
-          <h1 className="mt-3 text-lg font-bold text-foreground">Dashboard indisponivel</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {loadError ?? 'Nao foi possivel carregar os indicadores da clinica.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => void loadData(true)}
-            disabled={refreshing}
-            className="btn-primary mt-5 inline-flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-60"
-          >
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-            Tentar novamente
-          </button>
-        </div>
+      <div className="mx-auto max-w-screen-2xl app-page-padding">
+        <DataState
+          kind="error"
+          title="Dashboard indisponivel"
+          description={loadError ?? 'Nao foi possivel carregar os indicadores da clinica.'}
+          actionLabel="Tentar novamente"
+          onAction={() => void loadData(true)}
+        />
       </div>
     );
   }
@@ -701,7 +696,7 @@ export default function DashboardContent() {
     reviewPatients.length > 0;
 
   return (
-    <div className="mx-auto max-w-screen-2xl space-y-6 p-6 xl:p-8">
+    <div className="mx-auto max-w-screen-2xl space-y-6 app-page-padding">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -834,7 +829,7 @@ export default function DashboardContent() {
           {stats.operationalInsights.crm.canRead ? (
             <Link
               href={stats.operationalInsights.crm.href}
-              className="card-base border-sky-100 bg-sky-50/40 p-5 transition-colors hover:bg-sky-50"
+              className="card-base border-sky-100 bg-sky-50/40 p-5 transition-colors hover:bg-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
@@ -861,7 +856,7 @@ export default function DashboardContent() {
           {stats.operationalInsights.inventory.canRead ? (
             <Link
               href={stats.operationalInsights.inventory.href}
-              className="card-base border-orange-100 bg-orange-50/40 p-5 transition-colors hover:bg-orange-50"
+              className="card-base border-orange-100 bg-orange-50/40 p-5 transition-colors hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
@@ -969,7 +964,7 @@ export default function DashboardContent() {
                 <Link
                   key={entry.id}
                   href={`/clinic/patients/${entry.patientId}/encounter`}
-                  className="group flex items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-muted"
+                  className="group flex items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
                     {getInitials(entry.patientName)}
@@ -1006,7 +1001,7 @@ export default function DashboardContent() {
             </div>
             <Link
               href="/clinic/agenda"
-              className="flex items-center gap-0.5 text-xs font-medium text-primary hover:underline"
+              className="flex items-center gap-0.5 text-xs font-medium text-primary hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               Ver tudo <ChevronRight size={12} />
             </Link>
@@ -1028,7 +1023,7 @@ export default function DashboardContent() {
                 <Link
                   key={appt.id}
                   href={`/clinic/patients/${appt.patientId}`}
-                  className="group flex items-center gap-2.5 rounded-xl p-2 transition-colors hover:bg-muted"
+                  className="group flex items-center gap-2.5 rounded-xl p-2 transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <span className="w-10 shrink-0 font-mono text-xs font-semibold text-muted-foreground">
                     {formatTime(appt.scheduledAt)}
@@ -1089,7 +1084,7 @@ export default function DashboardContent() {
           </div>
           <Link
             href="/clinic/patients"
-            className="flex items-center gap-0.5 text-xs font-medium text-primary hover:underline"
+            className="flex items-center gap-0.5 text-xs font-medium text-primary hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             Ver lista <ChevronRight size={12} />
           </Link>
@@ -1111,7 +1106,7 @@ export default function DashboardContent() {
               <Link
                 key={`${patient.id}-${patient.issue}`}
                 href={`/clinic/patients/${patient.id}`}
-                className="group flex items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-muted"
+                className="group flex items-center gap-3 rounded-xl p-2.5 transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
                   {getInitials(patient.name)}
