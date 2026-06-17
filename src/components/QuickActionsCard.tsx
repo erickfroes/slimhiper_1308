@@ -1,12 +1,12 @@
 import React from 'react';
 import Link from 'next/link';
 import {
-  Plus,
   CalendarPlus,
+  ClipboardList,
+  CreditCard,
   FileText,
   MessageSquare,
-  CreditCard,
-  ClipboardList,
+  Plus,
 } from 'lucide-react';
 
 interface QuickAction {
@@ -43,7 +43,7 @@ const defaultActions: QuickAction[] = [
     color: 'text-sky-700',
     bg: 'bg-sky-50 hover:bg-sky-100 border-sky-200',
     href: '/clinic/inbox?tab=conversas',
-    disabledReason: 'Chat real ainda não está liberado no MVP clínico.',
+    disabledReason: 'Chat ainda não está liberado no MVP clínico.',
   },
   {
     key: 'qa-novo-documento',
@@ -76,18 +76,24 @@ interface QuickActionsCardProps {
 }
 
 export default function QuickActionsCard({ actions = defaultActions }: QuickActionsCardProps) {
+  const focusRingClasses =
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+
   return (
     <div className="card-base p-5">
-      <p className="text-sm font-semibold text-foreground mb-3">Ações Rápidas</p>
+      <p className="mb-3 text-sm font-semibold text-foreground">Ações Rápidas</p>
       <div className="grid grid-cols-2 gap-2">
         {actions.map((action) => {
           const Icon = action.icon;
           const disabled = Boolean(action.disabledReason);
           const className = [
-            'flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all duration-150',
-            disabled ? 'opacity-60 cursor-not-allowed' : 'active:scale-95',
+            'group flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all duration-150',
+            disabled
+              ? 'cursor-not-allowed opacity-55 disabled:hover:brightness-100 disabled:active:scale-100'
+              : 'active:scale-95 hover:brightness-95',
             action.color,
             action.bg,
+            focusRingClasses,
           ].join(' ');
 
           if (action.href && !disabled) {
@@ -103,12 +109,13 @@ export default function QuickActionsCard({ actions = defaultActions }: QuickActi
             <button
               key={action.key}
               type="button"
-              aria-disabled="true"
+              disabled={disabled}
+              aria-disabled={disabled ? 'true' : undefined}
               title={action.disabledReason}
               aria-label={
                 action.disabledReason ? `${action.label}: ${action.disabledReason}` : action.label
               }
-              onClick={(event) => event.preventDefault()}
+              onClick={(event) => disabled && event.preventDefault()}
               className={className}
             >
               <Icon size={14} />

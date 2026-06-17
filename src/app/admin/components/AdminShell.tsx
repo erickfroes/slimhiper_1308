@@ -77,9 +77,9 @@ function AdminSidebar({
     <aside
       id="admin-sidebar"
       className={[
-        'fixed inset-y-0 left-0 z-50 flex w-64 flex-shrink-0 flex-col border-r border-border bg-card shadow-xl sidebar-transition lg:relative lg:z-auto lg:shadow-none',
+        'fixed inset-y-0 left-0 z-50 flex w-64 flex-shrink-0 flex-col border-r border-border bg-card shadow-sm sidebar-transition lg:relative lg:z-auto lg:shadow-none',
         mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-        collapsed ? 'lg:w-16' : 'lg:w-56',
+        collapsed ? 'lg:w-16' : 'lg:w-64',
       ].join(' ')}
       aria-label="Navegacao administrativa"
     >
@@ -112,7 +112,7 @@ function AdminSidebar({
               href={item.href}
               title={collapsed ? item.label : undefined}
               onClick={onCloseMobile}
-              className={`group relative flex w-full items-center rounded-xl transition-all ${
+              className={`group relative flex w-full items-center rounded-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                 collapsed ? 'lg:justify-center lg:px-0 gap-3 px-3 py-2.5' : 'gap-3 px-3 py-2.5'
               } ${
                 active
@@ -122,7 +122,7 @@ function AdminSidebar({
             >
               <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
               {!collapsed ? (
-                <span className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>
+                <span className={`text-sm ${active ? 'font-semibold' : 'font-medium'}`}>
                   {item.label}
                 </span>
               ) : (
@@ -143,7 +143,7 @@ function AdminSidebar({
             type="button"
             onClick={onLogout}
             disabled={loggingOut}
-            className="mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            className="mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
             aria-label={
               loggingOut ? 'Saindo do admin pela barra lateral' : 'Sair do admin pela barra lateral'
             }
@@ -163,7 +163,7 @@ function AdminSidebar({
         <button
           type="button"
           onClick={onToggle}
-          className="hidden w-full items-center justify-center gap-1 rounded-xl py-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground lg:flex"
+          className="hidden w-full items-center justify-center gap-1 rounded-xl py-2 text-xs font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:flex"
           title={collapsed ? 'Expandir menu' : 'Recolher menu'}
         >
           <ChevronRight size={14} className={collapsed ? '' : 'rotate-180'} />
@@ -182,7 +182,7 @@ export default function AdminShell({
   onRefresh,
   refreshLabel = 'Atualizar',
   children,
-  mainClassName = 'flex-1 overflow-y-auto p-4 sm:p-6 scrollbar-thin',
+  mainClassName = 'flex-1 overflow-y-auto app-page-padding scrollbar-thin',
 }: {
   activeSection: AdminShellSection;
   title?: string;
@@ -239,7 +239,7 @@ export default function AdminShell({
         loggingOut={loggingOut}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex flex-shrink-0 items-center gap-3 border-b border-border bg-card px-4 py-3 sm:px-6">
+        <header className="app-topbar flex-shrink-0">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
@@ -252,7 +252,10 @@ export default function AdminShell({
           </button>
           {breadcrumbs ?? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Link href="/admin" className="hover:text-primary">
+              <Link
+                href="/admin"
+                className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
                 Admin
               </Link>
               {title ? (
@@ -283,11 +286,7 @@ export default function AdminShell({
               {adminPermissions.isLoading ? 'Validando papel' : adminPermissions.roleLabel}
             </span>
             {onRefresh ? (
-              <button
-                type="button"
-                onClick={onRefresh}
-                className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-              >
+              <button type="button" onClick={onRefresh} className="btn-ghost px-3 py-1.5 text-xs">
                 <RefreshCw size={12} aria-hidden="true" />
                 {refreshLabel}
               </button>
@@ -296,7 +295,7 @@ export default function AdminShell({
               type="button"
               onClick={() => void handleLogout()}
               disabled={loggingOut}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
               aria-label={loggingOut ? 'Saindo do admin' : 'Sair do admin'}
             >
               <LogOut size={12} aria-hidden="true" />

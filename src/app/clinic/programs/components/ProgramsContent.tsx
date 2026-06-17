@@ -39,8 +39,10 @@ import {
 } from '@/services/programsApi';
 import { getPatientListPage } from '@/services/patientsApi';
 import Dialog from '@/components/ui/Dialog';
+import DataState from '@/components/ui/DataState';
 import Tabs from '@/components/ui/Tabs';
 import CommercialCatalogContent, { type CommercialCatalogTab } from './CommercialCatalogContent';
+import { SkeletonCard } from '@/components/LoadingSkeleton';
 
 const colorMap: Record<string, { accent: string; badge: string; dot: string; icon: string }> = {
   teal: {
@@ -77,9 +79,9 @@ const colorMap: Record<string, { accent: string; badge: string; dot: string; ico
 
 const paymentModelLabel: Record<string, string> = {
   parcelado: 'Parcelado',
-  avista: 'A vista',
+  avista: 'À vista',
   assinatura: 'Assinatura',
-  hibrido: 'Hibrido',
+  hibrido: 'Híbrido',
 };
 
 const statusConfig: Record<ProgramStatus, { label: string; className: string }> = {
@@ -96,10 +98,20 @@ const emptySummary: ClinicProgramsSummary = {
   activePatients: 0,
 };
 
+const focusClasses = 'focus-visible:outline-none focus-visible:focus-ring';
+const inputClass = 'input-base';
+const actionButtonClass =
+  'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition-all disabled:cursor-not-allowed disabled:opacity-60';
+const menuItemClass =
+  'w-full flex items-center gap-2.5 text-xs text-foreground transition-all hover:bg-muted focus-visible:bg-muted focus-visible:text-foreground focus-visible:outline-none focus-visible:focus-ring px-3 py-2';
+const menuDangerClass =
+  'w-full flex items-center gap-2.5 text-xs text-negative transition-all hover:bg-negative/10 focus-visible:bg-negative/10 focus-visible:focus-ring focus-visible:outline-none px-3 py-2';
+const secondaryText = 'text-xs font-medium text-muted-foreground uppercase tracking-wide';
+
 type ProgramsSurfaceTab = CommercialCatalogTab | 'programs';
 
 const surfaceTabs: Array<{ id: ProgramsSurfaceTab; label: string }> = [
-  { id: 'services', label: 'Servicos' },
+  { id: 'services', label: 'Serviços' },
   { id: 'packages', label: 'Pacotes' },
   { id: 'programs', label: 'Programas' },
   { id: 'upgrades', label: 'Upgrades' },
@@ -144,7 +156,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
 
   return (
     <div
-      className={`bg-card border border-border rounded-xl border-l-4 ${colors.accent} shadow-sm overflow-hidden`}
+      className={`card-base border-l-4 ${colors.accent} shadow-sm transition-all duration-200 hover:shadow-md focus-within:shadow-md overflow-hidden`}
     >
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-start justify-between gap-3">
@@ -176,8 +188,10 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
               type="button"
               onClick={() => setMenuOpen((value) => !value)}
               disabled={busy}
-              aria-label="Abrir acoes do programa"
-              className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
+              aria-label="Abrir ações do programa"
+              aria-expanded={menuOpen}
+              aria-controls={`program-menu-${program.id}`}
+              className={`p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 ${focusClasses}`}
             >
               {busy ? (
                 <RefreshCw size={16} className="animate-spin" />
@@ -186,17 +200,23 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
               )}
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-8 z-20 bg-card border border-border rounded-lg shadow-lg py-1 min-w-[170px]">
+              <div
+                id={`program-menu-${program.id}`}
+                role="menu"
+                className="absolute right-0 top-8 z-20 bg-card border border-border rounded-lg shadow-lg py-1 min-w-[170px]"
+              >
                 <Link
                   href={`/clinic/programs/builder?programId=${program.id}`}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                  role="menuitem"
+                  className={menuItemClass}
                 >
                   <Edit2 size={13} className="text-muted-foreground" /> Editar
                 </Link>
                 <button
                   type="button"
                   onClick={() => closeAndRun(() => onClone(program))}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                  role="menuitem"
+                  className={menuItemClass}
                 >
                   <Copy size={13} className="text-muted-foreground" /> Duplicar
                 </button>
@@ -204,14 +224,16 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
                   <button
                     type="button"
                     onClick={() => closeAndRun(() => onPublish(program))}
-                    className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                    role="menuitem"
+                    className={menuItemClass}
                   >
                     <Send size={13} className="text-muted-foreground" /> Publicar
                   </button>
                 )}
                 <Link
                   href={`/clinic/patients?programId=${program.id}`}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                  role="menuitem"
+                  className={menuItemClass}
                 >
                   <Eye size={13} className="text-muted-foreground" /> Ver pacientes
                 </Link>
@@ -219,7 +241,8 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
                 <button
                   type="button"
                   onClick={() => closeAndRun(() => onArchive(program))}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-negative hover:bg-negative/5 transition-colors"
+                  role="menuitem"
+                  className={menuDangerClass}
                 >
                   <Archive size={13} /> Arquivar
                 </button>
@@ -270,9 +293,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
             <CheckSquare size={12} className="text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Servicos
-            </span>
+            <span className={secondaryText}>Serviços</span>
           </div>
           <div className="space-y-0.5">
             {program.includedServices.slice(0, 3).map((svc) => (
@@ -295,9 +316,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
           <div>
             <div className="flex items-center gap-1.5 mb-1">
               <Target size={12} className="text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Check-ins
-              </span>
+              <span className={secondaryText}>Check-ins</span>
             </div>
             <div className="text-xs text-foreground">
               {program.checkInsTotal} - {program.checkInFrequency}
@@ -306,9 +325,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
           <div>
             <div className="flex items-center gap-1.5 mb-1">
               <CreditCard size={12} className="text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Pagamento
-              </span>
+              <span className={secondaryText}>Pagamento</span>
             </div>
             <div className="text-xs text-foreground">{paymentModelLabel[program.paymentModel]}</div>
           </div>
@@ -322,9 +339,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <Smartphone size={12} className="text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  App do paciente
-                </span>
+                <span className={secondaryText}>App do paciente</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {program.appEntitlements.map((ent) => (
@@ -348,9 +363,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <FileText size={12} className="text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Documentos obrigatorios
-                </span>
+                <span className={secondaryText}>Documentos obrigatórios</span>
               </div>
               <div className="space-y-1">
                 {program.requiredDocuments.map((doc) => (
@@ -371,9 +384,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <CreditCard size={12} className="text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Modelo financeiro
-                </span>
+                <span className={secondaryText}>Modelo financeiro</span>
               </div>
               <p className="text-xs text-foreground">
                 {program.paymentDescription || 'Sem descricao financeira.'}
@@ -387,7 +398,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className={`${actionButtonClass} text-muted-foreground hover:text-foreground ${focusClasses}`}
         >
           {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           {expanded ? 'Recolher detalhes' : 'Ver detalhes'}
@@ -396,7 +407,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
         <div className="flex items-center gap-1">
           <Link
             href={`/clinic/patients?programId=${program.id}`}
-            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className={`${actionButtonClass} text-muted-foreground hover:bg-muted hover:text-foreground ${focusClasses}`}
           >
             <Eye size={12} /> Pacientes
           </Link>
@@ -407,15 +418,15 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
             title={
               program.status === 'ativo'
                 ? 'Matricular paciente'
-                : 'Publique o programa antes da matricula'
+                : 'Publique o programa antes da matrícula'
             }
-            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            className={`${actionButtonClass} text-muted-foreground hover:bg-muted hover:text-foreground ${focusClasses}`}
           >
             <CheckSquare size={12} /> Matricular
           </button>
           <Link
             href={`/clinic/programs/builder?programId=${program.id}`}
-            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+            className={`${actionButtonClass} bg-primary/10 text-primary hover:bg-primary/20 font-medium ${focusClasses}`}
           >
             <Wrench size={12} /> Builder
           </Link>
@@ -617,18 +628,15 @@ export default function ProgramsContent() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="app-page-padding space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-foreground">Comercial</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Servicos, pacotes, programas, beneficios e upgrades auditados.
+            Serviços, pacotes, programas, benefícios e upgrades auditados.
           </p>
         </div>
-        <Link
-          href="/clinic/programs/builder"
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors flex-shrink-0"
-        >
+        <Link href="/clinic/programs/builder" className="btn-primary flex-shrink-0">
           <Plus size={15} />
           Criar programa
         </Link>
@@ -644,7 +652,7 @@ export default function ProgramsContent() {
       {surfaceTab === 'programs' ? (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+            <div className="stat-card">
               <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                 <BookOpen size={15} className="text-primary" />
               </div>
@@ -653,7 +661,7 @@ export default function ProgramsContent() {
                 <div className="text-xs text-muted-foreground">Programas ativos</div>
               </div>
             </div>
-            <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+            <div className="stat-card">
               <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
                 <Users size={15} className="text-teal-600" />
               </div>
@@ -662,7 +670,7 @@ export default function ProgramsContent() {
                 <div className="text-xs text-muted-foreground">Pacientes em programas</div>
               </div>
             </div>
-            <div className="bg-card border border-border rounded-lg px-4 py-3 flex items-center gap-3">
+            <div className="stat-card">
               <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
                 <Layers size={15} className="text-violet-600" />
               </div>
@@ -674,29 +682,31 @@ export default function ProgramsContent() {
           </div>
 
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
-              <span>{error}</span>
-              <button
-                type="button"
-                onClick={() => void loadPrograms()}
-                className="text-xs font-semibold underline"
-              >
-                Tentar novamente
-              </button>
-            </div>
+            <DataState
+              kind="error"
+              title="Não foi possível carregar os programas"
+              description={error}
+              actionLabel="Tentar novamente"
+              onAction={() => void loadPrograms()}
+            />
           )}
 
-          <div className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit">
+          <div
+            className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit"
+            role="tablist"
+            aria-label="Filtrar programas por status"
+          >
             {(['todos', 'ativo', 'rascunho', 'arquivado'] as const).map((statusFilter) => (
               <button
                 key={statusFilter}
                 type="button"
                 onClick={() => setFilter(statusFilter)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all focus-visible:outline-none focus-visible:focus-ring ${
                   filter === statusFilter
                     ? 'bg-card text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
+                aria-pressed={filter === statusFilter}
               >
                 {statusFilter === 'todos'
                   ? 'Todos'
@@ -711,23 +721,16 @@ export default function ProgramsContent() {
 
           {loading ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="h-64 rounded-lg border border-border bg-card animate-pulse"
-                />
+              {Array.from({ length: 6 }).map((_, index) => (
+                <SkeletonCard key={`program-skeleton-${index}`} className="h-64" />
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mb-3">
-                <BookOpen size={20} className="text-muted-foreground" />
-              </div>
-              <p className="text-sm font-medium text-foreground">Nenhum programa encontrado</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Crie um programa ou ajuste o filtro selecionado.
-              </p>
-            </div>
+            <DataState
+              kind="empty"
+              title="Nenhum programa encontrado"
+              description="Crie um programa novo ou ajuste o filtro selecionado."
+            />
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
               {filtered.map((program) => (
@@ -752,7 +755,7 @@ export default function ProgramsContent() {
         <Dialog
           open
           title="Matricular paciente"
-          description={`Enrollment real no programa ${enrollmentProgram.name}, com reflexos operacionais gerados pela RPC do tenant ativo.`}
+          description={`Matricule um paciente no programa ${enrollmentProgram.name}, com reflexos operacionais gerados pela RPC do tenant ativo.`}
           onOpenChange={(open) => {
             if (!open && !enrollmentSubmitting) setEnrollmentProgram(null);
           }}
@@ -761,35 +764,37 @@ export default function ProgramsContent() {
           <div className="-m-5">
             <div className="space-y-4 px-5 py-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
-                <label className="space-y-1">
+                <label className="space-y-1" htmlFor={`search-patient-${enrollmentProgram.id}`}>
                   <span className="text-xs font-medium text-muted-foreground">
                     Buscar paciente ativo
                   </span>
                   <input
+                    id={`search-patient-${enrollmentProgram.id}`}
                     type="search"
                     value={enrollmentSearch}
                     onChange={(event) => setEnrollmentSearch(event.target.value)}
                     placeholder="Nome, telefone ou documento mascarado"
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                    className={`${inputClass} ${focusClasses}`}
                   />
                 </label>
                 <button
                   type="button"
                   onClick={() => void loadEnrollmentPatients(enrollmentSearch)}
                   disabled={enrollmentLoadingPatients}
-                  className="self-end rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  className={`self-end ${actionButtonClass} text-foreground btn-secondary`}
                 >
                   {enrollmentLoadingPatients ? 'Buscando...' : 'Buscar'}
                 </button>
               </div>
 
-              <label className="space-y-1 block">
+              <label className="space-y-1 block" htmlFor={`patient-${enrollmentProgram.id}`}>
                 <span className="text-xs font-medium text-muted-foreground">Paciente</span>
                 <select
+                  id={`patient-${enrollmentProgram.id}`}
                   value={enrollmentPatientId}
                   onChange={(event) => setEnrollmentPatientId(event.target.value)}
                   disabled={enrollmentLoadingPatients || enrollmentPatients.length === 0}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  className={`${inputClass} ${focusClasses} disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <option value="">Selecione um paciente ativo</option>
                   {enrollmentPatients.map((patient) => (
@@ -800,19 +805,20 @@ export default function ProgramsContent() {
                 </select>
               </label>
 
-              <label className="space-y-1 block">
-                <span className="text-xs font-medium text-muted-foreground">Data de inicio</span>
+              <label className="space-y-1 block" htmlFor={`start-date-${enrollmentProgram.id}`}>
+                <span className="text-xs font-medium text-muted-foreground">Data de início</span>
                 <input
+                  id={`start-date-${enrollmentProgram.id}`}
                   type="date"
                   value={enrollmentStartDate}
                   onChange={(event) => setEnrollmentStartDate(event.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary sm:w-56"
+                  className={`${inputClass} ${focusClasses} sm:w-56`}
                 />
               </label>
 
               {enrollmentCheckingConflict && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                  Verificando matriculas vigentes neste programa...
+                  Verificando matrículas vigentes neste programa...
                 </div>
               )}
 
@@ -836,7 +842,7 @@ export default function ProgramsContent() {
                   <ul className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
                     <li>Check-ins criados: {enrollmentResult.checkinsCreated}</li>
                     <li>Tarefas documentais: {enrollmentResult.documentTasksCreated}</li>
-                    <li>Agenda: {enrollmentResult.appointmentId ? 'criada' : 'nao gerada'}</li>
+                    <li>Agenda: {enrollmentResult.appointmentId ? 'criada' : 'não gerada'}</li>
                     <li>
                       Financeiro: {enrollmentResult.invoiceId ? 'invoice criada' : 'sem invoice'}
                     </li>
@@ -849,7 +855,7 @@ export default function ProgramsContent() {
               <button
                 type="button"
                 onClick={() => setEnrollmentProgram(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+                className={`btn-secondary ${actionButtonClass}`}
               >
                 Cancelar
               </button>
@@ -862,9 +868,9 @@ export default function ProgramsContent() {
                   enrollmentCheckingConflict ||
                   Boolean(enrollmentConflict)
                 }
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                className={`btn-primary ${actionButtonClass} disabled:opacity-60`}
               >
-                {enrollmentSubmitting ? 'Matriculando...' : 'Confirmar matricula'}
+                {enrollmentSubmitting ? 'Matriculando...' : 'Confirmar matrícula'}
               </button>
             </div>
           </div>
