@@ -91,7 +91,11 @@ export async function getCurrentAppSession(
   if (!user) return null;
 
   const [profileResult, membershipResult] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+    supabase
+      .from('profiles')
+      .select('id,email,full_name,platform_role,active_tenant_id,is_active')
+      .eq('id', user.id)
+      .maybeSingle(),
     supabase
       .from('tenant_memberships')
       .select('id, tenant_id, user_id, role, role_code, status, unit_id')
@@ -213,7 +217,7 @@ export async function getCurrentAppSession(
 
   const [featureFlagsResult, tenantSettingsResult] = activeTenantId
     ? await Promise.all([
-        supabase.from('feature_flags').select('*').eq('tenant_id', activeTenantId),
+        supabase.from('feature_flags').select('key,enabled').eq('tenant_id', activeTenantId),
         supabase.from('tenants').select('settings').eq('id', activeTenantId).maybeSingle(),
       ])
     : [{ data: [] }, { data: null }];
