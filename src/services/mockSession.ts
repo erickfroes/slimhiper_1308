@@ -59,13 +59,13 @@ const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
 export const mockSession = {
   currentUser: {
     id: 'user_001',
-    name: 'Demo User',
-    email: 'demo@slimhiper.app',
+    name: 'Usuario Local',
+    email: 'local@slimhiper.app',
   } satisfies MockSessionUser,
   currentTenant: {
     id: 'tenant_001',
-    name: 'SlimHiper Demo Clinic',
-    slug: 'slimhiper-demo',
+    name: 'SlimHiper Local Clinic',
+    slug: 'slimhiper-local',
   } satisfies MockSessionTenant,
   currentRole: 'physician' as UserRole,
   rolePermissions: ROLE_PERMISSIONS,

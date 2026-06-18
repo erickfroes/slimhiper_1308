@@ -48,6 +48,18 @@ interface NavItem {
 }
 
 interface AppSessionAccessPayload {
+  user?: {
+    id?: string;
+    email?: string | null;
+    fullName?: string | null;
+    platformRole?: string | null;
+  } | null;
+  activeTenantMembership?: {
+    roleCode?: string | null;
+    legacyRole?: string | null;
+    roleKey?: string | null;
+    status?: string | null;
+  } | null;
   permissions?: string[];
   planEntitlements?: PlanEntitlements;
 }
@@ -114,6 +126,15 @@ function formatRelativeTimestamp(value: string) {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
+function formatRoleLabel(value: string | null | undefined) {
+  const normalized = value?.replace(/[_-]+/g, ' ').trim();
+  if (!normalized) return 'Minha conta';
+  return normalized
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export default function DashboardShell({ children }: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -150,6 +171,14 @@ export default function DashboardShell({ children }: DashboardShellProps) {
       isClinicPathAllowed(item.href, entitlements, sessionAccess.permissions ?? [])
     );
   }, [sessionAccess]);
+  const userDisplayName =
+    sessionAccess?.user?.fullName?.trim() || sessionAccess?.user?.email?.trim() || 'Minha conta';
+  const userRoleLabel = formatRoleLabel(
+    sessionAccess?.activeTenantMembership?.roleKey ??
+      sessionAccess?.activeTenantMembership?.roleCode ??
+      sessionAccess?.activeTenantMembership?.legacyRole ??
+      sessionAccess?.user?.platformRole
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -393,23 +422,33 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         {/* Bottom: user + collapse toggle */}
         <div className="border-t border-border p-2 flex-shrink-0">
           {(!collapsed || mobileOpen) && (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex w-full items-center gap-2 px-3 py-2 rounded-xl hover:bg-muted transition-colors cursor-pointer mb-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              title="Sair"
-            >
-              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <User size={14} className="text-primary" />
-              </div>
-              <div className="flex flex-col leading-none min-w-0">
-                <span className="text-xs font-semibold text-foreground truncate">
-                  Coord. Ana Souza
-                </span>
-                <span className="text-xs text-muted-foreground">Coordenadora</span>
-              </div>
-              <LogOut size={14} className="ml-auto text-muted-foreground flex-shrink-0" />
-            </button>
+            <div className="mb-1 flex items-center gap-1">
+              <Link
+                href="/profile"
+                onClick={() => setMobileOpen(false)}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                title="Abrir perfil"
+              >
+                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <User size={14} className="text-primary" />
+                </div>
+                <div className="flex min-w-0 flex-col leading-none">
+                  <span className="truncate text-xs font-semibold text-foreground">
+                    {userDisplayName}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">{userRoleLabel}</span>
+                </div>
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label="Sair da conta"
+                title="Sair"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
           )}
           <button
             type="button"
@@ -681,14 +720,22 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 </div>
               )}
             </div>
+            <Link
+              href="/profile"
+              className="btn-ghost h-7 w-7 rounded-full p-0 bg-primary/10"
+              aria-label="Abrir perfil do usuario"
+              title={userDisplayName}
+            >
+              <User size={14} className="text-primary" aria-hidden="true" />
+            </Link>
             <button
               type="button"
               onClick={handleLogout}
-              className="btn-ghost h-7 w-7 rounded-full p-0 bg-primary/10"
+              className="btn-ghost h-7 w-7 rounded-full p-0"
               aria-label="Sair da conta"
               title="Sair"
             >
-              <User size={14} className="text-primary" aria-hidden="true" />
+              <LogOut size={14} aria-hidden="true" />
             </button>
           </div>
         </header>

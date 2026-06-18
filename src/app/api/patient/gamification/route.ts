@@ -322,6 +322,25 @@ function normalizePortalSnapshot(value: unknown): PatientPortalSnapshot | null {
     selectedPatientId,
     patients,
     patient,
+    access: {
+      tenantId: patient.tenantId,
+      patientId: selectedPatientId,
+      hasActiveProgram: true,
+      financialState: 'em_dia',
+      financialBlocksAccess: false,
+      capabilities: {
+        resumo: { enabled: true },
+        diario: { enabled: true },
+        jornada: { enabled: true },
+        beneficios: { enabled: true },
+        comunidade: { enabled: true },
+        documentos: { enabled: true },
+        financeiro: { enabled: true, blocksAccess: false },
+        chat: { enabled: true },
+        notificacoes: { enabled: true },
+        checkins: { enabled: true },
+      },
+    },
     documents: Array.isArray(record.documents)
       ? record.documents.map(normalizePortalDocument).filter(isPresent)
       : [],

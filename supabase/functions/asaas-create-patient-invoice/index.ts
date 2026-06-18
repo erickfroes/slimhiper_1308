@@ -285,6 +285,11 @@ Deno.serve(async (req) => {
     const dueDate = asString(body?.due_date);
     const description = asString(body?.description).slice(0, 240);
     const idempotencyKey = safeIdempotencyKey(body?.idempotency_key ?? body?.idempotencyKey);
+    const sourceModule = asString(body?.source_module ?? body?.sourceModule);
+    const programId = asString(body?.program_id ?? body?.programId) || null;
+    const packageId = asString(body?.package_id ?? body?.packageId) || null;
+    const enrollmentId = asString(body?.enrollment_id ?? body?.enrollmentId) || null;
+    const serviceId = asString(body?.service_id ?? body?.serviceId) || null;
 
     if (!patientId || !amountCents || !dueDate || !isDateInput(dueDate) || !description) {
       return jsonResponse(400, {
@@ -419,11 +424,21 @@ Deno.serve(async (req) => {
         description,
         invoice_url: invoiceUrl,
         payment_link: paymentLink,
+        source_module: sourceModule || null,
+        program_id: programId,
+        package_id: packageId,
+        enrollment_id: enrollmentId,
+        service_id: serviceId,
         metadata: {
           provider: 'asaas',
           invoice_number: providerData.invoiceNumber ?? null,
           external_reference: externalReference,
           idempotency_key: idempotencyKey || null,
+          source: sourceModule || null,
+          program_id: programId,
+          package_id: packageId,
+          enrollment_id: enrollmentId,
+          service_id: serviceId,
         },
       })
       .select('id, status, invoice_url, payment_link')

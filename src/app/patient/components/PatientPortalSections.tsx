@@ -355,6 +355,8 @@ export function PortalFinanceSection({ snapshot }: SnapshotProps) {
   }
 
   const orphanReceipts = receipts.filter((receipt) => !receipt.invoiceId);
+  const financeAccess = snapshot.access.capabilities.financeiro;
+  const financialState = financeAccess?.financialState ?? snapshot.access.financialState;
 
   return (
     <div className="space-y-4">
@@ -364,6 +366,11 @@ export function PortalFinanceSection({ snapshot }: SnapshotProps) {
           Acompanhe pendencias, pague por link seguro e envie comprovantes privados para analise.
         </p>
       </div>
+      {financialState && financialState !== 'em_dia' ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Ha pendencias financeiras registradas, mas o acesso ao portal nao foi bloqueado.
+        </p>
+      ) : null}
       {notice ? (
         <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           {notice}
@@ -396,6 +403,14 @@ export function PortalFinanceSection({ snapshot }: SnapshotProps) {
                 <p className="text-sm text-muted-foreground">
                   Vencimento {formatDate(invoice.dueDate)} - {invoice.status}
                 </p>
+                {invoice.programId || invoice.packageId || invoice.enrollmentId ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {invoice.sourceModule ?? 'programa'}{' '}
+                    {invoice.enrollmentId ? `- matricula ${invoice.enrollmentId.slice(0, 8)}` : ''}
+                    {invoice.programId ? ` - programa ${invoice.programId.slice(0, 8)}` : ''}
+                    {invoice.packageId ? ` - pacote ${invoice.packageId.slice(0, 8)}` : ''}
+                  </p>
+                ) : null}
               </div>
               <strong className="text-lg text-foreground">
                 {formatCurrency(invoice.amountCents)}

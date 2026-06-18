@@ -284,6 +284,11 @@ Deno.serve(async (req) => {
     const description = asString(body?.description, 'Assinatura SlimHiper').slice(0, 240);
     const cycle = cycleMap[String(body?.cycle ?? 'monthly').toLowerCase()] ?? cycleMap.monthly;
     const idempotencyKey = safeIdempotencyKey(body?.idempotency_key ?? body?.idempotencyKey);
+    const sourceModule = asString(body?.source_module ?? body?.sourceModule);
+    const packageId = asString(body?.package_id ?? body?.packageId) || null;
+    const programId = asString(body?.program_id ?? body?.programId) || null;
+    const enrollmentId = asString(body?.enrollment_id ?? body?.enrollmentId) || null;
+    const serviceId = asString(body?.service_id ?? body?.serviceId) || null;
 
     if (!patientId || !amountCents || !nextDueDate || !isDateInput(nextDueDate)) {
       return jsonResponse(400, {
@@ -410,11 +415,21 @@ Deno.serve(async (req) => {
         cycle: cycle.local,
         amount_cents: amountCents,
         next_due_date: nextDueDate,
+        source_module: sourceModule || null,
+        program_id: programId,
+        package_id: packageId,
+        enrollment_id: enrollmentId,
+        service_id: serviceId,
         metadata: {
           provider: 'asaas',
           description,
           external_reference: externalReference,
           idempotency_key: idempotencyKey || null,
+          source: sourceModule || null,
+          program_id: programId,
+          package_id: packageId,
+          enrollment_id: enrollmentId,
+          service_id: serviceId,
         },
       })
       .select('id, status')

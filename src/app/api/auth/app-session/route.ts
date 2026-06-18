@@ -58,6 +58,10 @@ export async function GET(request: Request) {
   return NextResponse.json(
     {
       authenticated: true,
+      user: session.user,
+      activeTenant: session.activeTenant,
+      activeTenantMembership: session.activeTenantMembership,
+      tenantMemberships: session.tenantMemberships,
       platformRole: session.platformRole,
       permissions: session.permissions,
       documentPermissions,

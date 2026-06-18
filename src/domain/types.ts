@@ -187,6 +187,7 @@ export interface InvoiceSummary {
   appointmentId?: string;
   packageId?: string;
   programId?: string;
+  enrollmentId?: string;
   serviceId?: string;
 }
 
@@ -202,6 +203,7 @@ export interface PatientPaymentRecord {
   appointmentId?: string;
   packageId?: string;
   programId?: string;
+  enrollmentId?: string;
   serviceId?: string;
   invoiceId?: string;
 }
@@ -261,6 +263,11 @@ export interface PatientPaymentReceipt {
   fileName?: string | null;
   mimeType?: string | null;
   sizeBytes?: number | null;
+  sourceModule?: string | null;
+  packageId?: string | null;
+  programId?: string | null;
+  enrollmentId?: string | null;
+  serviceId?: string | null;
 }
 
 export interface PatientBillingSubscription {
@@ -271,6 +278,11 @@ export interface PatientBillingSubscription {
   nextDueDate?: string | null;
   description?: string | null;
   createdAt?: string | null;
+  sourceModule?: string | null;
+  packageId?: string | null;
+  programId?: string | null;
+  enrollmentId?: string | null;
+  serviceId?: string | null;
 }
 
 export interface PatientBillingRefund {

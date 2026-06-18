@@ -945,3 +945,44 @@ export async function updatePatientPackageStatus(
     return { data: null, error: serviceError(error, 'Falha ao atualizar pacote do paciente.') };
   }
 }
+
+export async function resyncPatientProgramAccess(
+  enrollmentId: string
+): Promise<{ data: ProgramMutationResult | null; error: SafeServiceError | null }> {
+  try {
+    if (!enrollmentId.trim()) {
+      return {
+        data: null,
+        error: { message: 'Matricula obrigatoria para ressincronizar acesso.' },
+      };
+    }
+    if (isMockEnabled()) {
+      return { data: { id: enrollmentId, status: 'ativo' }, error: null };
+    }
+
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('sync_patient_program_access_snapshot', {
+      p_enrollment_id: enrollmentId,
+    });
+    if (error) {
+      return {
+        data: null,
+        error: serviceError(error, 'Falha ao ressincronizar acessos do paciente.'),
+      };
+    }
+
+    const result = asRecord(data);
+    return {
+      data: {
+        id: asString(result.id, enrollmentId),
+        status: 'ativo',
+      },
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: serviceError(error, 'Falha ao ressincronizar acessos do paciente.'),
+    };
+  }
+}
