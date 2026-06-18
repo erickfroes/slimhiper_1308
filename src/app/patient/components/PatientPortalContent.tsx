@@ -6,8 +6,6 @@ import {
   Activity,
   AlertTriangle,
   Bell,
-  CalendarDays,
-  ChevronRight,
   ClipboardCheck,
   CreditCard,
   FileText,
@@ -23,13 +21,13 @@ import {
 import { asSafeDocumentUrl } from '@/lib/safeExternalUrl';
 import { redirectToLogin, signOutFromApp } from '@/lib/auth/clientLogout';
 import DataState from '@/components/ui/DataState';
-import MetricCard from '@/components/ui/MetricCard';
 import SectionPanel from '@/components/ui/SectionPanel';
 import Tabs from '@/components/ui/Tabs';
 import { getDocumentSignedUrl } from '@/services/documentsApi';
 import DailyPortalSection from './daily/DailyPortalSection';
 import PatientCommercialSection from './PatientCommercialSection';
 import PatientCommunitySection from './PatientCommunitySection';
+import PatientGamificationPanel from './PatientGamificationPanel';
 import PatientJourneySection from './PatientJourneySection';
 import {
   PortalChatSection,
@@ -53,7 +51,15 @@ import {
   type PatientPortalSnapshot,
   type SafeServiceError,
 } from '@/services/patientPortalApi';
-import { isPatientDailyAction, type PatientDailyAction } from '@/services/patientDailyApi';
+import {
+  buildPatientDailySnapshot,
+  getPatientDailySnapshot,
+  isPatientDailyAction,
+  type PatientDailyAction,
+  type PatientDailySnapshot,
+} from '@/services/patientDailyApi';
+import { buildPatientGamificationState } from '@/services/patientGamificationEngine';
+import { getPatientGamificationSummary } from '@/services/patientGamificationApi';
 
 type PortalTab =
   | 'resumo'
@@ -108,17 +114,6 @@ function isTabEnabled(tab: PortalTab, featureFlags: Set<string> | null) {
   return isPortalFeatureEnabled(featureFlags, tabFeatureFlags[tab]);
 }
 
-function formatCurrency(cents: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return 'Sem data';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Sem data';
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(date);
-}
-
 export default function PatientPortalContent() {
   const searchParams = useSearchParams();
   const [snapshot, setSnapshot] = useState<PatientPortalSnapshot | null>(null);
@@ -130,6 +125,9 @@ export default function PatientPortalContent() {
   const [journeyLoading, setJourneyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [journeyError, setJourneyError] = useState<SafeServiceError | null>(null);
+  const [dailySnapshot, setDailySnapshot] = useState<PatientDailySnapshot | null>(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyError, setDailyError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [chatAttachment, setChatAttachment] = useState<File | null>(null);
   const [checkinAnswers, setCheckinAnswers] = useState<Record<string, Record<string, string>>>({});
@@ -137,6 +135,9 @@ export default function PatientPortalContent() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [portalFeatureFlags, setPortalFeatureFlags] = useState<Set<string> | null>(null);
+  const [gamificationSummaryState, setGamificationSummaryState] = useState<ReturnType<
+    typeof buildPatientGamificationState
+  > | null>(null);
   const availableTabs = useMemo(
     () => tabs.filter((tab) => isTabEnabled(tab.id, portalFeatureFlags)),
     [portalFeatureFlags]
@@ -168,6 +169,31 @@ export default function PatientPortalContent() {
     setJourneyLoading(false);
   }
 
+  async function loadDailySnapshot(
+    patientId = selectedPatientId,
+    fallbackSnapshot?: PatientPortalSnapshot
+  ) {
+    if (!patientId) {
+      setDailySnapshot(null);
+      setDailyError(null);
+      setDailyLoading(false);
+      return;
+    }
+
+    setDailyLoading(true);
+    setDailyError(null);
+    const result = await getPatientDailySnapshot(patientId);
+    if (result.error || !result.data) {
+      setDailySnapshot(fallbackSnapshot ? buildPatientDailySnapshot(fallbackSnapshot, []) : null);
+      setDailyError(result.error?.message ?? 'Contrato do diario indisponivel.');
+      setDailyLoading(false);
+      return;
+    }
+
+    setDailySnapshot(result.data);
+    setDailyLoading(false);
+  }
+
   async function loadPortal(patientId = selectedPatientId) {
     setLoading(true);
     setError(null);
@@ -175,13 +201,43 @@ export default function PatientPortalContent() {
     if (result.error || !result.data) {
       setSnapshot(null);
       setJourney(null);
+      setDailySnapshot(null);
+      setDailyError(null);
+      setDailyLoading(false);
       setError(result.error?.message ?? 'Nao foi possivel carregar o portal.');
+      setGamificationSummaryState(null);
     } else {
       setSnapshot(result.data);
       setSelectedPatientId(result.data.selectedPatientId);
-      await loadJourney(result.data.selectedPatientId);
+      await Promise.all([
+        loadJourney(result.data.selectedPatientId),
+        loadDailySnapshot(result.data.selectedPatientId, result.data),
+      ]);
+      await loadGamificationSummary(result.data.selectedPatientId);
     }
     setLoading(false);
+  }
+
+  async function loadGamificationSummary(patientId = selectedPatientId) {
+    if (!patientId) {
+      setGamificationSummaryState(null);
+      return;
+    }
+
+    const result = await getPatientGamificationSummary({
+      patientId,
+      tabItems: availableTabs.map((tab) => ({
+        id: tab.id,
+        label: tab.label,
+        shortLabel: tab.shortLabel,
+      })),
+    });
+
+    if (result.error || !result.data) {
+      setGamificationSummaryState(null);
+    } else {
+      setGamificationSummaryState(result.data);
+    }
   }
 
   async function handleLogout() {
@@ -243,112 +299,36 @@ export default function PatientPortalContent() {
     [snapshot]
   );
 
-  const portalCockpit = useMemo(() => {
-    if (!snapshot) return null;
+  const gamificationTabItems = useMemo(
+    () =>
+      availableTabs.map((tab) => ({
+        id: tab.id,
+        label: tab.label,
+      })),
+    [availableTabs]
+  );
 
-    const journeyEnabled = isTabEnabled('jornada', portalFeatureFlags);
-    const checkinsEnabled = isTabEnabled('checkins', portalFeatureFlags);
-    const financialEnabled = isTabEnabled('financeiro', portalFeatureFlags);
-    const notificationsEnabled = isTabEnabled('notificacoes', portalFeatureFlags);
-    const chatEnabled = isTabEnabled('chat', portalFeatureFlags);
-    const pendingCheckins = checkinsEnabled
-      ? snapshot.checkins
-          .filter((checkin) => checkin.status !== 'completed' && checkin.status !== 'canceled')
-          .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
-      : [];
-    const openInvoices = financialEnabled
-      ? snapshot.invoices
-          .filter((invoice) => !['paid', 'pago', 'CONFIRMED', 'RECEIVED'].includes(invoice.status))
-          .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
-      : [];
-    const completedCheckins = snapshot.checkins.filter(
-      (checkin) => checkin.status === 'completed'
-    ).length;
-    const progress =
-      snapshot.checkins.length > 0
-        ? Math.round((completedCheckins / snapshot.checkins.length) * 100)
-        : snapshot.documents.length > 0 || snapshot.invoices.length > 0
-          ? 25
-          : 0;
-    const firstUnreadNotification = notificationsEnabled
-      ? snapshot.notifications.find((notification) => notification.status === 'unread')
-      : undefined;
-
-    if (journeyEnabled && journey && journey.onboarding.status !== 'completed') {
-      return {
-        progress: journey.onboarding.progressPercent,
-        pendingCheckins,
-        openInvoices,
-        nextAction: {
-          tab: 'jornada' as PortalTab,
-          title: 'Concluir onboarding',
-          detail: `${journey.onboarding.progressPercent}% preenchido`,
-          icon: UserRound,
-        },
-      };
-    }
-
-    if (pendingCheckins[0]) {
-      return {
-        progress,
-        pendingCheckins,
-        openInvoices,
-        nextAction: {
-          tab: 'checkins' as PortalTab,
-          title: 'Responder check-in',
-          detail: `Prazo ${formatDate(pendingCheckins[0].dueDate)}`,
-          icon: ClipboardCheck,
-        },
-      };
-    }
-
-    if (openInvoices[0]) {
-      return {
-        progress,
-        pendingCheckins,
-        openInvoices,
-        nextAction: {
-          tab: 'financeiro' as PortalTab,
-          title: 'Revisar cobranca',
-          detail: `${formatCurrency(openInvoices[0].amountCents)} ate ${formatDate(openInvoices[0].dueDate)}`,
-          icon: CreditCard,
-        },
-      };
-    }
-
-    if (firstUnreadNotification) {
-      return {
-        progress,
-        pendingCheckins,
-        openInvoices,
-        nextAction: {
-          tab: 'notificacoes' as PortalTab,
-          title: 'Ler notificacao',
-          detail: firstUnreadNotification.title,
-          icon: Bell,
-        },
-      };
-    }
-
-    return {
-      progress,
-      pendingCheckins,
-      openInvoices,
-      nextAction: chatEnabled
-        ? {
-            tab: 'chat' as PortalTab,
-            title: 'Falar com a equipe',
-            detail: 'Envie uma mensagem quando precisar.',
-            icon: MessageSquare,
-          }
-        : {
-            tab: 'resumo' as PortalTab,
-            title: 'Ver resumo',
-            detail: 'Acompanhe os dados liberados para o seu vinculo.',
-            icon: Home,
-          },
-    };
-  }, [journey, portalFeatureFlags, snapshot]);
+  const gamificationSummary = useMemo(
+    () =>
+      gamificationSummaryState ??
+      buildPatientGamificationState({
+        snapshot,
+        journey,
+        dailySnapshot,
+        tabItems: gamificationTabItems,
+        dailyLoading,
+        dailyError,
+      }),
+    [
+      gamificationSummaryState,
+      snapshot,
+      journey,
+      dailySnapshot,
+      gamificationTabItems,
+      dailyLoading,
+      dailyError,
+    ]
+  );
 
   async function handlePatientChange(patientId: string) {
     setSelectedPatientId(patientId);
@@ -518,8 +498,6 @@ export default function PatientPortalContent() {
     );
   }
 
-  const nextAction = portalCockpit?.nextAction;
-  const NextActionIcon = nextAction?.icon ?? MessageSquare;
   const tabItems = availableTabs.map((tab) => ({
     id: tab.id,
     label: tab.label,
@@ -599,57 +577,18 @@ export default function PatientPortalContent() {
               </button>
             </div>
           </div>
-
-          <div className="mt-5 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-            <button
-              type="button"
-              onClick={() => nextAction && setActiveTab(nextAction.tab)}
-              className="group flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/10 p-4 text-left transition hover:bg-primary/15"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <NextActionIcon className="h-5 w-5" aria-hidden="true" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                    Proxima acao
-                  </p>
-                  <p className="mt-1 truncate text-base font-bold text-foreground">
-                    {nextAction?.title}
-                  </p>
-                  <p className="truncate text-sm text-muted-foreground">{nextAction?.detail}</p>
-                </div>
-              </div>
-              <ChevronRight
-                className="h-5 w-5 shrink-0 text-primary transition group-hover:translate-x-0.5"
-                aria-hidden="true"
-              />
-            </button>
-
-            <div className="rounded-lg border border-border bg-background p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Progresso do programa
-                  </p>
-                  <p className="mt-1 text-2xl font-bold text-foreground">
-                    {portalCockpit?.progress ?? 0}%
-                  </p>
-                </div>
-                <CalendarDays className="h-6 w-6 text-primary" aria-hidden="true" />
-              </div>
-              <div className="mt-3 h-2 rounded-full bg-muted">
-                <div
-                  className="h-2 rounded-full bg-primary"
-                  style={{ width: `${portalCockpit?.progress ?? 0}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Baseado nos check-ins atribuidos para este vinculo.
-              </p>
-            </div>
-          </div>
         </header>
+
+        <PatientGamificationPanel
+          summary={gamificationSummary}
+          dailySnapshot={dailySnapshot}
+          onNavigate={(tab) => setActiveTab(tab)}
+          tabItems={availableTabs.map((tab) => ({
+            id: tab.id,
+            label: tab.label,
+            shortLabel: tab.shortLabel,
+          }))}
+        />
 
         {actionMessage ? (
           <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-primary">
@@ -676,40 +615,6 @@ export default function PatientPortalContent() {
           </div>
         ) : null}
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {isTabEnabled('documentos', portalFeatureFlags) ? (
-            <MetricCard
-              icon={FileText}
-              label="Documentos"
-              value={String(snapshot.documents.length)}
-            />
-          ) : null}
-          {isTabEnabled('financeiro', portalFeatureFlags) ? (
-            <MetricCard
-              icon={CreditCard}
-              label="Cobrancas"
-              value={String(snapshot.invoices.length)}
-              tone={portalCockpit?.openInvoices.length ? 'warning' : 'default'}
-            />
-          ) : null}
-          {isTabEnabled('checkins', portalFeatureFlags) ? (
-            <MetricCard
-              icon={ClipboardCheck}
-              label="Check-ins pendentes"
-              value={String(portalCockpit?.pendingCheckins.length ?? 0)}
-              tone={portalCockpit?.pendingCheckins.length ? 'success' : 'default'}
-            />
-          ) : null}
-          {isTabEnabled('notificacoes', portalFeatureFlags) ? (
-            <MetricCard
-              icon={Bell}
-              label="Notificacoes nao lidas"
-              value={String(unreadNotifications)}
-              tone={unreadNotifications ? 'info' : 'default'}
-            />
-          ) : null}
-        </section>
-
         <Tabs
           items={tabItems}
           value={activeTab}
@@ -726,6 +631,10 @@ export default function PatientPortalContent() {
             onOpenChat={() => setActiveTab('chat')}
             onOpenCheckins={() => setActiveTab('checkins')}
             onActionMessage={setActionMessage}
+            onDataSynced={() => {
+              void loadDailySnapshot(snapshot.selectedPatientId, snapshot);
+              void loadGamificationSummary(snapshot.selectedPatientId);
+            }}
           />
         ) : (
           <SectionPanel contentClassName="p-5 sm:p-6">
