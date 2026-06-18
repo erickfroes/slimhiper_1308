@@ -45,6 +45,7 @@ interface DailyPortalSectionProps {
   onOpenChat: () => void;
   onOpenCheckins: () => void;
   onActionMessage: (message: string) => void;
+  onDataSynced?: () => void;
 }
 
 type DailyOperation = () => Promise<{
@@ -197,6 +198,7 @@ export default function DailyPortalSection({
   onOpenChat,
   onOpenCheckins,
   onActionMessage,
+  onDataSynced,
 }: DailyPortalSectionProps) {
   const [dailySnapshot, setDailySnapshot] = useState<ReturnType<
     typeof buildPatientDailySnapshot
@@ -338,6 +340,7 @@ export default function DailyPortalSection({
         current.map((entry) => (entry.id === localEntry.id ? syncedEntry : entry))
       );
       setActiveAction(null);
+      onDataSynced?.();
       onSuccess?.();
       onActionMessage(`${syncedEntry.title} sincronizado.`);
 
