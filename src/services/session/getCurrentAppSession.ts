@@ -27,13 +27,25 @@ export interface AppTenantMembership {
   status: string | null;
 }
 
+export interface AppSessionUser {
+  id: string;
+  email: string | null;
+  fullName: string | null;
+  avatarBucket: string | null;
+  avatarPath: string | null;
+  phone: string | null;
+  platformRole: PlatformRole;
+}
+
 export interface AppSession {
   userId: string;
   email: string | null;
   fullName: string | null;
+  user: AppSessionUser;
   platformRole: PlatformRole;
   activeTenant: { id: string } | null;
   tenantMemberships: AppTenantMembership[];
+  activeTenantMembership: AppTenantMembership | null;
   activeTenantRole: string | null;
   activeTenantRoles: string[];
   featureFlags: string[];
@@ -93,7 +105,9 @@ export async function getCurrentAppSession(
   const [profileResult, membershipResult] = await Promise.all([
     supabase
       .from('profiles')
-      .select('id,email,full_name,platform_role,active_tenant_id,is_active')
+      .select(
+        'id,email,full_name,phone,platform_role,active_tenant_id,is_active,avatar_bucket,avatar_path'
+      )
       .eq('id', user.id)
       .maybeSingle(),
     supabase
@@ -113,6 +127,16 @@ export async function getCurrentAppSession(
   const platformRole =
     normalizeString(profile.platform_role) ?? normalizeString(user.app_metadata?.role);
   const fullName = normalizeString(profile.full_name);
+  const email = user.email ?? normalizeString(profile.email);
+  const appSessionUser: AppSessionUser = {
+    id: user.id,
+    email,
+    fullName,
+    phone: normalizeString(profile.phone),
+    avatarBucket: normalizeString(profile.avatar_bucket),
+    avatarPath: normalizeString(profile.avatar_path),
+    platformRole,
+  };
 
   const memberships: Array<{
     id: string;
@@ -250,11 +274,13 @@ export async function getCurrentAppSession(
 
   const session: AppSession = {
     userId: user.id,
-    email: user.email ?? normalizeString(profile.email),
+    email,
     fullName,
+    user: appSessionUser,
     platformRole,
     activeTenant,
     tenantMemberships,
+    activeTenantMembership: activeMembership,
     activeTenantRole,
     activeTenantRoles,
     featureFlags,

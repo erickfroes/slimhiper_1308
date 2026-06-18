@@ -32,7 +32,7 @@ import {
   Activity,
 } from 'lucide-react';
 import EmptyState from '@/components/EmptyState';
-import { updatePatientPackageStatus } from '@/services/programsApi';
+import { resyncPatientProgramAccess, updatePatientPackageStatus } from '@/services/programsApi';
 
 interface TabPacotesProps {
   pkg?: PatientPackageSummary | null;
@@ -141,6 +141,23 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
     }
   };
 
+  const handleAccessResync = async () => {
+    if (!pkg) return;
+    setActionLoading('editar');
+    setActionNotice(null);
+    setActionError(null);
+    try {
+      const result = await resyncPatientProgramAccess(pkg.id);
+      if (result.error) {
+        setActionError(result.error.message);
+        return;
+      }
+      setActionNotice('Acessos do programa ressincronizados para este paciente.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleAction = async (key: string) => {
     if (!pkg) return;
     if (key === 'vender') {
@@ -148,10 +165,7 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
       return;
     }
     if (key === 'editar') {
-      await handlePackageStatus(
-        visibleStatus === 'pausado' ? 'ativo' : 'pausado',
-        'Ajuste operacional de acesso do pacote.'
-      );
+      await handleAccessResync();
       return;
     }
     if (key === 'contrato') {
@@ -242,7 +256,7 @@ export default function TabPacotes({ pkg }: TabPacotesProps) {
     },
     {
       key: 'editar',
-      label: 'Editar acesso',
+      label: 'Sincronizar acesso',
       icon: <Settings size={14} />,
       variant: 'secondary',
     },

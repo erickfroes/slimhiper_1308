@@ -110,8 +110,14 @@ function isPortalFeatureEnabled(featureFlags: Set<string> | null, featureFlag?: 
   return !featureFlag || featureFlags === null || featureFlags.has(featureFlag);
 }
 
-function isTabEnabled(tab: PortalTab, featureFlags: Set<string> | null) {
-  return isPortalFeatureEnabled(featureFlags, tabFeatureFlags[tab]);
+function isTabEnabled(
+  tab: PortalTab,
+  featureFlags: Set<string> | null,
+  access?: PatientPortalSnapshot['access']
+) {
+  if (!isPortalFeatureEnabled(featureFlags, tabFeatureFlags[tab])) return false;
+  if (!access) return true;
+  return access.capabilities[tab]?.enabled !== false;
 }
 
 export default function PatientPortalContent() {
@@ -139,8 +145,8 @@ export default function PatientPortalContent() {
     typeof buildPatientGamificationState
   > | null>(null);
   const availableTabs = useMemo(
-    () => tabs.filter((tab) => isTabEnabled(tab.id, portalFeatureFlags)),
-    [portalFeatureFlags]
+    () => tabs.filter((tab) => isTabEnabled(tab.id, portalFeatureFlags, snapshot?.access)),
+    [portalFeatureFlags, snapshot?.access]
   );
 
   async function loadJourney(patientId = selectedPatientId) {
@@ -209,10 +215,19 @@ export default function PatientPortalContent() {
     } else {
       setSnapshot(result.data);
       setSelectedPatientId(result.data.selectedPatientId);
+      const shouldLoadJourney = result.data.access.capabilities.jornada?.enabled !== false;
+      const shouldLoadDaily = result.data.access.capabilities.diario?.enabled !== false;
       await Promise.all([
-        loadJourney(result.data.selectedPatientId),
-        loadDailySnapshot(result.data.selectedPatientId, result.data),
+        shouldLoadJourney ? loadJourney(result.data.selectedPatientId) : Promise.resolve(),
+        shouldLoadDaily
+          ? loadDailySnapshot(result.data.selectedPatientId, result.data)
+          : Promise.resolve(),
       ]);
+      if (!shouldLoadJourney) setJourney(null);
+      if (!shouldLoadDaily) {
+        setDailySnapshot(null);
+        setDailyLoading(false);
+      }
       await loadGamificationSummary(result.data.selectedPatientId);
     }
     setLoading(false);
@@ -279,12 +294,14 @@ export default function PatientPortalContent() {
     const tab = searchParams.get('tab');
     const action = searchParams.get('action');
 
-    if (isPortalTab(tab) && isTabEnabled(tab, portalFeatureFlags)) setActiveTab(tab);
+    if (isPortalTab(tab) && isTabEnabled(tab, portalFeatureFlags, snapshot?.access)) {
+      setActiveTab(tab);
+    }
     if (isPatientDailyAction(action)) {
-      if (isTabEnabled('diario', portalFeatureFlags)) setActiveTab('diario');
+      if (isTabEnabled('diario', portalFeatureFlags, snapshot?.access)) setActiveTab('diario');
       setDailyInitialAction(action);
     }
-  }, [portalFeatureFlags, searchParams]);
+  }, [portalFeatureFlags, searchParams, snapshot?.access]);
 
   useEffect(() => {
     if (!availableTabs.some((tab) => tab.id === activeTab)) {

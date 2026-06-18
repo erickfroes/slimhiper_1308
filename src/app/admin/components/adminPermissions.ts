@@ -6,6 +6,12 @@ export type AdminRoleKind = 'owner' | 'admin' | 'support' | 'none';
 
 export interface AdminPermissions {
   authenticated: boolean;
+  user: {
+    id?: string;
+    email?: string | null;
+    fullName?: string | null;
+    platformRole?: string | null;
+  } | null;
   platformRole: string | null;
   roleKind: AdminRoleKind;
   roleLabel: string;
@@ -26,6 +32,7 @@ export interface AdminPermissions {
 
 interface AppSessionResponse {
   authenticated?: boolean;
+  user?: AdminPermissions['user'];
   platformRole?: string | null;
   permissions?: string[];
   canAccessPlatformAdmin?: boolean;
@@ -59,6 +66,7 @@ export function buildAdminPermissions(
 
   return {
     authenticated: session?.authenticated === true,
+    user: session?.user ?? null,
     platformRole: session?.platformRole ?? null,
     roleKind,
     roleLabel: roleLabelFromKind(roleKind),

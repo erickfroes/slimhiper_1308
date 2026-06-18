@@ -254,6 +254,33 @@ function asSafePaymentLink(value: string | null) {
   return asSafePaymentUrl(value);
 }
 
+function compactId(value: string | null | undefined) {
+  return value ? value.slice(0, 8) : null;
+}
+
+function CommercialContextLine({
+  item,
+}: {
+  item: {
+    sourceModule?: string | null;
+    programId?: string | null;
+    packageId?: string | null;
+    enrollmentId?: string | null;
+    serviceId?: string | null;
+  };
+}) {
+  const parts = [
+    item.sourceModule ? item.sourceModule : null,
+    item.enrollmentId ? `matricula ${compactId(item.enrollmentId)}` : null,
+    item.programId ? `programa ${compactId(item.programId)}` : null,
+    item.packageId ? `pacote ${compactId(item.packageId)}` : null,
+    item.serviceId ? `servico ${compactId(item.serviceId)}` : null,
+  ].filter(Boolean);
+
+  if (parts.length === 0) return null;
+  return <p className="mt-1 text-[11px] text-muted-foreground">{parts.join(' - ')}</p>;
+}
+
 function downloadTextFile(filename: string, content: string) {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -1189,6 +1216,7 @@ export default function TabFinanceiro({
                       <p className="truncate text-sm font-semibold text-foreground">
                         {p.description}
                       </p>
+                      <CommercialContextLine item={p} />
                       <p className="mt-1 text-xs text-muted-foreground">{formatDate(p.paidAt)}</p>
                     </div>
                     <span className="text-sm font-bold tabular-nums text-green-700">
@@ -1292,7 +1320,10 @@ export default function TabFinanceiro({
                       key={p.id}
                       className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
                     >
-                      <td className="py-2.5 text-foreground">{p.description}</td>
+                      <td className="py-2.5 text-foreground">
+                        {p.description}
+                        <CommercialContextLine item={p} />
+                      </td>
                       <td className="py-2.5 font-semibold text-green-700 tabular-nums">
                         {formatBRL(p.amount)}
                       </td>
@@ -1545,6 +1576,7 @@ export default function TabFinanceiro({
                     <p className="text-sm font-semibold text-foreground">
                       {subscription.description ?? 'Assinatura'}
                     </p>
+                    <CommercialContextLine item={subscription} />
                     <p className="mt-1 text-xs text-muted-foreground">
                       {subscription.cycle} - proxima em{' '}
                       {formatDate((subscription.nextDueDate ?? '').slice(0, 10))}

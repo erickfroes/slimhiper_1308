@@ -34,6 +34,11 @@ export interface PatientBillingIdentityInput {
 
 export interface BillingActionOptions {
   idempotencyKey?: string;
+  sourceModule?: string;
+  programId?: string | null;
+  packageId?: string | null;
+  enrollmentId?: string | null;
+  serviceId?: string | null;
 }
 
 export interface PatientFinancialLocalActionResult {
@@ -265,6 +270,16 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function billingContextPayload(options?: BillingActionOptions): Record<string, string> {
+  const context: Record<string, string> = {};
+  if (options?.sourceModule?.trim()) context.source_module = options.sourceModule.trim();
+  if (options?.programId?.trim()) context.program_id = options.programId.trim();
+  if (options?.packageId?.trim()) context.package_id = options.packageId.trim();
+  if (options?.enrollmentId?.trim()) context.enrollment_id = options.enrollmentId.trim();
+  if (options?.serviceId?.trim()) context.service_id = options.serviceId.trim();
+  return context;
+}
+
 function normalizePaymentReceipt(value: unknown): PatientPaymentReceipt | null {
   const record = asRecord(value);
   const id = asString(record.id);
@@ -283,6 +298,11 @@ function normalizePaymentReceipt(value: unknown): PatientPaymentReceipt | null {
     fileName: asNullableString(record.fileName),
     mimeType: asNullableString(record.mimeType),
     sizeBytes: asNumber(record.sizeBytes) || null,
+    sourceModule: asNullableString(record.sourceModule),
+    programId: asNullableString(record.programId),
+    packageId: asNullableString(record.packageId),
+    enrollmentId: asNullableString(record.enrollmentId),
+    serviceId: asNullableString(record.serviceId),
   };
 }
 
@@ -298,6 +318,11 @@ function normalizeSubscription(value: unknown): PatientBillingSubscription | nul
     nextDueDate: asNullableString(record.nextDueDate),
     description: asNullableString(record.description),
     createdAt: asNullableString(record.createdAt),
+    sourceModule: asNullableString(record.sourceModule),
+    programId: asNullableString(record.programId),
+    packageId: asNullableString(record.packageId),
+    enrollmentId: asNullableString(record.enrollmentId),
+    serviceId: asNullableString(record.serviceId),
   };
 }
 
@@ -878,6 +903,7 @@ export async function createPatientInvoice(
     amount_cents: amountCents,
     description: description.trim(),
     due_date: dueDate,
+    ...billingContextPayload(options),
     ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };
   const res = await invoke<unknown>('asaas-create-patient-invoice', payload);
@@ -928,6 +954,7 @@ export async function createPatientSubscription(
     amount_cents: amountCents,
     cycle: interval,
     next_due_date: new Date().toISOString().slice(0, 10),
+    ...billingContextPayload(options),
     ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };
   const res = await invoke<unknown>('asaas-create-patient-subscription', payload);

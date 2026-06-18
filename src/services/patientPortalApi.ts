@@ -48,6 +48,27 @@ export interface PatientPortalInvoice {
   paidAt?: string | null;
   description?: string | null;
   paymentLink?: string | null;
+  sourceModule?: string | null;
+  programId?: string | null;
+  packageId?: string | null;
+  enrollmentId?: string | null;
+  serviceId?: string | null;
+}
+
+export interface PatientPortalCapabilityAccess {
+  enabled: boolean;
+  reason?: string | null;
+  financialState?: string | null;
+  blocksAccess?: boolean;
+}
+
+export interface PatientPortalAccessContext {
+  tenantId?: string | null;
+  patientId?: string | null;
+  hasActiveProgram: boolean;
+  financialState?: string | null;
+  financialBlocksAccess: boolean;
+  capabilities: Record<string, PatientPortalCapabilityAccess>;
 }
 
 export interface PatientPortalMessage {
@@ -100,6 +121,7 @@ export interface PatientPortalSnapshot {
   selectedPatientId: string;
   patients: PatientPortalLinkedPatient[];
   patient: PatientPortalPatientSummary;
+  access: PatientPortalAccessContext;
   documents: PatientPortalDocument[];
   invoices: PatientPortalInvoice[];
   paymentReceipts: PatientPaymentReceipt[];
@@ -336,6 +358,47 @@ function normalizeInvoice(value: unknown): PatientPortalInvoice | null {
     paidAt: asNullableString(record.paidAt),
     description: asNullableString(record.description),
     paymentLink: asSafePaymentUrl(record.paymentLink),
+    sourceModule: asNullableString(record.sourceModule),
+    programId: asNullableString(record.programId),
+    packageId: asNullableString(record.packageId),
+    enrollmentId: asNullableString(record.enrollmentId),
+    serviceId: asNullableString(record.serviceId),
+  };
+}
+
+function normalizeCapabilityAccess(value: unknown): PatientPortalCapabilityAccess {
+  const record = asRecord(value);
+  return {
+    enabled: asBoolean(record.enabled, false),
+    reason: asNullableString(record.reason),
+    financialState: asNullableString(record.financialState),
+    blocksAccess: asBoolean(record.blocksAccess, false),
+  };
+}
+
+function normalizeAccessContext(value: unknown): PatientPortalAccessContext {
+  const record = asRecord(value);
+  const capabilityRecord = asRecord(record.capabilities);
+  const capabilities = Object.fromEntries(
+    Object.entries(capabilityRecord).map(([key, capability]) => [
+      key,
+      normalizeCapabilityAccess(capability),
+    ])
+  );
+
+  return {
+    tenantId: asNullableString(record.tenantId),
+    patientId: asNullableString(record.patientId),
+    hasActiveProgram: asBoolean(record.hasActiveProgram, false),
+    financialState: asNullableString(record.financialState),
+    financialBlocksAccess: asBoolean(record.financialBlocksAccess, false),
+    capabilities: {
+      resumo: { enabled: true },
+      financeiro: { enabled: true, blocksAccess: false },
+      documentos: { enabled: true },
+      notificacoes: { enabled: true },
+      ...capabilities,
+    },
   };
 }
 
@@ -452,6 +515,7 @@ function normalizeSnapshot(value: unknown): PatientPortalSnapshot | null {
     selectedPatientId,
     patients,
     patient,
+    access: normalizeAccessContext(record.access),
     documents: Array.isArray(record.documents)
       ? record.documents
           .map(normalizeDocument)

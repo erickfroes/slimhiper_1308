@@ -64,6 +64,8 @@ function AdminSidebar({
   onCloseMobile,
   onLogout,
   loggingOut,
+  userName,
+  userRoleLabel,
 }: {
   activeSection: AdminShellSection;
   collapsed: boolean;
@@ -72,6 +74,8 @@ function AdminSidebar({
   onCloseMobile: () => void;
   onLogout: () => void;
   loggingOut: boolean;
+  userName: string;
+  userRoleLabel: string;
 }) {
   return (
     <aside
@@ -139,26 +143,38 @@ function AdminSidebar({
       </nav>
       <div className="border-t border-border p-2">
         {!collapsed ? (
-          <button
-            type="button"
-            onClick={onLogout}
-            disabled={loggingOut}
-            className="mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label={
-              loggingOut ? 'Saindo do admin pela barra lateral' : 'Sair do admin pela barra lateral'
-            }
-          >
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
-              <User size={12} className="text-primary" />
-            </div>
-            <div className="flex min-w-0 flex-col leading-none">
-              <span className="truncate text-xs font-semibold text-foreground">Platform Admin</span>
-              <span className="text-xs text-muted-foreground">
-                {loggingOut ? 'Saindo...' : 'Operacoes'}
-              </span>
-            </div>
-            <LogOut size={12} className="ml-auto text-muted-foreground" aria-hidden="true" />
-          </button>
+          <div className="mb-1 flex items-center gap-1">
+            <Link
+              href="/profile"
+              onClick={onCloseMobile}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              aria-label="Abrir perfil do usuario"
+            >
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+                <User size={12} className="text-primary" />
+              </div>
+              <div className="flex min-w-0 flex-col leading-none">
+                <span className="truncate text-xs font-semibold text-foreground">{userName}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {loggingOut ? 'Saindo...' : userRoleLabel}
+                </span>
+              </div>
+            </Link>
+            <button
+              type="button"
+              onClick={onLogout}
+              disabled={loggingOut}
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={
+                loggingOut
+                  ? 'Saindo do admin pela barra lateral'
+                  : 'Sair do admin pela barra lateral'
+              }
+              title="Sair"
+            >
+              <LogOut size={12} aria-hidden="true" />
+            </button>
+          </div>
         ) : null}
         <button
           type="button"
@@ -197,6 +213,10 @@ export default function AdminShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const adminPermissions = useAdminPermissions();
+  const adminUserName =
+    adminPermissions.user?.fullName?.trim() ||
+    adminPermissions.user?.email?.trim() ||
+    'Minha conta';
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -237,6 +257,8 @@ export default function AdminShell({
         onCloseMobile={() => setMobileOpen(false)}
         onLogout={() => void handleLogout()}
         loggingOut={loggingOut}
+        userName={adminUserName}
+        userRoleLabel={adminPermissions.roleLabel}
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="app-topbar flex-shrink-0">
