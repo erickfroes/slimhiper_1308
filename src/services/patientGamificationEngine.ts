@@ -428,16 +428,6 @@ function getNextAction(args: {
     } as GamificationNextAction;
   }
 
-  if ((args.journey?.onboarding.pendingReviewCount ?? 0) > 0) {
-    return {
-      tab: resolveTab('jornada', args.tabItems),
-      title: 'Revisoes em andamento',
-      detail: 'Alguns dados do perfil ainda aguardam revisao da equipe.',
-      iconKey: 'clipboard',
-      icon: ClipboardCheck,
-    } as GamificationNextAction;
-  }
-
   if (args.pendingCheckin) {
     return {
       tab: resolveTab('diario', args.tabItems),
@@ -649,6 +639,9 @@ export function buildPatientGamificationState(input: EngineInput): GamificationS
     input.dailyError ? 'Diario temporariamente indisponivel.' : null,
     snapshot && !dailySnapshot ? 'Resumo diario calculado com dados parciais.' : null,
     snapshot && !journey ? 'Jornada calculada sem snapshot completo de onboarding.' : null,
+    (journey?.onboarding.pendingReviewCount ?? 0) > 0
+      ? 'Alguns dados do perfil ainda aguardam revisao da equipe.'
+      : null,
     ...(snapshot?.warnings.map((warning) => warning.message) ?? []),
   ].filter((reason): reason is string => Boolean(reason));
 
