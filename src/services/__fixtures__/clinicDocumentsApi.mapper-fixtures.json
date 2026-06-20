@@ -133,16 +133,7 @@
     }
   },
   "providerIsolation": {
-    "mustNotCall": [
-      "D4Sign",
-      "Asaas",
-      "Supabase Edge Functions",
-      "Supabase network APIs"
-    ],
-    "allowed": [
-      "pure mapper imports",
-      "local JSON fixtures",
-      "local assertion library"
-    ]
+    "mustNotCall": ["D4Sign", "Asaas", "Supabase Edge Functions", "Supabase network APIs"],
+    "allowed": ["pure mapper imports", "local JSON fixtures", "local assertion library"]
   }
 }
