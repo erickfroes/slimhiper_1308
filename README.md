@@ -48,6 +48,7 @@ Notes:
 - Document templates bootstrap: [docs/supabase/DOCUMENT_TEMPLATES_RUNBOOK.md](docs/supabase/DOCUMENT_TEMPLATES_RUNBOOK.md)
 - D4Sign documents runbook: [docs/integrations/D4SIGN_RUNBOOK.md](docs/integrations/D4SIGN_RUNBOOK.md)
 - Asaas billing runbook: [docs/integrations/ASAAS_BILLING_RUNBOOK.md](docs/integrations/ASAAS_BILLING_RUNBOOK.md)
+- Mercado Pago transition source of truth: [docs/integrations/MERCADOPAGO_TRANSITION_SOURCE_OF_TRUTH.md](docs/integrations/MERCADOPAGO_TRANSITION_SOURCE_OF_TRUTH.md)
 - Environment hygiene: [docs/security/ENV_HYGIENE.md](docs/security/ENV_HYGIENE.md)
 - Contract and smoke checks: [docs/testing/CONTRACT_TESTS.md](docs/testing/CONTRACT_TESTS.md)
 - Project completion checkpoints: [docs/PROJECT_COMPLETION_CHECKPOINTS.md](docs/PROJECT_COMPLETION_CHECKPOINTS.md)

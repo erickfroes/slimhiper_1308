@@ -1,0 +1,46 @@
+{
+  "name": "mercadopago-payment-chargeback",
+  "description": "Safe local fixture for a Mercado Pago chargeback-like payment webhook. Values are fake and non-sensitive.",
+  "provider": "mercadopago",
+  "headers": {
+    "content-type": "application/json",
+    "x-request-id": "mp_request_fixture_chargeback_001",
+    "x-signature": "ts=1710000005,v1=9e718bb4e60e82784747b4558aa07bdf698cb0230a38b3974ca068e6f6fb4f14"
+  },
+  "expected": {
+    "accepted": true,
+    "eventType": "payment.updated",
+    "invoiceStatus": "chargeback",
+    "paymentStatus": "chargeback",
+    "financialState": "attention",
+    "timelineEventType": "pagamento",
+    "timelineCategory": "financial",
+    "tenantResolution": {
+      "strategy": "patient_invoices.provider_payment_id",
+      "lookupPaymentId": "pay_fixture_mp_chargeback_001",
+      "tenantId": "tenant-fixture-001",
+      "patientId": "patient-fixture-001",
+      "shouldResolve": true
+    }
+  },
+  "payload": {
+    "id": "evt_mp_fixture_chargeback_001",
+    "live_mode": false,
+    "type": "payment",
+    "date_created": "2026-06-18T12:20:00.000Z",
+    "action": "payment.updated",
+    "data": {
+      "id": "pay_fixture_mp_chargeback_001"
+    }
+  },
+  "providerResource": {
+    "id": "pay_fixture_mp_chargeback_001",
+    "status": "charged_back",
+    "transaction_amount": 420,
+    "payment_method_id": "visa",
+    "payment_type_id": "credit_card",
+    "date_approved": "2026-06-18T10:00:00.000Z",
+    "preference_id": "pref_fixture_mp_005",
+    "external_reference": "shr_inv_fixture_005"
+  }
+}

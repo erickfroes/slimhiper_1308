@@ -85,7 +85,9 @@ function ProviderBadge({ provider }: { provider: WebhookProvider }) {
   const classes =
     provider === 'Asaas'
       ? 'border-blue-200 bg-blue-50 text-blue-700'
-      : 'border-violet-200 bg-violet-50 text-violet-700';
+      : provider === 'Mercado Pago'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        : 'border-violet-200 bg-violet-50 text-violet-700';
   return (
     <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${classes}`}>
       {provider}
@@ -245,7 +247,7 @@ function ReprocessDialog({
     <Dialog
       open
       title="Solicitar reprocesso"
-      description="Cria um job local auditado; nao chama Asaas ou D4Sign."
+      description="Cria um job local auditado; nao chama provedores externos."
       onOpenChange={(dialogOpen) => {
         if (!dialogOpen) onClose();
       }}
@@ -406,7 +408,7 @@ export default function WebhookMonitorContent() {
       acc[event.provider] += 1;
       return acc;
     },
-    { Asaas: 0, D4Sign: 0 }
+    { Asaas: 0, 'Mercado Pago': 0, D4Sign: 0 }
   );
 
   const processed = events.filter((event) => event.status === 'processed').length;
@@ -427,7 +429,7 @@ export default function WebhookMonitorContent() {
           </p>
           <h1 className="text-2xl font-bold text-foreground">Monitor de webhooks</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Resumo sanitizado de eventos Asaas e D4Sign, com erros operacionais, filtros por
+            Resumo sanitizado de eventos dos provedores, com erros operacionais, filtros por
             provider/status e idempotencia redigida sem expor payloads brutos.
           </p>
         </div>
@@ -450,6 +452,7 @@ export default function WebhookMonitorContent() {
             className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="all">Todos providers</option>
+            <option value="Mercado Pago">Mercado Pago</option>
             <option value="Asaas">Asaas</option>
             <option value="D4Sign">D4Sign</option>
           </select>
@@ -493,7 +496,7 @@ export default function WebhookMonitorContent() {
         <StatCard
           icon={Webhook}
           label="Eventos"
-          value={`${events.length} (${providerCounts.Asaas} Asaas / ${providerCounts.D4Sign} D4Sign)`}
+          value={`${events.length} (${providerCounts['Mercado Pago']} MP / ${providerCounts.Asaas} Asaas / ${providerCounts.D4Sign} D4Sign)`}
           tone="slate"
         />
         <StatCard icon={CheckCircle} label="Processados" value={processed} tone="emerald" />
@@ -597,7 +600,12 @@ export default function WebhookMonitorContent() {
                   const latestJob = jobs.find(
                     (job) =>
                       job.eventId === event.id &&
-                      job.provider === (event.provider === 'Asaas' ? 'asaas' : 'd4sign')
+                      job.provider ===
+                        (event.provider === 'Asaas'
+                          ? 'asaas'
+                          : event.provider === 'Mercado Pago'
+                            ? 'mercadopago'
+                            : 'd4sign')
                   );
                   const eligibleForReprocess = isReprocessableStatus(event.status);
                   return (

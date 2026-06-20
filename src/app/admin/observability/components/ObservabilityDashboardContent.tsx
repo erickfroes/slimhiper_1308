@@ -246,10 +246,10 @@ export default function ObservabilityDashboardContent() {
         icon: Activity,
       },
       {
-        title: 'Webhooks D4Sign/Asaas',
+        title: 'Webhooks de provedores',
         status: mapWebhookStatus(webhooks),
         owner: 'Integrations on-call',
-        target: 'webhook-d4sign e webhook-asaas',
+        target: 'webhook-d4sign, webhook-asaas legado e webhook-mercadopago',
         signal: 'signature failures, idempotencia, dead-letter e divergencia',
         source: 'live',
         evidence: `${webhooks.length} eventos recentes via RPC; ${failedWebhooks.length} requerem atencao.`,

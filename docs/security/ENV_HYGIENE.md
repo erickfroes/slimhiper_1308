@@ -49,6 +49,13 @@ scripts, CI secrets, or Supabase Edge Function secrets:
 - `TEST_PATIENT_ID`
 - `TEST_TEMPLATE_ID`
 - `ENABLE_PRODUCTION_SOURCE_MAPS`
+- `MERCADOPAGO_ACCESS_TOKEN`
+- `MERCADOPAGO_BASE_URL`
+- `MERCADOPAGO_WEBHOOK_SECRET`
+- `MERCADOPAGO_NOTIFICATION_URL`
+- `MERCADOPAGO_CLIENT_ID`
+- `MERCADOPAGO_CLIENT_SECRET`
+- `MERCADOPAGO_OAUTH_REDIRECT_URL`
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY`
 - `ANTHROPIC_API_KEY`
@@ -84,6 +91,26 @@ Asaas credentials and webhook secrets are server-only:
 
 Never expose Asaas credentials to frontend code. Do not call Asaas APIs unless a
 task explicitly authorizes that environment and operation.
+
+## Mercado Pago Variables
+
+Mercado Pago credentials and webhook secrets are server-only, except
+`MERCADOPAGO_PUBLIC_KEY` when a future browser SDK/card flow is explicitly
+approved:
+
+- `MERCADOPAGO_ACCESS_TOKEN`
+- `MERCADOPAGO_BASE_URL`
+- `MERCADOPAGO_WEBHOOK_SECRET`
+- `MERCADOPAGO_NOTIFICATION_URL`
+- `MERCADOPAGO_CLIENT_ID`
+- `MERCADOPAGO_CLIENT_SECRET`
+- `MERCADOPAGO_OAUTH_REDIRECT_URL`
+- `MERCADOPAGO_PUBLIC_KEY`
+
+Never expose access tokens, webhook secrets, OAuth secrets, provider payment
+IDs tied to real data, or raw Mercado Pago payloads to frontend code or logs.
+Do not call Mercado Pago APIs unless a task explicitly authorizes that
+environment and operation.
 
 ## Rotation Guidance
 

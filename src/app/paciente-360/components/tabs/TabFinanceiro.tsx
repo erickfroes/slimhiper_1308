@@ -25,8 +25,8 @@ import EmptyState from '@/components/EmptyState';
 import Dialog from '@/components/ui/Dialog';
 import {
   createBillingNegotiation,
+  createPatientCharge,
   createPatientFinancialContract,
-  createPatientInvoice,
   createPatientReceipt,
   createPatientSubscription,
   getPaymentReceiptSignedUrl,
@@ -34,7 +34,7 @@ import {
   refundPatientPayment,
   registerPatientManualPayment,
   sendPaymentReminder,
-  syncAsaasPayment,
+  syncProviderPayment,
 } from '@/services/billingApi';
 import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
 
@@ -405,7 +405,7 @@ export default function TabFinanceiro({
 
     setCreatingInvoice(true);
     try {
-      const result = await createPatientInvoice(
+      const result = await createPatientCharge(
         patientId,
         parsedAmount,
         trimmedDescription,
@@ -687,7 +687,7 @@ export default function TabFinanceiro({
     resetCreationFeedback();
     setLocalActionLoading(`sync:${invoiceId}`);
     try {
-      const result = await syncAsaasPayment(invoiceId, 'patient_360_manual_sync');
+      const result = await syncProviderPayment(invoiceId, 'patient_360_manual_sync');
       if (result.error) {
         setCreationError(result.error.message);
         return;
@@ -1055,7 +1055,7 @@ export default function TabFinanceiro({
             </label>
             <label className="block space-y-1">
               <span className="text-xs font-medium text-muted-foreground">
-                CPF/CNPJ para novo customer Asaas
+                CPF/CNPJ para cadastro no provedor
               </span>
               <input
                 className="border rounded px-2 py-1 w-full"
@@ -1107,11 +1107,11 @@ export default function TabFinanceiro({
             </label>
             <p className="text-xs text-muted-foreground">
               Contrato local seguro: pacote padrao, ciclo mensal e chave de idempotencia por
-              tentativa; provider Asaas permanece atras da Edge Function.
+              tentativa; Mercado Pago permanece atras da Edge Function.
             </p>
             <label className="block space-y-1">
               <span className="text-xs font-medium text-muted-foreground">
-                CPF/CNPJ para novo customer Asaas
+                CPF/CNPJ para cadastro no provedor
               </span>
               <input
                 className="border rounded px-2 py-1 w-full"

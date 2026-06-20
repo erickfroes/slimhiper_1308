@@ -16,7 +16,7 @@ export type AdminProviderStatus =
   | 'quota_exceeded'
   | 'error'
   | 'not_configured';
-export type AdminIntegrationProvider = 'asaas' | 'd4sign';
+export type AdminIntegrationProvider = 'asaas' | 'mercadopago' | 'd4sign';
 export type AdminIntegrationOperationalState = 'normal' | 'investigating' | 'resolved';
 
 export interface AdminIntegrationOperationState {
@@ -47,6 +47,8 @@ export interface AdminTenantRow {
   paymentMethod: string;
   asaasSubaccountStatus: AdminProviderStatus;
   asaasAccountId: string;
+  mercadopagoStatus: AdminProviderStatus;
+  mercadopagoAccountId: string;
   d4signStatus: AdminProviderStatus;
   d4signDocsUsed: number;
   d4signDocsLimit: number;
@@ -124,7 +126,7 @@ export interface AdminAuditEntry {
 
 export interface AdminWebhookEventSummary {
   id: string;
-  provider: 'Asaas' | 'D4Sign';
+  provider: 'Asaas' | 'Mercado Pago' | 'D4Sign';
   eventType: string;
   tenant: string;
   tenantId: string;
@@ -227,7 +229,7 @@ export interface PlatformPrivilegedUserSummary extends AdminTenantUser {
 export interface AdminWebhookReprocessJob {
   id: string;
   tenantId: string | null;
-  provider: 'asaas' | 'd4sign';
+  provider: AdminIntegrationProvider;
   eventId: string;
   status: 'queued' | 'processing' | 'processed' | 'failed' | 'not_reprocessable';
   reason: string;
@@ -586,6 +588,11 @@ function mapTenantRow(value: unknown): AdminTenantRow {
     paymentMethod: asString(record.paymentMethod, 'not_configured'),
     asaasSubaccountStatus: normalizeProviderStatus(record.asaasSubaccountStatus),
     asaasAccountId: asString(record.asaasAccountId),
+    mercadopagoStatus: normalizeProviderStatus(
+      record.mercadopagoStatus ??
+        (asString(record.paymentMethod).toLowerCase() === 'mercadopago' ? 'active' : undefined)
+    ),
+    mercadopagoAccountId: asString(record.mercadopagoAccountId),
     d4signStatus: normalizeProviderStatus(record.d4signStatus),
     d4signDocsUsed: asNumber(record.d4signDocsUsed),
     d4signDocsLimit: asNumber(record.d4signDocsLimit, 100),
@@ -593,6 +600,7 @@ function mapTenantRow(value: unknown): AdminTenantRow {
     doctorsLimit: asNumber(record.doctorsLimit, asNumber(record.usersLimit, 1)),
     integrationOperations: {
       asaas: mapIntegrationOperationState(asRecord(record.integrationOperations).asaas),
+      mercadopago: mapIntegrationOperationState(asRecord(record.integrationOperations).mercadopago),
       d4sign: mapIntegrationOperationState(asRecord(record.integrationOperations).d4sign),
     },
     appointmentsThisMonth: asNumber(record.appointmentsThisMonth),
@@ -675,9 +683,15 @@ function mapAudit(value: unknown): AdminAuditEntry {
 function mapWebhook(value: unknown): AdminWebhookEventSummary {
   const record = asRecord(value);
   const retryCount = asNumber(record.retryCount);
+  const provider = asString(record.provider).toLowerCase();
   return {
     id: asString(record.id),
-    provider: asString(record.provider) === 'D4Sign' ? 'D4Sign' : 'Asaas',
+    provider:
+      provider === 'd4sign'
+        ? 'D4Sign'
+        : provider === 'mercado pago' || provider === 'mercadopago'
+          ? 'Mercado Pago'
+          : 'Asaas',
     eventType: sanitizeOperationalText(record.eventType, 'unknown', 120),
     tenant: sanitizeOperationalText(record.tenant, 'N/A', 160),
     tenantId: asString(record.tenantId),
@@ -767,7 +781,7 @@ function mapWebhookReprocessJob(value: unknown): AdminWebhookReprocessJob {
   return {
     id: asString(record.id),
     tenantId: asNullableString(record.tenant_id),
-    provider: provider === 'd4sign' ? 'd4sign' : 'asaas',
+    provider: provider === 'd4sign' || provider === 'mercadopago' ? provider : 'asaas',
     eventId: asString(record.event_id),
     status:
       status === 'processing' ||
@@ -882,6 +896,7 @@ function mapTenantConfigSummary(value: unknown) {
     doctorsLimit: asNumber(record.doctorsLimit, 1),
     integrationOperations: {
       asaas: mapIntegrationOperationState(integrationOperations.asaas),
+      mercadopago: mapIntegrationOperationState(integrationOperations.mercadopago),
       d4sign: mapIntegrationOperationState(integrationOperations.d4sign),
     },
   };
@@ -1435,7 +1450,12 @@ export async function updatePlatformTenantIntegrationState(input: {
 }> {
   const tenantId = input.tenantId.trim();
   const reason = normalizeText(input.reason, 500);
-  const provider = input.provider === 'asaas' ? 'asaas' : 'd4sign';
+  const provider =
+    input.provider === 'mercadopago'
+      ? 'mercadopago'
+      : input.provider === 'asaas'
+        ? 'asaas'
+        : 'd4sign';
   const state =
     input.state === 'investigating' || input.state === 'resolved' ? input.state : 'normal';
 
@@ -2081,7 +2101,7 @@ export async function revokePlatformBreakGlass(input: { requestId: string; reaso
 }
 
 export async function requestWebhookReprocess(input: {
-  provider: AdminWebhookEventSummary['provider'] | 'asaas' | 'd4sign';
+  provider: AdminWebhookEventSummary['provider'] | AdminIntegrationProvider;
   eventId: string;
   reason: string;
   scope: string;
@@ -2089,7 +2109,13 @@ export async function requestWebhookReprocess(input: {
   const eventId = input.eventId.trim();
   const reason = normalizeText(input.reason, 500);
   const scope = normalizeText(input.scope, 240);
-  const provider = input.provider.toLowerCase() === 'asaas' ? 'asaas' : 'd4sign';
+  const providerInput = input.provider.toLowerCase();
+  const provider =
+    providerInput === 'mercadopago' || providerInput === 'mercado pago'
+      ? 'mercadopago'
+      : providerInput === 'asaas'
+        ? 'asaas'
+        : 'd4sign';
 
   if (!isUuid(eventId)) {
     return {

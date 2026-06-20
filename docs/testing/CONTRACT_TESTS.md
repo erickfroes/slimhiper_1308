@@ -413,8 +413,10 @@ node scripts/supabase/bootstrap-billing-demo.mjs
 node scripts/supabase/test-billing-contract.mjs
 ```
 
-Billing contract scripts may call Asaas-related functions and can create
-provider-side customers, invoices, or subscriptions depending on configuration.
+Billing contract scripts may call billing provider Edge Functions and can create
+provider-side customers, invoices, preferences, or subscriptions depending on
+configuration. Do not run provider-success mode without explicit authorization
+for the exact environment.
 
 Strict provider-success mode for an authorized Asaas sandbox:
 
@@ -429,6 +431,18 @@ running strict mode. The script requires customer, invoice, and subscription to
 return 200, verifies safe `{ ok, data/error }` envelopes, verifies unauthenticated
 requests fail closed, and rejects provider IDs in browser response data.
 
+Strict provider-success mode for authorized Mercado Pago test credentials:
+
+```bash
+REQUIRE_MERCADOPAGO_PROVIDER_SUCCESS=true \
+node scripts/supabase/test-billing-contract.mjs
+```
+
+Mercado Pago uses the regular API host with test credentials, so the script
+requires either a sandbox-like base URL, a `TEST-` access token, or the explicit
+`ALLOW_MERCADOPAGO_PROVIDER_CONTRACT_NON_SANDBOX=true` override for a separately
+approved non-sandbox run.
+
 Local fixture test:
 
 ```bash
@@ -436,12 +450,13 @@ node scripts/supabase/test-billing-fixtures.mjs
 node scripts/supabase/test-billing-reconciliation-local-smoke.mjs
 ```
 
-This fixture test validates event-to-status mapping, idempotency hash strategy,
-tenant resolution expectations, duplicated payload behavior, and invalid token
-handling without calling Asaas. The reconciliation smoke seeds deterministic
-local divergence scenarios, calls `get_clinic_finance_reconciliation()`, checks
-safe summary/divergence/event envelopes, and confirms unauthenticated access
-fails closed.
+This fixture test validates Asaas and Mercado Pago event-to-status mapping,
+idempotency hash strategy, Mercado Pago webhook HMAC signature handling, tenant
+resolution expectations, duplicated payload behavior, and invalid token/signature
+handling without calling external providers. The reconciliation smoke seeds
+deterministic local divergence scenarios, calls
+`get_clinic_finance_reconciliation()`, checks safe summary/divergence/event
+envelopes, and confirms unauthenticated access fails closed.
 
 ## CI Workflows
 

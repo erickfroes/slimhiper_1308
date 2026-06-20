@@ -1,0 +1,46 @@
+{
+  "name": "mercadopago-payment-refunded",
+  "description": "Safe local fixture for a Mercado Pago refunded payment webhook. Values are fake and non-sensitive.",
+  "provider": "mercadopago",
+  "headers": {
+    "content-type": "application/json",
+    "x-request-id": "mp_request_fixture_refunded_001",
+    "x-signature": "ts=1710000004,v1=1ba370850df1e7f022d851ebc21587de1576eee0a48b73ba8ca7e7a95744e3d7"
+  },
+  "expected": {
+    "accepted": true,
+    "eventType": "payment.updated",
+    "invoiceStatus": "refunded",
+    "paymentStatus": "refunded",
+    "financialState": "attention",
+    "timelineEventType": "pagamento",
+    "timelineCategory": "financial",
+    "tenantResolution": {
+      "strategy": "patient_invoices.provider_payment_id",
+      "lookupPaymentId": "pay_fixture_mp_refunded_001",
+      "tenantId": "tenant-fixture-001",
+      "patientId": "patient-fixture-001",
+      "shouldResolve": true
+    }
+  },
+  "payload": {
+    "id": "evt_mp_fixture_refunded_001",
+    "live_mode": false,
+    "type": "payment",
+    "date_created": "2026-06-18T12:15:00.000Z",
+    "action": "payment.updated",
+    "data": {
+      "id": "pay_fixture_mp_refunded_001"
+    }
+  },
+  "providerResource": {
+    "id": "pay_fixture_mp_refunded_001",
+    "status": "refunded",
+    "transaction_amount": 300,
+    "payment_method_id": "pix",
+    "payment_type_id": "bank_transfer",
+    "date_approved": "2026-06-18T11:30:00.000Z",
+    "preference_id": "pref_fixture_mp_004",
+    "external_reference": "shr_inv_fixture_004"
+  }
+}

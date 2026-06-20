@@ -1,0 +1,46 @@
+{
+  "name": "mercadopago-payment-rejected",
+  "description": "Safe local fixture for a Mercado Pago rejected payment webhook. Values are fake and non-sensitive.",
+  "provider": "mercadopago",
+  "headers": {
+    "content-type": "application/json",
+    "x-request-id": "mp_request_fixture_rejected_001",
+    "x-signature": "ts=1710000003,v1=ff7d80ca3f3127534cd23f72fd4aafdcb5c4bd22586659017d9dc23518a75f0c"
+  },
+  "expected": {
+    "accepted": true,
+    "eventType": "payment.updated",
+    "invoiceStatus": "failed",
+    "paymentStatus": "failed",
+    "financialState": "attention",
+    "timelineEventType": null,
+    "timelineCategory": null,
+    "tenantResolution": {
+      "strategy": "patient_invoices.provider_payment_id",
+      "lookupPaymentId": "pay_fixture_mp_rejected_001",
+      "tenantId": "tenant-fixture-001",
+      "patientId": "patient-fixture-001",
+      "shouldResolve": true
+    }
+  },
+  "payload": {
+    "id": "evt_mp_fixture_rejected_001",
+    "live_mode": false,
+    "type": "payment",
+    "date_created": "2026-06-18T12:10:00.000Z",
+    "action": "payment.updated",
+    "data": {
+      "id": "pay_fixture_mp_rejected_001"
+    }
+  },
+  "providerResource": {
+    "id": "pay_fixture_mp_rejected_001",
+    "status": "rejected",
+    "transaction_amount": 180,
+    "payment_method_id": "master",
+    "payment_type_id": "credit_card",
+    "date_approved": null,
+    "preference_id": "pref_fixture_mp_003",
+    "external_reference": "shr_inv_fixture_003"
+  }
+}

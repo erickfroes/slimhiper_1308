@@ -41,6 +41,10 @@ function readIntegrationOperations(settings: unknown) {
       state: normalizeText(asRecord(integrations.asaas).operationalStatus, 40) || 'normal',
       updatedAt: normalizeText(asRecord(integrations.asaas).operationalUpdatedAt, 80) || null,
     },
+    mercadopago: {
+      state: normalizeText(asRecord(integrations.mercadopago).operationalStatus, 40) || 'normal',
+      updatedAt: normalizeText(asRecord(integrations.mercadopago).operationalUpdatedAt, 80) || null,
+    },
     d4sign: {
       state: normalizeText(asRecord(integrations.d4sign).operationalStatus, 40) || 'normal',
       updatedAt: normalizeText(asRecord(integrations.d4sign).operationalUpdatedAt, 80) || null,

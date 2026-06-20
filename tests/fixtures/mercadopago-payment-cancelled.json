@@ -1,0 +1,46 @@
+{
+  "name": "mercadopago-payment-cancelled",
+  "description": "Safe local fixture for a Mercado Pago cancelled payment webhook. Values are fake and non-sensitive.",
+  "provider": "mercadopago",
+  "headers": {
+    "content-type": "application/json",
+    "x-request-id": "mp_request_fixture_cancelled_001",
+    "x-signature": "ts=1710000006,v1=422c880fdb753fd04419f042fc6d28ba018d473b1efcbf73a661bc283a1545c8"
+  },
+  "expected": {
+    "accepted": true,
+    "eventType": "payment.updated",
+    "invoiceStatus": "cancelled",
+    "paymentStatus": "cancelled",
+    "financialState": "attention",
+    "timelineEventType": null,
+    "timelineCategory": null,
+    "tenantResolution": {
+      "strategy": "patient_invoices.provider_payment_id",
+      "lookupPaymentId": "pay_fixture_mp_cancelled_001",
+      "tenantId": "tenant-fixture-001",
+      "patientId": "patient-fixture-001",
+      "shouldResolve": true
+    }
+  },
+  "payload": {
+    "id": "evt_mp_fixture_cancelled_001",
+    "live_mode": false,
+    "type": "payment",
+    "date_created": "2026-06-18T12:12:00.000Z",
+    "action": "payment.updated",
+    "data": {
+      "id": "pay_fixture_mp_cancelled_001"
+    }
+  },
+  "providerResource": {
+    "id": "pay_fixture_mp_cancelled_001",
+    "status": "cancelled",
+    "transaction_amount": 200,
+    "payment_method_id": "account_money",
+    "payment_type_id": "account_money",
+    "date_approved": null,
+    "preference_id": "pref_fixture_mp_006",
+    "external_reference": "shr_inv_fixture_006"
+  }
+}

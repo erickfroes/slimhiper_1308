@@ -1,0 +1,46 @@
+{
+  "name": "mercadopago-payment-pending",
+  "description": "Safe local fixture for a Mercado Pago pending payment webhook. Values are fake and non-sensitive.",
+  "provider": "mercadopago",
+  "headers": {
+    "content-type": "application/json",
+    "x-request-id": "mp_request_fixture_pending_001",
+    "x-signature": "ts=1710000002,v1=e167461d25416160bbdd205659535b389b63c5b302d69fa3f751176063074705"
+  },
+  "expected": {
+    "accepted": true,
+    "eventType": "payment.updated",
+    "invoiceStatus": "pending",
+    "paymentStatus": "pending",
+    "financialState": "pending",
+    "timelineEventType": null,
+    "timelineCategory": null,
+    "tenantResolution": {
+      "strategy": "patient_invoices.provider_payment_id",
+      "lookupPaymentId": "pay_fixture_mp_pending_001",
+      "tenantId": "tenant-fixture-001",
+      "patientId": "patient-fixture-001",
+      "shouldResolve": true
+    }
+  },
+  "payload": {
+    "id": "evt_mp_fixture_pending_001",
+    "live_mode": false,
+    "type": "payment",
+    "date_created": "2026-06-18T12:05:00.000Z",
+    "action": "payment.updated",
+    "data": {
+      "id": "pay_fixture_mp_pending_001"
+    }
+  },
+  "providerResource": {
+    "id": "pay_fixture_mp_pending_001",
+    "status": "pending",
+    "transaction_amount": 250,
+    "payment_method_id": "bolbradesco",
+    "payment_type_id": "ticket",
+    "date_approved": null,
+    "preference_id": "pref_fixture_mp_002",
+    "external_reference": "shr_inv_fixture_002"
+  }
+}

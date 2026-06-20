@@ -1087,8 +1087,16 @@ export default function TenantsManagementContent() {
                     <span className="text-muted-foreground">Integracoes</span>
                     <span className="flex items-center gap-2">
                       <IntegrationStatusDot
-                        status={tenant.asaasSubaccountStatus}
-                        label={tenant.asaasSubaccountStatus}
+                        status={
+                          tenant.mercadopagoStatus !== 'not_configured'
+                            ? tenant.mercadopagoStatus
+                            : tenant.asaasSubaccountStatus
+                        }
+                        label={
+                          tenant.mercadopagoStatus !== 'not_configured'
+                            ? tenant.mercadopagoStatus
+                            : tenant.asaasSubaccountStatus
+                        }
                       />
                       <IntegrationStatusDot
                         status={tenant.d4signStatus}
@@ -1143,7 +1151,7 @@ export default function TenantsManagementContent() {
                   MRR
                 </th>
                 <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
-                  Asaas
+                  Gateway
                 </th>
                 <th scope="col" className="px-4 py-3 text-left font-semibold text-muted-foreground">
                   D4Sign
@@ -1226,8 +1234,16 @@ export default function TenantsManagementContent() {
                     </td>
                     <td className="px-4 py-3">
                       <IntegrationStatusDot
-                        status={tenant.asaasSubaccountStatus}
-                        label={tenant.asaasSubaccountStatus}
+                        status={
+                          tenant.mercadopagoStatus !== 'not_configured'
+                            ? tenant.mercadopagoStatus
+                            : tenant.asaasSubaccountStatus
+                        }
+                        label={
+                          tenant.mercadopagoStatus !== 'not_configured'
+                            ? tenant.mercadopagoStatus
+                            : tenant.asaasSubaccountStatus
+                        }
                       />
                     </td>
                     <td className="px-4 py-3">

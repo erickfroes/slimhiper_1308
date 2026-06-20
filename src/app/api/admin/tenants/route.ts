@@ -293,6 +293,7 @@ export async function POST(request: Request) {
           },
           integrations: {
             asaas: { status: 'not_configured' },
+            mercadopago: { status: 'not_configured' },
             d4sign: { status: 'not_configured', docsLimit: usage.d4signDocsLimit },
           },
           onboarding: {

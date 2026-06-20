@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   const reason = normalizeText(body.reason, 500);
   const scope = normalizeText(body.scope, 240);
 
-  if (provider !== 'asaas' && provider !== 'd4sign') {
+  if (provider !== 'asaas' && provider !== 'd4sign' && provider !== 'mercadopago') {
     return jsonError('Provider invalido.', 400);
   }
 

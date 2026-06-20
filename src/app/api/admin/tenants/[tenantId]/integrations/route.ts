@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
 
-const PROVIDERS = new Set(['asaas', 'd4sign']);
+const PROVIDERS = new Set(['asaas', 'mercadopago', 'd4sign']);
 const OPERATIONAL_STATES = new Set(['normal', 'investigating', 'resolved']);
 
 function jsonError(message: string, status: number) {

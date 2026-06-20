@@ -33,6 +33,7 @@ export interface PatientBillingIdentityInput {
 }
 
 export interface BillingActionOptions {
+  provider?: BillingProvider;
   idempotencyKey?: string;
   sourceModule?: string;
   programId?: string | null;
@@ -178,8 +179,32 @@ export const PAYMENT_RECEIPT_ACCEPTED_MIME_TYPES = [
 ] as const;
 
 export const PAYMENT_RECEIPT_MAX_BYTES = 10 * 1024 * 1024;
-const FINANCIAL_ASAAS_DISABLED_MESSAGE =
-  'Asaas financeiro nao esta habilitado no plano deste tenant.';
+export type BillingProvider = 'asaas' | 'mercadopago';
+
+export const ACTIVE_BILLING_PROVIDER: BillingProvider = 'mercadopago';
+
+const PAYMENT_PROVIDER_DISABLED_MESSAGE =
+  'Provedor de pagamento nao esta habilitado no plano deste tenant.';
+const BILLING_PROVIDER_FEATURE_FLAGS = ['financial.mercadopago', 'financial.asaas'] as const;
+const BILLING_EDGE_FUNCTIONS = {
+  asaas: {
+    customer: 'asaas-create-patient-customer',
+    charge: 'asaas-create-patient-invoice',
+    subscription: 'asaas-create-patient-subscription',
+    refund: 'asaas-refund-payment',
+    sync: 'asaas-sync-payment',
+  },
+  mercadopago: {
+    customer: 'mercadopago-create-patient-customer',
+    charge: 'mercadopago-create-patient-invoice',
+    subscription: 'mercadopago-create-patient-subscription',
+    refund: 'mercadopago-refund-payment',
+    sync: 'mercadopago-sync-payment',
+  },
+} satisfies Record<
+  BillingProvider,
+  Record<'customer' | 'charge' | 'subscription' | 'refund' | 'sync', string>
+>;
 
 function isMockEnabled() {
   return isMockDataEnabled();
@@ -842,27 +867,51 @@ async function invoke<T>(fn: string, body: Record<string, unknown>) {
   return unwrap<T>(data);
 }
 
-export async function createPatientCustomer(
+async function requireBillingProviderFeatureFlag() {
+  let entitlementCheckFailed: SafeServiceError | null = null;
+
+  for (const featureFlag of BILLING_PROVIDER_FEATURE_FLAGS) {
+    const error = await requireClientFeatureFlag(featureFlag, PAYMENT_PROVIDER_DISABLED_MESSAGE);
+    if (!error) return null;
+    if (error.code === 'entitlement_check_failed') entitlementCheckFailed = error;
+  }
+
+  return entitlementCheckFailed ?? { message: PAYMENT_PROVIDER_DISABLED_MESSAGE };
+}
+
+function billingEdgeFunction(
+  action: keyof (typeof BILLING_EDGE_FUNCTIONS)[BillingProvider],
+  provider: BillingProvider = ACTIVE_BILLING_PROVIDER
+) {
+  return BILLING_EDGE_FUNCTIONS[provider][action];
+}
+
+export async function createBillingCustomer(
   patientId: string,
-  billingIdentity?: PatientBillingIdentityInput
+  billingIdentity?: PatientBillingIdentityInput,
+  provider: BillingProvider = ACTIVE_BILLING_PROVIDER
 ) {
   if (!patientId.trim()) {
-    return { data: null, error: { message: 'Paciente invalido para criar customer.' } };
+    return { data: null, error: { message: 'Paciente invalido para preparar cobranca.' } };
   }
   if (isMockEnabled())
     return { data: { id: `mock-customer-${patientId}` }, error: null as SafeServiceError | null };
-  const entitlementError = await requireClientFeatureFlag(
-    'financial.asaas',
-    FINANCIAL_ASAAS_DISABLED_MESSAGE
-  );
+  const entitlementError = await requireBillingProviderFeatureFlag();
   if (entitlementError) return { data: null, error: entitlementError };
-  return invoke<{ id: string }>('asaas-create-patient-customer', {
+  return invoke<{ id: string; status?: string }>(billingEdgeFunction('customer', provider), {
     patient_id: patientId,
     ...(billingIdentity?.cpfCnpj ? { cpf_cnpj: billingIdentity.cpfCnpj } : {}),
   });
 }
 
-export async function createPatientInvoice(
+export async function createPatientCustomer(
+  patientId: string,
+  billingIdentity?: PatientBillingIdentityInput
+) {
+  return createBillingCustomer(patientId, billingIdentity, 'asaas');
+}
+
+export async function createPatientCharge(
   patientId: string,
   amount: number,
   description: string,
@@ -894,8 +943,14 @@ export async function createPatientInvoice(
       error: null as SafeServiceError | null,
     };
 
-  const customer = await createPatientCustomer(patientId, billingIdentity);
-  if (customer.error) return { data: null, error: customer.error };
+  const provider = options?.provider ?? ACTIVE_BILLING_PROVIDER;
+  const entitlementError = await requireBillingProviderFeatureFlag();
+  if (entitlementError) return { data: null, error: entitlementError };
+
+  if (provider === 'asaas') {
+    const customer = await createBillingCustomer(patientId, billingIdentity, provider);
+    if (customer.error) return { data: null, error: customer.error };
+  }
 
   const idempotencyKey = normalizeIdempotencyKey(options?.idempotencyKey);
   const payload = {
@@ -904,9 +959,10 @@ export async function createPatientInvoice(
     description: description.trim(),
     due_date: dueDate,
     ...billingContextPayload(options),
+    ...(billingIdentity?.cpfCnpj ? { cpf_cnpj: billingIdentity.cpfCnpj } : {}),
     ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };
-  const res = await invoke<unknown>('asaas-create-patient-invoice', payload);
+  const res = await invoke<unknown>(billingEdgeFunction('charge', provider), payload);
   if (res.error) return { data: null, error: res.error };
   const charge = asChargeResult(res.data);
   return {
@@ -915,6 +971,17 @@ export async function createPatientInvoice(
       ? null
       : { message: 'Contrato invalido retornado pela Edge Function de cobranca.' },
   };
+}
+
+export async function createPatientInvoice(
+  patientId: string,
+  amount: number,
+  description: string,
+  dueDate: string,
+  billingIdentity?: PatientBillingIdentityInput,
+  options?: BillingActionOptions
+) {
+  return createPatientCharge(patientId, amount, description, dueDate, billingIdentity, options);
 }
 
 export async function createPatientSubscription(
@@ -944,8 +1011,14 @@ export async function createPatientSubscription(
       error: null as SafeServiceError | null,
     };
 
-  const customer = await createPatientCustomer(patientId, billingIdentity);
-  if (customer.error) return { data: null, error: customer.error };
+  const provider = options?.provider ?? ACTIVE_BILLING_PROVIDER;
+  const entitlementError = await requireBillingProviderFeatureFlag();
+  if (entitlementError) return { data: null, error: entitlementError };
+
+  if (provider === 'asaas') {
+    const customer = await createBillingCustomer(patientId, billingIdentity, provider);
+    if (customer.error) return { data: null, error: customer.error };
+  }
 
   const idempotencyKey = normalizeIdempotencyKey(options?.idempotencyKey);
   const payload = {
@@ -955,9 +1028,10 @@ export async function createPatientSubscription(
     cycle: interval,
     next_due_date: new Date().toISOString().slice(0, 10),
     ...billingContextPayload(options),
+    ...(billingIdentity?.cpfCnpj ? { cpf_cnpj: billingIdentity.cpfCnpj } : {}),
     ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };
-  const res = await invoke<unknown>('asaas-create-patient-subscription', payload);
+  const res = await invoke<unknown>(billingEdgeFunction('subscription', provider), payload);
   if (res.error) return { data: null, error: res.error };
   const charge = asChargeResult(res.data);
   return {
@@ -1046,10 +1120,10 @@ export async function getClinicFinanceReconciliation() {
             kind: 'webhook_unresolved',
             severity: 'medium',
             patientId: null,
-            patientName: 'Webhook Asaas',
+            patientName: 'Webhook provedor',
             invoiceId: null,
             paymentId: null,
-            description: 'Evento Asaas exige revisao operacional.',
+            description: 'Evento do provedor de pagamento exige revisao operacional.',
             expectedStatus: 'processed',
             actualStatus: 'ignored',
             expectedAmount: null,
@@ -1234,12 +1308,13 @@ export async function reviewPaymentReceipt(
   };
 }
 
-export async function refundPatientPayment(input: {
+export async function refundProviderPayment(input: {
   paymentId?: string | null;
   invoiceId?: string | null;
   amountCents: number;
   reason: string;
   idempotencyKey?: string;
+  provider?: BillingProvider;
 }) {
   if (!input.paymentId?.trim() && !input.invoiceId?.trim()) {
     return { data: null, error: { message: 'Pagamento ou cobranca obrigatoria para estorno.' } };
@@ -1263,12 +1338,10 @@ export async function refundPatientPayment(input: {
       error: null as SafeServiceError | null,
     };
   }
-  const entitlementError = await requireClientFeatureFlag(
-    'financial.asaas',
-    FINANCIAL_ASAAS_DISABLED_MESSAGE
-  );
+  const provider = input.provider ?? ACTIVE_BILLING_PROVIDER;
+  const entitlementError = await requireBillingProviderFeatureFlag();
   if (entitlementError) return { data: null, error: entitlementError };
-  const res = await invoke<unknown>('asaas-refund-payment', {
+  const res = await invoke<unknown>(billingEdgeFunction('refund', provider), {
     payment_id: input.paymentId ?? null,
     invoice_id: input.invoiceId ?? null,
     amount_cents: Math.round(input.amountCents),
@@ -1287,7 +1360,21 @@ export async function refundPatientPayment(input: {
   };
 }
 
-export async function syncAsaasPayment(invoiceId: string, reason = 'manual_sync') {
+export async function refundPatientPayment(input: {
+  paymentId?: string | null;
+  invoiceId?: string | null;
+  amountCents: number;
+  reason: string;
+  idempotencyKey?: string;
+}) {
+  return refundProviderPayment(input);
+}
+
+export async function syncProviderPayment(
+  invoiceId: string,
+  reason = 'manual_sync',
+  provider: BillingProvider = ACTIVE_BILLING_PROVIDER
+) {
   if (!invoiceId.trim()) return { data: null, error: { message: 'Cobranca invalida para sync.' } };
   if (isMockEnabled()) {
     return {
@@ -1295,12 +1382,9 @@ export async function syncAsaasPayment(invoiceId: string, reason = 'manual_sync'
       error: null as SafeServiceError | null,
     };
   }
-  const entitlementError = await requireClientFeatureFlag(
-    'financial.asaas',
-    FINANCIAL_ASAAS_DISABLED_MESSAGE
-  );
+  const entitlementError = await requireBillingProviderFeatureFlag();
   if (entitlementError) return { data: null, error: entitlementError };
-  const res = await invoke<unknown>('asaas-sync-payment', {
+  const res = await invoke<unknown>(billingEdgeFunction('sync', provider), {
     invoice_id: invoiceId,
     reason,
   });
@@ -1314,4 +1398,8 @@ export async function syncAsaasPayment(invoiceId: string, reason = 'manual_sync'
     },
     error: null as SafeServiceError | null,
   };
+}
+
+export async function syncAsaasPayment(invoiceId: string, reason = 'manual_sync') {
+  return syncProviderPayment(invoiceId, reason, 'asaas');
 }

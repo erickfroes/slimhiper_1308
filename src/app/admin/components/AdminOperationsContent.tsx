@@ -82,7 +82,7 @@ const sectionConfig: Record<
   integrations: {
     active: 'integrations',
     title: 'Integracoes',
-    description: 'Estado sanitizado de Asaas, D4Sign e webhooks sem chamar provedores.',
+    description: 'Estado sanitizado de Mercado Pago, Asaas legado, D4Sign e webhooks.',
   },
   security: {
     active: 'security',
@@ -337,7 +337,8 @@ function PlatformPlansPanel() {
         <div>
           <h2 className="text-sm font-bold text-foreground">Planos da plataforma</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Catalogo local usado na criacao/alteracao de tenants. Nenhuma chamada Asaas e executada.
+            Catalogo local usado na criacao/alteracao de tenants. Nenhuma chamada a provedor e
+            executada.
           </p>
         </div>
         <button
@@ -810,9 +811,10 @@ function Toolbar({
 
 function BillingSection({ snapshot, search }: { snapshot: PlatformAdminSnapshot; search: string }) {
   const tenants = snapshot.tenants.filter((tenant) => matchesTenantSearch(tenant, search));
-  const asaasIssues = snapshot.webhooks.filter(
+  const providerIssues = snapshot.webhooks.filter(
     (event) =>
-      event.provider === 'Asaas' && ['failed', 'dead_letter', 'retrying'].includes(event.status)
+      (event.provider === 'Mercado Pago' || event.provider === 'Asaas') &&
+      ['failed', 'dead_letter', 'retrying'].includes(event.status)
   );
   const suspended = tenants.filter((tenant) => tenant.status === 'suspended');
   const pastDue = tenants.filter((tenant) => tenant.saasSubscriptionStatus === 'past_due');
@@ -841,8 +843,8 @@ function BillingSection({ snapshot, search }: { snapshot: PlatformAdminSnapshot;
         <MetricCard
           icon={AlertTriangle}
           label="Atencao financeira"
-          value={pastDue.length + suspended.length + asaasIssues.length}
-          tone={pastDue.length || suspended.length || asaasIssues.length ? 'warning' : 'default'}
+          value={pastDue.length + suspended.length + providerIssues.length}
+          tone={pastDue.length || suspended.length || providerIssues.length ? 'warning' : 'default'}
         />
       </div>
 
@@ -866,7 +868,7 @@ function BillingSection({ snapshot, search }: { snapshot: PlatformAdminSnapshot;
                   'MRR',
                   'Proxima cobranca',
                   'Pagamento',
-                  'Asaas',
+                  'Gateway',
                   'Risco',
                   'Acoes',
                 ].map((header) => (
@@ -888,7 +890,8 @@ function BillingSection({ snapshot, search }: { snapshot: PlatformAdminSnapshot;
                   const risk =
                     tenant.saasSubscriptionStatus === 'past_due' || tenant.status === 'suspended'
                       ? 'Atencao'
-                      : tenant.asaasSubaccountStatus === 'error'
+                      : tenant.mercadopagoStatus === 'error' ||
+                          tenant.asaasSubaccountStatus === 'error'
                         ? 'Provider'
                         : 'OK';
                   return (
@@ -920,7 +923,13 @@ function BillingSection({ snapshot, search }: { snapshot: PlatformAdminSnapshot;
                         {tenant.paymentMethod || 'not_configured'}
                       </td>
                       <td className="px-4 py-3">
-                        <ProviderStatus status={tenant.asaasSubaccountStatus} />
+                        <ProviderStatus
+                          status={
+                            tenant.mercadopagoStatus !== 'not_configured'
+                              ? tenant.mercadopagoStatus
+                              : tenant.asaasSubaccountStatus
+                          }
+                        />
                       </td>
                       <td className="px-4 py-3">
                         <StatusPill tone={risk === 'OK' ? 'emerald' : 'amber'}>{risk}</StatusPill>
@@ -1161,6 +1170,7 @@ function IntegrationsSection({
   const tenants = snapshot.tenants.filter((tenant) => matchesTenantSearch(tenant, search));
   const integrationIssues = tenants.filter(
     (tenant) =>
+      ['error', 'blocked', 'quota_exceeded'].includes(tenant.mercadopagoStatus) ||
       ['error', 'blocked', 'quota_exceeded'].includes(tenant.asaasSubaccountStatus) ||
       ['error', 'blocked', 'quota_exceeded'].includes(tenant.d4signStatus)
   );
@@ -1170,8 +1180,13 @@ function IntegrationsSection({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <MetricCard
           icon={Link2}
-          label="Asaas ativo"
-          value={tenants.filter((tenant) => tenant.asaasSubaccountStatus === 'active').length}
+          label="Gateway ativo"
+          value={
+            tenants.filter(
+              (tenant) =>
+                tenant.mercadopagoStatus === 'active' || tenant.asaasSubaccountStatus === 'active'
+            ).length
+          }
           tone="success"
         />
         <MetricCard
@@ -1209,7 +1224,7 @@ function IntegrationsSection({
           <table className="w-full min-w-[920px] text-xs">
             <thead className="border-b border-border bg-muted/40 text-muted-foreground">
               <tr>
-                {['Tenant', 'Asaas', 'Conta', 'D4Sign', 'Docs', 'Webhooks', 'Acoes'].map(
+                {['Tenant', 'Gateway', 'Conta', 'D4Sign', 'Docs', 'Webhooks', 'Acoes'].map(
                   (header) => (
                     <th key={header} scope="col" className="px-4 py-3 text-left font-semibold">
                       {header}
@@ -1234,10 +1249,16 @@ function IntegrationsSection({
                       </Link>
                     </td>
                     <td className="px-4 py-3">
-                      <ProviderStatus status={tenant.asaasSubaccountStatus} />
+                      <ProviderStatus
+                        status={
+                          tenant.mercadopagoStatus !== 'not_configured'
+                            ? tenant.mercadopagoStatus
+                            : tenant.asaasSubaccountStatus
+                        }
+                      />
                     </td>
                     <td className="px-4 py-3 font-mono text-muted-foreground">
-                      {tenant.asaasAccountId || 'N/D'}
+                      {tenant.mercadopagoAccountId || tenant.asaasAccountId || 'N/D'}
                     </td>
                     <td className="px-4 py-3">
                       <ProviderStatus status={tenant.d4signStatus} />
