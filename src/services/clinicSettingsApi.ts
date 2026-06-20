@@ -437,6 +437,54 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
 }
 
+function readTenantId(value: unknown) {
+  const record = asRecord(value);
+  const tenant = asRecord(record.tenant);
+  return (
+    asString(tenant.id) ||
+    asString(tenant.tenantId) ||
+    asString(tenant.tenant_id) ||
+    asString(record.tenantId) ||
+    asString(record.tenant_id)
+  );
+}
+
+async function resolveClinicTenantId(inputTenantId: string) {
+  const normalizedTenantId = inputTenantId.trim();
+  if (isUuid(normalizedTenantId)) {
+    return { tenantId: normalizedTenantId, error: null as SafeServiceError | null };
+  }
+
+  try {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('get_clinic_settings_snapshot');
+    if (error) {
+      return {
+        tenantId: '',
+        error: asServiceError(error, 'Nao foi possivel identificar a clinica atual.'),
+      };
+    }
+
+    const tenantId = readTenantId(data);
+    if (!isUuid(tenantId)) {
+      return {
+        tenantId: '',
+        error: {
+          message:
+            'Nao foi possivel identificar a clinica atual. Recarregue a pagina e tente novamente.',
+        },
+      };
+    }
+
+    return { tenantId, error: null as SafeServiceError | null };
+  } catch (error) {
+    return {
+      tenantId: '',
+      error: asServiceError(error, 'Nao foi possivel identificar a clinica atual.'),
+    };
+  }
+}
+
 function initialsFrom(name: string, email: string) {
   const source = name.trim() || email.split('@')[0] || 'U';
   return source
@@ -821,12 +869,7 @@ function mapSnapshot(value: unknown, operationalValue: unknown = null): ClinicSe
   const record = asRecord(value);
   const operationalRecord = asRecord(operationalValue);
   const rawTenant = asRecord(record.tenant);
-  const tenantId =
-    asString(rawTenant.id) ||
-    asString(rawTenant.tenantId) ||
-    asString(rawTenant.tenant_id) ||
-    asString(record.tenantId) ||
-    asString(record.tenant_id);
+  const tenantId = readTenantId(record);
   const tenant: ClinicSettingsTenant = {
     id: tenantId,
     slug: asString(rawTenant.slug),
@@ -994,14 +1037,17 @@ export async function startClinicMercadoPagoOAuth(tenantId: string): Promise<{
   data: { authorizationUrl: string } | null;
   error: SafeServiceError | null;
 }> {
-  const normalizedTenantId = tenantId.trim();
-  const routeTenantId = isUuid(normalizedTenantId) ? normalizedTenantId : 'current';
+  const resolved = await resolveClinicTenantId(tenantId);
+  if (resolved.error) return { data: null, error: resolved.error };
 
   try {
-    const response = await fetch(`/api/admin/tenants/${routeTenantId}/mercadopago/oauth/start`, {
-      method: 'POST',
-      headers: { Accept: 'application/json' },
-    });
+    const response = await fetch(
+      `/api/admin/tenants/${resolved.tenantId}/mercadopago/oauth/start`,
+      {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      }
+    );
     const payload = (await response.json().catch(() => null)) as {
       data?: { authorizationUrl?: string } | null;
       error?: { message?: string } | null;
@@ -1024,8 +1070,9 @@ export async function disconnectClinicMercadoPagoOAuth(input: {
   tenantId: string;
   reason: string;
 }): Promise<{ error: SafeServiceError | null }> {
-  const tenantId = input.tenantId.trim();
-  const routeTenantId = isUuid(tenantId) ? tenantId : 'current';
+  const resolved = await resolveClinicTenantId(input.tenantId);
+  if (resolved.error) return { error: resolved.error };
+
   const reason = normalizeText(input.reason, 500);
   if (reason.length < 16) {
     return { error: { message: 'Informe um motivo auditavel com pelo menos 16 caracteres.' } };
@@ -1033,7 +1080,7 @@ export async function disconnectClinicMercadoPagoOAuth(input: {
 
   try {
     const response = await fetch(
-      `/api/admin/tenants/${routeTenantId}/mercadopago/oauth/disconnect`,
+      `/api/admin/tenants/${resolved.tenantId}/mercadopago/oauth/disconnect`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
