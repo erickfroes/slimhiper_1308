@@ -1,6 +1,6 @@
 # Mercado Pago Billing Runbook
 
-Last updated: 2026-06-18
+Last updated: 2026-06-20
 
 This runbook covers the provider-neutral Mercado Pago billing integration. It
 does not authorize provider API calls, migrations, bootstraps, or production
@@ -8,7 +8,10 @@ cutover by itself.
 
 ## Active Scope
 
-- MVP flow: single SlimHiper seller account with Checkout Pro redirect.
+- Active flow: tenant sellers connect their Mercado Pago account through OAuth;
+  patient charges use Checkout Pro with the connected tenant token.
+- SlimHiper platform plan billing remains a separate platform billing concern
+  and must not reuse tenant seller OAuth tokens.
 - One-time charges create a local invoice first, then create a Mercado Pago
   preference.
 - Webhooks and manual sync fetch the Mercado Pago payment before mutating local
@@ -16,8 +19,8 @@ cutover by itself.
 - Refunds require a resolved Mercado Pago payment id.
 - Asaas remains available only for legacy drain until a separate cleanup phase.
 
-Marketplace/OAuth, split payments, per-clinic sellers, and card vault flows are
-out of scope until product/security explicitly approve them.
+Split payments, card vault flows, and transparent checkout are out of scope
+until product/security explicitly approve them.
 
 ## Secrets
 
@@ -27,9 +30,11 @@ Server/Edge only:
 - `MERCADOPAGO_BASE_URL`
 - `MERCADOPAGO_WEBHOOK_SECRET`
 - `MERCADOPAGO_NOTIFICATION_URL`
+- `MERCADOPAGO_TOKEN_ENCRYPTION_KEY`
 - `MERCADOPAGO_CLIENT_ID`
 - `MERCADOPAGO_CLIENT_SECRET`
 - `MERCADOPAGO_OAUTH_REDIRECT_URL`
+- `MERCADOPAGO_OAUTH_TEST_TOKEN`
 
 Public key:
 
@@ -39,21 +44,33 @@ Public key:
 Never print secrets, raw provider payloads, CPF/CNPJ, real patient data, or
 provider identifiers tied to real people in logs or evidence.
 
+`MERCADOPAGO_TOKEN_ENCRYPTION_KEY` must be a 32-byte AES-GCM key. Prefer a
+base64 value generated per environment, for example with
+`node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`.
+Configure it in Vercel and as a Supabase Edge Function secret.
+
 ## Deploy Order
 
 1. Apply the provider-neutral schema migration in an authorized environment.
-2. Deploy Mercado Pago Edge Functions:
+2. Apply the tenant OAuth schema migration in an authorized environment.
+3. Deploy Mercado Pago Edge Functions:
    - `mercadopago-create-patient-customer`
    - `mercadopago-create-patient-invoice`
    - `mercadopago-create-patient-subscription`
    - `mercadopago-refund-payment`
    - `mercadopago-sync-payment`
    - `webhook-mercadopago`
-3. Configure `webhook-mercadopago` with `verify_jwt = false`.
-4. Configure Edge Function secrets in the target Supabase project.
-5. Configure the Mercado Pago notification URL only after the webhook URL and
-   secret are ready.
-6. Enable `financial.mercadopago` for authorized tenants/plans.
+4. Configure `webhook-mercadopago` with `verify_jwt = false`.
+5. Configure Edge Function secrets in the target Supabase project.
+6. Configure the Mercado Pago OAuth app redirect URL exactly as
+   `MERCADOPAGO_OAUTH_REDIRECT_URL`; for this implementation it should point to
+   `/api/admin/mercadopago/oauth/callback` on the target app origin.
+7. Configure the Mercado Pago notification URL only after the webhook URL and
+   secret are ready. The default Supabase Edge Function URL format is
+   `https://<project-ref>.supabase.co/functions/v1/webhook-mercadopago`.
+8. Enable `financial.mercadopago` for authorized tenants/plans.
+9. Connect each tenant from Admin > Tenants > Integrations > Mercado Pago or
+   Clinic > Settings > Integrations before creating patient payment links.
 
 Do not remove Asaas functions or secrets until all legacy Asaas invoices,
 subscriptions, refunds, and webhook events are drained.
@@ -90,8 +107,9 @@ run.
 - Validate `x-signature`, `x-request-id`, and `data.id` fail-closed.
 - Deduplicate before local mutation.
 - Fetch `GET /v1/payments/{id}` before trusting payment state.
-- Resolve tenant through local provider identifiers or pseudonymous external
-  reference.
+- Resolve the tenant from the `tenant_id` query parameter added to the
+  `notification_url` when the preference is created, then verify the fetched
+  payment resolves to a local invoice for the same tenant.
 - Store only sanitized summaries in `billing_provider_events` and
   `billing_webhook_events`.
 

@@ -8,10 +8,11 @@ import {
   bearerToken,
   corsHeaders,
   jsonResponse,
-  mercadoPagoFetch,
+  mercadoPagoFetchWithAccessToken,
   MERCADOPAGO_FEATURE_FLAGS,
   MERCADOPAGO_PROVIDER,
   normalizePaymentStatus,
+  resolveMercadoPagoTenantAccessToken,
   safeErrorMessage,
   safeText,
 } from '../_shared/mercadopago.ts';
@@ -303,8 +304,36 @@ Deno.serve(async (req) => {
     if (jobInsert.error) throw jobInsert.error;
     const jobId = String(jobInsert.data.id);
 
-    const providerResponse = await mercadoPagoFetch(
+    const tenantToken = await resolveMercadoPagoTenantAccessToken(Deno.env, admin, tenantId);
+    if (!tenantToken.accessToken) {
+      await admin
+        .from('billing_sync_jobs')
+        .update({
+          status: 'failed',
+          processed_at: new Date().toISOString(),
+          error_code: tenantToken.errorCode || 'tenant_mercadopago_not_connected',
+        })
+        .eq('id', jobId)
+        .eq('tenant_id', tenantId);
+
+      return jsonResponse(
+        Deno.env,
+        409,
+        {
+          ok: false,
+          error: {
+            code: tenantToken.errorCode || 'tenant_mercadopago_not_connected',
+            message: 'Mercado Pago OAuth account is not active for this tenant.',
+          },
+          meta: { tenantId, timestamp },
+        },
+        req
+      );
+    }
+
+    const providerResponse = await mercadoPagoFetchWithAccessToken(
       Deno.env,
+      tenantToken.accessToken,
       `/v1/payments/${encodeURIComponent(providerPaymentId)}`,
       { method: 'GET' }
     );

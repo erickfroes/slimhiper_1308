@@ -365,6 +365,12 @@ const INTEGRATION_DEFINITIONS = [
     description: 'Cobrancas, assinaturas e conciliacao por Edge Functions.',
   },
   {
+    id: 'mercadopago',
+    name: 'Mercado Pago',
+    category: 'Financeiro',
+    description: 'Checkout Pro por conta OAuth conectada ao tenant.',
+  },
+  {
     id: 'd4sign',
     name: 'D4Sign',
     category: 'Documentos',
@@ -421,6 +427,14 @@ function asServiceError(error: unknown, fallback: string): SafeServiceError {
     };
   }
   return { message: fallback };
+}
+
+function normalizeText(value: unknown, maxLength = 500) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, maxLength) : '';
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
 }
 
 function initialsFrom(name: string, email: string) {
@@ -787,11 +801,14 @@ function mapIntegrations(
 
   return INTEGRATION_DEFINITIONS.map((definition) => {
     const item = asRecord(integrationSettings[definition.id]);
+    const storedStatus = asString(item.status);
+    const statusEnabled =
+      storedStatus === 'enabled' || storedStatus === 'active' || storedStatus === 'connected';
     const enabled =
       asBoolean(item.enabled) ||
+      statusEnabled ||
       enabledFeatureFlags.has(definition.id) ||
       enabledFeatureFlags.has(`integration.${definition.id}`);
-    const storedStatus = asString(item.status);
     return {
       ...definition,
       enabled,
@@ -964,6 +981,72 @@ export async function updateClinicSettings(name: string | null, patch: ClinicSet
       data: null as ClinicSettingsSnapshot | null,
       error: asServiceError(error, 'Nao foi possivel salvar configuracoes.'),
     };
+  }
+}
+
+export async function startClinicMercadoPagoOAuth(tenantId: string): Promise<{
+  data: { authorizationUrl: string } | null;
+  error: SafeServiceError | null;
+}> {
+  const normalizedTenantId = tenantId.trim();
+  if (!isUuid(normalizedTenantId)) return { data: null, error: { message: 'Tenant invalido.' } };
+
+  try {
+    const response = await fetch(
+      `/api/admin/tenants/${normalizedTenantId}/mercadopago/oauth/start`,
+      {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      }
+    );
+    const payload = (await response.json().catch(() => null)) as {
+      data?: { authorizationUrl?: string } | null;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error || !payload?.data?.authorizationUrl) {
+      return {
+        data: null,
+        error: { message: payload?.error?.message ?? 'Nao foi possivel iniciar Mercado Pago.' },
+      };
+    }
+
+    return { data: { authorizationUrl: payload.data.authorizationUrl }, error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Nao foi possivel iniciar Mercado Pago.') };
+  }
+}
+
+export async function disconnectClinicMercadoPagoOAuth(input: {
+  tenantId: string;
+  reason: string;
+}): Promise<{ error: SafeServiceError | null }> {
+  const tenantId = input.tenantId.trim();
+  const reason = normalizeText(input.reason, 500);
+  if (!isUuid(tenantId)) return { error: { message: 'Tenant invalido.' } };
+  if (reason.length < 16) {
+    return { error: { message: 'Informe um motivo auditavel com pelo menos 16 caracteres.' } };
+  }
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${tenantId}/mercadopago/oauth/disconnect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        error: { message: payload?.error?.message ?? 'Nao foi possivel desconectar Mercado Pago.' },
+      };
+    }
+
+    return { error: null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Nao foi possivel desconectar Mercado Pago.') };
   }
 }
 

@@ -10,11 +10,12 @@ import {
   corsHeaders,
   isDateInput,
   jsonResponse,
-  mercadoPagoFetch,
+  mercadoPagoFetchWithAccessToken,
   MERCADOPAGO_FEATURE_FLAGS,
   MERCADOPAGO_PROVIDER,
   normalizeSubscriptionStatus,
   pickPaymentLink,
+  resolveMercadoPagoTenantAccessToken,
   safeErrorMessage,
   safeIdempotencyKey,
   safeText,
@@ -218,6 +219,23 @@ Deno.serve(async (req) => {
       );
     }
 
+    const tenantToken = await resolveMercadoPagoTenantAccessToken(Deno.env, admin, tenantId);
+    if (!tenantToken.accessToken) {
+      return jsonResponse(
+        Deno.env,
+        409,
+        {
+          ok: false,
+          error: {
+            code: tenantToken.errorCode || 'tenant_mercadopago_not_connected',
+            message: 'Mercado Pago OAuth account is not active for this tenant.',
+          },
+          meta: { tenantId, timestamp },
+        },
+        req
+      );
+    }
+
     const { data: pii, error: piiError } = await supabase
       .from('patient_pii')
       .select('email')
@@ -305,23 +323,28 @@ Deno.serve(async (req) => {
 
     if (insertError) throw insertError;
 
-    const providerResponse = await mercadoPagoFetch(Deno.env, '/preapproval', {
-      method: 'POST',
-      idempotencyKey: idempotencyKey || `subscription:${subscription.id}`,
-      body: JSON.stringify({
-        reason: description,
-        external_reference: externalReference,
-        payer_email: payerEmail,
-        status: 'pending',
-        auto_recurring: {
-          frequency: cycle.frequency,
-          frequency_type: cycle.frequencyType,
-          transaction_amount: centsToProviderAmount(amountCents),
-          currency_id: 'BRL',
-          start_date: `${nextDueDate}T00:00:00.000-03:00`,
-        },
-      }),
-    });
+    const providerResponse = await mercadoPagoFetchWithAccessToken(
+      Deno.env,
+      tenantToken.accessToken,
+      '/preapproval',
+      {
+        method: 'POST',
+        idempotencyKey: idempotencyKey || `subscription:${subscription.id}`,
+        body: JSON.stringify({
+          reason: description,
+          external_reference: externalReference,
+          payer_email: payerEmail,
+          status: 'pending',
+          auto_recurring: {
+            frequency: cycle.frequency,
+            frequency_type: cycle.frequencyType,
+            transaction_amount: centsToProviderAmount(amountCents),
+            currency_id: 'BRL',
+            start_date: `${nextDueDate}T00:00:00.000-03:00`,
+          },
+        }),
+      }
+    );
 
     if (!providerResponse.ok) {
       console.error('[mercadopago-create-patient-subscription] provider_error', {

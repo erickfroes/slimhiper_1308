@@ -52,6 +52,30 @@ function readIntegrationOperations(settings: unknown) {
   };
 }
 
+async function readMercadoPagoAccount(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  tenantId: string
+) {
+  if (!admin) return null;
+  const result = await admin
+    .from('mercadopago_tenant_accounts')
+    .select(
+      'status,account_ref_masked,connected_at,expires_at,last_refreshed_at,error_code,error_message'
+    )
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  if (result.error || !result.data) return null;
+  return {
+    status: normalizeText(result.data.status, 40) || 'not_configured',
+    accountRef: normalizeText(result.data.account_ref_masked, 120),
+    connectedAt: normalizeText(result.data.connected_at, 80) || null,
+    expiresAt: normalizeText(result.data.expires_at, 80) || null,
+    lastRefreshedAt: normalizeText(result.data.last_refreshed_at, 80) || null,
+    errorCode: normalizeText(result.data.error_code, 80) || null,
+    errorMessage: normalizeText(result.data.error_message, 240) || null,
+  };
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ tenantId: string }> }) {
   const session = await getCurrentAppSession();
   if (!session) return jsonError('Sessao obrigatoria para carregar tenant.', 401);
@@ -75,11 +99,14 @@ export async function GET(_request: Request, context: { params: Promise<{ tenant
   if (error) return jsonError('Falha ao carregar tenant.', 500);
   if (!tenant) return jsonError('Tenant nao encontrado.', 404);
 
+  const mercadopagoAccount = await readMercadoPagoAccount(admin, tenantId);
+
   return NextResponse.json({
     data: {
       tenantId,
       doctorsLimit: readDoctorsLimit(tenant.settings),
       integrationOperations: readIntegrationOperations(tenant.settings),
+      mercadopagoAccount,
     },
     error: null,
   });

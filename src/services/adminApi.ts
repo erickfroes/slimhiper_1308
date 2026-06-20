@@ -15,6 +15,7 @@ export type AdminProviderStatus =
   | 'blocked'
   | 'quota_exceeded'
   | 'error'
+  | 'disconnected'
   | 'not_configured';
 export type AdminIntegrationProvider = 'asaas' | 'mercadopago' | 'd4sign';
 export type AdminIntegrationOperationalState = 'normal' | 'investigating' | 'resolved';
@@ -49,6 +50,10 @@ export interface AdminTenantRow {
   asaasAccountId: string;
   mercadopagoStatus: AdminProviderStatus;
   mercadopagoAccountId: string;
+  mercadopagoConnectedAt: string | null;
+  mercadopagoExpiresAt: string | null;
+  mercadopagoLastRefreshedAt: string | null;
+  mercadopagoErrorMessage: string | null;
   d4signStatus: AdminProviderStatus;
   d4signDocsUsed: number;
   d4signDocsLimit: number;
@@ -247,6 +252,16 @@ export interface AdminTenantDetail {
   webhookErrors: AdminTenantWebhookError[];
   supportSessions: AdminSupportSession[];
   breakGlassRequests: AdminBreakGlassRequest[];
+}
+
+export interface AdminMercadoPagoAccountStatus {
+  status: AdminProviderStatus;
+  accountRef: string;
+  connectedAt: string | null;
+  expiresAt: string | null;
+  lastRefreshedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
 }
 
 export interface PlatformAdminSupportSummary extends AdminSupportSession {
@@ -525,6 +540,7 @@ function normalizeProviderStatus(value: unknown): AdminProviderStatus {
   }
   if (normalized === 'quota_exceeded') return 'quota_exceeded';
   if (normalized === 'error' || normalized === 'failed') return 'error';
+  if (normalized === 'disconnected') return 'disconnected';
   return 'not_configured';
 }
 
@@ -593,6 +609,10 @@ function mapTenantRow(value: unknown): AdminTenantRow {
         (asString(record.paymentMethod).toLowerCase() === 'mercadopago' ? 'active' : undefined)
     ),
     mercadopagoAccountId: asString(record.mercadopagoAccountId),
+    mercadopagoConnectedAt: asNullableString(record.mercadopagoConnectedAt),
+    mercadopagoExpiresAt: asNullableString(record.mercadopagoExpiresAt),
+    mercadopagoLastRefreshedAt: asNullableString(record.mercadopagoLastRefreshedAt),
+    mercadopagoErrorMessage: asNullableString(record.mercadopagoErrorMessage),
     d4signStatus: normalizeProviderStatus(record.d4signStatus),
     d4signDocsUsed: asNumber(record.d4signDocsUsed),
     d4signDocsLimit: asNumber(record.d4signDocsLimit, 100),
@@ -892,6 +912,7 @@ function mapTenantDetail(value: unknown): AdminTenantDetail {
 function mapTenantConfigSummary(value: unknown) {
   const record = asRecord(value);
   const integrationOperations = asRecord(record.integrationOperations);
+  const mercadopagoAccount = asRecord(record.mercadopagoAccount);
   return {
     doctorsLimit: asNumber(record.doctorsLimit, 1),
     integrationOperations: {
@@ -899,6 +920,15 @@ function mapTenantConfigSummary(value: unknown) {
       mercadopago: mapIntegrationOperationState(integrationOperations.mercadopago),
       d4sign: mapIntegrationOperationState(integrationOperations.d4sign),
     },
+    mercadopagoAccount: {
+      status: normalizeProviderStatus(mercadopagoAccount.status),
+      accountRef: asString(mercadopagoAccount.accountRef),
+      connectedAt: asNullableString(mercadopagoAccount.connectedAt),
+      expiresAt: asNullableString(mercadopagoAccount.expiresAt),
+      lastRefreshedAt: asNullableString(mercadopagoAccount.lastRefreshedAt),
+      errorCode: asNullableString(mercadopagoAccount.errorCode),
+      errorMessage: asNullableString(mercadopagoAccount.errorMessage),
+    } satisfies AdminMercadoPagoAccountStatus,
   };
 }
 
@@ -1240,6 +1270,7 @@ export async function getPlatformTenantConfig(tenantId: string): Promise<{
   data: {
     doctorsLimit: number;
     integrationOperations: Record<AdminIntegrationProvider, AdminIntegrationOperationState>;
+    mercadopagoAccount: AdminMercadoPagoAccountStatus;
   } | null;
   error: SafeServiceError | null;
 }> {
@@ -1427,6 +1458,16 @@ export async function getTenantDetail(tenantId: string): Promise<{
     if (configResult.data) {
       detail.tenant.doctorsLimit = configResult.data.doctorsLimit;
       detail.tenant.integrationOperations = configResult.data.integrationOperations;
+      const mercadoPagoAccount = configResult.data.mercadopagoAccount;
+      if (mercadoPagoAccount.status !== 'not_configured') {
+        detail.tenant.mercadopagoStatus = mercadoPagoAccount.status;
+      }
+      detail.tenant.mercadopagoAccountId =
+        mercadoPagoAccount.accountRef || detail.tenant.mercadopagoAccountId;
+      detail.tenant.mercadopagoConnectedAt = mercadoPagoAccount.connectedAt;
+      detail.tenant.mercadopagoExpiresAt = mercadoPagoAccount.expiresAt;
+      detail.tenant.mercadopagoLastRefreshedAt = mercadoPagoAccount.lastRefreshedAt;
+      detail.tenant.mercadopagoErrorMessage = mercadoPagoAccount.errorMessage;
     }
 
     return { data: detail, error: null };
@@ -1498,6 +1539,79 @@ export async function updatePlatformTenantIntegrationState(input: {
     };
   } catch (error) {
     return { data: null, error: asServiceError(error, 'Falha ao atualizar integracao local.') };
+  }
+}
+
+export async function startTenantMercadoPagoOAuth(tenantId: string): Promise<{
+  data: { authorizationUrl: string } | null;
+  error: SafeServiceError | null;
+}> {
+  const normalizedTenantId = tenantId.trim();
+  if (!isUuid(normalizedTenantId)) return { data: null, error: { message: 'Tenant invalido.' } };
+
+  try {
+    const response = await fetch(
+      `/api/admin/tenants/${normalizedTenantId}/mercadopago/oauth/start`,
+      {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      }
+    );
+    const payload = (await response.json().catch(() => null)) as {
+      data?: { authorizationUrl?: string } | null;
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error || !payload?.data?.authorizationUrl) {
+      return {
+        data: null,
+        error: {
+          message: payload?.error?.message ?? 'Falha ao iniciar OAuth Mercado Pago.',
+        },
+      };
+    }
+
+    return { data: { authorizationUrl: payload.data.authorizationUrl }, error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Falha ao iniciar OAuth Mercado Pago.') };
+  }
+}
+
+export async function disconnectTenantMercadoPagoOAuth(input: {
+  tenantId: string;
+  reason: string;
+}): Promise<{
+  error: SafeServiceError | null;
+}> {
+  const tenantId = input.tenantId.trim();
+  const reason = normalizeText(input.reason, 500);
+
+  if (!isUuid(tenantId)) return { error: { message: 'Tenant invalido.' } };
+  if (reason.length < 16) {
+    return { error: { message: 'Informe um motivo auditavel com pelo menos 16 caracteres.' } };
+  }
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${tenantId}/mercadopago/oauth/disconnect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      error?: { message?: string } | null;
+    } | null;
+
+    if (!response.ok || payload?.error) {
+      return {
+        error: {
+          message: payload?.error?.message ?? 'Falha ao desconectar Mercado Pago.',
+        },
+      };
+    }
+
+    return { error: null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Falha ao desconectar Mercado Pago.') };
   }
 }
 

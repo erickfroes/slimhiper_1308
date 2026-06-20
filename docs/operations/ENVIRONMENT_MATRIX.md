@@ -66,27 +66,29 @@ sao nomes e finalidade; mantenha vazios em templates versionados.
 
 ### Providers e webhooks
 
-| Variavel                         | Ambientes permitidos                                                    | Observacao                                                                                          |
-| -------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `D4SIGN_TOKEN_API`               | Local/staging sandbox; production somente apos go/no-go                 | Nunca imprimir. Sandbox e production segregados.                                                    |
-| `D4SIGN_CRYPT_KEY`               | Local/staging sandbox; production somente apos go/no-go                 | Secret backend/Edge only.                                                                           |
-| `D4SIGN_BASE_URL`                | Local/staging sandbox; production                                       | Base sandbox/production por ambiente.                                                               |
-| `D4SIGN_SAFE_UUID`               | Local/staging sandbox; production                                       | Cofre do ambiente; nao reutilizar producao em preview.                                              |
-| `D4SIGN_FOLDER_UUID`             | Local/staging sandbox; production                                       | Pasta/cofre segregado.                                                                              |
-| `D4SIGN_AUTO_DISCOVER_SAFE`      | Local/staging sandbox                                                   | Opt-in operacional; nao ativar em producao sem runbook.                                             |
-| `D4SIGN_WEBHOOK_TOKEN`           | Staging/production segregados                                           | Usar apenas em endpoints do ambiente.                                                               |
-| `D4SIGN_WEBHOOK_HMAC_SECRET`     | Staging/production segregados                                           | Rotacao conforme runbook de incidentes.                                                             |
-| `ASAAS_API_KEY`                  | Local/staging sandbox; production somente apos go/no-go                 | Nunca misturar sandbox/producao.                                                                    |
-| `ASAAS_BASE_URL`                 | Local/staging sandbox; production                                       | Base por ambiente.                                                                                  |
-| `ASAAS_WEBHOOK_TOKEN`            | Staging/production segregados                                           | Validacao fail-closed.                                                                              |
-| `MERCADOPAGO_ACCESS_TOKEN`       | Local/staging com credencial de teste; production somente apos go/no-go | Secret server/Edge only. Nunca `NEXT_PUBLIC_*`.                                                     |
-| `MERCADOPAGO_BASE_URL`           | Local/staging/production                                                | Default esperado: `https://api.mercadopago.com`; validar credencial de teste antes de sandbox real. |
-| `MERCADOPAGO_WEBHOOK_SECRET`     | Staging/production segregados                                           | Usado para validar `x-signature` fail-closed.                                                       |
-| `MERCADOPAGO_NOTIFICATION_URL`   | Staging/production por ambiente                                         | URL publica do webhook configurada no provider.                                                     |
-| `MERCADOPAGO_PUBLIC_KEY`         | Somente se SDK/frontend futuro for aprovado                             | Publica, mas nao necessaria para Checkout Pro redirect MVP.                                         |
-| `MERCADOPAGO_CLIENT_ID`          | Marketplace/OAuth somente se aprovado                                   | Server/admin config; nao requerido no MVP single-seller.                                            |
-| `MERCADOPAGO_CLIENT_SECRET`      | Marketplace/OAuth somente se aprovado                                   | Secret server-only.                                                                                 |
-| `MERCADOPAGO_OAUTH_REDIRECT_URL` | Marketplace/OAuth somente se aprovado                                   | URL de callback segregada por ambiente.                                                             |
+| Variavel                           | Ambientes permitidos                                                    | Observacao                                                                                          |
+| ---------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `D4SIGN_TOKEN_API`                 | Local/staging sandbox; production somente apos go/no-go                 | Nunca imprimir. Sandbox e production segregados.                                                    |
+| `D4SIGN_CRYPT_KEY`                 | Local/staging sandbox; production somente apos go/no-go                 | Secret backend/Edge only.                                                                           |
+| `D4SIGN_BASE_URL`                  | Local/staging sandbox; production                                       | Base sandbox/production por ambiente.                                                               |
+| `D4SIGN_SAFE_UUID`                 | Local/staging sandbox; production                                       | Cofre do ambiente; nao reutilizar producao em preview.                                              |
+| `D4SIGN_FOLDER_UUID`               | Local/staging sandbox; production                                       | Pasta/cofre segregado.                                                                              |
+| `D4SIGN_AUTO_DISCOVER_SAFE`        | Local/staging sandbox                                                   | Opt-in operacional; nao ativar em producao sem runbook.                                             |
+| `D4SIGN_WEBHOOK_TOKEN`             | Staging/production segregados                                           | Usar apenas em endpoints do ambiente.                                                               |
+| `D4SIGN_WEBHOOK_HMAC_SECRET`       | Staging/production segregados                                           | Rotacao conforme runbook de incidentes.                                                             |
+| `ASAAS_API_KEY`                    | Local/staging sandbox; production somente apos go/no-go                 | Nunca misturar sandbox/producao.                                                                    |
+| `ASAAS_BASE_URL`                   | Local/staging sandbox; production                                       | Base por ambiente.                                                                                  |
+| `ASAAS_WEBHOOK_TOKEN`              | Staging/production segregados                                           | Validacao fail-closed.                                                                              |
+| `MERCADOPAGO_ACCESS_TOKEN`         | Local/staging com credencial de teste; production somente apos go/no-go | Secret server/Edge only. Nunca `NEXT_PUBLIC_*`.                                                     |
+| `MERCADOPAGO_BASE_URL`             | Local/staging/production                                                | Default esperado: `https://api.mercadopago.com`; validar credencial de teste antes de sandbox real. |
+| `MERCADOPAGO_WEBHOOK_SECRET`       | Staging/production segregados                                           | Usado para validar `x-signature` fail-closed.                                                       |
+| `MERCADOPAGO_NOTIFICATION_URL`     | Staging/production por ambiente                                         | URL publica do webhook configurada no provider.                                                     |
+| `MERCADOPAGO_TOKEN_ENCRYPTION_KEY` | Local/staging/production segregados                                     | Chave AES-GCM de 32 bytes para tokens OAuth por tenant; gerar em base64 e manter server/Edge only.  |
+| `MERCADOPAGO_PUBLIC_KEY`           | Somente se SDK/frontend futuro for aprovado                             | Publica, mas nao necessaria para Checkout Pro redirect MVP.                                         |
+| `MERCADOPAGO_CLIENT_ID`            | Marketplace/OAuth por tenant                                            | Server/admin config para gerar a URL de autorizacao OAuth.                                          |
+| `MERCADOPAGO_CLIENT_SECRET`        | Marketplace/OAuth somente se aprovado                                   | Secret server-only.                                                                                 |
+| `MERCADOPAGO_OAUTH_REDIRECT_URL`   | Marketplace/OAuth somente se aprovado                                   | URL de callback segregada por ambiente.                                                             |
+| `MERCADOPAGO_OAUTH_TEST_TOKEN`     | Local/staging sandbox                                                   | Opcional; solicita token de teste no callback OAuth quando habilitado.                              |
 
 ### Provedores opcionais de IA
 
