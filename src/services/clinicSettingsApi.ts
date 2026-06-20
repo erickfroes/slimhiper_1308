@@ -821,8 +821,14 @@ function mapSnapshot(value: unknown, operationalValue: unknown = null): ClinicSe
   const record = asRecord(value);
   const operationalRecord = asRecord(operationalValue);
   const rawTenant = asRecord(record.tenant);
+  const tenantId =
+    asString(rawTenant.id) ||
+    asString(rawTenant.tenantId) ||
+    asString(rawTenant.tenant_id) ||
+    asString(record.tenantId) ||
+    asString(record.tenant_id);
   const tenant: ClinicSettingsTenant = {
-    id: asString(rawTenant.id),
+    id: tenantId,
     slug: asString(rawTenant.slug),
     name: asString(rawTenant.name, 'Clinica'),
     status: asString(rawTenant.status, 'active'),
@@ -989,16 +995,13 @@ export async function startClinicMercadoPagoOAuth(tenantId: string): Promise<{
   error: SafeServiceError | null;
 }> {
   const normalizedTenantId = tenantId.trim();
-  if (!isUuid(normalizedTenantId)) return { data: null, error: { message: 'Tenant invalido.' } };
+  const routeTenantId = isUuid(normalizedTenantId) ? normalizedTenantId : 'current';
 
   try {
-    const response = await fetch(
-      `/api/admin/tenants/${normalizedTenantId}/mercadopago/oauth/start`,
-      {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-      }
-    );
+    const response = await fetch(`/api/admin/tenants/${routeTenantId}/mercadopago/oauth/start`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
     const payload = (await response.json().catch(() => null)) as {
       data?: { authorizationUrl?: string } | null;
       error?: { message?: string } | null;
@@ -1022,18 +1025,21 @@ export async function disconnectClinicMercadoPagoOAuth(input: {
   reason: string;
 }): Promise<{ error: SafeServiceError | null }> {
   const tenantId = input.tenantId.trim();
+  const routeTenantId = isUuid(tenantId) ? tenantId : 'current';
   const reason = normalizeText(input.reason, 500);
-  if (!isUuid(tenantId)) return { error: { message: 'Tenant invalido.' } };
   if (reason.length < 16) {
     return { error: { message: 'Informe um motivo auditavel com pelo menos 16 caracteres.' } };
   }
 
   try {
-    const response = await fetch(`/api/admin/tenants/${tenantId}/mercadopago/oauth/disconnect`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason }),
-    });
+    const response = await fetch(
+      `/api/admin/tenants/${routeTenantId}/mercadopago/oauth/disconnect`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      }
+    );
     const payload = (await response.json().catch(() => null)) as {
       error?: { message?: string } | null;
     } | null;

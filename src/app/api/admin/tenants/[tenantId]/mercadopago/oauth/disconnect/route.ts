@@ -28,6 +28,15 @@ function canManageTenantMercadoPago(session: AppSession, tenantId: string) {
   return session.activeTenant?.id === tenantId && session.permissions.includes('financial.write');
 }
 
+function resolveTenantId(session: AppSession, tenantId: string) {
+  const normalized = tenantId.trim();
+  if (isUuid(normalized)) return normalized;
+  if (normalized === 'current' && session.activeTenant?.id && isUuid(session.activeTenant.id)) {
+    return session.activeTenant.id;
+  }
+  return '';
+}
+
 function disconnectMercadoPagoSettings(settings: unknown) {
   const current = asRecord(settings);
   const integrations = asRecord(current.integrations);
@@ -51,7 +60,8 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
   const session = await getCurrentAppSession();
   if (!session) return jsonError('Sessao obrigatoria para desconectar Mercado Pago.', 401);
 
-  const { tenantId } = await context.params;
+  const params = await context.params;
+  const tenantId = resolveTenantId(session, params.tenantId);
   if (!isUuid(tenantId)) return jsonError('Tenant invalido.', 400);
   if (!canManageTenantMercadoPago(session, tenantId)) {
     return jsonError('Permissao financeira obrigatoria para desconectar Mercado Pago.', 403);
