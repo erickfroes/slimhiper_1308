@@ -128,6 +128,25 @@ function optionalPreferenceUrls(invoiceId: string, tenantId: string) {
   };
 }
 
+function clampInstallments(value: unknown, fallback = 12) {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim()
+        ? Number(value)
+        : fallback;
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(12, Math.max(1, Math.trunc(parsed)));
+}
+
+function preferencePaymentMethods(maxInstallments: number) {
+  return {
+    payment_methods: {
+      installments: clampInstallments(maxInstallments),
+    },
+  };
+}
+
 Deno.serve(async (req) => {
   const timestamp = new Date().toISOString();
 
@@ -202,6 +221,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => null);
+    const invoiceId = asString(body?.invoice_id ?? body?.invoiceId);
     const patientId = asString(body?.patient_id);
     const amountCents = asPositiveInteger(body?.amount_cents);
     const dueDate = asString(body?.due_date);
@@ -212,6 +232,316 @@ Deno.serve(async (req) => {
     const packageId = asString(body?.package_id ?? body?.packageId) || null;
     const enrollmentId = asString(body?.enrollment_id ?? body?.enrollmentId) || null;
     const serviceId = asString(body?.service_id ?? body?.serviceId) || null;
+    const maxInstallments = clampInstallments(body?.max_installments ?? body?.maxInstallments);
+
+    if (invoiceId) {
+      const { data: existingInvoice, error: invoiceError } = await admin
+        .from('patient_invoices')
+        .select(
+          'id,tenant_id,patient_id,provider,status,amount_cents,due_date,paid_at,description,invoice_url,payment_link,asaas_invoice_id,provider_payment_id,provider_invoice_id,provider_preference_id,metadata,source_module,program_id,package_id,enrollment_id,service_id'
+        )
+        .eq('id', invoiceId)
+        .maybeSingle();
+
+      if (invoiceError) throw invoiceError;
+      const invoice = existingInvoice ? asRecord(existingInvoice) : null;
+      const invoicePatientId = asString(invoice?.patient_id);
+      const invoiceTenantId = asString(invoice?.tenant_id);
+      if (!invoice || !invoicePatientId || !invoiceTenantId) {
+        return jsonResponse(
+          Deno.env,
+          404,
+          {
+            ok: false,
+            error: { code: 'invoice_not_found', message: 'Invoice was not found.' },
+            meta: { timestamp },
+          },
+          req
+        );
+      }
+
+      const tenantResolution = await resolvePatientTenant({
+        supabase,
+        userId: user.id,
+        patientId: invoicePatientId,
+      });
+      if (tenantResolution.error) return tenantResolution.error;
+      const tenantId = tenantResolution.tenantId as string;
+      if (tenantId !== invoiceTenantId) {
+        return jsonResponse(
+          Deno.env,
+          403,
+          {
+            ok: false,
+            error: { code: 'forbidden', message: 'Invoice tenant mismatch.' },
+            meta: { timestamp },
+          },
+          req
+        );
+      }
+
+      const invoiceStatus = asString(invoice.status).toLowerCase();
+      if (
+        asString(invoice.paid_at) ||
+        ['paid', 'pago', 'received', 'confirmed', 'cancelled', 'canceled', 'cancelado'].includes(
+          invoiceStatus
+        )
+      ) {
+        return jsonResponse(
+          Deno.env,
+          409,
+          {
+            ok: false,
+            error: {
+              code: 'invoice_not_payable',
+              message: 'Only open invoices can receive a payment link.',
+            },
+            meta: { tenantId, timestamp },
+          },
+          req
+        );
+      }
+
+      const existingPaymentLink = asString(invoice.payment_link) || asString(invoice.invoice_url);
+      if (existingPaymentLink) {
+        return jsonResponse(
+          Deno.env,
+          200,
+          {
+            ok: true,
+            data: {
+              id: invoiceId,
+              status: invoice.status,
+              invoice_url: invoice.invoice_url ?? null,
+              payment_link: invoice.payment_link ?? invoice.invoice_url ?? null,
+            },
+            meta: { tenantId, timestamp, reused: true },
+          },
+          req
+        );
+      }
+
+      if (
+        asString(invoice.asaas_invoice_id) ||
+        asString(invoice.provider_payment_id) ||
+        asString(invoice.provider_invoice_id) ||
+        asString(invoice.provider_preference_id)
+      ) {
+        return jsonResponse(
+          Deno.env,
+          409,
+          {
+            ok: false,
+            error: {
+              code: 'invoice_provider_already_linked',
+              message: 'Invoice already has provider identifiers.',
+            },
+            meta: { tenantId, timestamp },
+          },
+          req
+        );
+      }
+
+      if (!(await tenantHasBillingProviderFeature(admin, tenantId))) {
+        return jsonResponse(
+          Deno.env,
+          403,
+          {
+            ok: false,
+            error: {
+              code: 'plan_feature_disabled',
+              message: 'Payment provider is not enabled for this tenant plan.',
+            },
+            meta: { tenantId, timestamp },
+          },
+          req
+        );
+      }
+
+      const tenantToken = await resolveMercadoPagoTenantAccessToken(Deno.env, admin, tenantId);
+      if (!tenantToken.accessToken) {
+        return jsonResponse(
+          Deno.env,
+          409,
+          {
+            ok: false,
+            error: {
+              code: tenantToken.errorCode || 'tenant_mercadopago_not_connected',
+              message: 'Mercado Pago OAuth account is not active for this tenant.',
+            },
+            meta: { tenantId, timestamp },
+          },
+          req
+        );
+      }
+
+      const invoiceMetadata = asRecord(invoice.metadata);
+      const invoiceAmountCents = asPositiveInteger(invoice.amount_cents);
+      const invoiceDescription =
+        safeText(invoice.description, 240) || `Cobranca ${invoiceId.slice(0, 8)}`;
+      const maxInstallments = clampInstallments(
+        body?.max_installments ??
+          body?.maxInstallments ??
+          invoiceMetadata.max_installments ??
+          invoiceMetadata.maxInstallments ??
+          invoiceMetadata.installments
+      );
+
+      if (!invoiceAmountCents) {
+        return jsonResponse(
+          Deno.env,
+          400,
+          {
+            ok: false,
+            error: {
+              code: 'invalid_invoice_amount',
+              message: 'Invoice amount must be greater than zero.',
+            },
+            meta: { tenantId, timestamp },
+          },
+          req
+        );
+      }
+
+      const externalReference =
+        asString(invoiceMetadata.external_reference) ||
+        `shr_inv_${crypto.randomUUID().replaceAll('-', '')}`;
+      const preference = await mercadoPagoFetchWithAccessToken(
+        Deno.env,
+        tenantToken.accessToken,
+        '/checkout/preferences',
+        {
+          method: 'POST',
+          idempotencyKey: idempotencyKey || `invoice:${invoiceId}`,
+          body: JSON.stringify({
+            items: [
+              {
+                id: invoiceId,
+                title: invoiceDescription,
+                description: invoiceDescription,
+                quantity: 1,
+                currency_id: 'BRL',
+                unit_price: centsToProviderAmount(invoiceAmountCents),
+              },
+            ],
+            external_reference: externalReference,
+            statement_descriptor: 'SLIMHIPER',
+            expires: false,
+            metadata: {
+              local_invoice_id: invoiceId,
+              tenant_reference: `tenant_${tenantId.replaceAll('-', '').slice(0, 16)}`,
+            },
+            ...preferencePaymentMethods(maxInstallments),
+            ...optionalPreferenceUrls(invoiceId, tenantId),
+          }),
+        }
+      );
+
+      if (!preference.ok) {
+        console.error('[mercadopago-create-patient-invoice] provider_error', {
+          status: preference.status,
+        });
+        await admin
+          .from('patient_invoices')
+          .update({
+            metadata: {
+              ...invoiceMetadata,
+              provider: MERCADOPAGO_PROVIDER,
+              external_reference: externalReference,
+              idempotency_key: idempotencyKey || null,
+              max_installments: maxInstallments,
+              provider_error_code: preference.errorCode,
+            },
+          })
+          .eq('id', invoiceId)
+          .eq('tenant_id', tenantId);
+
+        return jsonResponse(
+          Deno.env,
+          502,
+          {
+            ok: false,
+            error: { code: 'mercadopago_error', message: 'Billing provider request failed.' },
+            meta: { tenantId, timestamp },
+          },
+          req
+        );
+      }
+
+      const providerData = asRecord(preference.data);
+      const preferenceId = asString(providerData.id);
+      const paymentLink = pickPaymentLink(providerData);
+      if (!preferenceId || !paymentLink) {
+        await admin
+          .from('patient_invoices')
+          .update({
+            metadata: {
+              ...invoiceMetadata,
+              provider: MERCADOPAGO_PROVIDER,
+              external_reference: externalReference,
+              idempotency_key: idempotencyKey || null,
+              max_installments: maxInstallments,
+              provider_error_code: 'mercadopago_invalid_response',
+            },
+          })
+          .eq('id', invoiceId)
+          .eq('tenant_id', tenantId);
+
+        return jsonResponse(
+          Deno.env,
+          502,
+          {
+            ok: false,
+            error: {
+              code: 'mercadopago_invalid_response',
+              message: 'Billing provider response invalid.',
+            },
+            meta: { tenantId, timestamp },
+          },
+          req
+        );
+      }
+
+      const { data: updatedInvoice, error: updateError } = await admin
+        .from('patient_invoices')
+        .update({
+          provider: MERCADOPAGO_PROVIDER,
+          provider_invoice_id: preferenceId,
+          provider_preference_id: preferenceId,
+          invoice_url: paymentLink,
+          payment_link: paymentLink,
+          metadata: {
+            ...invoiceMetadata,
+            provider: MERCADOPAGO_PROVIDER,
+            external_reference: externalReference,
+            idempotency_key: idempotencyKey || null,
+            provider_preference_id: preferenceId,
+            max_installments: maxInstallments,
+          },
+        })
+        .eq('id', invoiceId)
+        .eq('tenant_id', tenantId)
+        .select('id, status, invoice_url, payment_link')
+        .single();
+
+      if (updateError) throw updateError;
+
+      return jsonResponse(
+        Deno.env,
+        200,
+        {
+          ok: true,
+          data: {
+            id: updatedInvoice.id,
+            status: updatedInvoice.status,
+            invoice_url: updatedInvoice.invoice_url ?? null,
+            payment_link: updatedInvoice.payment_link ?? null,
+          },
+          meta: { tenantId, timestamp },
+        },
+        req
+      );
+    }
 
     if (!patientId || !amountCents || !dueDate || !isDateInput(dueDate) || !description) {
       return jsonResponse(
@@ -321,6 +651,7 @@ Deno.serve(async (req) => {
           package_id: packageId,
           enrollment_id: enrollmentId,
           service_id: serviceId,
+          max_installments: maxInstallments,
         },
       })
       .select('id, status')
@@ -353,6 +684,7 @@ Deno.serve(async (req) => {
             local_invoice_id: invoice.id,
             tenant_reference: `tenant_${tenantId.replaceAll('-', '').slice(0, 16)}`,
           },
+          ...preferencePaymentMethods(maxInstallments),
           ...optionalPreferenceUrls(invoice.id, tenantId),
         }),
       }
@@ -370,6 +702,7 @@ Deno.serve(async (req) => {
             provider: MERCADOPAGO_PROVIDER,
             external_reference: externalReference,
             idempotency_key: idempotencyKey || null,
+            max_installments: maxInstallments,
             provider_error_code: preference.errorCode,
           },
         })
@@ -400,6 +733,7 @@ Deno.serve(async (req) => {
             provider: MERCADOPAGO_PROVIDER,
             external_reference: externalReference,
             idempotency_key: idempotencyKey || null,
+            max_installments: maxInstallments,
             provider_error_code: 'mercadopago_invalid_response',
           },
         })
@@ -433,6 +767,7 @@ Deno.serve(async (req) => {
           external_reference: externalReference,
           idempotency_key: idempotencyKey || null,
           provider_preference_id: preferenceId,
+          max_installments: maxInstallments,
           source: sourceModule || null,
           program_id: programId,
           package_id: packageId,

@@ -400,22 +400,15 @@ async function hydrateLocalFinancialRecords(
 ): Promise<PatientFinancialSummary> {
   const invoices = Array.isArray(summary.invoices) ? summary.invoices : [];
   const paymentHistory = Array.isArray(summary.paymentHistory) ? summary.paymentHistory : [];
-  const baseCharges =
-    summary.charges && summary.charges.length > 0
-      ? summary.charges
-      : invoices.map((invoice) => ({
-          id: invoice.id,
-          description: invoice.description,
-          amount: invoice.amount,
-          issuedAt: invoice.dueDate,
-          dueDate: invoice.dueDate,
-          status: invoice.status,
-          chargeType: 'link_pagamento' as const,
-          sentAt: invoice.dueDate,
-        }));
 
   const supabase = createBrowserSupabaseClient();
-  const [receiptsRes, negotiationsRes, m13Res] = await Promise.all([
+  const [invoiceDetailsRes, receiptsRes, negotiationsRes, m13Res] = await Promise.all([
+    supabase
+      .from('patient_invoices')
+      .select(
+        'id, payment_link, invoice_url, provider, provider_payment_id, metadata, source_module, program_id, package_id, enrollment_id, service_id'
+      )
+      .eq('patient_id', patientId),
     supabase
       .from('patient_receipts')
       .select('id, description, amount_cents, issued_at, payment_date, receipt_number, payment_id')
@@ -432,6 +425,71 @@ async function hydrateLocalFinancialRecords(
       p_patient_id: patientId,
     }),
   ]);
+
+  const invoiceDetailsById = new Map(
+    (invoiceDetailsRes.data ?? []).map((row: Record<string, unknown>) => [
+      asString(row.id),
+      {
+        paymentLink: asSafePaymentUrl(row.payment_link) ?? asSafePaymentUrl(row.invoice_url),
+        invoiceUrl: asSafePaymentUrl(row.invoice_url),
+        provider: asNullableString(row.provider),
+        providerPaymentId: asNullableString(row.provider_payment_id),
+        maxInstallments:
+          asNumber(asRecord(row.metadata).max_installments) ||
+          asNumber(asRecord(row.metadata).maxInstallments) ||
+          asNumber(asRecord(row.metadata).installments) ||
+          null,
+        sourceModule: asNullableString(row.source_module),
+        programId: asNullableString(row.program_id),
+        packageId: asNullableString(row.package_id),
+        enrollmentId: asNullableString(row.enrollment_id),
+        serviceId: asNullableString(row.service_id),
+        supersededByInvoiceId: asNullableString(asRecord(row.metadata).superseded_by_invoice_id),
+      },
+    ])
+  );
+  const enrichedInvoices = invoices
+    .map((invoice) => {
+      const details = invoiceDetailsById.get(invoice.id);
+      return {
+        ...invoice,
+        paymentLink: invoice.paymentLink ?? details?.paymentLink ?? null,
+        invoiceUrl: invoice.invoiceUrl ?? details?.invoiceUrl ?? null,
+        provider: invoice.provider ?? details?.provider ?? null,
+        providerPaymentId: invoice.providerPaymentId ?? details?.providerPaymentId ?? null,
+        maxInstallments: invoice.maxInstallments ?? details?.maxInstallments ?? null,
+        sourceModule: invoice.sourceModule ?? details?.sourceModule ?? undefined,
+        programId: invoice.programId ?? details?.programId ?? undefined,
+        packageId: invoice.packageId ?? details?.packageId ?? undefined,
+        enrollmentId: invoice.enrollmentId ?? details?.enrollmentId ?? undefined,
+        serviceId: invoice.serviceId ?? details?.serviceId ?? undefined,
+        supersededByInvoiceId: details?.supersededByInvoiceId ?? null,
+      };
+    })
+    .filter((invoice) => invoice.status !== 'cancelado' && !invoice.supersededByInvoiceId);
+  const baseCharges =
+    summary.charges && summary.charges.length > 0
+      ? summary.charges
+      : enrichedInvoices.map((invoice) => ({
+          id: invoice.id,
+          description: invoice.description,
+          amount: invoice.amount,
+          issuedAt: invoice.dueDate,
+          dueDate: invoice.dueDate,
+          status: invoice.status,
+          chargeType: 'link_pagamento' as const,
+          sentAt: invoice.paymentLink ? invoice.dueDate : undefined,
+          paymentLink: invoice.paymentLink ?? null,
+          invoiceUrl: invoice.invoiceUrl ?? null,
+          provider: invoice.provider ?? null,
+          providerPaymentId: invoice.providerPaymentId ?? null,
+          maxInstallments: invoice.maxInstallments ?? null,
+          sourceModule: invoice.sourceModule,
+          programId: invoice.programId,
+          packageId: invoice.packageId,
+          enrollmentId: invoice.enrollmentId,
+          serviceId: invoice.serviceId,
+        }));
 
   const receipts =
     receiptsRes.error && !isIgnorableLocalFinancialReadError(receiptsRes.error)
@@ -481,6 +539,7 @@ async function hydrateLocalFinancialRecords(
 
   return {
     ...summary,
+    invoices: enrichedInvoices,
     charges: baseCharges,
     paymentHistory: enrichedPaymentHistory,
     receipts: hydratedReceipts,
@@ -963,6 +1022,43 @@ export async function createPatientCharge(
     ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
   };
   const res = await invoke<unknown>(billingEdgeFunction('charge', provider), payload);
+  if (res.error) return { data: null, error: res.error };
+  const charge = asChargeResult(res.data);
+  return {
+    data: charge,
+    error: charge
+      ? null
+      : { message: 'Contrato invalido retornado pela Edge Function de cobranca.' },
+  };
+}
+
+export async function createPatientInvoicePaymentLink(
+  invoiceId: string,
+  options?: Pick<BillingActionOptions, 'provider' | 'idempotencyKey'>
+) {
+  if (!invoiceId.trim()) {
+    return { data: null, error: { message: 'Cobranca invalida para gerar link.' } };
+  }
+
+  if (isMockEnabled())
+    return {
+      data: {
+        id: invoiceId,
+        paymentLink: `https://mock.pay/invoice/${invoiceId}`,
+        invoiceUrl: null,
+      },
+      error: null as SafeServiceError | null,
+    };
+
+  const provider = options?.provider ?? ACTIVE_BILLING_PROVIDER;
+  const entitlementError = await requireBillingProviderFeatureFlag();
+  if (entitlementError) return { data: null, error: entitlementError };
+
+  const idempotencyKey = normalizeIdempotencyKey(options?.idempotencyKey);
+  const res = await invoke<unknown>(billingEdgeFunction('charge', provider), {
+    invoice_id: invoiceId,
+    ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+  });
   if (res.error) return { data: null, error: res.error };
   const charge = asChargeResult(res.data);
   return {

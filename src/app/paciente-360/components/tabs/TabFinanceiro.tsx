@@ -13,11 +13,13 @@ import {
   HandshakeIcon,
   ChevronDown,
   ChevronUp,
+  Copy,
   Plus,
   Bell,
   FileSignature,
   RefreshCw,
   Eye,
+  ExternalLink,
   Download,
   Undo2,
 } from 'lucide-react';
@@ -27,6 +29,7 @@ import {
   createBillingNegotiation,
   createPatientCharge,
   createPatientFinancialContract,
+  createPatientInvoicePaymentLink,
   createPatientReceipt,
   createPatientSubscription,
   getPaymentReceiptSignedUrl,
@@ -52,7 +55,10 @@ function formatDate(dateStr: string) {
   return `${d}/${m}/${y}`;
 }
 
-function createBillingActionKey(prefix: 'invoice' | 'subscription', patientId?: string) {
+function createBillingActionKey(
+  prefix: 'invoice' | 'subscription' | 'payment-link',
+  patientId?: string
+) {
   const randomId =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
@@ -695,6 +701,44 @@ export default function TabFinanceiro({
       await refreshAfterLocalAction('Sincronizacao da cobranca solicitada.');
     } finally {
       setLocalActionLoading(null);
+    }
+  };
+
+  const handleGeneratePaymentLink = async (invoiceId: string) => {
+    resetCreationFeedback();
+    setLocalActionLoading(`link:${invoiceId}`);
+    try {
+      const result = await createPatientInvoicePaymentLink(invoiceId, {
+        idempotencyKey: createBillingActionKey('payment-link', invoiceId),
+      });
+      if (result.error) {
+        setCreationError(result.error.message);
+        return;
+      }
+      const nextPaymentLink = result.data?.paymentLink ?? result.data?.invoiceUrl ?? null;
+      setPaymentLink(nextPaymentLink);
+      await refreshAfterLocalAction(
+        nextPaymentLink
+          ? 'Link de pagamento Mercado Pago gerado para a cobranca.'
+          : 'Cobranca atualizada, mas o Mercado Pago nao retornou link.'
+      );
+    } finally {
+      setLocalActionLoading(null);
+    }
+  };
+
+  const handleCopyPaymentLink = async (link: string | null | undefined) => {
+    resetCreationFeedback();
+    const safeLink = asSafePaymentLink(link ?? null);
+    if (!safeLink) {
+      setCreationError('Link de pagamento invalido ou bloqueado por seguranca.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(safeLink);
+      setCreationNotice('Link de pagamento copiado.');
+    } catch {
+      setCreationError('Nao foi possivel copiar o link neste navegador.');
     }
   };
 
@@ -1380,48 +1424,84 @@ export default function TabFinanceiro({
         ) : (
           <>
             <div className="space-y-3 sm:hidden">
-              {charges.map((c) => (
-                <article key={c.id} className="rounded-xl border border-border bg-card p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        {c.description}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Vence em {formatDate(c.dueDate)}
-                      </p>
+              {charges.map((c) => {
+                const chargePaymentLink = asSafePaymentLink(c.paymentLink ?? c.invoiceUrl ?? null);
+                const canSyncCharge = c.provider === 'mercadopago' && Boolean(c.providerPaymentId);
+                return (
+                  <article key={c.id} className="rounded-xl border border-border bg-card p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {c.description}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Vence em {formatDate(c.dueDate)}
+                        </p>
+                      </div>
+                      <span className="text-sm font-bold tabular-nums text-foreground">
+                        {formatBRL(c.amount)}
+                      </span>
                     </div>
-                    <span className="text-sm font-bold tabular-nums text-foreground">
-                      {formatBRL(c.amount)}
-                    </span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-lg bg-muted/40 p-2">
-                      <span className="text-muted-foreground">Tipo</span>
-                      <p className="mt-1 font-semibold text-foreground">
-                        {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
-                      </p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg bg-muted/40 p-2">
+                        <span className="text-muted-foreground">Tipo</span>
+                        <p className="mt-1 font-semibold text-foreground">
+                          {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-muted/40 p-2">
+                        <span className="text-muted-foreground">Enviada em</span>
+                        <p className="mt-1 font-semibold text-foreground">
+                          {c.sentAt ? formatDate(c.sentAt) : 'Nao enviada'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="rounded-lg bg-muted/40 p-2">
-                      <span className="text-muted-foreground">Enviada em</span>
-                      <p className="mt-1 font-semibold text-foreground">
-                        {c.sentAt ? formatDate(c.sentAt) : 'Nao enviada'}
-                      </p>
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      <StatusPill status={c.status} />
+                      {chargePaymentLink ? (
+                        <>
+                          <a
+                            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary"
+                            href={chargePaymentLink}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <ExternalLink size={12} /> Abrir
+                          </a>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isLocalActionLoading}
+                            onClick={() => void handleCopyPaymentLink(chargePaymentLink)}
+                          >
+                            <Copy size={12} /> Copiar
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!canWriteFinancial || isLocalActionLoading}
+                          onClick={() => void handleGeneratePaymentLink(c.id)}
+                        >
+                          <CreditCard size={12} />
+                          {localActionLoading === `link:${c.id}` ? 'Gerando...' : 'Gerar link'}
+                        </button>
+                      )}
+                      {canSyncCharge ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!canWriteFinancial || isLocalActionLoading}
+                          onClick={() => void handleSyncCharge(c.id)}
+                        >
+                          <RefreshCw size={12} /> Sync
+                        </button>
+                      ) : null}
                     </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap justify-end gap-2">
-                    <StatusPill status={c.status} />
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={!canWriteFinancial || isLocalActionLoading}
-                      onClick={() => void handleSyncCharge(c.id)}
-                    >
-                      <RefreshCw size={12} /> Sync
-                    </button>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
 
             <div className="hidden overflow-x-auto sm:block">
@@ -1468,42 +1548,85 @@ export default function TabFinanceiro({
                       scope="col"
                       className="pb-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide"
                     >
-                      Sync
+                      Pagamento
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {charges.map((c) => (
-                    <tr
-                      key={c.id}
-                      className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                    >
-                      <td className="py-2.5 text-foreground">{c.description}</td>
-                      <td className="py-2.5 font-semibold tabular-nums text-foreground">
-                        {formatBRL(c.amount)}
-                      </td>
-                      <td className="py-2.5 text-muted-foreground">{formatDate(c.dueDate)}</td>
-                      <td className="py-2.5 text-muted-foreground">
-                        {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
-                      </td>
-                      <td className="py-2.5">
-                        <StatusPill status={c.status} />
-                      </td>
-                      <td className="py-2.5 text-muted-foreground">
-                        {c.sentAt ? formatDate(c.sentAt) : '—'}
-                      </td>
-                      <td className="py-2.5">
-                        <button
-                          type="button"
-                          className="flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!canWriteFinancial || isLocalActionLoading}
-                          onClick={() => void handleSyncCharge(c.id)}
-                        >
-                          <RefreshCw size={12} /> Sync
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {charges.map((c) => {
+                    const chargePaymentLink = asSafePaymentLink(
+                      c.paymentLink ?? c.invoiceUrl ?? null
+                    );
+                    const canSyncCharge =
+                      c.provider === 'mercadopago' && Boolean(c.providerPaymentId);
+                    return (
+                      <tr
+                        key={c.id}
+                        className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                      >
+                        <td className="py-2.5 text-foreground">{c.description}</td>
+                        <td className="py-2.5 font-semibold tabular-nums text-foreground">
+                          {formatBRL(c.amount)}
+                        </td>
+                        <td className="py-2.5 text-muted-foreground">{formatDate(c.dueDate)}</td>
+                        <td className="py-2.5 text-muted-foreground">
+                          {CHARGE_TYPE_LABELS[c.chargeType] ?? c.chargeType}
+                        </td>
+                        <td className="py-2.5">
+                          <StatusPill status={c.status} />
+                        </td>
+                        <td className="py-2.5 text-muted-foreground">
+                          {c.sentAt ? formatDate(c.sentAt) : '—'}
+                        </td>
+                        <td className="py-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {chargePaymentLink ? (
+                              <>
+                                <a
+                                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                                  href={chargePaymentLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  <ExternalLink size={12} /> Abrir
+                                </a>
+                                <button
+                                  type="button"
+                                  className="flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                                  disabled={isLocalActionLoading}
+                                  onClick={() => void handleCopyPaymentLink(chargePaymentLink)}
+                                >
+                                  <Copy size={12} /> Copiar
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={!canWriteFinancial || isLocalActionLoading}
+                                onClick={() => void handleGeneratePaymentLink(c.id)}
+                              >
+                                <CreditCard size={12} />
+                                {localActionLoading === `link:${c.id}`
+                                  ? 'Gerando...'
+                                  : 'Gerar link'}
+                              </button>
+                            )}
+                            {canSyncCharge ? (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={!canWriteFinancial || isLocalActionLoading}
+                                onClick={() => void handleSyncCharge(c.id)}
+                              >
+                                <RefreshCw size={12} /> Sync
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

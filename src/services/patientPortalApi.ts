@@ -524,6 +524,7 @@ function normalizeSnapshot(value: unknown): PatientPortalSnapshot | null {
     invoices: Array.isArray(record.invoices)
       ? record.invoices
           .map(normalizeInvoice)
+          .filter((item) => !item || !['cancelled', 'canceled', 'cancelado'].includes(item.status))
           .filter((item): item is PatientPortalInvoice => Boolean(item))
       : [],
     paymentReceipts: [],

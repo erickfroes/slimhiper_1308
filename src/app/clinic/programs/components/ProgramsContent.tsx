@@ -78,11 +78,16 @@ const colorMap: Record<string, { accent: string; badge: string; dot: string; ico
 };
 
 const paymentModelLabel: Record<string, string> = {
+  checkout_pro: 'Preço fixo Mercado Pago',
   parcelado: 'Parcelado',
   avista: 'À vista',
   assinatura: 'Assinatura',
   hibrido: 'Híbrido',
 };
+
+function formatProgramCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
 
 const statusConfig: Record<ProgramStatus, { label: string; className: string }> = {
   ativo: { label: 'Ativo', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
@@ -148,6 +153,8 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
   const [menuOpen, setMenuOpen] = useState(false);
   const colors = colorMap[program.color] ?? colorMap['teal'];
   const status = statusConfig[program.status];
+  const maxInstallments =
+    program.financialConfig?.maxInstallments ?? program.financialConfig?.installments ?? 12;
 
   const closeAndRun = (callback: () => void) => {
     setMenuOpen(false);
@@ -327,7 +334,16 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
               <CreditCard size={12} className="text-muted-foreground" />
               <span className={secondaryText}>Pagamento</span>
             </div>
-            <div className="text-xs text-foreground">{paymentModelLabel[program.paymentModel]}</div>
+            <div className="text-xs text-foreground">
+              {program.paymentModel === 'checkout_pro' || program.financialConfig?.basePrice ? (
+                <>
+                  Preço fixo: {formatProgramCurrency(program.financialConfig?.basePrice ?? 0)} |
+                  Mercado Pago até {maxInstallments}x
+                </>
+              ) : (
+                paymentModelLabel[program.paymentModel]
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -115,10 +115,14 @@ function asStatus(value: unknown): ProgramStatus {
 }
 
 function asPaymentModel(value: unknown): ProgramPaymentModel {
-  const raw = asString(value, 'parcelado');
-  return raw === 'avista' || raw === 'parcelado' || raw === 'assinatura' || raw === 'hibrido'
+  const raw = asString(value, 'checkout_pro');
+  return raw === 'checkout_pro' ||
+    raw === 'avista' ||
+    raw === 'parcelado' ||
+    raw === 'assinatura' ||
+    raw === 'hibrido'
     ? raw
-    : 'parcelado';
+    : 'checkout_pro';
 }
 
 function asProfessionalType(value: unknown): ProfessionalType | null {
@@ -209,10 +213,20 @@ function normalizeFinancialConfig(
   paymentDescription: string
 ): ProgramBuilderFinancialConfig {
   const raw = asRecord(item);
+  const legacyInstallments =
+    raw.installments === undefined
+      ? undefined
+      : Math.max(0, Math.trunc(asNumber(raw.installments)));
+  const maxInstallments =
+    raw.maxInstallments === undefined
+      ? Math.min(12, Math.max(1, legacyInstallments ?? 12))
+      : Math.min(12, Math.max(1, Math.trunc(asNumber(raw.maxInstallments, 12))));
   return {
     paymentModel: asPaymentModel(raw.paymentModel ?? paymentModel),
+    pricingModel: asString(raw.pricingModel, 'fixed_price_provider_installments'),
     basePrice: asNumber(raw.basePrice),
-    installments: raw.installments === undefined ? undefined : asNumber(raw.installments),
+    maxInstallments,
+    installments: legacyInstallments,
     discountPercent: raw.discountPercent === undefined ? undefined : asNumber(raw.discountPercent),
     description: asString(raw.description, paymentDescription),
   };
@@ -326,8 +340,16 @@ function sanitizeDraft(draft: ProgramBuilderDraft): ProgramBuilderDraft {
     checkinTemplates,
     requiredDocuments,
     financial: {
-      paymentModel: asPaymentModel(draft.financial.paymentModel),
+      paymentModel: 'checkout_pro',
+      pricingModel: 'fixed_price_provider_installments',
       basePrice: Math.max(0, asNumber(draft.financial.basePrice)),
+      maxInstallments: Math.min(
+        12,
+        Math.max(
+          1,
+          Math.trunc(asNumber(draft.financial.maxInstallments ?? draft.financial.installments, 12))
+        )
+      ),
       installments:
         draft.financial.installments === undefined
           ? undefined
@@ -402,12 +424,12 @@ export function validateProgramDraft(draft: ProgramBuilderDraft): ProgramDraftVa
       blockingForPublish: true,
     });
   }
-  if (sanitized.financial.basePrice > 0 && sanitized.financial.paymentModel === 'parcelado') {
-    const installments = sanitized.financial.installments ?? 0;
-    if (installments <= 0) {
+  if (sanitized.financial.basePrice > 0 && sanitized.financial.paymentModel === 'checkout_pro') {
+    const maxInstallments = sanitized.financial.maxInstallments ?? 0;
+    if (maxInstallments <= 0 || maxInstallments > 12) {
       issues.push({
-        field: 'financial.installments',
-        message: 'Informe parcelas para modelo parcelado.',
+        field: 'financial.maxInstallments',
+        message: 'Informe parcelas maximas entre 1 e 12 para o Mercado Pago.',
         blockingForPublish: true,
       });
     }
@@ -573,8 +595,10 @@ export function createInitialProgramBuilderDraft(): ProgramBuilderDraft {
       { label: 'Exames pre-tratamento', required: false },
     ],
     financial: {
-      paymentModel: 'parcelado',
+      paymentModel: 'checkout_pro',
+      pricingModel: 'fixed_price_provider_installments',
       basePrice: 0,
+      maxInstallments: 12,
       installments: 12,
       discountPercent: 0,
       description: '',

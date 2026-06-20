@@ -29,6 +29,7 @@ const programTypeLabel: Record<string, string> = {
 };
 
 const paymentModelLabel: Record<string, string> = {
+  checkout_pro: 'Preço fixo Mercado Pago',
   parcelado: 'Parcelado',
   avista: 'À Vista',
   assinatura: 'Assinatura',
@@ -211,11 +212,10 @@ export default function StepRevisao({ draft }: Props) {
           <strong>Valor base:</strong> R${' '}
           {draft.financial.basePrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
         </p>
-        {draft.financial.discountPercent ? (
-          <p>
-            <strong>Desconto à vista:</strong> {draft.financial.discountPercent}%
-          </p>
-        ) : null}
+        <p>
+          <strong>Mercado Pago:</strong> até{' '}
+          {draft.financial.maxInstallments ?? draft.financial.installments ?? 12}x
+        </p>
         {draft.financial.description && <p className="italic">{draft.financial.description}</p>}
       </ReviewSection>
 

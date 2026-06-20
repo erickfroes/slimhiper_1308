@@ -183,6 +183,11 @@ export interface InvoiceSummary {
   dueDate: string;
   paidAt?: string;
   status: 'pago' | 'pendente' | 'vencido' | 'cancelado';
+  paymentLink?: string | null;
+  invoiceUrl?: string | null;
+  provider?: string | null;
+  providerPaymentId?: string | null;
+  maxInstallments?: number | null;
   sourceModule?: string;
   appointmentId?: string;
   packageId?: string;
@@ -217,6 +222,16 @@ export interface PatientCharge {
   status: 'pendente' | 'pago' | 'vencido' | 'cancelado';
   chargeType: 'boleto' | 'pix' | 'link_pagamento' | 'cartao';
   sentAt?: string;
+  paymentLink?: string | null;
+  invoiceUrl?: string | null;
+  provider?: string | null;
+  providerPaymentId?: string | null;
+  maxInstallments?: number | null;
+  sourceModule?: string;
+  packageId?: string;
+  programId?: string;
+  enrollmentId?: string;
+  serviceId?: string;
 }
 
 export interface PatientReceipt {
@@ -1218,7 +1233,12 @@ export interface PatientReportDefinition {
 // ─── Clinic Program / Package Template types ──────────────────────────────────
 
 export type ProgramStatus = 'ativo' | 'arquivado' | 'rascunho';
-export type ProgramPaymentModel = 'parcelado' | 'avista' | 'assinatura' | 'hibrido';
+export type ProgramPaymentModel =
+  | 'checkout_pro'
+  | 'parcelado'
+  | 'avista'
+  | 'assinatura'
+  | 'hibrido';
 
 export interface ProgramPhase {
   name: string;
@@ -1471,7 +1491,9 @@ export interface ProgramBuilderCheckinTemplate {
 
 export interface ProgramBuilderFinancialConfig {
   paymentModel: ProgramPaymentModel;
+  pricingModel?: string;
   basePrice: number;
+  maxInstallments?: number;
   installments?: number;
   discountPercent?: number;
   description: string;
