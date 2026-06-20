@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { getCurrentAppSession, type AppSession } from '@/services/session/getCurrentAppSession';
-import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
+import {
+  canManageMercadoPagoOAuthTenant,
+  isUuid,
+  resolveMercadoPagoOAuthTenantId,
+} from '@/lib/mercadopago/oauthTenant';
+import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ data: null, error: { message } }, { status });
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -19,22 +19,6 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function normalizeText(value: unknown, maxLength = 500) {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, maxLength) : '';
-}
-
-function canManageTenantMercadoPago(session: AppSession, tenantId: string) {
-  if (isPlatformOwnerRole(session.platformRole) || isPlatformAdminRole(session.platformRole)) {
-    return true;
-  }
-  return session.activeTenant?.id === tenantId && session.permissions.includes('financial.write');
-}
-
-function resolveTenantId(session: AppSession, tenantId: string) {
-  const normalized = tenantId.trim();
-  if (isUuid(normalized)) return normalized;
-  if (normalized === 'current' && session.activeTenant?.id && isUuid(session.activeTenant.id)) {
-    return session.activeTenant.id;
-  }
-  return '';
 }
 
 function disconnectMercadoPagoSettings(settings: unknown) {
@@ -60,13 +44,6 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
   const session = await getCurrentAppSession();
   if (!session) return jsonError('Sessao obrigatoria para desconectar Mercado Pago.', 401);
 
-  const params = await context.params;
-  const tenantId = resolveTenantId(session, params.tenantId);
-  if (!isUuid(tenantId)) return jsonError('Tenant invalido.', 400);
-  if (!canManageTenantMercadoPago(session, tenantId)) {
-    return jsonError('Permissao financeira obrigatoria para desconectar Mercado Pago.', 403);
-  }
-
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const reason = normalizeText(body?.reason);
   if (reason.length < 16) {
@@ -75,6 +52,13 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
 
   const admin = createSupabaseAdminClient();
   if (!admin) return jsonError('Supabase admin client nao configurado no servidor.', 503);
+
+  const params = await context.params;
+  const tenantId = await resolveMercadoPagoOAuthTenantId(admin, session, params.tenantId);
+  if (!isUuid(tenantId)) return jsonError('Tenant invalido.', 400);
+  if (!(await canManageMercadoPagoOAuthTenant(admin, session, tenantId))) {
+    return jsonError('Permissao financeira obrigatoria para desconectar Mercado Pago.', 403);
+  }
 
   const tenantResult = await admin
     .from('tenants')

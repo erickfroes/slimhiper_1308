@@ -2,37 +2,21 @@ import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { hashMercadoPagoOAuthState } from '@/lib/mercadopago/tokenCrypto';
-import { getCurrentAppSession, type AppSession } from '@/services/session/getCurrentAppSession';
-import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
+import {
+  canManageMercadoPagoOAuthTenant,
+  isUuid,
+  resolveMercadoPagoOAuthTenantId,
+} from '@/lib/mercadopago/oauthTenant';
+import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ data: null, error: { message } }, { status });
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function canManageTenantMercadoPago(session: AppSession, tenantId: string) {
-  if (isPlatformOwnerRole(session.platformRole) || isPlatformAdminRole(session.platformRole)) {
-    return true;
-  }
-  return session.activeTenant?.id === tenantId && session.permissions.includes('financial.write');
-}
-
-function resolveTenantId(session: AppSession, tenantId: string) {
-  const normalized = tenantId.trim();
-  if (isUuid(normalized)) return normalized;
-  if (normalized === 'current' && session.activeTenant?.id && isUuid(session.activeTenant.id)) {
-    return session.activeTenant.id;
-  }
-  return '';
 }
 
 function readOAuthEnv() {
@@ -63,18 +47,18 @@ export async function POST(_request: Request, context: { params: Promise<{ tenan
   const session = await getCurrentAppSession();
   if (!session) return jsonError('Sessao obrigatoria para conectar Mercado Pago.', 401);
 
-  const params = await context.params;
-  const tenantId = resolveTenantId(session, params.tenantId);
-  if (!isUuid(tenantId)) return jsonError('Tenant invalido.', 400);
-  if (!canManageTenantMercadoPago(session, tenantId)) {
-    return jsonError('Permissao financeira obrigatoria para conectar Mercado Pago.', 403);
-  }
-
   const oauthEnv = readOAuthEnv();
   if (!oauthEnv) return jsonError('OAuth Mercado Pago nao configurado no servidor.', 503);
 
   const admin = createSupabaseAdminClient();
   if (!admin) return jsonError('Supabase admin client nao configurado no servidor.', 503);
+
+  const params = await context.params;
+  const tenantId = await resolveMercadoPagoOAuthTenantId(admin, session, params.tenantId);
+  if (!isUuid(tenantId)) return jsonError('Tenant invalido.', 400);
+  if (!(await canManageMercadoPagoOAuthTenant(admin, session, tenantId))) {
+    return jsonError('Permissao financeira obrigatoria para conectar Mercado Pago.', 403);
+  }
 
   const tenantResult = await admin
     .from('tenants')
