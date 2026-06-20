@@ -75,14 +75,24 @@ export function configuredAllowedOrigins(env: EnvReader) {
       'http://localhost:4028',
       'http://127.0.0.1:4028',
     ]
-      .map((origin) => origin.trim())
+      .map(normalizeOrigin)
       .filter(Boolean)
   );
 }
 
+function normalizeOrigin(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return trimmed.replace(/\/+$/, '');
+  }
+}
+
 function isLocalOrigin(origin: string) {
   try {
-    const url = new URL(origin);
+    const url = new URL(normalizeOrigin(origin));
     return (
       (url.protocol === 'http:' || url.protocol === 'https:') &&
       ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)
@@ -98,7 +108,7 @@ export function corsHeaders(env: EnvReader, req?: Request) {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
-  const origin = req?.headers.get('Origin') ?? '';
+  const origin = normalizeOrigin(req?.headers.get('Origin') ?? '');
   const configured = configuredAllowedOrigins(env);
   const allowedOrigin = origin
     ? configured.has(origin) || isLocalOrigin(origin)

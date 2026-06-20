@@ -128,22 +128,64 @@ function mapEventDate(eventAt: unknown, createdAt: unknown): string {
   return safeDate(eventAt) ?? safeDate(createdAt) ?? new Date(0).toISOString();
 }
 
-const corsHeaders = {
-  'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': (
-    Deno.env.get('APP_ALLOWED_ORIGINS') ??
-    Deno.env.get('SITE_URL') ??
-    Deno.env.get('NEXT_PUBLIC_SITE_URL') ??
-    'http://localhost:4028'
-  )
-    .split(',')[0]
-    .trim(),
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+function normalizeOrigin(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return trimmed.replace(/\/+$/, '');
+  }
+}
 
-function jsonResponse(status: number, payload: Json) {
-  return new Response(JSON.stringify(payload), { status, headers: corsHeaders });
+function allowedOrigins() {
+  return new Set(
+    [
+      ...(Deno.env.get('APP_ALLOWED_ORIGINS') ?? '').split(','),
+      Deno.env.get('SITE_URL') ?? '',
+      Deno.env.get('NEXT_PUBLIC_SITE_URL') ?? '',
+      'http://localhost:4028',
+      'http://127.0.0.1:4028',
+    ]
+      .map(normalizeOrigin)
+      .filter(Boolean)
+  );
+}
+
+function isLocalOrigin(origin: string) {
+  try {
+    const url = new URL(normalizeOrigin(origin));
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function corsHeaders(req?: Request) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+  const origin = normalizeOrigin(req?.headers.get('Origin') ?? '');
+  const configured = allowedOrigins();
+  const allowedOrigin = origin
+    ? configured.has(origin) || isLocalOrigin(origin)
+      ? origin
+      : ''
+    : (configured.values().next().value ?? '');
+  if (allowedOrigin) {
+    headers['Access-Control-Allow-Origin'] = allowedOrigin;
+    headers.Vary = 'Origin';
+  }
+  return headers;
+}
+
+function jsonResponse(status: number, payload: Json, req?: Request) {
+  return new Response(JSON.stringify(payload), { status, headers: corsHeaders(req) });
 }
 
 function calculateAge(birthDate: string | null | undefined): number | null {
@@ -674,7 +716,7 @@ function safeTimelinePayload(payload: unknown): Record<string, unknown> | null {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders(req) });
   }
 
   if (req.method !== 'POST') {
