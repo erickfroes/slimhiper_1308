@@ -915,14 +915,52 @@ export async function createBillingNegotiation(
   });
 }
 
-async function invoke<T>(fn: string, body: Record<string, unknown>) {
+async function invoke<T>(
+  fn: string,
+  body: Record<string, unknown>
+): Promise<{ data: T | null; error: SafeServiceError | null }> {
   const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase.functions.invoke(fn, { body });
-  if (error)
+
+  const response =
+    fn === 'asaas-create-patient-customer'
+      ? await supabase.functions.invoke('asaas-create-patient-customer', { body })
+      : fn === 'asaas-create-patient-invoice'
+        ? await supabase.functions.invoke('asaas-create-patient-invoice', { body })
+        : fn === 'asaas-create-patient-subscription'
+          ? await supabase.functions.invoke('asaas-create-patient-subscription', { body })
+          : fn === 'asaas-refund-payment'
+            ? await supabase.functions.invoke('asaas-refund-payment', { body })
+            : fn === 'asaas-sync-payment'
+              ? await supabase.functions.invoke('asaas-sync-payment', { body })
+              : fn === 'mercadopago-create-patient-customer'
+                ? await supabase.functions.invoke('mercadopago-create-patient-customer', { body })
+                : fn === 'mercadopago-create-patient-invoice'
+                  ? await supabase.functions.invoke('mercadopago-create-patient-invoice', { body })
+                  : fn === 'mercadopago-create-patient-subscription'
+                    ? await supabase.functions.invoke('mercadopago-create-patient-subscription', {
+                        body,
+                      })
+                    : fn === 'mercadopago-refund-payment'
+                      ? await supabase.functions.invoke('mercadopago-refund-payment', { body })
+                      : fn === 'mercadopago-sync-payment'
+                        ? await supabase.functions.invoke('mercadopago-sync-payment', { body })
+                        : {
+                            data: null,
+                            error: {
+                              message: `Edge Function nao mapeada: ${fn}`,
+                              name: 'UnknownEdgeFunction',
+                            },
+                          };
+
+  const { data, error } = response;
+
+  if (error) {
     return {
       data: null as T | null,
       error: { message: error.message, code: error.name } as SafeServiceError,
     };
+  }
+
   return unwrap<T>(data);
 }
 
