@@ -833,14 +833,19 @@ function OverviewTab({ detail, onReload }: { detail: AdminTenantDetail; onReload
           <div className="space-y-4">
             <div className="rounded-xl border border-border bg-muted/30 p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">Asaas</span>
-                <StateBadge tone={tenant.asaasSubaccountStatus === 'active' ? 'emerald' : 'amber'}>
-                  {tenant.asaasSubaccountStatus}
+                <span className="text-xs font-semibold text-foreground">Mercado Pago</span>
+                <StateBadge tone={tenant.mercadopagoStatus === 'active' ? 'emerald' : 'amber'}>
+                  {tenant.mercadopagoStatus}
                 </StateBadge>
               </div>
               <p className="text-xs text-muted-foreground">
                 Conta redigida:{' '}
-                <span className="font-mono text-foreground">{tenant.asaasAccountId || 'N/D'}</span>
+                <span className="font-mono text-foreground">
+                  {tenant.mercadopagoAccountId || tenant.asaasAccountId || 'N/D'}
+                </span>
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Asaas legado: {tenant.asaasSubaccountStatus}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-muted/30 p-3">
@@ -910,14 +915,15 @@ function BillingTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
       entry.action.includes('subscription') ||
       entry.action.includes('plan')
   );
-  const asaasWebhookErrors = detail.webhookErrors.filter((webhook) =>
-    webhook.event.toLowerCase().includes('asaas')
+  const paymentProviderWebhookErrors = detail.webhookErrors.filter((webhook) =>
+    /asaas|mercado\s*pago|mercadopago/.test(webhook.event.toLowerCase())
   );
   const hasBillingRisk =
     tenant.saasSubscriptionStatus === 'past_due' ||
     tenant.status === 'suspended' ||
+    tenant.mercadopagoStatus === 'error' ||
     tenant.asaasSubaccountStatus === 'error' ||
-    asaasWebhookErrors.length > 0;
+    paymentProviderWebhookErrors.length > 0;
 
   return (
     <div className="space-y-5">
@@ -949,14 +955,18 @@ function BillingTab({ detail, onReload }: { detail: AdminTenantDetail; onReload:
               </StateBadge>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Asaas local</span>
-              <StateBadge tone={tenant.asaasSubaccountStatus === 'active' ? 'emerald' : 'amber'}>
-                {tenant.asaasSubaccountStatus}
+              <span className="text-muted-foreground">Gateway local</span>
+              <StateBadge tone={tenant.mercadopagoStatus === 'active' ? 'emerald' : 'amber'}>
+                {tenant.mercadopagoStatus !== 'not_configured'
+                  ? tenant.mercadopagoStatus
+                  : tenant.asaasSubaccountStatus}
               </StateBadge>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Webhooks Asaas com erro</span>
-              <span className="font-semibold text-foreground">{asaasWebhookErrors.length}</span>
+              <span className="text-muted-foreground">Webhooks de pagamento com erro</span>
+              <span className="font-semibold text-foreground">
+                {paymentProviderWebhookErrors.length}
+              </span>
             </div>
             <a href="#configuracao-auditada" className="btn-secondary mt-2 text-xs">
               Ajustar plano/status local
@@ -1047,32 +1057,37 @@ function IntegrationsTab({
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <SectionCard title="Asaas" icon={CreditCard}>
+        <SectionCard title="Mercado Pago" icon={CreditCard}>
           <div className="space-y-3 text-xs">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Status local</span>
-              <StateBadge tone={tenant.asaasSubaccountStatus === 'active' ? 'emerald' : 'amber'}>
-                {tenant.asaasSubaccountStatus}
+              <StateBadge tone={tenant.mercadopagoStatus === 'active' ? 'emerald' : 'amber'}>
+                {tenant.mercadopagoStatus}
               </StateBadge>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Operacao admin</span>
-              <StateBadge tone={integrationStateTone(tenant.integrationOperations.asaas.state)}>
-                {tenant.integrationOperations.asaas.state}
+              <StateBadge
+                tone={integrationStateTone(tenant.integrationOperations.mercadopago.state)}
+              >
+                {tenant.integrationOperations.mercadopago.state}
               </StateBadge>
             </div>
             <div>
               <p className="text-muted-foreground">Conta redigida</p>
               <p className="mt-1 break-all font-mono text-foreground">
-                {tenant.asaasAccountId || 'N/D'}
+                {tenant.mercadopagoAccountId || 'N/D'}
               </p>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800">
+              Asaas legado: {tenant.asaasSubaccountStatus}
             </div>
             <div className="flex flex-wrap gap-2 border-t border-border pt-3">
               {(['investigating', 'resolved', 'normal'] as const).map((state) => (
                 <button
-                  key={`asaas-${state}`}
+                  key={`mercadopago-${state}`}
                   type="button"
-                  onClick={() => setActionTarget({ provider: 'asaas', state })}
+                  onClick={() => setActionTarget({ provider: 'mercadopago', state })}
                   disabled={!adminPermissions.canManageTenantConfig || isSaving}
                   className="btn-ghost px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1173,7 +1188,7 @@ function IntegrationsTab({
         <Dialog
           open
           title="Atualizar integracao local"
-          description="Registra apenas estado operacional local. Nenhuma chamada sera enviada para Asaas ou D4Sign."
+          description="Registra apenas estado operacional local. Nenhuma chamada sera enviada para provedores externos."
           onOpenChange={(open) => {
             if (!open) closeActionDialog();
           }}
@@ -2313,8 +2328,8 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
   return (
     <SectionCard title="Erros de Webhook" icon={Webhook}>
       <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-        Reprocessos criam jobs locais auditados. Esta tela nao executa replay direto nem chama Asaas
-        ou D4Sign.
+        Reprocessos criam jobs locais auditados. Esta tela nao executa replay direto nem chama
+        provedores externos.
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -2326,6 +2341,7 @@ function WebhooksTab({ detail }: { detail: AdminTenantDetail }) {
           className="input-base w-auto text-xs"
         >
           <option value="all">Todos providers</option>
+          <option value="Mercado Pago">Mercado Pago</option>
           <option value="Asaas">Asaas</option>
           <option value="D4Sign">D4Sign</option>
         </select>

@@ -1,0 +1,34 @@
+{
+  "name": "mercadopago-invalid-signature",
+  "description": "Safe local fixture for a Mercado Pago webhook that must fail closed due to invalid signature.",
+  "provider": "mercadopago",
+  "headers": {
+    "content-type": "application/json",
+    "x-request-id": "mp_request_fixture_approved_001",
+    "x-signature": "ts=1710000001,v1=0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "expected": {
+    "accepted": false,
+    "error": "invalid_signature"
+  },
+  "payload": {
+    "id": "evt_mp_fixture_approved_001",
+    "live_mode": false,
+    "type": "payment",
+    "date_created": "2026-06-18T12:00:00.000Z",
+    "action": "payment.updated",
+    "data": {
+      "id": "pay_fixture_mp_approved_001"
+    }
+  },
+  "providerResource": {
+    "id": "pay_fixture_mp_approved_001",
+    "status": "approved",
+    "transaction_amount": 400,
+    "payment_method_id": "pix",
+    "payment_type_id": "bank_transfer",
+    "date_approved": "2026-06-18T12:01:00.000Z",
+    "preference_id": "pref_fixture_mp_001",
+    "external_reference": "shr_inv_fixture_001"
+  }
+}

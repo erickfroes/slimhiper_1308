@@ -21,7 +21,7 @@ import {
   getClinicFinanceReconciliation,
   getPaymentReceiptSignedUrl,
   reviewPaymentReceipt,
-  syncAsaasPayment,
+  syncProviderPayment,
 } from '@/services/billingApi';
 import type { ClinicFinanceDivergence } from '@/services/billingApi';
 import Dialog from '@/components/ui/Dialog';
@@ -164,7 +164,8 @@ export default function ClinicFinanceiroContent() {
   const [reviewReason, setReviewReason] = useState('');
   const [reviewError, setReviewError] = useState<string | null>(null);
   const reviewReasonRef = useRef<HTMLTextAreaElement>(null);
-  const canUseAsaas = featureFlags.has('financial.asaas');
+  const canUsePaymentProvider =
+    featureFlags.has('financial.mercadopago') || featureFlags.has('financial.asaas');
 
   const loadFinanceOverview = useCallback(async () => {
     setLoading(true);
@@ -276,14 +277,14 @@ export default function ClinicFinanceiroContent() {
 
   const handleSyncInvoice = async (invoiceId: string | null) => {
     if (!invoiceId) return;
-    if (!canUseAsaas) {
-      setActionError('Operacoes Asaas indisponiveis no plano deste tenant.');
+    if (!canUsePaymentProvider) {
+      setActionError('Operacoes do provedor de pagamento indisponiveis no plano deste tenant.');
       return;
     }
     setActionLoading(`sync:${invoiceId}`);
     setActionMessage(null);
     setActionError(null);
-    const result = await syncAsaasPayment(invoiceId, 'manual_clinic_reconciliation');
+    const result = await syncProviderPayment(invoiceId, 'manual_clinic_reconciliation');
     setActionLoading(null);
     if (result.error) {
       setActionError(result.error.message);
@@ -704,19 +705,19 @@ export default function ClinicFinanceiroContent() {
       <section className="bg-card border rounded-2xl p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-base font-semibold">Operacoes Asaas</h2>
+            <h2 className="text-base font-semibold">Operacoes Mercado Pago</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Criacao de customer, cobranca e assinatura permanece bloqueada neste painel. As acoes
               mutaveis exigem paciente validado, ambiente sandbox explicitamente autorizado e Edge
               Functions com idempotencia.
             </p>
-            {!canUseAsaas ? (
+            {!canUsePaymentProvider ? (
               <p className="mt-2 text-xs font-semibold text-amber-700">
-                Subparte financial.asaas indisponivel no plano deste tenant.
+                Subparte financial.mercadopago indisponivel no plano deste tenant.
               </p>
             ) : null}
           </div>
-          <div className="flex flex-wrap gap-2" aria-label="Acoes Asaas bloqueadas">
+          <div className="flex flex-wrap gap-2" aria-label="Acoes do provedor bloqueadas">
             {['Criar customer', 'Gerar cobranca', 'Criar assinatura'].map((label) => (
               <button
                 key={label}
@@ -738,7 +739,7 @@ export default function ClinicFinanceiroContent() {
           <div>
             <h2 className="text-base font-semibold">Conciliacao e divergencias</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Conferencia local entre cobrancas, pagamentos e eventos Asaas.
+              Conferencia local entre cobrancas, pagamentos e eventos do provedor.
             </p>
           </div>
           <ReceiptText size={18} className="text-muted-foreground" />
@@ -800,12 +801,13 @@ export default function ClinicFinanceiroContent() {
                               type="button"
                               className="inline-flex w-fit items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={
-                                !canUseAsaas || actionLoading === `sync:${divergence.invoiceId}`
+                                !canUsePaymentProvider ||
+                                actionLoading === `sync:${divergence.invoiceId}`
                               }
                               title={
-                                canUseAsaas
+                                canUsePaymentProvider
                                   ? undefined
-                                  : 'Operacoes Asaas indisponiveis no plano deste tenant'
+                                  : 'Operacoes do provedor indisponiveis no plano deste tenant'
                               }
                               onClick={() => void handleSyncInvoice(divergence.invoiceId)}
                             >
@@ -837,7 +839,7 @@ export default function ClinicFinanceiroContent() {
             )}
 
             <div>
-              <h3 className="text-sm font-semibold">Eventos Asaas recentes</h3>
+              <h3 className="text-sm font-semibold">Eventos recentes do provedor</h3>
               {hasRecentEvents ? (
                 <div className="mt-2 space-y-2">
                   {reconciliation.recentEvents.map((event) => (
@@ -869,7 +871,7 @@ export default function ClinicFinanceiroContent() {
                 </div>
               ) : (
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Nenhum evento Asaas recente encontrado para o tenant ativo.
+                  Nenhum evento recente do provedor encontrado para o tenant ativo.
                 </p>
               )}
             </div>

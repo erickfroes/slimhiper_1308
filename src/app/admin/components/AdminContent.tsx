@@ -581,9 +581,12 @@ function SectionFromSnapshot({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <StatCard
           icon={Link2}
-          label="Asaas ativos"
+          label="Gateway ativos"
           value={
-            snapshot.tenants.filter((tenant) => tenant.asaasSubaccountStatus === 'active').length
+            snapshot.tenants.filter(
+              (tenant) =>
+                tenant.mercadopagoStatus === 'active' || tenant.asaasSubaccountStatus === 'active'
+            ).length
           }
           tone="emerald"
         />
@@ -599,7 +602,9 @@ function SectionFromSnapshot({
           value={
             snapshot.tenants.filter(
               (tenant) =>
-                tenant.asaasSubaccountStatus === 'error' || tenant.d4signStatus === 'error'
+                tenant.mercadopagoStatus === 'error' ||
+                tenant.asaasSubaccountStatus === 'error' ||
+                tenant.d4signStatus === 'error'
             ).length
           }
           tone="amber"

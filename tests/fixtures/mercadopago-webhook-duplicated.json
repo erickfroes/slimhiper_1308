@@ -1,0 +1,48 @@
+{
+  "name": "mercadopago-webhook-duplicated",
+  "description": "Safe local fixture for a duplicated Mercado Pago webhook. Payload intentionally matches mercadopago-payment-approved.",
+  "provider": "mercadopago",
+  "duplicateOf": "mercadopago-payment-approved",
+  "headers": {
+    "content-type": "application/json",
+    "x-request-id": "mp_request_fixture_approved_001",
+    "x-signature": "ts=1710000001,v1=298a300ec469df8360d6343153dbc6cafcf2073e5da5f16dd0bf00abb540b9dc"
+  },
+  "expected": {
+    "accepted": true,
+    "idempotent": true,
+    "eventType": "payment.updated",
+    "invoiceStatus": "paid",
+    "paymentStatus": "paid",
+    "financialState": "settled",
+    "timelineEventType": "pagamento_recebido",
+    "timelineCategory": "financial",
+    "tenantResolution": {
+      "strategy": "patient_invoices.provider_payment_id",
+      "lookupPaymentId": "pay_fixture_mp_approved_001",
+      "tenantId": "tenant-fixture-001",
+      "patientId": "patient-fixture-001",
+      "shouldResolve": true
+    }
+  },
+  "payload": {
+    "id": "evt_mp_fixture_approved_001",
+    "live_mode": false,
+    "type": "payment",
+    "date_created": "2026-06-18T12:00:00.000Z",
+    "action": "payment.updated",
+    "data": {
+      "id": "pay_fixture_mp_approved_001"
+    }
+  },
+  "providerResource": {
+    "id": "pay_fixture_mp_approved_001",
+    "status": "approved",
+    "transaction_amount": 400,
+    "payment_method_id": "pix",
+    "payment_type_id": "bank_transfer",
+    "date_approved": "2026-06-18T12:01:00.000Z",
+    "preference_id": "pref_fixture_mp_001",
+    "external_reference": "shr_inv_fixture_001"
+  }
+}

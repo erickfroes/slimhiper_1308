@@ -303,9 +303,18 @@ export const PLAN_MODULE_CATALOG: PlanModuleDefinition[] = [
         featureFlagKey: 'financial.invoices',
       },
       {
+        key: 'financial.mercadopago',
+        label: 'Mercado Pago',
+        description:
+          'Estados e filas locais relacionadas ao Mercado Pago, sem provider call pela UI.',
+        permissions: ['financial.write'],
+        featureFlagKey: 'financial.mercadopago',
+        badges: ['provider'],
+      },
+      {
         key: 'financial.asaas',
-        label: 'Asaas',
-        description: 'Estados e filas locais relacionadas ao Asaas, sem provider call pela UI.',
+        label: 'Asaas legado',
+        description: 'Estados e filas locais relacionadas ao Asaas legado durante a drenagem.',
         permissions: ['financial.write'],
         featureFlagKey: 'financial.asaas',
         badges: ['provider'],

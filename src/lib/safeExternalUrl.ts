@@ -1,4 +1,11 @@
-const PAYMENT_HOSTS = ['asaas.com', 'sandbox.asaas.com', 'mock.pay'];
+const PAYMENT_HOSTS = [
+  'asaas.com',
+  'sandbox.asaas.com',
+  'mercadopago.com.br',
+  'mercadopago.com',
+  'mpago.la',
+  'mock.pay',
+];
 const DOCUMENT_HOSTS = [
   'd4sign.com',
   'd4sign.com.br',
