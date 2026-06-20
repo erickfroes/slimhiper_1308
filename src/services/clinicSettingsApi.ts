@@ -449,40 +449,86 @@ function readTenantId(value: unknown) {
   );
 }
 
+function readSessionTenantId(value: unknown) {
+  const record = asRecord(value);
+  const activeTenant = asRecord(record.activeTenant);
+  const activeTenantMembership = asRecord(record.activeTenantMembership);
+  const activeTenantId =
+    asString(activeTenant.id) ||
+    asString(record.activeTenantId) ||
+    asString(record.active_tenant_id) ||
+    asString(activeTenantMembership.tenantId) ||
+    asString(activeTenantMembership.tenant_id);
+  if (isUuid(activeTenantId)) return activeTenantId;
+
+  const activeMembership = asArray(record.tenantMemberships)
+    .map(asRecord)
+    .find((membership) => asString(membership.status).toLowerCase() === 'active');
+  return (
+    asString(activeMembership?.tenantId) ||
+    asString(activeMembership?.tenant_id) ||
+    asString(asRecord(activeMembership?.tenant).id)
+  );
+}
+
 async function resolveClinicTenantId(inputTenantId: string) {
   const normalizedTenantId = inputTenantId.trim();
   if (isUuid(normalizedTenantId)) {
     return { tenantId: normalizedTenantId, error: null as SafeServiceError | null };
   }
 
+  let lastError: SafeServiceError | null = null;
+
   try {
     const supabase = createBrowserSupabaseClient();
     const { data, error } = await supabase.rpc('get_clinic_settings_snapshot');
     if (error) {
-      return {
-        tenantId: '',
-        error: asServiceError(error, 'Nao foi possivel identificar a clinica atual.'),
+      lastError = asServiceError(error, 'Nao foi possivel identificar a clinica atual.');
+    } else {
+      const tenantId = readTenantId(data);
+      if (isUuid(tenantId)) return { tenantId, error: null as SafeServiceError | null };
+    }
+
+    const sessionResponse = await fetch('/api/auth/app-session', {
+      headers: { Accept: 'application/json' },
+    });
+    const sessionPayload = (await sessionResponse.json().catch(() => null)) as unknown;
+    if (sessionResponse.ok) {
+      const tenantId = readSessionTenantId(sessionPayload);
+      if (isUuid(tenantId)) return { tenantId, error: null as SafeServiceError | null };
+    } else {
+      lastError = {
+        message: asString(
+          asRecord(asRecord(sessionPayload).error).message,
+          'Nao foi possivel identificar a sessao atual.'
+        ),
       };
     }
 
-    const tenantId = readTenantId(data);
-    if (!isUuid(tenantId)) {
-      return {
-        tenantId: '',
-        error: {
-          message:
-            'Nao foi possivel identificar a clinica atual. Recarregue a pagina e tente novamente.',
-        },
-      };
+    const profileResult = await supabase.rpc('get_current_user_profile');
+    if (profileResult.error) {
+      lastError = asServiceError(
+        profileResult.error,
+        'Nao foi possivel identificar o perfil atual.'
+      );
+    } else {
+      const tenantId = readSessionTenantId(profileResult.data);
+      if (isUuid(tenantId)) return { tenantId, error: null as SafeServiceError | null };
     }
-
-    return { tenantId, error: null as SafeServiceError | null };
   } catch (error) {
-    return {
-      tenantId: '',
-      error: asServiceError(error, 'Nao foi possivel identificar a clinica atual.'),
-    };
+    lastError = asServiceError(error, 'Nao foi possivel identificar a clinica atual.');
   }
+
+  return {
+    tenantId: '',
+    error: {
+      message:
+        lastError?.message ||
+        'Nao foi possivel identificar a clinica atual. Recarregue a pagina e tente novamente.',
+      code: lastError?.code,
+      details: lastError?.details,
+    },
+  };
 }
 
 function initialsFrom(name: string, email: string) {
