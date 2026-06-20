@@ -33,6 +33,7 @@ import {
   saveAutoMessageTemplate,
   saveChatServiceHours,
   saveClinicUnit,
+  startClinicMercadoPagoOAuth,
   updateComplianceGapStatus,
   updateClinicMemberRole,
   updateClinicMemberProfessionalProfile,
@@ -2297,27 +2298,43 @@ function SectionLegal({
 }
 
 function SectionIntegracoes({
+  tenantId,
   integrations,
   draft,
   setDraft,
   saving,
   onSave,
 }: {
+  tenantId: string;
   integrations: ClinicIntegration[];
   draft: Record<string, boolean>;
   setDraft: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   saving: boolean;
   onSave: () => void;
 }) {
+  const [oauthError, setOauthError] = useState<string | null>(null);
+  const [oauthBusy, setOauthBusy] = useState(false);
   const categories = useMemo(
     () => Array.from(new Set(integrations.map((integration) => integration.category))),
     [integrations]
   );
 
   const toggle = (id: string, value: boolean) => setDraft((prev) => ({ ...prev, [id]: value }));
+  const startMercadoPagoOAuth = async () => {
+    setOauthBusy(true);
+    setOauthError(null);
+    const { data, error } = await startClinicMercadoPagoOAuth(tenantId);
+    setOauthBusy(false);
+    if (error || !data) {
+      setOauthError(error?.message ?? 'Nao foi possivel iniciar Mercado Pago.');
+      return;
+    }
+    window.location.assign(data.authorizationUrl);
+  };
 
   return (
     <div className="space-y-5">
+      {oauthError ? <InlineAlert message={oauthError} /> : null}
       {categories.map((category) => (
         <div key={category} className="space-y-2">
           <h3 className="text-xs font-semibold uppercase text-muted-foreground">{category}</h3>
@@ -2337,11 +2354,28 @@ function SectionIntegracoes({
                     </div>
                     <p className="text-xs text-muted-foreground">{integration.description}</p>
                   </div>
-                  <Toggle
-                    label={integration.name}
-                    checked={enabled}
-                    onChange={(value) => toggle(integration.id, value)}
-                  />
+                  <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
+                    <Toggle
+                      label={integration.name}
+                      checked={enabled}
+                      onChange={(value) => toggle(integration.id, value)}
+                    />
+                    {integration.id === 'mercadopago' ? (
+                      <button
+                        type="button"
+                        onClick={startMercadoPagoOAuth}
+                        disabled={oauthBusy}
+                        className="btn-secondary flex-shrink-0 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {oauthBusy ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <CreditCard size={14} />
+                        )}
+                        {enabled ? 'Reconectar' : 'Conectar'}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               );
             })}
@@ -3020,6 +3054,7 @@ export default function ClinicSettingsContent() {
 
         <SectionCard id="integracoes" title="Integracoes" icon={Plug}>
           <SectionIntegracoes
+            tenantId={snapshot.tenant.id}
             integrations={snapshot.integrations}
             draft={integrationDraft}
             setDraft={setIntegrationDraft}

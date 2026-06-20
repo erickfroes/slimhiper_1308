@@ -6,8 +6,10 @@ import {
   asRecord,
   asString,
   mercadoPagoFetch,
+  mercadoPagoFetchWithAccessToken,
   MERCADOPAGO_PROVIDER,
   normalizePaymentStatus,
+  resolveMercadoPagoTenantAccessToken,
   safeErrorMessage,
   sha256Hex,
   verifyMercadoPagoWebhookSignature,
@@ -53,6 +55,15 @@ function getWebhookResourceType(bodyRecord: Record<string, unknown>) {
   if (eventType === 'payment' || action.startsWith('payment.')) return 'payment';
   if (eventType.includes('preapproval') || action.includes('preapproval')) return 'preapproval';
   return eventType || 'unknown';
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
+}
+
+function getTenantIdHint(req: Request) {
+  const value = asString(new URL(req.url).searchParams.get('tenant_id'));
+  return isUuid(value) ? value : '';
 }
 
 function minimizedWebhookPayload(params: {
@@ -221,6 +232,7 @@ Deno.serve(async (req) => {
 
   try {
     const rawText = await req.text();
+    const tenantIdHint = getTenantIdHint(req);
     const body = rawText
       ? await Promise.resolve()
           .then(() => JSON.parse(rawText))
@@ -333,11 +345,34 @@ Deno.serve(async (req) => {
       return json(200, { ok: true, processed: false, ignored: true }, observedEdgeHeaders(context));
     }
 
-    const providerResponse = await mercadoPagoFetch(
-      Deno.env,
-      `/v1/payments/${encodeURIComponent(dataId)}`,
-      { method: 'GET' }
-    );
+    const tenantToken = tenantIdHint
+      ? await resolveMercadoPagoTenantAccessToken(Deno.env, supabase, tenantIdHint)
+      : null;
+    if (tenantIdHint && !tenantToken?.accessToken) {
+      await supabase
+        .from('billing_webhook_events')
+        .update({
+          status: 'failed',
+          processed_at: timestamp,
+          error_message: tenantToken?.errorCode || 'tenant_mercadopago_not_connected',
+        })
+        .eq('event_hash', eventHash);
+      return internalError(context, 'tenant_token_unavailable', {
+        tenant_id: tenantIdHint,
+        error_code: tenantToken?.errorCode || 'tenant_mercadopago_not_connected',
+      });
+    }
+
+    const providerResponse = tenantToken?.accessToken
+      ? await mercadoPagoFetchWithAccessToken(
+          Deno.env,
+          tenantToken.accessToken,
+          `/v1/payments/${encodeURIComponent(dataId)}`,
+          { method: 'GET' }
+        )
+      : await mercadoPagoFetch(Deno.env, `/v1/payments/${encodeURIComponent(dataId)}`, {
+          method: 'GET',
+        });
     if (!providerResponse.ok) {
       await supabase
         .from('billing_webhook_events')
@@ -363,6 +398,43 @@ Deno.serve(async (req) => {
     const tenantId = asString(invoice?.tenant_id) || null;
     const patientId = asString(invoice?.patient_id) || null;
     const invoiceId = asString(invoice?.id) || null;
+    if (tenantIdHint && tenantId && tenantIdHint !== tenantId) {
+      await supabase.from('billing_provider_events').insert({
+        tenant_id: tenantIdHint,
+        provider: MERCADOPAGO_PROVIDER,
+        provider_event_id: providerEventId,
+        event_type: eventType,
+        resource_type: 'payment',
+        resource_id: providerPaymentId,
+        idempotency_key: eventHash,
+        status: 'failed',
+        processed_at: timestamp,
+        error_code: 'tenant_mismatch',
+        payload_summary: {
+          event: eventType,
+          payment_id: providerPaymentId,
+          tenant_hint: tenantIdHint,
+        },
+      });
+      await supabase
+        .from('billing_webhook_events')
+        .update({
+          status: 'failed',
+          processed_at: timestamp,
+          error_message: 'tenant_mismatch',
+        })
+        .eq('event_hash', eventHash);
+      await logEdgeEvent(context, 'webhook_rejected', 'warn', 'denied', {
+        provider: MERCADOPAGO_PROVIDER,
+        event_type: eventType,
+        reason: 'tenant_mismatch',
+      });
+      return json(
+        200,
+        { ok: true, processed: false, rejected: true },
+        observedEdgeHeaders(context)
+      );
+    }
     const providerStatus = asString(providerPayment.status);
     const mapping = normalizePaymentStatus(providerStatus);
     const amountCents =

@@ -10,9 +10,10 @@ import {
   centsToProviderAmount,
   corsHeaders,
   jsonResponse,
-  mercadoPagoFetch,
+  mercadoPagoFetchWithAccessToken,
   MERCADOPAGO_FEATURE_FLAGS,
   MERCADOPAGO_PROVIDER,
+  resolveMercadoPagoTenantAccessToken,
   safeErrorMessage,
   safeIdempotencyKey,
   safeText,
@@ -333,8 +334,36 @@ Deno.serve(async (req) => {
     if (refundInsert.error) throw refundInsert.error;
     const refundId = String(refundInsert.data.id);
     const fullRefund = amountCents >= localAmountCents;
-    const providerResponse = await mercadoPagoFetch(
+    const tenantToken = await resolveMercadoPagoTenantAccessToken(Deno.env, admin, tenantId);
+    if (!tenantToken.accessToken) {
+      await admin
+        .from('billing_refunds')
+        .update({
+          status: 'failed',
+          processed_at: new Date().toISOString(),
+          error_code: tenantToken.errorCode || 'tenant_mercadopago_not_connected',
+        })
+        .eq('id', refundId)
+        .eq('tenant_id', tenantId);
+
+      return jsonResponse(
+        Deno.env,
+        409,
+        {
+          ok: false,
+          error: {
+            code: tenantToken.errorCode || 'tenant_mercadopago_not_connected',
+            message: 'Mercado Pago OAuth account is not active for this tenant.',
+          },
+          meta: { tenantId, timestamp },
+        },
+        req
+      );
+    }
+
+    const providerResponse = await mercadoPagoFetchWithAccessToken(
       Deno.env,
+      tenantToken.accessToken,
       `/v1/payments/${encodeURIComponent(providerPaymentId)}/refunds`,
       {
         method: 'POST',

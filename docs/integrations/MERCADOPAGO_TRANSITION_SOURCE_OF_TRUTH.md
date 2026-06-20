@@ -1,6 +1,6 @@
 # Mercado Pago Transition Source Of Truth
 
-Last updated: 2026-06-18
+Last updated: 2026-06-20
 
 This document is the operational source of truth for replacing the current
 Asaas billing integration with Mercado Pago.
@@ -10,7 +10,7 @@ implementation, review, staging validation, cutover, and post-cutover cleanup.
 
 ## Current Status
 
-- [ ] Product decision finalized: single SlimHiper seller account or per-clinic
+- [x] Product decision finalized: single SlimHiper seller account or per-clinic
       Mercado Pago marketplace sellers.
 - [x] Provider-neutral billing schema designed.
 - [x] Provider-neutral frontend/service contract designed.
@@ -24,8 +24,9 @@ implementation, review, staging validation, cutover, and post-cutover cleanup.
 - [ ] Production cutover approved.
 - [ ] Asaas legacy processing retired after all pending legacy objects close.
 
-Implementation note: code now follows the single-seller Checkout Pro MVP path.
-Marketplace/OAuth remains blocked until the product decision gate is finalized.
+Implementation note: code now follows the per-tenant OAuth + Checkout Pro path
+for patient charges. SlimHiper platform plan billing remains a separate
+platform billing concern and sandbox/cutover validation are still pending.
 The migration and provider calls have not been run by this document update.
 
 ## Non-Negotiable Rules
@@ -86,10 +87,10 @@ Checklist:
 
 Blocked until answered:
 
-- [ ] `mercadopago-create-tenant-subaccount` equivalent design.
-- [ ] OAuth credential storage.
+- [x] Tenant OAuth connection design implemented through Next admin routes.
+- [x] OAuth credential storage uses encrypted `mercadopago_tenant_accounts`.
 - [ ] Marketplace fee payload mapping.
-- [ ] Admin integration model for clinic-level payment provider status.
+- [x] Admin/clinic integration model for Mercado Pago OAuth status.
 
 ## Current Asaas Inventory
 
@@ -336,10 +337,12 @@ Required variables:
 | `MERCADOPAGO_ACCESS_TOKEN`                        | server/Edge only      | Private credential for API calls. Never browser.                                   |
 | `MERCADOPAGO_BASE_URL`                            | server/Edge only      | Default target should be `https://api.mercadopago.com`.                            |
 | `MERCADOPAGO_WEBHOOK_SECRET`                      | server/Edge only      | Used to validate webhook signature.                                                |
+| `MERCADOPAGO_TOKEN_ENCRYPTION_KEY`                | server/Edge only      | 32-byte AES-GCM key for encrypted tenant OAuth tokens.                             |
 | `MERCADOPAGO_PUBLIC_KEY`                          | public only if needed | Only for frontend SDK/card flows. Not needed for simple Checkout Pro redirect MVP. |
 | `MERCADOPAGO_CLIENT_ID`                           | server only           | Marketplace/OAuth only.                                                            |
 | `MERCADOPAGO_CLIENT_SECRET`                       | server only           | Marketplace/OAuth only.                                                            |
 | `MERCADOPAGO_OAUTH_REDIRECT_URL`                  | server/admin config   | Marketplace/OAuth only.                                                            |
+| `MERCADOPAGO_OAUTH_TEST_TOKEN`                    | server/admin config   | Optional sandbox OAuth token flag.                                                 |
 | `REQUIRE_MERCADOPAGO_PROVIDER_SUCCESS`            | scripts               | Strict sandbox contract gate, matching current Asaas pattern.                      |
 | `ALLOW_MERCADOPAGO_PROVIDER_CONTRACT_NON_SANDBOX` | scripts               | Explicit override for non-sandbox provider contract.                               |
 
@@ -393,7 +396,7 @@ Checklist:
 - [ ] Decide item description format.
 - [ ] Decide whether payer email/name/document are sent.
 - [ ] Decide back URLs.
-- [ ] Configure `notification_url`.
+- [x] Configure `notification_url`.
 - [ ] Include `external_reference`.
 - [ ] Store `init_point` or equivalent safe link.
 - [ ] Map preference/payment ids to local invoice.

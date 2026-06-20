@@ -45,6 +45,8 @@ import {
   resendPlatformTenantInvite,
   revokePlatformBreakGlass,
   saveTenantEntitlements,
+  disconnectTenantMercadoPagoOAuth,
+  startTenantMercadoPagoOAuth,
   updatePlatformTenantIntegrationState,
   updatePlatformTenantConfig,
   updatePlatformTenantMembership,
@@ -1028,6 +1030,10 @@ function IntegrationsTab({
   } | null>(null);
   const [reason, setReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isStartingMercadoPagoOAuth, setIsStartingMercadoPagoOAuth] = useState(false);
+  const [isDisconnectingMercadoPago, setIsDisconnectingMercadoPago] = useState(false);
+  const [disconnectReason, setDisconnectReason] = useState('');
+  const [showMercadoPagoDisconnectDialog, setShowMercadoPagoDisconnectDialog] = useState(false);
 
   const closeActionDialog = () => {
     if (isSaving) return;
@@ -1051,6 +1057,34 @@ function IntegrationsTab({
     }
     toast.success('Estado local da integracao atualizado com auditoria.');
     closeActionDialog();
+    onReload();
+  };
+
+  const startMercadoPagoOAuth = async () => {
+    setIsStartingMercadoPagoOAuth(true);
+    const { data, error } = await startTenantMercadoPagoOAuth(tenant.id);
+    setIsStartingMercadoPagoOAuth(false);
+    if (error || !data) {
+      toast.error(error?.message ?? 'Falha ao iniciar OAuth Mercado Pago.');
+      return;
+    }
+    window.location.assign(data.authorizationUrl);
+  };
+
+  const submitMercadoPagoDisconnect = async () => {
+    setIsDisconnectingMercadoPago(true);
+    const { error } = await disconnectTenantMercadoPagoOAuth({
+      tenantId: tenant.id,
+      reason: disconnectReason,
+    });
+    setIsDisconnectingMercadoPago(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Mercado Pago desconectado com auditoria.');
+    setShowMercadoPagoDisconnectDialog(false);
+    setDisconnectReason('');
     onReload();
   };
 
@@ -1079,8 +1113,55 @@ function IntegrationsTab({
                 {tenant.mercadopagoAccountId || 'N/D'}
               </p>
             </div>
+            <div className="grid grid-cols-1 gap-2 border-t border-border pt-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Conectado em</span>
+                <span className="font-medium text-foreground">
+                  {formatDate(tenant.mercadopagoConnectedAt)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Token expira</span>
+                <span className="font-medium text-foreground">
+                  {formatDate(tenant.mercadopagoExpiresAt)}
+                </span>
+              </div>
+              {tenant.mercadopagoErrorMessage ? (
+                <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-red-700">
+                  {tenant.mercadopagoErrorMessage}
+                </p>
+              ) : null}
+            </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800">
               Asaas legado: {tenant.asaasSubaccountStatus}
+            </div>
+            <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+              <button
+                type="button"
+                onClick={startMercadoPagoOAuth}
+                disabled={
+                  !adminPermissions.canManageTenantConfig ||
+                  isStartingMercadoPagoOAuth ||
+                  isDisconnectingMercadoPago
+                }
+                className="btn-primary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {tenant.mercadopagoStatus === 'active' ? 'Reconectar' : 'Conectar Mercado Pago'}
+              </button>
+              {tenant.mercadopagoStatus === 'active' ? (
+                <button
+                  type="button"
+                  onClick={() => setShowMercadoPagoDisconnectDialog(true)}
+                  disabled={
+                    !adminPermissions.canManageTenantConfig ||
+                    isStartingMercadoPagoOAuth ||
+                    isDisconnectingMercadoPago
+                  }
+                  className="btn-secondary px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Desconectar
+                </button>
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-2 border-t border-border pt-3">
               {(['investigating', 'resolved', 'normal'] as const).map((state) => (
@@ -1234,6 +1315,57 @@ function IntegrationsTab({
               />
             </label>
           </div>
+        </Dialog>
+      ) : null}
+      {showMercadoPagoDisconnectDialog ? (
+        <Dialog
+          open
+          title="Desconectar Mercado Pago"
+          description="Remove os tokens OAuth armazenados para este tenant e bloqueia novas cobrancas Mercado Pago ate reconectar."
+          onOpenChange={(open) => {
+            if (!open && !isDisconnectingMercadoPago) {
+              setShowMercadoPagoDisconnectDialog(false);
+              setDisconnectReason('');
+            }
+          }}
+          footer={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDisconnectingMercadoPago) return;
+                  setShowMercadoPagoDisconnectDialog(false);
+                  setDisconnectReason('');
+                }}
+                disabled={isDisconnectingMercadoPago}
+                className="btn-ghost px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submitMercadoPagoDisconnect}
+                disabled={
+                  !adminPermissions.canManageTenantConfig ||
+                  isDisconnectingMercadoPago ||
+                  disconnectReason.trim().length < 16
+                }
+                className="btn-primary px-3 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isDisconnectingMercadoPago ? 'Desconectando...' : 'Desconectar'}
+              </button>
+            </div>
+          }
+        >
+          <label className="block">
+            <span className="text-xs font-semibold text-foreground">Motivo auditavel</span>
+            <textarea
+              value={disconnectReason}
+              onChange={(event) => setDisconnectReason(event.target.value)}
+              placeholder="Explique a desconexao. Minimo de 16 caracteres."
+              className="input-base mt-1 min-h-24 text-sm"
+            />
+          </label>
         </Dialog>
       ) : null}
     </div>

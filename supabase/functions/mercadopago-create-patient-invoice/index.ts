@@ -10,10 +10,11 @@ import {
   corsHeaders,
   isDateInput,
   jsonResponse,
-  mercadoPagoFetch,
+  mercadoPagoFetchWithAccessToken,
   MERCADOPAGO_FEATURE_FLAGS,
   MERCADOPAGO_PROVIDER,
   pickPaymentLink,
+  resolveMercadoPagoTenantAccessToken,
   safeErrorMessage,
   safeIdempotencyKey,
   safeText,
@@ -97,8 +98,20 @@ function siteUrl() {
   }
 }
 
-function optionalPreferenceUrls(invoiceId: string) {
+function notificationUrlForTenant(tenantId: string) {
   const notificationUrl = envString(Deno.env, 'MERCADOPAGO_NOTIFICATION_URL');
+  if (!notificationUrl) return '';
+  try {
+    const url = new URL(notificationUrl);
+    url.searchParams.set('tenant_id', tenantId);
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+function optionalPreferenceUrls(invoiceId: string, tenantId: string) {
+  const notificationUrl = notificationUrlForTenant(tenantId);
   const site = siteUrl();
   return {
     ...(notificationUrl ? { notification_url: notificationUrl } : {}),
@@ -236,6 +249,23 @@ Deno.serve(async (req) => {
       );
     }
 
+    const tenantToken = await resolveMercadoPagoTenantAccessToken(Deno.env, admin, tenantId);
+    if (!tenantToken.accessToken) {
+      return jsonResponse(
+        Deno.env,
+        409,
+        {
+          ok: false,
+          error: {
+            code: tenantToken.errorCode || 'tenant_mercadopago_not_connected',
+            message: 'Mercado Pago OAuth account is not active for this tenant.',
+          },
+          meta: { tenantId, timestamp },
+        },
+        req
+      );
+    }
+
     if (idempotencyKey) {
       const { data: existingInvoice, error: existingInvoiceError } = await admin
         .from('patient_invoices')
@@ -298,30 +328,35 @@ Deno.serve(async (req) => {
 
     if (insertError) throw insertError;
 
-    const preference = await mercadoPagoFetch(Deno.env, '/checkout/preferences', {
-      method: 'POST',
-      idempotencyKey: idempotencyKey || `invoice:${invoice.id}`,
-      body: JSON.stringify({
-        items: [
-          {
-            id: invoice.id,
-            title: description,
-            description,
-            quantity: 1,
-            currency_id: 'BRL',
-            unit_price: centsToProviderAmount(amountCents),
+    const preference = await mercadoPagoFetchWithAccessToken(
+      Deno.env,
+      tenantToken.accessToken,
+      '/checkout/preferences',
+      {
+        method: 'POST',
+        idempotencyKey: idempotencyKey || `invoice:${invoice.id}`,
+        body: JSON.stringify({
+          items: [
+            {
+              id: invoice.id,
+              title: description,
+              description,
+              quantity: 1,
+              currency_id: 'BRL',
+              unit_price: centsToProviderAmount(amountCents),
+            },
+          ],
+          external_reference: externalReference,
+          statement_descriptor: 'SLIMHIPER',
+          expires: false,
+          metadata: {
+            local_invoice_id: invoice.id,
+            tenant_reference: `tenant_${tenantId.replaceAll('-', '').slice(0, 16)}`,
           },
-        ],
-        external_reference: externalReference,
-        statement_descriptor: 'SLIMHIPER',
-        expires: false,
-        metadata: {
-          local_invoice_id: invoice.id,
-          tenant_reference: `tenant_${tenantId.replaceAll('-', '').slice(0, 16)}`,
-        },
-        ...optionalPreferenceUrls(invoice.id),
-      }),
-    });
+          ...optionalPreferenceUrls(invoice.id, tenantId),
+        }),
+      }
+    );
 
     if (!preference.ok) {
       console.error('[mercadopago-create-patient-invoice] provider_error', {

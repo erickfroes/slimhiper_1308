@@ -53,9 +53,11 @@ scripts, CI secrets, or Supabase Edge Function secrets:
 - `MERCADOPAGO_BASE_URL`
 - `MERCADOPAGO_WEBHOOK_SECRET`
 - `MERCADOPAGO_NOTIFICATION_URL`
+- `MERCADOPAGO_TOKEN_ENCRYPTION_KEY`
 - `MERCADOPAGO_CLIENT_ID`
 - `MERCADOPAGO_CLIENT_SECRET`
 - `MERCADOPAGO_OAUTH_REDIRECT_URL`
+- `MERCADOPAGO_OAUTH_TEST_TOKEN`
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY`
 - `ANTHROPIC_API_KEY`
@@ -102,15 +104,21 @@ approved:
 - `MERCADOPAGO_BASE_URL`
 - `MERCADOPAGO_WEBHOOK_SECRET`
 - `MERCADOPAGO_NOTIFICATION_URL`
+- `MERCADOPAGO_TOKEN_ENCRYPTION_KEY`
 - `MERCADOPAGO_CLIENT_ID`
 - `MERCADOPAGO_CLIENT_SECRET`
 - `MERCADOPAGO_OAUTH_REDIRECT_URL`
+- `MERCADOPAGO_OAUTH_TEST_TOKEN`
 - `MERCADOPAGO_PUBLIC_KEY`
 
 Never expose access tokens, webhook secrets, OAuth secrets, provider payment
 IDs tied to real data, or raw Mercado Pago payloads to frontend code or logs.
 Do not call Mercado Pago APIs unless a task explicitly authorizes that
 environment and operation.
+
+`MERCADOPAGO_TOKEN_ENCRYPTION_KEY` must be a 32-byte AES-GCM key, preferably
+base64-encoded, configured in both the Next.js server environment and Supabase
+Edge Function secrets. Generate a new segregated value per environment.
 
 ## Rotation Guidance
 
