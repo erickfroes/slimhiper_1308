@@ -27,7 +27,11 @@ import { SkeletonCard } from '@/components/LoadingSkeleton';
 import QuickActionsCard from '@/components/QuickActionsCard';
 import StatusBadge from '@/components/StatusBadge';
 import DataState from '@/components/ui/DataState';
-import { getDashboardSnapshot } from '@/services/dashboardApi';
+import {
+  getClinicPatientPortalMetrics,
+  getDashboardSnapshot,
+  type PatientPortalMetrics,
+} from '@/services/dashboardApi';
 import type {
   AppointmentSummary,
   DashboardAccess,
@@ -581,6 +585,49 @@ function OperationalSignalsPanel({ sections }: { sections: DashboardOperationalS
   );
 }
 
+function PortalMetricsPanel({ metrics }: { metrics: PatientPortalMetrics | null }) {
+  if (!metrics) return null;
+  const money = (cents: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+  return (
+    <section className="card-base p-5">
+      <div className="mb-4">
+        <h2 className="text-sm font-semibold text-foreground">Portal do paciente</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Indicadores consolidados dos últimos {metrics.periodDays} dias.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl bg-muted/50 p-3">
+          <p className="text-xs text-muted-foreground">Contas ativas</p>
+          <p className="mt-1 text-xl font-bold">{metrics.portalAccounts}</p>
+        </div>
+        <div className="rounded-xl bg-muted/50 p-3">
+          <p className="text-xs text-muted-foreground">Agendamentos próprios</p>
+          <p className="mt-1 text-xl font-bold">{metrics.selfScheduledAppointments}</p>
+          <p className="text-xs text-muted-foreground">
+            {metrics.completedSelfScheduledAppointments} concluídos
+          </p>
+        </div>
+        <div className="rounded-xl bg-muted/50 p-3">
+          <p className="text-xs text-muted-foreground">Cobrança avulsa</p>
+          <p className="mt-1 text-xl font-bold">{money(metrics.avulsoInvoiceAmountCents)}</p>
+          <p className="text-xs text-muted-foreground">
+            {money(metrics.paidPortalInvoiceAmountCents)} pagos
+          </p>
+        </div>
+        <div className="rounded-xl bg-muted/50 p-3">
+          <p className="text-xs text-muted-foreground">Baixa adesão</p>
+          <p className="mt-1 text-xl font-bold">{metrics.lowAdherencePatients}</p>
+          <Link href="/clinic/patients" className="text-xs font-semibold text-primary">
+            Acompanhar pacientes
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function DashboardContent() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [access, setAccess] = useState<DashboardAccess>(defaultAccess);
@@ -592,6 +639,7 @@ export default function DashboardContent() {
   const [operationalSections, setOperationalSections] =
     useState<DashboardOperationalSections | null>(null);
   const [degradedSections, setDegradedSections] = useState<DashboardDegradedSection[]>([]);
+  const [portalMetrics, setPortalMetrics] = useState<PatientPortalMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -605,7 +653,10 @@ export default function DashboardContent() {
     setLoadError(null);
 
     try {
-      const snapshot = await getDashboardSnapshot();
+      const [snapshot, metrics] = await Promise.all([
+        getDashboardSnapshot(),
+        getClinicPatientPortalMetrics().catch(() => null),
+      ]);
       if (requestId !== loadRequestIdRef.current) return;
 
       setStats(snapshot.stats);
@@ -617,6 +668,7 @@ export default function DashboardContent() {
       setActionableQueue(snapshot.actionableQueue ?? snapshot.sections?.actionableQueue.data ?? []);
       setOperationalSections(snapshot.sections ?? null);
       setDegradedSections(snapshot.degradedSections ?? []);
+      setPortalMetrics(metrics);
       if (isRefresh) toast.success('Dados atualizados');
     } catch {
       if (requestId !== loadRequestIdRef.current) return;
@@ -631,6 +683,7 @@ export default function DashboardContent() {
       setActionableQueue([]);
       setOperationalSections(null);
       setDegradedSections([]);
+      setPortalMetrics(null);
       setLoadError('Nao foi possivel validar o snapshot operacional do dashboard.');
       toast.error('Falha ao carregar dados do dashboard. Tente novamente.');
     } finally {
@@ -933,6 +986,7 @@ export default function DashboardContent() {
       </div>
 
       <OperationalSignalsPanel sections={operationalSections} />
+      <PortalMetricsPanel metrics={portalMetrics} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="card-base p-5">

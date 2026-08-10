@@ -77,6 +77,13 @@ import {
 } from '@/services/agendaApi';
 import { getClinicCommercialCatalog } from '@/services/commercialApi';
 import { createBioimpedanceResult, createMeasurement } from '@/services/clinicalRecordsApi';
+import {
+  listCallPanels,
+  rotateCallPanelToken,
+  saveCallPanel,
+  type CallPanel,
+  type CallPanelStatus,
+} from '@/services/callPanelApi';
 import { getPatientList } from '@/services/patientsApi';
 
 // ─── WORKFLOW STAGES ──────────────────────────────────────────────────────────
@@ -445,11 +452,14 @@ type CommercialCatalogState = {
 };
 
 type RoomFormState = {
+  id: string;
+  unitId: string;
   code: string;
   name: string;
   roomType: AgendaRoomType;
   status: AgendaRoomStatus;
   capacity: string;
+  equipment: string;
 };
 
 type AllocationFormState = {
@@ -475,7 +485,7 @@ function createEmptyAppointmentForm(date: string): AppointmentFormState {
     programId: '',
     packageId: '',
     serviceId: '',
-    billingMode: 'none',
+    billingMode: 'local_invoice',
     billingAmount: '',
     billingDueDate: date,
     paymentMethod: 'pix',
@@ -498,11 +508,6 @@ function packageMatchesProgram(pkg: CommercialPackage, programId: string) {
   return pkg.programLinks.some((link) => link.programId === programId && link.status === 'ativo');
 }
 
-function serviceMatchesPackage(service: CommercialService, pkg?: CommercialPackage | null) {
-  if (!pkg) return true;
-  return pkg.services.some((item) => item.serviceId === service.id);
-}
-
 function getSuggestedBillingAmountCents(
   form: Pick<AppointmentFormState, 'serviceId' | 'packageId'>,
   catalog: CommercialCatalogState
@@ -514,11 +519,14 @@ function getSuggestedBillingAmountCents(
 
 function createEmptyRoomForm(): RoomFormState {
   return {
+    id: '',
+    unitId: '',
     code: '',
     name: '',
     roomType: 'consulting',
     status: 'active',
     capacity: '1',
+    equipment: '',
   };
 }
 
@@ -680,13 +688,10 @@ function AppointmentFormModal({
   const activePrograms = commercialCatalog.programs.filter((program) => program.status === 'ativo');
   const activePackages = commercialCatalog.packages.filter((pkg) => pkg.status === 'ativo');
   const activeServices = commercialCatalog.services.filter((service) => service.status === 'ativo');
-  const selectedPackage = activePackages.find((pkg) => pkg.id === form.packageId) ?? null;
   const programPackages = activePackages.filter((pkg) =>
     packageMatchesProgram(pkg, form.programId)
   );
-  const packageServices = activeServices.filter((service) =>
-    serviceMatchesPackage(service, selectedPackage)
-  );
+  const packageServices = activeServices;
   const suggestedAmountCents = getSuggestedBillingAmountCents(form, commercialCatalog);
 
   return (
@@ -972,32 +977,31 @@ function AppointmentFormModal({
                     onChange={(event) => {
                       const serviceId = event.target.value;
                       const service = activeServices.find((item) => item.id === serviceId);
-                      const nextAmountCents =
-                        service?.basePriceCents ??
-                        activePackages.find((pkg) => pkg.id === form.packageId)?.priceCents ??
-                        0;
+                      const isCoveredByProgram = Boolean(form.programId);
+                      const nextAmountCents = service?.basePriceCents ?? 0;
                       onChange({
                         serviceId,
                         durationMinutes:
                           service?.durationMinutes && !Number.isNaN(service.durationMinutes)
                             ? String(service.durationMinutes)
                             : form.durationMinutes,
-                        billingAmount:
-                          form.billingMode === 'none'
-                            ? form.billingAmount
-                            : centsToCurrencyInput(nextAmountCents),
+                        billingMode: isCoveredByProgram ? 'none' : form.billingMode,
+                        billingAmount: isCoveredByProgram
+                          ? ''
+                          : centsToCurrencyInput(nextAmountCents),
                         billingDescription: service?.name ?? form.billingDescription,
                       });
                     }}
                     className="input-base text-sm"
                     disabled={commercialCatalogLoading || packageServices.length === 0}
+                    required
                   >
                     <option value="">
                       {commercialCatalogLoading
                         ? 'Carregando...'
                         : packageServices.length === 0
-                          ? 'Sem servico ativo'
-                          : 'Sem servico'}
+                          ? 'Cadastre um serviço no catálogo'
+                          : 'Selecione o serviço'}
                     </option>
                     {packageServices.map((service) => (
                       <option key={service.id} value={service.id}>
@@ -1442,6 +1446,7 @@ const allocationStatusLabel: Record<ProfessionalDayAllocationStatus, string> = {
 
 function AgendaSchedulePanel({
   selectedDate,
+  appointments,
   options,
   isLoading,
   error,
@@ -1451,11 +1456,14 @@ function AgendaSchedulePanel({
   onRoomChange,
   onAllocationChange,
   onSaveRoom,
+  onEditRoom,
+  onNewRoom,
   onSaveAllocation,
   onCancelAllocation,
   onRefresh,
 }: {
   selectedDate: string;
+  appointments: AppointmentSummary[];
   options: AgendaScheduleOptions;
   isLoading: boolean;
   error: string | null;
@@ -1465,12 +1473,34 @@ function AgendaSchedulePanel({
   onRoomChange: (patch: Partial<RoomFormState>) => void;
   onAllocationChange: (patch: Partial<AllocationFormState>) => void;
   onSaveRoom: () => void;
+  onEditRoom: (room: AgendaScheduleOptions['rooms'][number]) => void;
+  onNewRoom: () => void;
   onSaveAllocation: () => void;
   onCancelAllocation: (allocationId: string) => void;
   onRefresh: () => void;
 }) {
   const activeRooms = options.rooms.filter((room) => room.status === 'active');
   const activeProfessionals = options.professionals.filter((professional) => professional.isActive);
+  const roomAppointmentCounts = new Map<string, number>();
+  const roomAllocationCounts = new Map<string, number>();
+
+  appointments
+    .filter(
+      (appointment) => appointment.roomId && !['cancelado', 'falta'].includes(appointment.status)
+    )
+    .forEach((appointment) => {
+      roomAppointmentCounts.set(
+        appointment.roomId as string,
+        (roomAppointmentCounts.get(appointment.roomId as string) ?? 0) + 1
+      );
+    });
+  options.allocations.forEach((allocation) => {
+    if (!allocation.roomId) return;
+    roomAllocationCounts.set(
+      allocation.roomId,
+      (roomAllocationCounts.get(allocation.roomId) ?? 0) + 1
+    );
+  });
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -1506,8 +1536,20 @@ function AgendaSchedulePanel({
         >
           <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
             <Building2 size={14} />
-            Nova sala
+            {roomForm.id ? 'Editar sala' : 'Nova sala'}
           </div>
+          <select
+            value={roomForm.unitId}
+            onChange={(event) => onRoomChange({ unitId: event.target.value })}
+            className="input-base text-sm"
+          >
+            <option value="">Sem unidade vinculada</option>
+            {options.units.map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
+              </option>
+            ))}
+          </select>
           <input
             value={roomForm.name}
             onChange={(event) => {
@@ -1560,15 +1602,83 @@ function AgendaSchedulePanel({
               ))}
             </select>
           </div>
+          <input
+            value={roomForm.equipment}
+            onChange={(event) => onRoomChange({ equipment: event.target.value })}
+            className="input-base text-sm"
+            placeholder="Equipamentos (separe por vírgula)"
+          />
           <button
             type="submit"
             disabled={submitting === 'room' || !roomForm.name.trim() || !roomForm.code.trim()}
             className="btn-secondary w-full justify-center text-xs disabled:opacity-60"
           >
             <Save size={13} />
-            {submitting === 'room' ? 'Salvando...' : 'Salvar sala'}
+            {submitting === 'room'
+              ? 'Salvando...'
+              : roomForm.id
+                ? 'Salvar alterações'
+                : 'Salvar sala'}
           </button>
+          {roomForm.id ? (
+            <button
+              type="button"
+              onClick={onNewRoom}
+              className="btn-ghost w-full justify-center text-xs"
+            >
+              Cancelar edição
+            </button>
+          ) : null}
         </form>
+
+        <div className="space-y-2 border-b border-border pb-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground">Salas cadastradas</span>
+            <span className="text-xs text-muted-foreground">{options.rooms.length}</span>
+          </div>
+          {options.rooms.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+              Nenhuma sala cadastrada.
+            </p>
+          ) : (
+            <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+              {options.rooms.map((room) => (
+                <div key={room.id} className="rounded-xl border border-border px-3 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-foreground">
+                        {room.name} · {room.code}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {roomStatusLabel[room.status]} · {roomTypeLabel[room.roomType]} · cap.{' '}
+                        {room.capacity}
+                        {room.unitName ? ` · ${room.unitName}` : ''}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {roomAppointmentCounts.get(room.id) ?? 0} agendamento(s) ·{' '}
+                        {roomAllocationCounts.get(room.id) ?? 0} escala(s) em{' '}
+                        {formatDate(selectedDate)}
+                      </p>
+                      {room.equipment.length > 0 ? (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {room.equipment.join(', ')}
+                        </p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onEditRoom(room)}
+                      className="btn-ghost h-7 w-7 p-0"
+                      title={`Editar ${room.name}`}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <form
           className="space-y-2 border-b border-border pb-3"
@@ -1699,6 +1809,169 @@ function AgendaSchedulePanel({
         </div>
       </div>
     </div>
+  );
+}
+
+function CallPanelManager({ units }: { units: AgendaScheduleOptions['units'] }) {
+  const [panels, setPanels] = useState<CallPanel[]>([]);
+  const [name, setName] = useState('Painel de chamadas');
+  const [unitId, setUnitId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPanels = useCallback(async () => {
+    try {
+      setPanels(await listCallPanels());
+      setError(null);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error ? loadError.message : 'Não foi possível carregar os painéis.'
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPanels();
+  }, [loadPanels]);
+
+  const savePanel = async (panel?: CallPanel, status?: CallPanelStatus) => {
+    if (!panel && !name.trim()) {
+      setError('Informe um nome para o painel.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveCallPanel({
+        id: panel?.id,
+        name: panel?.name ?? name.trim(),
+        unitId: panel?.unitId ?? (unitId || null),
+        status: status ?? panel?.status ?? 'active',
+        settings: panel?.settings,
+      });
+      if (!panel) setName('Painel de chamadas');
+      await loadPanels();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error ? saveError.message : 'Não foi possível salvar o painel.'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const rotateToken = async (panel: CallPanel) => {
+    setSaving(true);
+    try {
+      await rotateCallPanelToken(panel.id);
+      await loadPanels();
+    } catch (rotateError) {
+      setError(
+        rotateError instanceof Error ? rotateError.message : 'Não foi possível renovar o link.'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Painel de chamadas</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Exibe apenas primeiro nome e inicial do sobrenome para o paciente chamado.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void loadPanels()}
+          className="btn-ghost h-8 w-8 p-0"
+          title="Atualizar painéis"
+        >
+          <RefreshCw size={14} />
+        </button>
+      </div>
+
+      {error ? (
+        <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(10rem,0.6fr)_auto]">
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          className="input-base text-sm"
+          placeholder="Nome do painel"
+        />
+        <select
+          value={unitId}
+          onChange={(event) => setUnitId(event.target.value)}
+          className="input-base text-sm"
+        >
+          <option value="">Todas as unidades</option>
+          {units.map((unit) => (
+            <option key={unit.id} value={unit.id}>
+              {unit.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => void savePanel()}
+          disabled={saving}
+          className="btn-secondary justify-center text-xs disabled:opacity-60"
+        >
+          <Plus size={13} /> Criar
+        </button>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {panels.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nenhum painel cadastrado.</p>
+        ) : null}
+        {panels.map((panel) => {
+          const href = `/painel/${panel.publicToken}`;
+          return (
+            <div key={panel.id} className="rounded-xl border border-border px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">{panel.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {panel.unitName ?? 'Todas as unidades'} ·{' '}
+                    {panel.status === 'active' ? 'Ativo' : 'Inativo'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Link href={href} target="_blank" className="btn-ghost text-xs">
+                    Abrir
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void savePanel(panel, panel.status === 'active' ? 'inactive' : 'active')
+                    }
+                    disabled={saving}
+                    className="btn-ghost text-xs disabled:opacity-60"
+                  >
+                    {panel.status === 'active' ? 'Desativar' : 'Ativar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void rotateToken(panel)}
+                    disabled={saving}
+                    className="btn-ghost text-xs disabled:opacity-60"
+                  >
+                    Renovar link
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -3667,11 +3940,17 @@ export default function AgendaContent() {
     setScheduleOptionsError(null);
 
     const result = await saveClinicRoom({
+      id: roomForm.id || null,
+      unitId: roomForm.unitId || null,
       code,
       name,
       roomType: roomForm.roomType,
       status: roomForm.status,
       capacity: Number(roomForm.capacity) || 1,
+      equipment: roomForm.equipment
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
     });
 
     setScheduleSubmitting(null);
@@ -3683,6 +3962,20 @@ export default function AgendaContent() {
 
     setRoomForm(createEmptyRoomForm());
     await loadScheduleOptions();
+  };
+
+  const handleEditRoom = (room: AgendaScheduleOptions['rooms'][number]) => {
+    setRoomForm({
+      id: room.id,
+      unitId: room.unitId ?? '',
+      code: room.code,
+      name: room.name,
+      roomType: room.roomType,
+      status: room.status,
+      capacity: String(room.capacity),
+      equipment: room.equipment.join(', '),
+    });
+    setScheduleOptionsError(null);
   };
 
   const handleSaveAllocation = async () => {
@@ -3781,6 +4074,11 @@ export default function AgendaContent() {
     );
     if (activeAllocations.length > 0 && !appointmentForm.professionalProfileId) {
       setAppointmentFormError('Selecione um profissional da escala do dia.');
+      return;
+    }
+
+    if (!appointmentForm.serviceId) {
+      setAppointmentFormError('Selecione um serviço cadastrado para o atendimento.');
       return;
     }
 
@@ -4018,6 +4316,7 @@ export default function AgendaContent() {
             <BlockedSlotsPanel slots={blockedSlots} />
             <AgendaSchedulePanel
               selectedDate={selectedDate}
+              appointments={appointments}
               options={scheduleOptions}
               isLoading={scheduleOptionsLoading}
               error={scheduleOptionsError}
@@ -4029,10 +4328,13 @@ export default function AgendaContent() {
                 setAllocationForm((current) => ({ ...current, ...patch }))
               }
               onSaveRoom={handleSaveRoom}
+              onEditRoom={handleEditRoom}
+              onNewRoom={() => setRoomForm(createEmptyRoomForm())}
               onSaveAllocation={handleSaveAllocation}
               onCancelAllocation={handleCancelAllocation}
               onRefresh={loadScheduleOptions}
             />
+            <CallPanelManager units={scheduleOptions.units} />
           </div>
 
           {/* RIGHT COLUMN: Workflow + Schedule */}

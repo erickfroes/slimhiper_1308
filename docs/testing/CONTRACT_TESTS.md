@@ -315,6 +315,8 @@ Validated behavior:
 8. `get_agenda_day_snapshot()` returns persisted `professionalProfileId`,
    `professionalUserId`, `roomId`, `roomCode` and `unitId`; the attendance queue
    mirrors those IDs from the appointment trigger.
+9. `get_call_panel_snapshot()` accepts only an active panel token and returns
+   masked patient name, room and call time; it must not return PII or clinical data.
 
 ## Documents Contract Test
 

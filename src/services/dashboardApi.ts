@@ -31,7 +31,38 @@ export interface DashboardProvider {
   getDashboardSnapshot(): Promise<DashboardSnapshot>;
 }
 
+export interface PatientPortalMetrics {
+  periodDays: number;
+  portalAccounts: number;
+  selfScheduledAppointments: number;
+  completedSelfScheduledAppointments: number;
+  avulsoInvoiceAmountCents: number;
+  paidPortalInvoiceAmountCents: number;
+  lowAdherencePatients: number;
+}
+
 type BrowserSupabaseClient = ReturnType<typeof createBrowserSupabaseClient>;
+
+function normalizePatientPortalMetrics(value: unknown): PatientPortalMetrics | null {
+  const record = asRecord(value);
+  const periodDays = Math.round(asNumber(record.periodDays));
+  if (periodDays <= 0) return null;
+  return {
+    periodDays,
+    portalAccounts: Math.max(0, Math.round(asNumber(record.portalAccounts))),
+    selfScheduledAppointments: Math.max(0, Math.round(asNumber(record.selfScheduledAppointments))),
+    completedSelfScheduledAppointments: Math.max(
+      0,
+      Math.round(asNumber(record.completedSelfScheduledAppointments))
+    ),
+    avulsoInvoiceAmountCents: Math.max(0, Math.round(asNumber(record.avulsoInvoiceAmountCents))),
+    paidPortalInvoiceAmountCents: Math.max(
+      0,
+      Math.round(asNumber(record.paidPortalInvoiceAmountCents))
+    ),
+    lowAdherencePatients: Math.max(0, Math.round(asNumber(record.lowAdherencePatients))),
+  };
+}
 
 const actionCategories = new Set<DashboardActionCategory>([
   'fila',
@@ -907,6 +938,24 @@ async function runDashboardOperation<T>(
 
 export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   return runDashboardOperation((provider) => provider.getDashboardSnapshot());
+}
+
+export async function getClinicPatientPortalMetrics(): Promise<PatientPortalMetrics | null> {
+  if (isMockDataEnabled()) {
+    return {
+      periodDays: 30,
+      portalAccounts: 0,
+      selfScheduledAppointments: 0,
+      completedSelfScheduledAppointments: 0,
+      avulsoInvoiceAmountCents: 0,
+      paidPortalInvoiceAmountCents: 0,
+      lowAdherencePatients: 0,
+    };
+  }
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase.rpc('get_clinic_patient_portal_metrics', { p_days: 30 });
+  if (error) throw error;
+  return normalizePatientPortalMetrics(data);
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

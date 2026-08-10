@@ -10,6 +10,67 @@ export interface SafeServiceError {
   details?: string;
 }
 
+export interface PatientPortalOperationalSnapshot {
+  patientId: string;
+  appointments: Array<{
+    id: string;
+    scheduledAt: string;
+    durationMinutes: number;
+    status: string;
+    type: string;
+    serviceName: string;
+    professionalName: string;
+    roomName?: string | null;
+    canCancel: boolean;
+  }>;
+  credits: Array<{
+    enrollmentId: string;
+    programName: string;
+    serviceId?: string | null;
+    serviceName: string;
+    total: number;
+    reserved: number;
+    used: number;
+    available: number;
+  }>;
+  pending: Array<{ kind: string; title: string; dueAt?: string | null; href: string }>;
+}
+
+export interface PatientPortalBookingOptions {
+  patientId: string;
+  allowProfessionalChoice: boolean;
+  services: Array<{
+    serviceId: string;
+    enrollmentId: string;
+    programId: string;
+    name: string;
+    durationMinutes: number;
+    available: number;
+  }>;
+  allocations: Array<{
+    id: string;
+    startsAt: string;
+    endsAt: string;
+    professionalId: string;
+    professionalName: string;
+    roomId: string;
+    roomName: string;
+  }>;
+}
+
+export interface PatientPortalAvulsoBookingOptions {
+  patientId: string;
+  paymentRequiredBeforeConfirmation: boolean;
+  services: Array<{
+    serviceId: string;
+    name: string;
+    durationMinutes: number;
+    priceCents: number;
+    deliveryMode?: string | null;
+  }>;
+  allocations: PatientPortalBookingOptions['allocations'];
+}
+
 export interface PatientPortalLinkedPatient {
   tenantId: string;
   patientId: string;
@@ -977,6 +1038,221 @@ export async function getPatientPortalSnapshot(patientId?: string): Promise<{
     };
   } catch (error) {
     return { data: null, error: safeError(error, 'Nao foi possivel carregar o portal.') };
+  }
+}
+
+export async function getPatientPortalOperationalSnapshot(patientId?: string): Promise<{
+  data: PatientPortalOperationalSnapshot | null;
+  error: SafeServiceError | null;
+}> {
+  try {
+    const supabase = await createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('get_patient_portal_operational_snapshot', {
+      p_patient_id: asUuid(patientId) ?? null,
+    });
+    if (error)
+      return { data: null, error: safeError(error, 'Não foi possível carregar atendimentos.') };
+    const record = asRecord(data);
+    const selectedPatientId = asString(record.patientId);
+    if (!selectedPatientId)
+      return { data: null, error: { message: 'Contrato operacional do portal indisponível.' } };
+    return {
+      data: {
+        patientId: selectedPatientId,
+        appointments: Array.isArray(record.appointments)
+          ? (record.appointments as PatientPortalOperationalSnapshot['appointments'])
+          : [],
+        credits: Array.isArray(record.credits)
+          ? (record.credits as PatientPortalOperationalSnapshot['credits'])
+          : [],
+        pending: Array.isArray(record.pending)
+          ? (record.pending as PatientPortalOperationalSnapshot['pending'])
+          : [],
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Não foi possível carregar atendimentos.') };
+  }
+}
+
+export async function getPatientPortalBookingOptions(
+  patientId: string
+): Promise<{ data: PatientPortalBookingOptions | null; error: SafeServiceError | null }> {
+  try {
+    const supabase = await createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('get_patient_portal_booking_options', {
+      p_patient_id: asUuid(patientId),
+    });
+    if (error)
+      return {
+        data: null,
+        error: safeError(error, 'Não foi possível carregar opções de agendamento.'),
+      };
+    const record = asRecord(data);
+    const selectedPatientId = asString(record.patientId);
+    if (!selectedPatientId)
+      return { data: null, error: { message: 'Auto-agendamento não está disponível.' } };
+    return {
+      data: {
+        patientId: selectedPatientId,
+        allowProfessionalChoice: asBoolean(record.allowProfessionalChoice),
+        services: Array.isArray(record.services)
+          ? (record.services as PatientPortalBookingOptions['services'])
+          : [],
+        allocations: Array.isArray(record.allocations)
+          ? (record.allocations as PatientPortalBookingOptions['allocations'])
+          : [],
+      },
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error: safeError(error, 'Não foi possível carregar opções de agendamento.'),
+    };
+  }
+}
+
+export async function getPatientPortalAvulsoBookingOptions(
+  patientId: string
+): Promise<{ data: PatientPortalAvulsoBookingOptions | null; error: SafeServiceError | null }> {
+  try {
+    const supabase = await createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('get_patient_portal_avulso_booking_options', {
+      p_patient_id: asUuid(patientId),
+    });
+    if (error)
+      return { data: null, error: safeError(error, 'Não foi possível carregar serviços avulsos.') };
+    const record = asRecord(data);
+    const selectedPatientId = asString(record.patientId);
+    if (!selectedPatientId)
+      return { data: null, error: { message: 'Agendamento avulso indisponível.' } };
+    return {
+      data: {
+        patientId: selectedPatientId,
+        paymentRequiredBeforeConfirmation: asBoolean(record.paymentRequiredBeforeConfirmation),
+        services: Array.isArray(record.services)
+          ? (record.services as PatientPortalAvulsoBookingOptions['services'])
+          : [],
+        allocations: Array.isArray(record.allocations)
+          ? (record.allocations as PatientPortalAvulsoBookingOptions['allocations'])
+          : [],
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Não foi possível carregar serviços avulsos.') };
+  }
+}
+
+export async function bookPatientPortalAppointment(input: {
+  patientId: string;
+  serviceId: string;
+  enrollmentId: string;
+  allocationId: string;
+  scheduledAt: string;
+}): Promise<{ data: { id: string; status: string } | null; error: SafeServiceError | null }> {
+  try {
+    const supabase = await createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('book_patient_portal_appointment', {
+      p_patient_id: asUuid(input.patientId),
+      p_service_id: asUuid(input.serviceId),
+      p_enrollment_id: asUuid(input.enrollmentId),
+      p_allocation_id: asUuid(input.allocationId),
+      p_scheduled_at: input.scheduledAt,
+    });
+    if (error)
+      return { data: null, error: safeError(error, 'Não foi possível confirmar o agendamento.') };
+    const record = asRecord(data);
+    return { data: { id: asString(record.id), status: asString(record.status) }, error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Não foi possível confirmar o agendamento.') };
+  }
+}
+
+export async function bookPatientPortalAvulsoAppointment(input: {
+  patientId: string;
+  serviceId: string;
+  allocationId: string;
+  scheduledAt: string;
+}): Promise<{
+  data: { id: string; status: string; invoiceId?: string } | null;
+  error: SafeServiceError | null;
+}> {
+  try {
+    const supabase = await createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('book_patient_portal_avulso_appointment', {
+      p_patient_id: asUuid(input.patientId),
+      p_service_id: asUuid(input.serviceId),
+      p_allocation_id: asUuid(input.allocationId),
+      p_scheduled_at: input.scheduledAt,
+    });
+    if (error)
+      return { data: null, error: safeError(error, 'Não foi possível agendar o serviço avulso.') };
+    const record = asRecord(data);
+    const id = asString(record.id);
+    const status = asString(record.status);
+    return {
+      data:
+        id && status ? { id, status, invoiceId: asString(record.invoiceId) || undefined } : null,
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Não foi possível agendar o serviço avulso.') };
+  }
+}
+
+export async function cancelPatientPortalAppointment(
+  appointmentId: string,
+  reason?: string
+): Promise<{ data: { id: string; status: string } | null; error: SafeServiceError | null }> {
+  try {
+    const supabase = await createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('cancel_patient_portal_appointment', {
+      p_appointment_id: asUuid(appointmentId),
+      p_reason: sanitizeText(reason ?? '', 240) || null,
+    });
+    if (error)
+      return { data: null, error: safeError(error, 'Não foi possível cancelar o atendimento.') };
+    const record = asRecord(data);
+    return { data: { id: asString(record.id), status: asString(record.status) }, error: null };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Não foi possível cancelar o atendimento.') };
+  }
+}
+
+export async function reschedulePatientPortalAppointment(input: {
+  appointmentId: string;
+  allocationId: string;
+  scheduledAt: string;
+}): Promise<{
+  data: { id: string; status: string; previousAppointmentId?: string } | null;
+  error: SafeServiceError | null;
+}> {
+  try {
+    const supabase = await createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('reschedule_patient_portal_appointment', {
+      p_appointment_id: asUuid(input.appointmentId),
+      p_allocation_id: asUuid(input.allocationId),
+      p_scheduled_at: input.scheduledAt,
+    });
+    if (error)
+      return { data: null, error: safeError(error, 'Não foi possível reagendar o atendimento.') };
+    const record = asRecord(data);
+    return {
+      data:
+        asString(record.id) && asString(record.status)
+          ? {
+              id: asString(record.id),
+              status: asString(record.status),
+              previousAppointmentId: asString(record.previousAppointmentId) || undefined,
+            }
+          : null,
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error: safeError(error, 'Não foi possível reagendar o atendimento.') };
   }
 }
 

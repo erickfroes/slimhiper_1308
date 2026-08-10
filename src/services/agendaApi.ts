@@ -86,6 +86,7 @@ export interface AgendaRoom {
   roomType: AgendaRoomType;
   status: AgendaRoomStatus;
   capacity: number;
+  equipment: string[];
 }
 
 export interface AgendaProfessionalOption {
@@ -150,6 +151,7 @@ export interface AgendaRoomInput {
   roomType: AgendaRoomType;
   status: AgendaRoomStatus;
   capacity?: number | null;
+  equipment?: string[] | null;
 }
 
 export interface ProfessionalDayAllocationInput {
@@ -407,6 +409,7 @@ function getMockAgendaProvider(): Promise<AgendaProvider> {
           roomType: input.roomType,
           status: input.status,
           capacity: input.capacity ?? 1,
+          equipment: input.equipment ?? [],
         };
       },
       async saveProfessionalDayAllocation(input) {
@@ -796,6 +799,9 @@ function normalizeAgendaRoom(value: unknown): AgendaRoom | null {
     roomType: normalizeRoomType(record.roomType),
     status: normalizeRoomStatus(record.status),
     capacity: Math.max(1, Math.round(asNumber(record.capacity, 1))),
+    equipment: asArray(record.equipment)
+      .map((item) => asString(item))
+      .filter(Boolean),
   };
 }
 
@@ -1206,6 +1212,7 @@ const supabaseAgendaProvider: AgendaProvider = {
         roomType: input.roomType,
         status: input.status,
         capacity: input.capacity ?? 1,
+        equipment: input.equipment ?? [],
       },
     });
 

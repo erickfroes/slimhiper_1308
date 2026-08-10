@@ -69,6 +69,7 @@ export interface InboxConversation {
   slaDueAt?: string | null;
   serviceAvailable?: boolean | null;
   category: string;
+  priority?: 'baixa' | 'normal' | 'alta' | 'urgente';
   href: string;
 }
 
@@ -124,6 +125,13 @@ function asSeverity(value: unknown): InboxSeverity {
   const severity = asString(value, 'medium').toLowerCase();
   if (severity === 'critical' || severity === 'high' || severity === 'low') return severity;
   return 'medium';
+}
+
+function asChatPriority(value: unknown): InboxConversation['priority'] {
+  const priority = asString(value).toLowerCase();
+  return priority === 'baixa' || priority === 'alta' || priority === 'urgente'
+    ? priority
+    : 'normal';
 }
 
 function serviceError(error: unknown, fallback: string): SafeServiceError {
@@ -234,6 +242,7 @@ function normalizeConversation(value: unknown): InboxConversation | null {
     slaDueAt: asString(record.slaDueAt) || null,
     serviceAvailable: typeof record.serviceAvailable === 'boolean' ? record.serviceAvailable : null,
     category: asString(record.category, 'chat'),
+    priority: asChatPriority(record.priority),
     href: asString(record.href, `/clinic/patients/${patientId}?tab=chat`),
   };
 }
@@ -445,6 +454,27 @@ export async function assignThreadToMe(threadId: string) {
     return { data: normalizeInbox(data), error: null };
   } catch (error) {
     return { data: null, error: serviceError(error, 'Falha ao atribuir conversa.') };
+  }
+}
+
+export async function setChatThreadTriage(
+  threadId: string,
+  category: string,
+  priority: NonNullable<InboxConversation['priority']>
+) {
+  try {
+    if (isMockEnabled()) return { data: { id: threadId, category, priority }, error: null };
+    const supabase = createBrowserSupabaseClient();
+    const { data, error } = await supabase.rpc('set_chat_thread_triage', {
+      p_thread_id: threadId,
+      p_category: category.trim().slice(0, 60) || 'geral',
+      p_priority: priority,
+      p_assigned_to: null,
+    });
+    if (error) return { data: null, error: serviceError(error, 'Falha ao classificar conversa.') };
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error: serviceError(error, 'Falha ao classificar conversa.') };
   }
 }
 

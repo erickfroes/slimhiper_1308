@@ -36,6 +36,14 @@ export interface ClinicBrandingSettings {
 export interface ClinicPortalSettings {
   url: string;
   selfScheduling: boolean;
+  allowPatientProfessionalChoice: boolean;
+  allowAvulsoScheduling: boolean;
+  requireAvulsoPaymentBeforeConfirmation: boolean;
+  releaseProgramCreditOnPatientCancellation: boolean;
+  consumeProgramCreditOnNoShow: boolean;
+  blockSchedulingWithFinancialPending: boolean;
+  guardianFinancialAccess: boolean;
+  guardianEvolutionAccess: boolean;
   chatEnabled: boolean;
   documentsAccess: boolean;
   financialAccess: boolean;
@@ -615,6 +623,21 @@ function mapSettings(rawSettings: Record<string, unknown>, tenant: ClinicSetting
   const portal: ClinicPortalSettings = {
     url: asString(portalRecord.url, tenant.slug ? `/patient/${tenant.slug}` : ''),
     selfScheduling: asBoolean(portalRecord.selfScheduling),
+    allowPatientProfessionalChoice: asBoolean(portalRecord.allowPatientProfessionalChoice),
+    allowAvulsoScheduling: asBoolean(portalRecord.allowAvulsoScheduling),
+    requireAvulsoPaymentBeforeConfirmation: asBoolean(
+      portalRecord.requireAvulsoPaymentBeforeConfirmation
+    ),
+    releaseProgramCreditOnPatientCancellation: asBoolean(
+      portalRecord.releaseProgramCreditOnPatientCancellation,
+      true
+    ),
+    consumeProgramCreditOnNoShow: asBoolean(portalRecord.consumeProgramCreditOnNoShow),
+    blockSchedulingWithFinancialPending: asBoolean(
+      portalRecord.blockSchedulingWithFinancialPending
+    ),
+    guardianFinancialAccess: asBoolean(portalRecord.guardianFinancialAccess),
+    guardianEvolutionAccess: asBoolean(portalRecord.guardianEvolutionAccess),
     chatEnabled: asBoolean(portalRecord.chatEnabled),
     documentsAccess: asBoolean(portalRecord.documentsAccess),
     financialAccess: asBoolean(portalRecord.financialAccess),

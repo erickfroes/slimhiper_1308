@@ -24,6 +24,7 @@ import {
   markNotificationRead,
   markThreadRead,
   setThreadStatus,
+  setChatThreadTriage,
   type ClinicInboxPayload,
   type InboxConversation,
   type InboxTab,
@@ -78,6 +79,13 @@ function statusLabel(status: InboxConversation['status']) {
   return 'Aberta';
 }
 
+function priorityClass(priority?: InboxConversation['priority']) {
+  if (priority === 'urgente') return 'bg-red-50 text-red-700';
+  if (priority === 'alta') return 'bg-amber-50 text-amber-700';
+  if (priority === 'baixa') return 'bg-slate-100 text-slate-600';
+  return 'bg-blue-50 text-blue-700';
+}
+
 export default function ClinicInboxContent() {
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get('tab') as InboxTab | null) ?? 'conversas';
@@ -87,6 +95,10 @@ export default function ClinicInboxContent() {
   const [unreadOnly, setUnreadOnly] = useState(searchParams.get('unread') === '1');
   const [patientId, setPatientId] = useState('');
   const [category, setCategory] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState<
+    'all' | NonNullable<InboxConversation['priority']>
+  >('all');
+  const [assignedOnly, setAssignedOnly] = useState(false);
   const [payload, setPayload] = useState<ClinicInboxPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -106,7 +118,14 @@ export default function ClinicInboxContent() {
     error?: string | null;
   } | null>(null);
 
-  const conversations = useMemo(() => payload?.conversations ?? [], [payload]);
+  const conversations = useMemo(() => {
+    const source = payload?.conversations ?? [];
+    return source.filter((conversation) => {
+      if (priorityFilter !== 'all' && conversation.priority !== priorityFilter) return false;
+      if (assignedOnly && !conversation.assignedTo) return false;
+      return true;
+    });
+  }, [assignedOnly, payload, priorityFilter]);
   const notifications = useMemo(() => payload?.notifications ?? [], [payload]);
   const unreadConversationCount = useMemo(
     () => conversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0),
@@ -322,6 +341,18 @@ export default function ClinicInboxContent() {
                 placeholder="Categoria"
                 aria-label="Filtrar por categoria"
               />
+              <select
+                value={priorityFilter}
+                onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}
+                className="input-base py-2 text-sm"
+                aria-label="Filtrar por prioridade"
+              >
+                <option value="all">Todas prioridades</option>
+                <option value="urgente">Urgente</option>
+                <option value="alta">Alta</option>
+                <option value="normal">Normal</option>
+                <option value="baixa">Baixa</option>
+              </select>
               <label className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-muted-foreground">
                 <input
                   type="checkbox"
@@ -329,6 +360,14 @@ export default function ClinicInboxContent() {
                   onChange={(event) => setUnreadOnly(event.target.checked)}
                 />
                 <Filter size={13} /> Não lidas
+              </label>
+              <label className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={assignedOnly}
+                  onChange={(event) => setAssignedOnly(event.target.checked)}
+                />
+                <UserCheck size={13} /> Com responsável
               </label>
             </div>
           </div>
@@ -461,6 +500,11 @@ export default function ClinicInboxContent() {
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
                       {statusLabel(conversation.status)}
                     </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${priorityClass(conversation.priority)}`}
+                    >
+                      {conversation.priority ?? 'normal'}
+                    </span>
                     {moderationLabel(conversation.moderationStatus) && (
                       <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                         {moderationLabel(conversation.moderationStatus)}
@@ -479,6 +523,47 @@ export default function ClinicInboxContent() {
                       ? `Resp. ${conversation.assignedToName}`
                       : 'Sem responsável'}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <select
+                      className="input-base h-8 py-1 text-xs"
+                      defaultValue={conversation.category}
+                      aria-label="Categoria da conversa"
+                      onChange={(event) =>
+                        void runAction(conversation.id, () =>
+                          setChatThreadTriage(
+                            conversation.threadId,
+                            event.target.value,
+                            conversation.priority ?? 'normal'
+                          )
+                        )
+                      }
+                    >
+                      <option value="geral">Geral</option>
+                      <option value="clinico">Clínico</option>
+                      <option value="financeiro">Financeiro</option>
+                      <option value="agenda">Agenda</option>
+                      <option value="documentos">Documentos</option>
+                    </select>
+                    <select
+                      className="input-base h-8 py-1 text-xs"
+                      defaultValue={conversation.priority ?? 'normal'}
+                      aria-label="Prioridade da conversa"
+                      onChange={(event) =>
+                        void runAction(conversation.id, () =>
+                          setChatThreadTriage(
+                            conversation.threadId,
+                            conversation.category,
+                            event.target.value as NonNullable<InboxConversation['priority']>
+                          )
+                        )
+                      }
+                    >
+                      <option value="baixa">Baixa</option>
+                      <option value="normal">Normal</option>
+                      <option value="alta">Alta</option>
+                      <option value="urgente">Urgente</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
