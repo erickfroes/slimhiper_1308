@@ -6,6 +6,7 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  CalendarDays,
   ClipboardCheck,
   CreditCard,
   FileText,
@@ -29,6 +30,7 @@ import PatientCommercialSection from './PatientCommercialSection';
 import PatientCommunitySection from './PatientCommunitySection';
 import PatientGamificationPanel from './PatientGamificationPanel';
 import PatientJourneySection from './PatientJourneySection';
+import PatientAppointmentsSection from './PatientAppointmentsSection';
 import {
   PortalChatSection,
   PortalCheckinsSection,
@@ -59,10 +61,12 @@ import {
   type PatientDailySnapshot,
 } from '@/services/patientDailyApi';
 import { buildPatientGamificationState } from '@/services/patientGamificationEngine';
+import type { GamificationPortalTab } from '@/services/patientGamificationEngine';
 import { getPatientGamificationSummary } from '@/services/patientGamificationApi';
 
 type PortalTab =
   | 'resumo'
+  | 'atendimentos'
   | 'diario'
   | 'jornada'
   | 'beneficios'
@@ -75,6 +79,7 @@ type PortalTab =
 
 const tabs: Array<{ id: PortalTab; label: string; shortLabel: string; icon: LucideIcon }> = [
   { id: 'resumo', label: 'Resumo', shortLabel: 'Inicio', icon: Home },
+  { id: 'atendimentos', label: 'Atendimentos', shortLabel: 'Agenda', icon: CalendarDays },
   { id: 'diario', label: 'Diario', shortLabel: 'Hoje', icon: Activity },
   { id: 'jornada', label: 'Minha jornada', shortLabel: 'Jornada', icon: UserRound },
   { id: 'beneficios', label: 'Beneficios', shortLabel: 'Planos', icon: Sparkles },
@@ -147,6 +152,13 @@ export default function PatientPortalContent() {
   const availableTabs = useMemo(
     () => tabs.filter((tab) => isTabEnabled(tab.id, portalFeatureFlags, snapshot?.access)),
     [portalFeatureFlags, snapshot?.access]
+  );
+  const gamificationTabs = useMemo(
+    () =>
+      availableTabs.filter((tab) => tab.id !== 'atendimentos') as Array<
+        (typeof tabs)[number] & { id: GamificationPortalTab }
+      >,
+    [availableTabs]
   );
 
   async function loadJourney(patientId = selectedPatientId) {
@@ -241,7 +253,7 @@ export default function PatientPortalContent() {
 
     const result = await getPatientGamificationSummary({
       patientId,
-      tabItems: availableTabs.map((tab) => ({
+      tabItems: gamificationTabs.map((tab) => ({
         id: tab.id,
         label: tab.label,
         shortLabel: tab.shortLabel,
@@ -318,11 +330,11 @@ export default function PatientPortalContent() {
 
   const gamificationTabItems = useMemo(
     () =>
-      availableTabs.map((tab) => ({
+      gamificationTabs.map((tab) => ({
         id: tab.id,
         label: tab.label,
       })),
-    [availableTabs]
+    [gamificationTabs]
   );
 
   const gamificationSummary = useMemo(
@@ -600,7 +612,7 @@ export default function PatientPortalContent() {
           summary={gamificationSummary}
           dailySnapshot={dailySnapshot}
           onNavigate={(tab) => setActiveTab(tab)}
-          tabItems={availableTabs.map((tab) => ({
+          tabItems={gamificationTabs.map((tab) => ({
             id: tab.id,
             label: tab.label,
             shortLabel: tab.shortLabel,
@@ -656,6 +668,10 @@ export default function PatientPortalContent() {
         ) : (
           <SectionPanel contentClassName="p-5 sm:p-6">
             {activeTab === 'resumo' ? <PortalSummarySection snapshot={snapshot} /> : null}
+
+            {activeTab === 'atendimentos' ? (
+              <PatientAppointmentsSection patientId={snapshot.selectedPatientId} />
+            ) : null}
 
             {activeTab === 'jornada' ? (
               <PatientJourneySection

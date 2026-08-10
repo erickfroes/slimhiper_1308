@@ -95,6 +95,10 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function getSafeErrorCode(error: unknown) {
+  return normalizeString(asRecord(error).code, 80) || 'unknown';
+}
+
 function mapProfileSnapshot(value: unknown): ProfileSnapshot | null {
   const record = asRecord(value);
   const id = normalizeString(record.id, 80);
@@ -243,8 +247,10 @@ export async function POST(request: Request) {
   let createdAuthUserId: string | null = null;
   let createdProfileUserId: string | null = null;
   let previousProfile: ProfileSnapshot | null = null;
+  let provisioningStep = 'preparacao';
 
   try {
+    provisioningStep = 'validacao_do_owner';
     const existingAuthUser = await findAuthUserByEmail(admin, ownerEmail);
     if (existingAuthUser) {
       const { data: profileRow, error: profileFetchError } = await admin
@@ -265,6 +271,7 @@ export async function POST(request: Request) {
     const nowIso = new Date().toISOString();
     const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
+    provisioningStep = 'criacao_do_tenant';
     const { data: tenant, error: tenantError } = await admin
       .from('tenants')
       .insert({
@@ -315,6 +322,7 @@ export async function POST(request: Request) {
     const createdTenantId = tenant.id;
     tenantId = createdTenantId;
 
+    provisioningStep = 'criacao_da_unidade';
     const { data: unit, error: unitError } = await admin
       .from('tenant_units')
       .insert({
@@ -333,6 +341,7 @@ export async function POST(request: Request) {
       .single();
     if (unitError) throw unitError;
 
+    provisioningStep = 'criacao_da_assinatura';
     const { error: subscriptionError } = await admin.from('tenant_subscriptions').insert({
       tenant_id: createdTenantId,
       platform_plan_id: plan.id,
@@ -346,6 +355,7 @@ export async function POST(request: Request) {
     });
     if (subscriptionError) throw subscriptionError;
 
+    provisioningStep = 'configuracao_do_rbac';
     const { data: ownerRole, error: ownerRoleError } = await admin
       .from('roles')
       .select('id')
@@ -355,6 +365,7 @@ export async function POST(request: Request) {
     if (ownerRoleError) throw ownerRoleError;
     if (!ownerRole) throw new Error('tenant_owner_role_not_seeded');
 
+    provisioningStep = 'aplicacao_de_permissoes';
     await applyTenantEntitlements({
       admin,
       tenantId: createdTenantId,
@@ -364,6 +375,7 @@ export async function POST(request: Request) {
     let authUser = existingAuthUser;
     let inviteDelivery: TenantInviteDelivery = 'password_setup_sent';
 
+    provisioningStep = 'convite_do_owner';
     if (!authUser) {
       const invited = await sendTenantInviteEmail({
         admin,
@@ -387,6 +399,7 @@ export async function POST(request: Request) {
 
     if (!previousProfile) createdProfileUserId = authUser.id;
 
+    provisioningStep = 'perfil_do_owner';
     const { error: profileError } = await admin.from('profiles').upsert(
       {
         id: authUser.id,
@@ -400,6 +413,7 @@ export async function POST(request: Request) {
     );
     if (profileError) throw profileError;
 
+    provisioningStep = 'vinculo_do_owner';
     const { data: membership, error: membershipError } = await admin
       .from('tenant_memberships')
       .insert({
@@ -417,6 +431,7 @@ export async function POST(request: Request) {
     if (membershipError) throw membershipError;
 
     if (professionalProfile) {
+      provisioningStep = 'perfil_profissional';
       const { error: professionalError } = await upsertTenantProfessionalProfile({
         admin,
         tenantId: createdTenantId,
@@ -428,6 +443,7 @@ export async function POST(request: Request) {
       if (professionalError) throw professionalError;
     }
 
+    provisioningStep = 'auditoria';
     const { error: auditError } = await admin.from('audit_logs').insert({
       tenant_id: createdTenantId,
       user_id: session.userId,
@@ -468,7 +484,11 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
-  } catch {
+  } catch (error) {
+    console.error('platform_tenant_create_failed', {
+      provisioningStep,
+      errorCode: getSafeErrorCode(error),
+    });
     await rollbackTenantProvisioning({
       admin,
       tenantId,
@@ -477,6 +497,6 @@ export async function POST(request: Request) {
       previousProfile,
     }).catch(() => undefined);
 
-    return jsonError('Falha ao criar tenant.', 500);
+    return jsonError(`Falha ao criar tenant na etapa: ${provisioningStep}.`, 500);
   }
 }

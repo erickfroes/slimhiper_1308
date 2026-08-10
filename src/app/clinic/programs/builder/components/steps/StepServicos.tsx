@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import type { ProgramBuilderDraft, ProgramService } from '@/domain/types';
+import type { CommercialService, ProgramBuilderDraft, ProgramService } from '@/domain/types';
+import { getClinicCommercialCatalog } from '@/services/commercialApi';
 
 interface Props {
   draft: ProgramBuilderDraft;
@@ -20,14 +21,49 @@ const servicePresets: ProgramService[] = [
 
 export default function StepServicos({ draft, onChange }: Props) {
   const services = draft.includedServices;
+  const [catalogServices, setCatalogServices] = useState<CommercialService[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void getClinicCommercialCatalog().then((result) => {
+      if (!active) return;
+      if (result.data) {
+        const activeServices = result.data.services.filter((service) => service.status === 'ativo');
+        setCatalogServices(activeServices);
+      } else {
+        setCatalogError(result.error?.message ?? 'Não foi possível carregar o catálogo.');
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (catalogServices.length === 0) return;
+    const linkedServices = services.map((service) => {
+      if (service.serviceId) return service;
+      const match = catalogServices.find((item) => item.name === service.label);
+      return match ? { ...service, serviceId: match.id, label: match.name } : service;
+    });
+    if (linkedServices.some((service, index) => service.serviceId !== services[index]?.serviceId)) {
+      onChange({ includedServices: linkedServices });
+    }
+  }, [catalogServices, onChange, services]);
 
   const addService = () => {
-    onChange({ includedServices: [...services, { label: '', quantity: 1, unit: 'sessões' }] });
+    onChange({
+      includedServices: [...services, { serviceId: '', label: '', quantity: 1, unit: 'sessões' }],
+    });
   };
 
   const addPreset = (preset: ProgramService) => {
+    const catalogService = catalogServices.find((service) => service.name === preset.label);
     const exists = services.some((s) => s.label === preset.label);
-    if (!exists) onChange({ includedServices: [...services, { ...preset }] });
+    if (!exists && catalogService) {
+      onChange({ includedServices: [...services, { ...preset, serviceId: catalogService.id }] });
+    }
   };
 
   const updateService = (idx: number, patch: Partial<ProgramService>) => {
@@ -46,11 +82,12 @@ export default function StepServicos({ draft, onChange }: Props) {
         <div className="flex flex-wrap gap-2">
           {servicePresets.map((p) => {
             const added = services.some((s) => s.label === p.label);
+            const isRegistered = catalogServices.some((service) => service.name === p.label);
             return (
               <button
                 key={p.label}
                 onClick={() => addPreset(p)}
-                disabled={added}
+                disabled={added || !isRegistered}
                 className={[
                   'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
                   added
@@ -73,13 +110,27 @@ export default function StepServicos({ draft, onChange }: Props) {
             <div className="grid grid-cols-12 gap-3 items-end">
               <div className="col-span-6 space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Serviço</label>
-                <input
-                  type="text"
-                  value={svc.label}
-                  onChange={(e) => updateService(idx, { label: e.target.value })}
+                <select
+                  value={svc.serviceId ?? ''}
+                  onChange={(e) => {
+                    const service = catalogServices.find((item) => item.id === e.target.value);
+                    updateService(idx, {
+                      serviceId: service?.id ?? '',
+                      label: service?.name ?? '',
+                      unit: service?.unit ?? svc.unit,
+                    });
+                  }}
                   className="input-base w-full"
-                  placeholder="Nome do serviço"
-                />
+                  required
+                >
+                  <option value="">Selecione um serviço cadastrado</option>
+                  {catalogServices.map((service) => (
+                    <option key={service.id} value={service.id}>
+                      {service.name} · R${' '}
+                      {(service.basePriceCents / 100).toFixed(2).replace('.', ',')}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="col-span-2 space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Qtd.</label>
@@ -117,6 +168,12 @@ export default function StepServicos({ draft, onChange }: Props) {
           </div>
         ))}
       </div>
+
+      {catalogError ? <p className="text-xs text-negative">{catalogError}</p> : null}
+      <p className="text-xs text-muted-foreground">
+        Os serviços do programa vêm do Catálogo Comercial. Cadastre preço e duração antes de
+        incluí-los.
+      </p>
 
       <button
         onClick={addService}

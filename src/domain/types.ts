@@ -1247,6 +1247,7 @@ export interface ProgramPhase {
 }
 
 export interface ProgramService {
+  serviceId?: string;
   label: string;
   quantity: number;
   unit: string;

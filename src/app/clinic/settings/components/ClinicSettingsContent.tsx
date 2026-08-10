@@ -125,6 +125,14 @@ const EMPTY_BRANDING: ClinicBrandingSettings = {
 const EMPTY_PORTAL: ClinicPortalSettings = {
   url: '',
   selfScheduling: false,
+  allowPatientProfessionalChoice: false,
+  allowAvulsoScheduling: false,
+  requireAvulsoPaymentBeforeConfirmation: false,
+  releaseProgramCreditOnPatientCancellation: true,
+  consumeProgramCreditOnNoShow: false,
+  blockSchedulingWithFinancialPending: false,
+  guardianFinancialAccess: false,
+  guardianEvolutionAccess: false,
   chatEnabled: false,
   documentsAccess: false,
   financialAccess: false,
@@ -1775,7 +1783,11 @@ function SectionPortal({
 
   const updateUrl = (value: string) => setDraft((prev) => ({ ...prev, url: value }));
 
-  const items: Array<{ key: keyof ClinicPortalSettings; label: string; description: string }> = [
+  const experienceItems: Array<{
+    key: keyof ClinicPortalSettings;
+    label: string;
+    description: string;
+  }> = [
     {
       key: 'selfScheduling',
       label: 'Auto-agendamento',
@@ -1800,6 +1812,82 @@ function SectionPortal({
     { key: 'npsEnabled', label: 'NPS', description: 'Preferencia de pesquisa pos-atendimento.' },
   ];
 
+  const schedulingItems: Array<{
+    key: keyof ClinicPortalSettings;
+    label: string;
+    description: string;
+  }> = [
+    {
+      key: 'allowPatientProfessionalChoice',
+      label: 'Permitir escolha do profissional',
+      description: 'No auto-agendamento, o paciente poderá escolher entre profissionais elegíveis.',
+    },
+    {
+      key: 'allowAvulsoScheduling',
+      label: 'Permitir agendamento avulso',
+      description: 'Permite marcar serviços fora do pacote ou programa, pelo preço cadastrado.',
+    },
+    {
+      key: 'requireAvulsoPaymentBeforeConfirmation',
+      label: 'Exigir pagamento antes da confirmação',
+      description: 'Atendimentos avulsos só são confirmados após o pagamento ser registrado.',
+    },
+    {
+      key: 'releaseProgramCreditOnPatientCancellation',
+      label: 'Liberar crédito em cancelamento do paciente',
+      description:
+        'O crédito reservado volta ao saldo quando o cancelamento obedecer a política da clínica.',
+    },
+    {
+      key: 'consumeProgramCreditOnNoShow',
+      label: 'Consumir crédito em falta',
+      description: 'Marca o crédito como utilizado quando o paciente não comparece ao atendimento.',
+    },
+    {
+      key: 'blockSchedulingWithFinancialPending',
+      label: 'Bloquear novos agendamentos com pendência financeira',
+      description:
+        'Mantém o portal acessível, mas impede marcar novos atendimentos até regularização.',
+    },
+  ];
+
+  const guardianItems: Array<{
+    key: keyof ClinicPortalSettings;
+    label: string;
+    description: string;
+  }> = [
+    {
+      key: 'guardianFinancialAccess',
+      label: 'Responsável pode ver o financeiro',
+      description: 'Libera cobranças e comprovantes ao responsável vinculado ao paciente.',
+    },
+    {
+      key: 'guardianEvolutionAccess',
+      label: 'Responsável pode ver evolução corporal',
+      description: 'Libera fotos e dados de evolução que a clínica já tenha autorizado ao portal.',
+    },
+  ];
+
+  const renderItems = (
+    items: Array<{ key: keyof ClinicPortalSettings; label: string; description: string }>
+  ) =>
+    items.map((item) => (
+      <div
+        key={item.key}
+        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background p-3"
+      >
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">{item.label}</p>
+          <p className="text-xs text-muted-foreground">{item.description}</p>
+        </div>
+        <Toggle
+          label={item.label}
+          checked={Boolean(draft[item.key])}
+          onChange={(value) => toggle(item.key, value)}
+        />
+      </div>
+    ));
+
   return (
     <div className="space-y-4">
       <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
@@ -1811,23 +1899,26 @@ function SectionPortal({
         />
       </label>
 
-      <div className="space-y-2">
-        {items.map((item) => (
-          <div
-            key={item.key}
-            className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background p-3"
-          >
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">{item.label}</p>
-              <p className="text-xs text-muted-foreground">{item.description}</p>
-            </div>
-            <Toggle
-              label={item.label}
-              checked={Boolean(draft[item.key])}
-              onChange={(value) => toggle(item.key, value)}
-            />
-          </div>
-        ))}
+      <div className="space-y-2">{renderItems(experienceItems)}</div>
+
+      <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Políticas de agendamento</p>
+          <p className="text-xs text-muted-foreground">
+            Estas escolhas serão aplicadas ao fluxo de auto-agendamento do portal.
+          </p>
+        </div>
+        {renderItems(schedulingItems)}
+      </div>
+
+      <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Acesso de responsáveis</p>
+          <p className="text-xs text-muted-foreground">
+            Use apenas quando houver consentimento e base legal para o compartilhamento.
+          </p>
+        </div>
+        {renderItems(guardianItems)}
       </div>
 
       <div className="flex justify-end">

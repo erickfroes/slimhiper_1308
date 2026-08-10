@@ -147,6 +147,7 @@ function normalizePhase(item: unknown): ProgramPhase {
 function normalizeService(item: unknown): ProgramService {
   const raw = asRecord(item);
   return {
+    serviceId: asNullableString(raw.serviceId) ?? undefined,
     label: asString(raw.label, 'Servico'),
     quantity: asNumber(raw.quantity),
     unit: asString(raw.unit, 'unidade'),
@@ -262,6 +263,7 @@ function sanitizeDraft(draft: ProgramBuilderDraft): ProgramBuilderDraft {
 
   const includedServices = draft.includedServices
     .map((service) => ({
+      serviceId: sanitizeText(service.serviceId ?? '', 80) || undefined,
       label: sanitizeText(service.label, 120),
       quantity: Math.max(0, Math.trunc(asNumber(service.quantity))),
       unit: sanitizeText(service.unit || 'unidade', 40),
@@ -410,10 +412,14 @@ export function validateProgramDraft(draft: ProgramBuilderDraft): ProgramDraftVa
       blockingForPublish: true,
     });
   }
-  if (sanitized.includedServices.some((service) => !service.label || service.quantity <= 0)) {
+  if (
+    sanitized.includedServices.some(
+      (service) => !service.serviceId || !service.label || service.quantity <= 0
+    )
+  ) {
     issues.push({
       field: 'includedServices',
-      message: 'Cada servico precisa de nome e quantidade maior que zero.',
+      message: 'Cada serviço precisa vir do catálogo e ter quantidade maior que zero.',
       blockingForPublish: true,
     });
   }
@@ -570,11 +576,7 @@ export function createInitialProgramBuilderDraft(): ProgramBuilderDraft {
         description: 'Revisao de resultados e plano de manutencao.',
       },
     ],
-    includedServices: [
-      { label: 'Consultas medicas', quantity: 4, unit: 'sessoes' },
-      { label: 'Sessoes de nutricao', quantity: 4, unit: 'sessoes' },
-      { label: 'Bioimpedancia', quantity: 2, unit: 'avaliacoes' },
-    ],
+    includedServices: [],
     appEntitlements: [
       { key: 'chat', label: 'Chat com equipe', enabled: true },
       { key: 'plano_alimentar', label: 'Plano alimentar digital', enabled: true },
