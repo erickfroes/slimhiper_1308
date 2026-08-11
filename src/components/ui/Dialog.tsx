@@ -93,7 +93,7 @@ export default function Dialog({
   return (
     <div
       className={cx(
-        'fixed inset-0 z-50 flex bg-slate-950/40 p-4 backdrop-blur-sm',
+        'fixed inset-0 z-50 flex bg-overlay p-4 backdrop-blur-sm',
         placement === 'bottom' && 'items-end sm:items-center',
         mobileFullscreen && 'max-sm:p-0'
       )}
@@ -111,7 +111,7 @@ export default function Dialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         className={cx(
-          'relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl',
+          'relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-card card-shadow-md',
           placement === 'right' && 'ml-auto w-[calc(100vw-2rem)] max-w-xl self-stretch sm:w-full',
           placement === 'center' && 'm-auto w-[calc(100vw-2rem)] max-w-lg sm:w-full',
           placement === 'bottom' &&

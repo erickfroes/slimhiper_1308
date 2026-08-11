@@ -556,7 +556,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                     {communicationsError ? (
                       <div
                         role="alert"
-                        className="mb-2 flex gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"
+                        className="mb-2 flex gap-2 rounded-lg border border-warning-border bg-warning-bg p-3 text-xs text-warning-foreground"
                       >
                         <AlertTriangle size={14} className="shrink-0" /> {communicationsError}
                       </div>
@@ -564,18 +564,21 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                     {communicationsLoading && topMessages.length === 0 ? (
                       <div className="space-y-2 p-2" aria-label="Carregando conversas">
                         {[0, 1, 2].map((item) => (
-                          <div key={item} className="h-14 animate-pulse rounded-xl bg-muted" />
+                          <div
+                            key={item}
+                            className="h-14 animate-pulse rounded-lg bg-surface-strong"
+                          />
                         ))}
                       </div>
                     ) : topMessages.length === 0 && !communicationsError ? (
-                      <div className="rounded-xl p-4 text-center text-xs text-muted-foreground">
+                      <div className="rounded-lg p-4 text-center text-xs text-muted-foreground">
                         Nenhuma conversa recente.
                       </div>
                     ) : (
                       topMessages.map((message) => (
                         <div
                           key={message.id}
-                          className="rounded-xl p-2 hover:bg-muted/60 focus-within:bg-muted/60"
+                          className="rounded-lg p-2 hover:bg-hover focus-within:bg-hover"
                         >
                           <div className="flex items-start gap-2">
                             <Link
@@ -662,7 +665,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                     {communicationsError ? (
                       <div
                         role="alert"
-                        className="mb-2 flex gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800"
+                        className="mb-2 flex gap-2 rounded-lg border border-warning-border bg-warning-bg p-3 text-xs text-warning-foreground"
                       >
                         <AlertTriangle size={14} className="shrink-0" /> {communicationsError}
                       </div>
@@ -670,18 +673,21 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                     {communicationsLoading && topNotifications.length === 0 ? (
                       <div className="space-y-2 p-2" aria-label="Carregando Notificações">
                         {[0, 1, 2].map((item) => (
-                          <div key={item} className="h-14 animate-pulse rounded-xl bg-muted" />
+                          <div
+                            key={item}
+                            className="h-14 animate-pulse rounded-lg bg-surface-strong"
+                          />
                         ))}
                       </div>
                     ) : topNotifications.length === 0 && !communicationsError ? (
-                      <div className="rounded-xl p-4 text-center text-xs text-muted-foreground">
+                      <div className="rounded-lg p-4 text-center text-xs text-muted-foreground">
                         Nenhuma notificação pendente.
                       </div>
                     ) : (
                       topNotifications.map((notification) => (
                         <div
                           key={notification.id}
-                          className="rounded-xl p-2 hover:bg-muted/60 focus-within:bg-muted/60"
+                          className="rounded-lg p-2 hover:bg-hover focus-within:bg-hover"
                         >
                           <div className="flex items-start gap-2">
                             <Link

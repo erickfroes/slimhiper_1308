@@ -30,7 +30,7 @@ export default function Tabs<T extends string>({
       role="tablist"
       aria-label={label}
       className={cx(
-        'flex gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1 shadow-sm scrollbar-thin',
+        'flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 card-shadow scrollbar-thin',
         className
       )}
     >
@@ -48,8 +48,8 @@ export default function Tabs<T extends string>({
             className={cx(
               'inline-flex min-h-9 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition',
               selected
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                ? 'bg-selected text-brand-deep'
+                : 'text-muted-foreground hover:bg-hover hover:text-foreground',
               item.disabled &&
                 'cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted-foreground'
             )}

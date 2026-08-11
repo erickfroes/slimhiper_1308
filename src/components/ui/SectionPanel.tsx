@@ -19,7 +19,7 @@ export default function SectionPanel({
   contentClassName,
 }: SectionPanelProps) {
   return (
-    <section className={cx('rounded-lg border border-border bg-card shadow-sm', className)}>
+    <section className={cx('rounded-xl border border-border bg-card card-shadow', className)}>
       {(title || description || actions) && (
         <header className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">

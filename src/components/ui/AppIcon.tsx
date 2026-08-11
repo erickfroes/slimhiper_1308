@@ -36,7 +36,7 @@ function Icon({
       <QuestionMarkCircleIcon
         width={size}
         height={size}
-        className={`text-gray-400 ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+        className={`text-muted-foreground ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
         onClick={disabled ? undefined : onClick}
         {...props}
       />

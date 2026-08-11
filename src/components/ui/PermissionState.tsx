@@ -18,20 +18,20 @@ export default function PermissionState({
   return (
     <section
       className={cx(
-        'rounded-lg border border-amber-200 bg-amber-50/70 p-5 text-amber-950',
+        'rounded-xl border border-warning-border bg-warning-bg p-5 text-warning-foreground',
         className
       )}
       role="status"
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warning/15 text-warning-foreground">
           <ShieldOff className="h-5 w-5" aria-hidden="true" />
         </div>
         <div>
           <h2 className="text-sm font-semibold">{title}</h2>
-          <p className="mt-1 text-sm text-amber-900">{description}</p>
+          <p className="mt-1 text-sm text-warning-foreground">{description}</p>
           {requiredPermission ? (
-            <p className="mt-2 text-xs font-semibold text-amber-900">
+            <p className="mt-2 text-xs font-semibold text-warning-foreground">
               Permissao minima: {requiredPermission}
             </p>
           ) : null}

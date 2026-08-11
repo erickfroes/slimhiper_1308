@@ -17,8 +17,8 @@ export default function ActionBar({
   return (
     <div
       className={cx(
-        'flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between',
-        sticky && 'sticky top-0 z-20 shadow-sm',
+        'flex flex-col gap-3 rounded-xl border border-border bg-card p-3 card-shadow sm:flex-row sm:items-center sm:justify-between',
+        sticky && 'sticky top-0 z-20',
         className
       )}
     >

@@ -3,6 +3,10 @@
 import React, { memo, useMemo } from 'react';
 import AppIcon from './AppIcon';
 import AppImage from './AppImage';
+import { visualAssets } from '@/lib/visualAssets';
+
+type AppLogoVariant = 'primary' | 'symbol' | 'reversed';
+type AppLogoSurface = 'light' | 'dark';
 
 interface AppLogoProps {
   src?: string; // Image source (optional)
@@ -10,14 +14,25 @@ interface AppLogoProps {
   size?: number; // Size for icon/image
   className?: string; // Additional classes
   onClick?: () => void; // Click handler
+  /** Semantic brand asset used when `src` is not supplied. */
+  variant?: AppLogoVariant;
+  /** Selects the accessible reversed logo on dark surfaces. */
+  surface?: AppLogoSurface;
+  /** Shortcut for the compact symbol treatment. */
+  compact?: boolean;
+  alt?: string;
 }
 
 const AppLogo = memo(function AppLogo({
-  src = '/assets/images/app_logo.png',
+  src,
   iconName = 'SparklesIcon',
   size = 64,
   className = '',
   onClick,
+  variant = 'primary',
+  surface = 'light',
+  compact = false,
+  alt = 'SlimHiper',
 }: AppLogoProps) {
   // Memoize className calculation
   const containerClassName = useMemo(() => {
@@ -27,19 +42,26 @@ const AppLogo = memo(function AppLogo({
     return classes.join(' ');
   }, [onClick, className]);
 
+  const resolvedSrc = useMemo(() => {
+    if (src !== undefined) return src;
+    if (surface === 'dark' || variant === 'reversed') return visualAssets.brandLogoReversed;
+    if (compact || variant === 'symbol') return visualAssets.brandLogoSymbol;
+    return visualAssets.brandLogoPrimary;
+  }, [compact, src, surface, variant]);
+
   return (
     <div className={containerClassName} onClick={onClick}>
       {/* Show image if src provided, otherwise show icon */}
-      {src ? (
+      {resolvedSrc ? (
         <AppImage
-          src={src}
-          alt="Logo"
+          src={resolvedSrc}
+          alt={alt}
           width={size}
           height={size}
           className="flex-shrink-0"
           priority={true}
           style={{ width: size, height: size }}
-          unoptimized={src.endsWith('.svg')}
+          unoptimized={resolvedSrc.endsWith('.svg')}
         />
       ) : (
         <AppIcon name={iconName} size={size} className="flex-shrink-0" />

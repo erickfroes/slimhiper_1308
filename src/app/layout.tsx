@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import { Toaster } from 'sonner';
+import { visualAssets } from '@/lib/visualAssets';
 import '../styles/tailwind.css';
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -21,7 +22,8 @@ export const metadata: Metadata = {
   description:
     'Sistema operacional completo para clínicas de transformação corporal — gerencie pacientes, programas, agenda e financeiro em um único painel.',
   icons: {
-    icon: [{ url: '/favicon.ico', type: 'image/x-icon' }],
+    icon: [{ url: visualAssets.brandAppIcon, type: 'image/png' }],
+    shortcut: [visualAssets.brandAppIcon],
   },
 };
 

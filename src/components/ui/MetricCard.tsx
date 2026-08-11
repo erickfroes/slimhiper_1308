@@ -16,10 +16,10 @@ interface MetricCardProps {
 
 const toneClass: Record<MetricTone, string> = {
   default: 'bg-primary/10 text-primary',
-  success: 'bg-emerald-50 text-emerald-700',
-  warning: 'bg-amber-50 text-amber-700',
-  danger: 'bg-red-50 text-red-700',
-  info: 'bg-blue-50 text-blue-700',
+  success: 'bg-positive-bg text-positive-foreground',
+  warning: 'bg-warning-bg text-warning-foreground',
+  danger: 'bg-negative-bg text-negative-foreground',
+  info: 'bg-info-bg text-info-foreground',
 };
 
 export default function MetricCard({
@@ -32,7 +32,7 @@ export default function MetricCard({
   className,
 }: MetricCardProps) {
   return (
-    <article className={cx('rounded-lg border border-border bg-card p-4 shadow-sm', className)}>
+    <article className={cx('rounded-xl border border-border bg-card p-4 card-shadow', className)}>
       <div className="flex items-start justify-between gap-3">
         <div
           className={cx('flex h-10 w-10 items-center justify-center rounded-lg', toneClass[tone])}
