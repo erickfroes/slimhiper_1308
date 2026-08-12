@@ -238,7 +238,7 @@ function SectionCard({
 }) {
   return (
     <section id={id} className="card-base overflow-hidden scroll-mt-6">
-      <div className="flex items-center gap-3 border-b border-border bg-muted/20 px-5 py-4">
+      <div className="flex items-center gap-3 border-b border-border bg-surface-subtle px-5 py-4">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
           <Icon size={16} className="text-primary" />
         </div>
@@ -255,8 +255,8 @@ function InlineAlert({ message, tone = 'error' }: { message: string; tone?: 'err
       className={[
         'flex items-start gap-2 rounded-xl border px-3 py-2 text-sm',
         tone === 'ok'
-          ? 'border-positive/20 bg-positive-bg text-positive'
-          : 'border-negative/20 bg-negative-bg text-negative',
+          ? 'border-positive-border bg-positive-bg text-positive-foreground'
+          : 'border-negative-border bg-negative-bg text-negative-foreground',
       ].join(' ')}
     >
       {tone === 'ok' ? (
@@ -281,7 +281,12 @@ function SaveButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick} disabled={saving || disabled} className="btn-primary">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={saving || disabled}
+      className="btn-primary min-h-11"
+    >
       {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
       {children}
     </button>
@@ -309,10 +314,10 @@ function StatusBadge({ status }: { status: string }) {
   const normalized = status.toLowerCase();
   const color =
     normalized === 'active' || normalized === 'ativo'
-      ? 'bg-positive-bg text-positive'
+      ? 'border border-positive-border bg-positive-bg text-positive-foreground'
       : normalized === 'inactive' || normalized === 'suspended'
-        ? 'bg-warning-bg text-warning'
-        : 'bg-muted text-muted-foreground';
+        ? 'border border-warning-border bg-warning-bg text-warning-foreground'
+        : 'border border-border bg-surface-subtle text-muted-foreground';
 
   return (
     <span className={['rounded-full px-2 py-0.5 text-xs font-medium', color].join(' ')}>
@@ -330,10 +335,10 @@ function formatDateTime(value: string | null | undefined) {
 
 function ComplianceSeverityBadge({ severity }: { severity: ComplianceGap['severity'] }) {
   const config = {
-    critical: 'bg-negative-bg text-negative',
-    high: 'bg-warning-bg text-warning',
-    medium: 'bg-primary/10 text-primary',
-    low: 'bg-muted text-muted-foreground',
+    critical: 'border border-negative-border bg-negative-bg text-negative-foreground',
+    high: 'border border-warning-border bg-warning-bg text-warning-foreground',
+    medium: 'border border-info-border bg-info-bg text-info-foreground',
+    low: 'border border-border bg-surface-subtle text-muted-foreground',
   };
   const label = {
     critical: 'Critica',
@@ -3012,8 +3017,8 @@ export default function ClinicSettingsContent() {
                 className={[
                   'flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors',
                   isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    ? 'bg-selected text-brand-deep'
+                    : 'text-muted-foreground hover:bg-hover hover:text-foreground',
                 ].join(' ')}
               >
                 <Icon size={14} />
@@ -3053,7 +3058,7 @@ export default function ClinicSettingsContent() {
                 className={[
                   'flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium',
                   isActive
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'border border-primary/30 bg-selected text-brand-deep'
                     : 'border border-border bg-card text-muted-foreground',
                 ].join(' ')}
               >
