@@ -36,9 +36,9 @@ canonical IDs are `brand.pattern.light` and `brand.pattern.dark`.
 
 ## Compatibility and policy
 
-- `public/assets/images/app_logo.png` remains in place for three marketing
-  components that still explicitly reference it. It is a legacy asset and is
-  not used by `AppLogo` anymore.
+- `public/assets/images/app_logo.png` is retained only for backward-compatible
+  asset URLs. Production UI no longer references it; marketing and application
+  surfaces use canonical `AppLogo` variants.
 - `public/assets/images/no_image.png` remains the `AppImage` fallback.
 - `public/favicon.ico` remains untouched for direct legacy `/favicon.ico`
   requests. Next metadata now selects the approved PNG app icon.

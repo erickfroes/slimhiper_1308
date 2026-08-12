@@ -1,4 +1,4 @@
-import Image from 'next/image';
+import AppLogo from '@/components/ui/AppLogo';
 import {
   Bell,
   CalendarDays,
@@ -108,15 +108,7 @@ export default function ProductPreview() {
       <div className="grid min-h-[500px] grid-cols-1 lg:grid-cols-[180px_1fr]">
         <aside className="hidden bg-slate-950 p-4 text-white lg:flex lg:flex-col">
           <div className="mb-5 flex items-center gap-2">
-            <Image
-              src="/assets/images/app_logo.png"
-              alt=""
-              width={30}
-              height={48}
-              className="h-8 w-5 object-contain"
-              style={{ height: '32px', width: 'auto' }}
-              priority
-            />
+            <AppLogo compact surface="dark" size={28} alt="" />
             <div className="leading-none">
               <p className="text-sm font-bold">SlimHiper</p>
               <p className="text-[11px] text-teal-100/80">Clinic OS</p>

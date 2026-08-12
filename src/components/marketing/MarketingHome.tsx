@@ -1,6 +1,6 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, ChevronRight, ShieldCheck, type LucideIcon } from 'lucide-react';
+import AppLogo from '@/components/ui/AppLogo';
 import ProductPreview from './ProductPreview';
 import {
   heroProofItems,
@@ -41,15 +41,7 @@ function SiteHeader() {
           href="/"
           className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
-          <Image
-            src="/assets/images/app_logo.png"
-            alt=""
-            width={28}
-            height={45}
-            className="h-10 w-7 object-contain"
-            style={{ height: '40px', width: 'auto' }}
-            priority
-          />
+          <AppLogo compact size={32} alt="" />
           <span className="leading-none">
             <span className="block text-xl font-extrabold text-slate-950">SlimHiper</span>
             <span className="block text-sm font-semibold text-muted-foreground">Clinic OS</span>
@@ -351,14 +343,7 @@ function Footer() {
     <footer className="border-t border-border bg-slate-950 py-8 text-slate-300">
       <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
         <div className="flex items-center gap-3">
-          <Image
-            src="/assets/images/app_logo.png"
-            alt=""
-            width={24}
-            height={39}
-            className="h-8 w-5 object-contain"
-            style={{ height: '32px', width: 'auto' }}
-          />
+          <AppLogo compact surface="dark" size={28} alt="" />
           <div>
             <p className="text-sm font-extrabold text-white">SlimHiper Clinic OS</p>
             <p className="text-xs text-slate-400">Operação clínica, documentos e financeiro.</p>
