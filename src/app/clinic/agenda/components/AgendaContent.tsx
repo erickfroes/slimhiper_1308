@@ -4252,7 +4252,7 @@ export default function AgendaContent() {
               type="button"
               disabled
               title="Filtros avançados entram junto do contrato real de agenda."
-              className="btn-ghost flex items-center gap-1.5 text-sm px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-ghost min-h-11 flex items-center gap-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Filter size={14} />
               Filtrar
@@ -4260,7 +4260,7 @@ export default function AgendaContent() {
             <button
               type="button"
               onClick={openCreateAppointment}
-              className="btn-primary flex items-center gap-1.5 text-sm px-3 py-1.5"
+              className="btn-primary min-h-11 flex items-center gap-1.5 text-sm"
             >
               <Plus size={14} />
               Nova Consulta
@@ -4344,14 +4344,14 @@ export default function AgendaContent() {
 
             {/* View toggle */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1 bg-muted rounded-xl p-1">
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-surface-subtle p-1">
                 <button
                   onClick={() => setActiveView('kanban')}
                   className={[
                     'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
                     activeView === 'kanban'
-                      ? 'bg-card shadow-sm text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
+                      ? 'bg-card card-shadow text-brand-deep'
+                      : 'text-muted-foreground hover:bg-hover hover:text-foreground',
                   ].join(' ')}
                 >
                   Fluxo Clínico
@@ -4361,8 +4361,8 @@ export default function AgendaContent() {
                   className={[
                     'text-xs font-medium px-3 py-1.5 rounded-lg transition-all',
                     activeView === 'lista'
-                      ? 'bg-card shadow-sm text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
+                      ? 'bg-card card-shadow text-brand-deep'
+                      : 'text-muted-foreground hover:bg-hover hover:text-foreground',
                   ].join(' ')}
                 >
                   Lista do Dia
