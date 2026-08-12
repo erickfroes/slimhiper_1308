@@ -103,23 +103,23 @@ const chargeStatusLabel = {
 };
 
 const chargeStatusClass = {
-  pendente: 'border-amber-200 bg-amber-50 text-amber-700',
-  pago: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  vencido: 'border-red-200 bg-red-50 text-red-700',
-  cancelado: 'border-slate-200 bg-slate-50 text-slate-600',
+  pendente: 'border-warning-border bg-warning-bg text-warning-foreground',
+  pago: 'border-positive-border bg-positive-bg text-positive-foreground',
+  vencido: 'border-negative-border bg-negative-bg text-negative-foreground',
+  cancelado: 'border-border bg-surface-subtle text-muted-foreground',
 };
 
 const eventStatusClass = {
-  received: 'border-blue-200 bg-blue-50 text-blue-700',
-  processed: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  failed: 'border-red-200 bg-red-50 text-red-700',
-  ignored: 'border-amber-200 bg-amber-50 text-amber-700',
+  received: 'border-info-border bg-info-bg text-info-foreground',
+  processed: 'border-positive-border bg-positive-bg text-positive-foreground',
+  failed: 'border-negative-border bg-negative-bg text-negative-foreground',
+  ignored: 'border-warning-border bg-warning-bg text-warning-foreground',
 };
 
 const severityClass = {
-  high: 'border-red-200 bg-red-50 text-red-700',
-  medium: 'border-amber-200 bg-amber-50 text-amber-700',
-  low: 'border-slate-200 bg-slate-50 text-slate-600',
+  high: 'border-negative-border bg-negative-bg text-negative-foreground',
+  medium: 'border-warning-border bg-warning-bg text-warning-foreground',
+  low: 'border-border bg-surface-subtle text-muted-foreground',
 };
 
 const divergenceLabels: Record<ClinicFinanceDivergence['kind'], string> = {
@@ -411,7 +411,7 @@ export default function ClinicFinanceiroContent() {
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
-      <section className="bg-card border border-border rounded-2xl p-5 lg:p-6">
+      <section className="card-base p-5 lg:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Financeiro da Clinica</h1>
@@ -436,12 +436,12 @@ export default function ClinicFinanceiroContent() {
         {metrics.map((metric) => {
           const Icon = metric.icon;
           return (
-            <article key={metric.label} className="bg-card border border-border rounded-2xl p-4">
+            <article key={metric.label} className="card-base p-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Icon size={16} />
                 <p>{metric.label}</p>
               </div>
-              <p className="text-2xl font-semibold mt-2">{metric.value}</p>
+              <p className="mt-2 text-2xl font-semibold tabular-nums">{metric.value}</p>
             </article>
           );
         })}
@@ -452,15 +452,15 @@ export default function ClinicFinanceiroContent() {
           role={actionError ? 'alert' : 'status'}
           className={`rounded-2xl border p-4 text-sm ${
             actionError
-              ? 'border-red-200 bg-red-50 text-red-700'
-              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              ? 'border-negative-border bg-negative-bg text-negative-foreground'
+              : 'border-positive-border bg-positive-bg text-positive-foreground'
           }`}
         >
           {actionError ?? actionMessage}
         </section>
       ) : null}
 
-      <section className="bg-card border rounded-2xl p-5">
+      <section className="card-base p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-semibold">Cobrancas por status</h2>
@@ -477,14 +477,14 @@ export default function ClinicFinanceiroContent() {
               className={`rounded-lg border p-3 ${chargeStatusClass[item.status]}`}
             >
               <p className="text-xs font-medium">{item.label}</p>
-              <p className="mt-1 text-xl font-semibold">{item.count}</p>
-              <p className="mt-1 text-xs">{brl(item.total)}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums">{item.count}</p>
+              <p className="mt-1 text-xs tabular-nums">{brl(item.total)}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="bg-card border rounded-2xl p-5">
+      <section className="card-base p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-semibold">Comprovantes, recorrencia e estornos</h2>
@@ -670,7 +670,7 @@ export default function ClinicFinanceiroContent() {
         )}
       </section>
 
-      <section className="bg-card border rounded-2xl p-5">
+      <section className="card-base p-5">
         <h2 className="text-base font-semibold">Cobrancas recentes</h2>
         {hasRecentCharges ? (
           <div className="mt-3 space-y-2">
@@ -684,7 +684,7 @@ export default function ClinicFinanceiroContent() {
                   <span className="text-muted-foreground"> - {charge.description}</span>
                 </span>
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{brl(charge.amount)}</span>
+                  <span className="font-medium tabular-nums">{brl(charge.amount)}</span>
                   <span
                     className={`rounded-full border px-2 py-0.5 text-xs ${chargeStatusClass[charge.status]}`}
                   >
