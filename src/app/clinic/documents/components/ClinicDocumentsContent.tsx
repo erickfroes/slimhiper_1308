@@ -229,10 +229,14 @@ function ReleasePill({ released }: { released: boolean }) {
     <Pill
       icon={Unlock}
       label="Liberado"
-      classes="border-emerald-200 bg-emerald-50 text-emerald-700"
+      classes="border-positive-border bg-positive-bg text-positive-foreground"
     />
   ) : (
-    <Pill icon={Lock} label="Restrito" classes="border-slate-200 bg-slate-100 text-slate-700" />
+    <Pill
+      icon={Lock}
+      label="Restrito"
+      classes="border-border bg-surface-subtle text-muted-foreground"
+    />
   );
 }
 
@@ -242,17 +246,25 @@ function TemplateStatusPill({ template }: { template: ClinicDocumentTemplate }) 
       <Pill
         icon={CheckCircle2}
         label="Ativo"
-        classes="border-emerald-200 bg-emerald-50 text-emerald-700"
+        classes="border-positive-border bg-positive-bg text-positive-foreground"
       />
     );
   }
   if (template.status === 'archived') {
     return (
-      <Pill icon={Lock} label="Arquivado" classes="border-slate-200 bg-slate-100 text-slate-700" />
+      <Pill
+        icon={Lock}
+        label="Arquivado"
+        classes="border-border bg-surface-subtle text-muted-foreground"
+      />
     );
   }
   return (
-    <Pill icon={FileSearch} label="Rascunho" classes="border-blue-200 bg-blue-50 text-blue-700" />
+    <Pill
+      icon={FileSearch}
+      label="Rascunho"
+      classes="border-info-border bg-info-bg text-info-foreground"
+    />
   );
 }
 
@@ -266,7 +278,7 @@ function MetricCard({
   value: string | number;
 }) {
   return (
-    <article className="rounded-lg border border-border bg-card p-4">
+    <article className="rounded-xl border border-border bg-card p-4 card-shadow">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Icon size={16} aria-hidden="true" />
         <p>{label}</p>
@@ -2837,7 +2849,7 @@ export default function ClinicDocumentsContent() {
           </section>
         </div>
 
-        <section className="rounded-lg border border-border bg-card">
+        <section className="overflow-hidden rounded-xl border border-border bg-card card-shadow">
           <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <FileText size={16} aria-hidden="true" />
@@ -2849,7 +2861,7 @@ export default function ClinicDocumentsContent() {
             </div>
           </div>
 
-          <div className="grid gap-3 border-b border-border bg-muted/20 px-4 py-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-3 border-b border-border bg-surface-subtle px-4 py-3 md:grid-cols-3 xl:grid-cols-6">
             <label className="block text-xs font-medium text-muted-foreground md:col-span-2">
               Busca
               <input
@@ -3027,16 +3039,16 @@ export default function ClinicDocumentsContent() {
             <>
               <div className="hidden overflow-x-auto md:block">
                 <table className="min-w-[980px] w-full text-sm">
-                  <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                  <thead className="bg-surface-subtle text-xs uppercase text-muted-foreground">
                     <tr>
                       {[
                         'Documento',
                         'Paciente',
-                        'Categoria',
+                        'Template e categoria',
                         'Status',
                         'Assinatura',
                         'Portal',
-                        'Atualizado',
+                        'Emitido',
                         'Acoes',
                       ].map((header) => (
                         <th key={header} scope="col" className="px-4 py-3 text-left font-medium">
@@ -3051,7 +3063,7 @@ export default function ClinicDocumentsContent() {
                         <td className="px-4 py-3">
                           <p className="font-medium text-foreground">{document.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            Codigo {document.displayCode}
+                            {document.templateName ?? 'Sem template'} · {document.displayCode}
                           </p>
                         </td>
                         <td className="px-4 py-3">
@@ -3063,7 +3075,10 @@ export default function ClinicDocumentsContent() {
                           </Link>
                         </td>
                         <td className="px-4 py-3 text-foreground">
-                          {categoryLabel(document.category)}
+                          <p>{document.templateName ?? 'Sem template'}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {categoryLabel(document.category)}
+                          </p>
                         </td>
                         <td className="px-4 py-3">
                           <DocumentStatusPill document={document} />
@@ -3074,7 +3089,7 @@ export default function ClinicDocumentsContent() {
                         <td className="px-4 py-3">
                           <ReleasePill released={document.releasedToPatient} />
                         </td>
-                        <td className="px-4 py-3 text-foreground">{document.updatedAt}</td>
+                        <td className="px-4 py-3 text-foreground">{document.generatedAt}</td>
                         <td className="px-4 py-3">
                           <DocumentActions
                             document={document}
@@ -3100,12 +3115,15 @@ export default function ClinicDocumentsContent() {
 
               <div className="space-y-3 p-3 md:hidden">
                 {filteredDocuments.map((document) => (
-                  <article key={document.id} className="rounded-lg border border-border p-3">
+                  <article
+                    key={document.id}
+                    className="rounded-lg border border-border bg-card p-3 card-shadow"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-foreground">{document.name}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {document.patientName} · Codigo {document.displayCode}
+                          {document.patientName} · {document.templateName ?? 'Sem template'}
                         </p>
                       </div>
                       <ReleasePill released={document.releasedToPatient} />
@@ -3114,6 +3132,9 @@ export default function ClinicDocumentsContent() {
                       <DocumentStatusPill document={document} />
                       <SignaturePill document={document} />
                     </div>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      {categoryLabel(document.category)} · emitido em {document.generatedAt}
+                    </p>
                     <div className="mt-3">
                       <DocumentActions
                         document={document}
