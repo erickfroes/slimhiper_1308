@@ -39,12 +39,17 @@ import {
   updateClinicMemberProfessionalProfile,
   updateClinicMemberPersonalProfile,
   updateClinicSettings,
+  getClinicPrivacyGovernance,
+  publishClinicPrivacyPolicy,
+  saveClinicPrivacyPolicy,
   type AutoMessageTemplate,
   type ClinicChatServiceHour,
   type ClinicBrandingSettings,
   type ClinicFinanceSettings,
   type ClinicIntegration,
   type ClinicLegalSettings,
+  type ClinicPrivacyGovernance,
+  type ClinicPrivacyPolicy,
   type ClinicPortalSettings,
   type ClinicProfileSettings,
   type ClinicSettingsSnapshot,
@@ -70,6 +75,7 @@ type SectionId =
   | 'chat'
   | 'mensagens'
   | 'legal'
+  | 'privacidade'
   | 'integracoes'
   | 'financeiro'
   | 'programas'
@@ -83,6 +89,7 @@ type SaveKey =
   | 'portal'
   | 'chatHours'
   | 'legal'
+  | 'privacy'
   | 'integrations'
   | 'finance'
   | 'programs'
@@ -99,6 +106,7 @@ const SECTIONS: Array<{ id: SectionId; label: string; icon: React.ElementType }>
   { id: 'chat', label: 'Chat', icon: Clock },
   { id: 'mensagens', label: 'Mensagens', icon: MessageSquare },
   { id: 'legal', label: 'Legal', icon: FileText },
+  { id: 'privacidade', label: 'Privacidade', icon: ShieldCheck },
   { id: 'integracoes', label: 'Integracoes', icon: Plug },
   { id: 'financeiro', label: 'Financeiro', icon: CreditCard },
   { id: 'programas', label: 'Programas', icon: BookOpen },
@@ -159,6 +167,23 @@ const EMPTY_LEGAL: ClinicLegalSettings = {
   lgpdRequestEmail: '',
   dataRetentionYears: 6,
   requirePatientConsent: true,
+};
+
+const EMPTY_PRIVACY_POLICY: ClinicPrivacyPolicy = {
+  dpoEmail: '',
+  consentVersion: '',
+  requestSlaDays: 15,
+  alertLeadDays: 3,
+  automationEnabled: false,
+  allowNonclinicalAnonymization: false,
+  retentionRules: { clinical: 'clinical_retention_required', personal: 'until_request_resolution' },
+  optionalConsents: {
+    marketing: { version: 'v1', enabled: true },
+    community: { version: 'v1', enabled: true },
+    progress_photos: { version: 'v1', enabled: true },
+    optional_communications: { version: 'v1', enabled: true },
+  },
+  approvedOperators: [],
 };
 
 const EMPTY_UNIT: SaveClinicUnitInput = {
@@ -2393,6 +2418,130 @@ function SectionLegal({
   );
 }
 
+function SectionPrivacy({
+  governance,
+  draft,
+  setDraft,
+  saving,
+  onSave,
+  onPublish,
+}: {
+  governance: ClinicPrivacyGovernance | null;
+  draft: ClinicPrivacyPolicy;
+  setDraft: React.Dispatch<React.SetStateAction<ClinicPrivacyPolicy>>;
+  saving: boolean;
+  onSave: () => void;
+  onPublish: () => void;
+}) {
+  const published = governance?.policy?.status === 'published';
+  const update = <K extends keyof ClinicPrivacyPolicy>(key: K, value: ClinicPrivacyPolicy[K]) =>
+    setDraft((current) => ({ ...current, [key]: value }));
+  return (
+    <div className="space-y-5">
+      <div
+        className={`rounded-xl border p-4 text-sm ${published ? 'border-positive-border bg-positive-bg' : 'border-warning-border bg-warning-bg'}`}
+      >
+        {published
+          ? `Política v${governance?.policy?.version} publicada; automações híbridas ativas.`
+          : 'Política ainda não publicada: automações permanecem desativadas.'}
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          E-mail do DPO
+          <input
+            type="email"
+            value={draft.dpoEmail}
+            onChange={(event) => update('dpoEmail', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Versão de consentimento
+          <input
+            value={draft.consentVersion}
+            onChange={(event) => update('consentVersion', event.target.value)}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          SLA de solicitações (dias)
+          <input
+            type="number"
+            min={1}
+            max={90}
+            value={draft.requestSlaDays}
+            onChange={(event) => update('requestSlaDays', Number(event.target.value))}
+            className="input-base"
+          />
+        </label>
+        <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+          Alerta antes do prazo (dias)
+          <input
+            type="number"
+            min={1}
+            max={30}
+            value={draft.alertLeadDays}
+            onChange={(event) => update('alertLeadDays', Number(event.target.value))}
+            className="input-base"
+          />
+        </label>
+      </div>
+      <label className="flex items-center gap-2 text-sm text-foreground">
+        <input
+          type="checkbox"
+          checked={draft.allowNonclinicalAnonymization}
+          onChange={(event) => update('allowNonclinicalAnonymization', event.target.checked)}
+        />{' '}
+        Permitir anonimização automática apenas de dados não clínicos elegíveis
+      </label>
+      <p className="text-xs text-muted-foreground">
+        Retenção clínica, compartilhamentos e decisões negadas/retidas exigem revisão humana.
+        Operadores aprovados: {draft.approvedOperators.length || 0}.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn-secondary" disabled={saving} onClick={onSave}>
+          {saving ? 'Salvando...' : 'Salvar rascunho'}
+        </button>
+        {governance?.policy?.id && governance.policy.status === 'draft' && (
+          <button type="button" className="btn-primary" disabled={saving} onClick={onPublish}>
+            Publicar política
+          </button>
+        )}
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <h3 className="text-sm font-semibold">Alertas operacionais</h3>
+          {governance?.alerts?.length ? (
+            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+              {governance.alerts.slice(0, 5).map((alert) => (
+                <li key={alert.id}>
+                  {alert.severity}: {alert.type}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">Nenhum alerta aberto.</p>
+          )}
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold">Solicitações do titular</h3>
+          {governance?.requests?.length ? (
+            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+              {governance.requests.slice(0, 5).map((request) => (
+                <li key={request.id}>
+                  {request.type}: {request.status}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">Nenhuma solicitação pendente.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SectionIntegracoes({
   tenantId,
   integrations,
@@ -2835,6 +2984,8 @@ export default function ClinicSettingsContent() {
   const [portalDraft, setPortalDraft] = useState<ClinicPortalSettings>(EMPTY_PORTAL);
   const [financeDraft, setFinanceDraft] = useState<ClinicFinanceSettings>(EMPTY_FINANCE);
   const [legalDraft, setLegalDraft] = useState<ClinicLegalSettings>(EMPTY_LEGAL);
+  const [privacyGovernance, setPrivacyGovernance] = useState<ClinicPrivacyGovernance | null>(null);
+  const [privacyDraft, setPrivacyDraft] = useState<ClinicPrivacyPolicy>(EMPTY_PRIVACY_POLICY);
   const [chatHoursDraft, setChatHoursDraft] = useState<ClinicChatServiceHour[]>([]);
   const [integrationDraft, setIntegrationDraft] = useState<Record<string, boolean>>({});
   const [selectedProgramIds, setSelectedProgramIds] = useState<string[]>([]);
@@ -2861,7 +3012,10 @@ export default function ClinicSettingsContent() {
     setLoading(true);
     setLoadError(null);
     try {
-      const result = await getClinicSettings();
+      const [result, privacyResult] = await Promise.all([
+        getClinicSettings(),
+        getClinicPrivacyGovernance(),
+      ]);
       if (result.error || !result.data) {
         setLoadError(result.error?.message ?? 'Nao foi possivel carregar configuracoes.');
         setSnapshot(null);
@@ -2869,6 +3023,18 @@ export default function ClinicSettingsContent() {
       }
 
       applySnapshot(result.data);
+      if (!privacyResult.error && privacyResult.data) {
+        setPrivacyGovernance(privacyResult.data);
+        setPrivacyDraft(
+          privacyResult.data.policy ?? {
+            ...EMPTY_PRIVACY_POLICY,
+            dpoEmail: result.data.legal.dpoEmail,
+            consentVersion: result.data.legal.consentFormVersion,
+          }
+        );
+      } else {
+        setPrivacyGovernance(null);
+      }
     } catch {
       setLoadError('Nao foi possivel carregar configuracoes.');
       setSnapshot(null);
@@ -2930,6 +3096,43 @@ export default function ClinicSettingsContent() {
 
   const saveLegal = () =>
     void savePatch('legal', 'Configuracoes legais salvas.', { legal: legalDraft });
+
+  const savePrivacy = async () => {
+    setSavingKey('privacy');
+    setSaveError(null);
+    setNotice(null);
+    const result = await saveClinicPrivacyPolicy(privacyDraft);
+    if (result.error || !result.data)
+      setSaveError(result.error?.message ?? 'Nao foi possivel salvar politica.');
+    else {
+      const refreshed = await getClinicPrivacyGovernance();
+      if (!refreshed.error && refreshed.data) {
+        setPrivacyGovernance(refreshed.data);
+        setPrivacyDraft(refreshed.data.policy ?? privacyDraft);
+      }
+      setNotice('Rascunho de privacidade salvo.');
+    }
+    setSavingKey(null);
+  };
+
+  const publishPrivacy = async () => {
+    const policyId = privacyGovernance?.policy?.id;
+    if (!policyId) return;
+    setSavingKey('privacy');
+    setSaveError(null);
+    setNotice(null);
+    const result = await publishClinicPrivacyPolicy(policyId);
+    if (result.error) setSaveError(result.error.message);
+    else {
+      const refreshed = await getClinicPrivacyGovernance();
+      if (!refreshed.error && refreshed.data) {
+        setPrivacyGovernance(refreshed.data);
+        setPrivacyDraft(refreshed.data.policy ?? privacyDraft);
+      }
+      setNotice('Política publicada e automações híbridas ativadas.');
+    }
+    setSavingKey(null);
+  };
 
   const saveIntegrations = () => {
     const integrations = Object.fromEntries(
@@ -3145,6 +3348,17 @@ export default function ClinicSettingsContent() {
             setDraft={setLegalDraft}
             saving={savingKey === 'legal'}
             onSave={saveLegal}
+          />
+        </SectionCard>
+
+        <SectionCard id="privacidade" title="Privacidade e Direitos do Titular" icon={ShieldCheck}>
+          <SectionPrivacy
+            governance={privacyGovernance}
+            draft={privacyDraft}
+            setDraft={setPrivacyDraft}
+            saving={savingKey === 'privacy'}
+            onSave={() => void savePrivacy()}
+            onPublish={() => void publishPrivacy()}
           />
         </SectionCard>
 

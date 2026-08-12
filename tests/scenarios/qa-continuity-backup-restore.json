@@ -1,0 +1,8 @@
+{
+  "id": "qa-continuity-backup-restore",
+  "syntheticDataPrefix": "qa_",
+  "restoresRequired": 2,
+  "domains": ["clinical", "pii", "documents", "financial", "rbac"],
+  "assertions": ["tenant-scoped relations restore", "attachment hash restores", "owner export works", "cross-tenant export is denied", "RPO/RTO are aggregated"],
+  "cleanup": "removes qa_ tenants, qa_ identities and temporary backup payload; report is sanitized"
+}

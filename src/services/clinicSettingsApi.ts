@@ -72,6 +72,44 @@ export interface ClinicLegalSettings {
   requirePatientConsent: boolean;
 }
 
+export interface ClinicPrivacyPolicy {
+  id?: string;
+  version?: number;
+  status?: 'draft' | 'published' | 'superseded';
+  dpoEmail: string;
+  consentVersion: string;
+  requestSlaDays: number;
+  alertLeadDays: number;
+  automationEnabled: boolean;
+  allowNonclinicalAnonymization: boolean;
+  retentionRules: Record<string, string>;
+  optionalConsents: Record<string, { version?: string; enabled?: boolean }>;
+  approvedOperators: string[];
+  publishedAt?: string | null;
+}
+
+export interface ClinicPrivacyAlert {
+  id: string;
+  type: string;
+  severity: 'low' | 'medium' | 'high';
+  status: string;
+  dueAt: string | null;
+  createdAt: string | null;
+}
+export interface ClinicPrivacyRequest {
+  id: string;
+  type: string;
+  status: string;
+  dueAt: string | null;
+  assignedTo: string | null;
+  createdAt: string | null;
+}
+export interface ClinicPrivacyGovernance {
+  policy: ClinicPrivacyPolicy | null;
+  alerts: ClinicPrivacyAlert[];
+  requests: ClinicPrivacyRequest[];
+}
+
 export interface ClinicChatServiceHour {
   id?: string;
   weekday: number;
@@ -1099,6 +1137,107 @@ export async function updateClinicSettings(name: string | null, patch: ClinicSet
       data: null as ClinicSettingsSnapshot | null,
       error: asServiceError(error, 'Nao foi possivel salvar configuracoes.'),
     };
+  }
+}
+
+function asPrivacyGovernance(value: unknown): ClinicPrivacyGovernance {
+  const record = asRecord(value);
+  const policyRecord = asRecord(record.policy);
+  const policy =
+    Object.keys(policyRecord).length === 0
+      ? null
+      : {
+          id: asString(policyRecord.id) || undefined,
+          version: asInteger(policyRecord.version, 1),
+          status: asString(policyRecord.status) as ClinicPrivacyPolicy['status'],
+          dpoEmail: asString(policyRecord.dpoEmail),
+          consentVersion: asString(policyRecord.consentVersion),
+          requestSlaDays: asInteger(policyRecord.requestSlaDays, 15),
+          alertLeadDays: asInteger(policyRecord.alertLeadDays, 3),
+          automationEnabled: asBoolean(policyRecord.automationEnabled),
+          allowNonclinicalAnonymization: asBoolean(policyRecord.allowNonclinicalAnonymization),
+          retentionRules: asRecord(policyRecord.retentionRules) as Record<string, string>,
+          optionalConsents: asRecord(
+            policyRecord.optionalConsents
+          ) as ClinicPrivacyPolicy['optionalConsents'],
+          approvedOperators: asArray(policyRecord.approvedOperators)
+            .map((item) => asString(item))
+            .filter(Boolean),
+          publishedAt: asString(policyRecord.publishedAt) || null,
+        };
+  return {
+    policy,
+    alerts: asArray(record.alerts)
+      .map((item) => {
+        const row = asRecord(item);
+        return {
+          id: asString(row.id),
+          type: asString(row.type),
+          severity: asString(row.severity, 'medium') as ClinicPrivacyAlert['severity'],
+          status: asString(row.status),
+          dueAt: asString(row.dueAt) || null,
+          createdAt: asString(row.createdAt) || null,
+        };
+      })
+      .filter((item) => item.id),
+    requests: asArray(record.requests)
+      .map((item) => {
+        const row = asRecord(item);
+        return {
+          id: asString(row.id),
+          type: asString(row.type),
+          status: asString(row.status),
+          dueAt: asString(row.dueAt) || null,
+          assignedTo: asString(row.assignedTo) || null,
+          createdAt: asString(row.createdAt) || null,
+        };
+      })
+      .filter((item) => item.id),
+  };
+}
+
+export async function getClinicPrivacyGovernance(): Promise<{
+  data: ClinicPrivacyGovernance | null;
+  error: SafeServiceError | null;
+}> {
+  try {
+    const { data, error } = await createBrowserSupabaseClient().rpc(
+      'get_clinic_privacy_governance'
+    );
+    return error
+      ? { data: null, error: asServiceError(error, 'Nao foi possivel carregar privacidade.') }
+      : { data: asPrivacyGovernance(data), error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Nao foi possivel carregar privacidade.') };
+  }
+}
+
+export async function saveClinicPrivacyPolicy(policy: ClinicPrivacyPolicy): Promise<{
+  data: { id: string; version: number; status: string } | null;
+  error: SafeServiceError | null;
+}> {
+  try {
+    const { data, error } = await createBrowserSupabaseClient().rpc('save_clinic_privacy_policy', {
+      p_policy: policy,
+    });
+    return error
+      ? { data: null, error: asServiceError(error, 'Nao foi possivel salvar politica.') }
+      : { data: data as { id: string; version: number; status: string }, error: null };
+  } catch (error) {
+    return { data: null, error: asServiceError(error, 'Nao foi possivel salvar politica.') };
+  }
+}
+
+export async function publishClinicPrivacyPolicy(
+  policyId: string
+): Promise<{ error: SafeServiceError | null }> {
+  try {
+    const { error } = await createBrowserSupabaseClient().rpc('publish_clinic_privacy_policy', {
+      p_policy_id: policyId,
+    });
+    return { error: error ? asServiceError(error, 'Nao foi possivel publicar politica.') : null };
+  } catch (error) {
+    return { error: asServiceError(error, 'Nao foi possivel publicar politica.') };
   }
 }
 

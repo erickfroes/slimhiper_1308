@@ -1,0 +1,7 @@
+{
+  "id": "qa-clinical-record-lifecycle",
+  "syntheticDataPrefix": "qa_",
+  "steps": ["appointment", "attendance workflow", "measurement", "SOAP draft/final", "SOAP addendum", "issued orientation", "automatic checkout"],
+  "negativeAssertions": ["connection drop", "concurrent appointment conflict", "invalid workflow transition", "duplicate SOAP finalization", "final SOAP mutation", "issued prescription mutation", "patient SOAP export denial"],
+  "evidence": ["measurement", "timeline", "audit log", "SOAP amendment", "authorized SOAP export"]
+}

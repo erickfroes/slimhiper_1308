@@ -1,0 +1,14 @@
+{
+  "id": "qa-rls-portal-revocation",
+  "syntheticDataPrefix": "qa_",
+  "preconditions": ["Supabase local with all migrations", "process environment contains local Supabase credentials"],
+  "assertions": [
+    "clinic owner can read an own-tenant patient",
+    "clinic owner cannot read another tenant patient",
+    "patient can read only own active patient account linkage",
+    "patient cannot read clinical patient rows directly",
+    "guardian can read only own active guardian linkage",
+    "revoked membership cannot read patient data"
+  ],
+  "cleanup": "delete tenants qa-clinica-aurora and qa-clinica-boreal plus qa_ auth users"
+}

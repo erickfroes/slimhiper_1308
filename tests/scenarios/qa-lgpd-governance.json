@@ -1,0 +1,6 @@
+{
+  "id": "qa-lgpd-governance",
+  "syntheticDataPrefix": "qa_",
+  "covers": ["versioned processing inventory", "marketing opt-out", "photo consent", "authorized export", "cross-tenant denial", "clinical retention", "permitted anonymization", "content-free audit metadata"],
+  "dataPolicy": "Only qa_ identities and evidence digests are used; clinical content is never written to audit_logs."
+}

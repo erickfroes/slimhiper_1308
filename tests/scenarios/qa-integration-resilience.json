@@ -1,0 +1,7 @@
+{
+  "id": "qa-integration-resilience",
+  "syntheticDataPrefix": "qa_",
+  "providersCalled": false,
+  "covers": ["outbox idempotency", "timeout", "400", "401", "429", "500", "ambiguous result", "invalid signature", "duplicate inbound event", "out-of-order event", "dead letter", "sanitized reconciliation"],
+  "dataPolicy": "Only digests, codes and bounded summaries are persisted; raw provider payloads are forbidden."
+}
