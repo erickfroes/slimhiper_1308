@@ -186,7 +186,7 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
       <div
         role="tablist"
         aria-label="Abas do Paciente 360"
-        className="flex items-center gap-1 overflow-x-auto scrollbar-thin pb-1 mb-5 border-b border-border"
+        className="mb-5 flex items-center gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 card-shadow scrollbar-thin"
       >
         {TABS.map((tab) => {
           const tabAllowed = canAccessTab(tab.id, userContext);
@@ -205,10 +205,10 @@ export default function Patient360Tabs({ data, patientId, userContext }: Patient
               }
               onClick={() => handleTabChange(tab.id)}
               className={[
-                'flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-all duration-150 border-b-2 -mb-px',
+                'flex min-h-10 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 activeTab === tab.id
-                  ? 'border-primary text-primary bg-primary/5'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted',
+                  ? 'bg-selected text-brand-deep'
+                  : 'text-muted-foreground hover:bg-hover hover:text-foreground',
                 !tabAllowed
                   ? 'cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted-foreground'
                   : '',

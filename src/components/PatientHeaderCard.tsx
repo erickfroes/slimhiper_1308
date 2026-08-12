@@ -19,6 +19,7 @@ import {
   CreditCard,
   BarChart2,
   Pencil,
+  ShieldAlert,
 } from 'lucide-react';
 import type { Patient360Summary } from '@/domain/types';
 import type { UserContext } from '@/lib/auth/getCurrentUserContext';
@@ -242,9 +243,9 @@ export default function PatientHeaderCard({
   const canViewFinancial = userContext?.canViewFinancial ?? false;
 
   return (
-    <div className="card-base mb-5 overflow-hidden">
+    <div className="mb-5 overflow-hidden rounded-xl border border-border bg-card card-shadow">
       {/* Top accent bar */}
-      <div className="h-1 w-full bg-gradient-to-r from-teal-500 to-emerald-400 rounded-t-2xl" />
+      <div className="h-1 w-full bg-primary" />
 
       <div className="p-5 pb-4">
         {/* Row 1: Avatar + Identity + Actions */}
@@ -306,10 +307,7 @@ export default function PatientHeaderCard({
           <div className="flex flex-wrap items-center gap-2 flex-shrink-0 lg:ml-auto">
             {/* Primary action */}
             {canUsePrimaryAction ? (
-              <Link
-                href={primaryAction.href}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold shadow-sm hover:bg-primary/90 transition-colors"
-              >
+              <Link href={primaryAction.href} className="btn-primary min-h-11 px-4 text-sm">
                 {primaryAction.icon}
                 {primaryAction.label}
               </Link>
@@ -322,7 +320,7 @@ export default function PatientHeaderCard({
                     ? 'Requer permissão para criar ou editar atendimento.'
                     : 'Requer permissão de escrita em agenda.'
                 }
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold shadow-sm cursor-not-allowed opacity-55"
+                className="btn-primary min-h-11 px-4 text-sm cursor-not-allowed opacity-55"
               >
                 {primaryAction.icon}
                 {primaryAction.label}
@@ -335,7 +333,7 @@ export default function PatientHeaderCard({
                 <Link
                   key={action.label}
                   href={action.href}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors border border-border"
+                  className="btn-secondary min-h-11 px-3 text-sm"
                 >
                   {action.icon}
                   <span className="hidden sm:inline">{action.label}</span>
@@ -346,7 +344,7 @@ export default function PatientHeaderCard({
                   type="button"
                   disabled
                   title={action.blockedTitle}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium transition-colors border border-border cursor-not-allowed opacity-55"
+                  className="btn-secondary min-h-11 px-3 text-sm cursor-not-allowed opacity-55"
                 >
                   {action.icon}
                   <span className="hidden sm:inline">{action.label}</span>
@@ -359,7 +357,7 @@ export default function PatientHeaderCard({
               type="button"
               disabled
               title="Edição direta bloqueada até contrato seguro de atualização do paciente."
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium transition-colors border border-border cursor-not-allowed opacity-55"
+              className="btn-secondary min-h-11 px-3 text-sm cursor-not-allowed opacity-55"
             >
               <Pencil size={14} />
               <span className="hidden sm:inline">Editar</span>
@@ -402,22 +400,49 @@ export default function PatientHeaderCard({
         </div>
 
         {/* Row 3: Status badges */}
-        <div className="flex flex-wrap items-center gap-2 mt-4">
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
           {pkgStatus ? (
-            <BadgePill label={pkgStatus.label} className={pkgStatus.className} />
+            <div className="rounded-lg border border-border bg-surface-subtle p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                Tratamento
+              </p>
+              <div className="mt-1">
+                <BadgePill label={pkgStatus.label} className={pkgStatus.className} />
+              </div>
+            </div>
           ) : (
             <span className="text-sm text-muted-foreground">Sem pacote ativo</span>
           )}
           {canViewFinancial ? (
             finStatus ? (
-              <BadgePill label={finStatus.label} className={finStatus.className} />
+              <div className="rounded-lg border border-border bg-surface-subtle p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                  Financeiro
+                </p>
+                <div className="mt-1">
+                  <BadgePill label={finStatus.label} className={finStatus.className} />
+                </div>
+              </div>
             ) : (
               <span className="text-sm text-muted-foreground">Financeiro não disponível</span>
             )
           ) : (
             <span className="text-sm text-muted-foreground">Financeiro restrito</span>
           )}
-          {riskConfig && <BadgePill label={riskConfig.label} className={riskConfig.className} />}
+          {riskConfig && (
+            <div className="rounded-lg border border-border bg-surface-subtle p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                Risco clínico
+              </p>
+              <div className="mt-1">
+                <BadgePill label={riskConfig.label} className={riskConfig.className} />
+                <span className="ml-2 inline-flex items-center gap-1 text-xs font-semibold text-foreground">
+                  <ShieldAlert size={13} />
+                  Avaliar
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
