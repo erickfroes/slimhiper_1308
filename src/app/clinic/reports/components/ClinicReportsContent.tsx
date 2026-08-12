@@ -123,14 +123,14 @@ function statusLabel(status: ClinicReportArtifactStatus | ClinicReportRun['statu
 
 function statusClass(status: ClinicReportArtifactStatus | ClinicReportRun['status']): string {
   const classes: Record<string, string> = {
-    pending: 'bg-slate-100 text-slate-700',
-    running: 'bg-sky-100 text-sky-700',
-    ready: 'bg-emerald-100 text-emerald-700',
-    completed: 'bg-emerald-100 text-emerald-700',
-    failed: 'bg-red-100 text-red-700',
-    cancelled: 'bg-slate-100 text-slate-700',
-    expired: 'bg-amber-100 text-amber-700',
-    deleted: 'bg-slate-100 text-slate-600',
+    pending: 'border border-warning-border bg-warning-bg text-warning-foreground',
+    running: 'border border-info-border bg-info-bg text-info-foreground',
+    ready: 'border border-positive-border bg-positive-bg text-positive-foreground',
+    completed: 'border border-positive-border bg-positive-bg text-positive-foreground',
+    failed: 'border border-negative-border bg-negative-bg text-negative-foreground',
+    cancelled: 'border border-border bg-surface-subtle text-muted-foreground',
+    expired: 'border border-warning-border bg-warning-bg text-warning-foreground',
+    deleted: 'border border-border bg-surface-subtle text-muted-foreground',
   };
 
   return classes[status] ?? 'bg-muted text-muted-foreground';
@@ -302,7 +302,7 @@ export default function ClinicReportsContent() {
                 Somente chaves de relatorio aprovadas no backend podem gerar runs/export.
               </p>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+            <span className="inline-flex items-center gap-1 rounded-full border border-info-border bg-info-bg px-2.5 py-1 text-xs font-medium text-info-foreground">
               <ShieldCheck size={13} /> reports.read
             </span>
           </div>
@@ -341,10 +341,10 @@ export default function ClinicReportsContent() {
                     type="button"
                     onClick={() => setSelectedKey(definition.key)}
                     className={[
-                      'rounded-2xl border p-4 text-left transition-colors',
+                      'rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       active
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border bg-card hover:bg-muted/50',
+                        ? 'border-primary bg-selected card-shadow'
+                        : 'border-border bg-card hover:bg-hover',
                     ].join(' ')}
                   >
                     <div className="flex items-start gap-3">
@@ -561,7 +561,7 @@ export default function ClinicReportsContent() {
         </div>
 
         {historyLoading ? (
-          <div className="rounded-2xl border border-border p-5 text-sm text-muted-foreground">
+          <div className="rounded-xl border border-border bg-surface-subtle p-5 text-sm text-muted-foreground">
             Carregando historico de exports...
           </div>
         ) : historyError ? (
@@ -591,7 +591,10 @@ export default function ClinicReportsContent() {
               const canDownload = status === 'ready' && Boolean(run.artifactId ?? artifact?.id);
 
               return (
-                <article key={run.id} className="rounded-2xl border border-border bg-card p-4">
+                <article
+                  key={run.id}
+                  className="rounded-xl border border-border bg-card p-4 card-shadow"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-foreground">
@@ -745,9 +748,9 @@ export default function ClinicReportsContent() {
                 Relatorio executado sem linhas para os filtros selecionados.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-border">
+              <div className="overflow-x-auto rounded-xl border border-border">
                 <table className="min-w-full divide-y divide-border text-sm">
-                  <thead className="bg-muted/60">
+                  <thead className="bg-surface-subtle">
                     <tr>
                       {resultColumns.map((column) => (
                         <th
