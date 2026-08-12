@@ -42,23 +42,23 @@ const filters: Array<{ id: ClinicCommunityFilter; label: string }> = [
 const statusConfig: Record<string, { label: string; className: string }> = {
   pending: {
     label: 'Pendente',
-    className: 'border-amber-200 bg-amber-50 text-amber-700',
+    className: 'border-warning-border bg-warning-bg text-warning-foreground',
   },
   approved: {
     label: 'Aprovado',
-    className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    className: 'border-positive-border bg-positive-bg text-positive-foreground',
   },
   rejected: {
     label: 'Rejeitado',
-    className: 'border-red-200 bg-red-50 text-red-700',
+    className: 'border-negative-border bg-negative-bg text-negative-foreground',
   },
   hidden: {
     label: 'Oculto',
-    className: 'border-slate-200 bg-slate-100 text-slate-700',
+    className: 'border-border bg-surface-subtle text-muted-foreground',
   },
   removed: {
     label: 'Removido',
-    className: 'border-slate-200 bg-slate-100 text-slate-700',
+    className: 'border-border bg-surface-subtle text-muted-foreground',
   },
 };
 
@@ -80,6 +80,16 @@ function formatDateTime(value?: string | null) {
 
 function statusLabel(status: string) {
   return statusConfig[status] ?? statusConfig.pending;
+}
+
+function initials(label: string) {
+  return label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
 }
 
 export default function ClinicCommunityContent() {
@@ -238,8 +248,8 @@ export default function ClinicCommunityContent() {
         />
       </section>
 
-      <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-1 overflow-x-auto rounded-lg bg-muted p-1 scrollbar-thin">
+      <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 card-shadow sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-surface-subtle p-1 scrollbar-thin">
           {filters.map((item) => (
             <button
               key={item.id}
@@ -248,7 +258,7 @@ export default function ClinicCommunityContent() {
               className={[
                 'min-h-9 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-semibold transition',
                 filter === item.id
-                  ? 'bg-card text-foreground shadow-sm'
+                  ? 'bg-card text-brand-deep card-shadow'
                   : 'text-muted-foreground hover:text-foreground',
               ].join(' ')}
             >
@@ -261,7 +271,7 @@ export default function ClinicCommunityContent() {
           <select
             value={programId}
             onChange={(event) => handleProgramChange(event.target.value)}
-            className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+            className="input-base min-h-11 text-sm"
           >
             <option value="">Todos os programas</option>
             {payload?.programs.map((program) => (
@@ -302,48 +312,56 @@ export default function ClinicCommunityContent() {
             return (
               <article
                 key={`${item.itemType}-${item.id}`}
-                className="rounded-lg border border-border bg-card p-4 shadow-sm"
+                className="rounded-xl border border-border bg-card p-4 card-shadow"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                        {item.itemType === 'comment' ? (
-                          <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                        ) : (
-                          <UsersRound className="h-3.5 w-3.5" aria-hidden="true" />
-                        )}
-                        {item.itemType === 'comment' ? 'Comentario' : 'Post'}
-                      </span>
-                      <span
-                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${status.className}`}
-                      >
-                        {status.label}
-                      </span>
-                      {item.reportCount > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                          <Flag className="h-3.5 w-3.5" aria-hidden="true" />
-                          {item.reportCount}
-                        </span>
-                      ) : null}
-                      {item.riskFlag ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                          <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                          Triagem
-                        </span>
-                      ) : null}
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary"
+                      aria-hidden="true"
+                    >
+                      {initials(item.authorLabel)}
                     </div>
-                    <h2 className="mt-3 text-sm font-semibold text-foreground">
-                      {item.authorLabel} em {item.programName}
-                    </h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatDateTime(item.createdAt)}
-                    </p>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-subtle px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                          {item.itemType === 'comment' ? (
+                            <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                          ) : (
+                            <UsersRound className="h-3.5 w-3.5" aria-hidden="true" />
+                          )}
+                          {item.itemType === 'comment' ? 'Comentario' : 'Post'}
+                        </span>
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${status.className}`}
+                        >
+                          {status.label}
+                        </span>
+                        {item.reportCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-negative-border bg-negative-bg px-2.5 py-1 text-xs font-semibold text-negative-foreground">
+                            <Flag className="h-3.5 w-3.5" aria-hidden="true" />
+                            {item.reportCount}
+                          </span>
+                        ) : null}
+                        {item.riskFlag ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-warning-border bg-warning-bg px-2.5 py-1 text-xs font-semibold text-warning-foreground">
+                            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                            Triagem
+                          </span>
+                        ) : null}
+                      </div>
+                      <h2 className="mt-3 text-sm font-semibold text-foreground">
+                        {item.authorLabel} em {item.programName}
+                      </h2>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatDateTime(item.createdAt)}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
                 {item.parentBody ? (
-                  <blockquote className="mt-4 rounded-lg border-l-4 border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                  <blockquote className="mt-4 rounded-lg border-l-4 border-primary/30 bg-surface-subtle px-3 py-2 text-xs text-muted-foreground">
                     {item.parentBody}
                   </blockquote>
                 ) : null}
@@ -353,7 +371,7 @@ export default function ClinicCommunityContent() {
                 </p>
 
                 {item.moderationReason ? (
-                  <p className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  <p className="mt-3 rounded-lg border border-negative-border bg-negative-bg px-3 py-2 text-xs text-negative-foreground">
                     {item.moderationReason}
                   </p>
                 ) : null}
@@ -402,7 +420,10 @@ export default function ClinicCommunityContent() {
           <h2 className="text-sm font-semibold text-foreground">Prompts ativos</h2>
           <div className="grid gap-3 lg:grid-cols-2">
             {payload.prompts.map((prompt) => (
-              <article key={prompt.id} className="rounded-lg border border-border bg-card p-4">
+              <article
+                key={prompt.id}
+                className="rounded-xl border border-border bg-card p-4 card-shadow"
+              >
                 <div className="flex items-start gap-3">
                   <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                   <div className="min-w-0">
