@@ -117,8 +117,8 @@ function LeadCard({
       type="button"
       onClick={onSelect}
       className={[
-        'w-full rounded-xl border bg-card p-3 text-left shadow-sm transition hover:border-primary/50 hover:shadow-md',
-        selected ? 'border-primary ring-2 ring-primary/10' : 'border-border',
+        'w-full rounded-lg border bg-card p-3 text-left card-shadow transition-colors hover:border-primary/50 hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        selected ? 'border-primary bg-selected ring-2 ring-primary/10' : 'border-border',
       ].join(' ')}
     >
       <div className="flex items-start justify-between gap-2">
@@ -129,23 +129,25 @@ function LeadCard({
           </p>
         </div>
         {lead.status === 'converted' ? (
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+          <span className="rounded-full border border-positive-border bg-positive-bg px-2 py-0.5 text-[11px] font-semibold text-positive-foreground">
             Convertido
           </span>
         ) : overdue ? (
-          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+          <span className="rounded-full border border-negative-border bg-negative-bg px-2 py-0.5 text-[11px] font-semibold text-negative-foreground">
             SLA vencido
           </span>
         ) : null}
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-        <span className="rounded-full bg-muted px-2 py-0.5">
+        <span className="rounded-full bg-surface-subtle px-2 py-0.5">
           {lead.source || 'Origem nao informada'}
         </span>
-        <span className="rounded-full bg-muted px-2 py-0.5">{lead.campaign || 'Sem campanha'}</span>
+        <span className="rounded-full bg-surface-subtle px-2 py-0.5">
+          {lead.campaign || 'Sem campanha'}
+        </span>
       </div>
-      <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
-        <Clock3 size={12} /> Proximo contato: {formatDateTime(lead.nextFollowUpAt)}
+      <p className="mt-3 flex items-center gap-1 text-xs font-medium text-muted-foreground">
+        <Clock3 size={12} /> Próximo contato: {formatDateTime(lead.nextFollowUpAt)}
       </p>
     </button>
   );
@@ -752,7 +754,7 @@ export default function CrmPipelineContent() {
             <button
               type="button"
               onClick={handleEmitNotifications}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+              className="btn-secondary min-h-11 gap-2 px-3 text-sm"
             >
               <AlertTriangle size={16} /> Atualizar alertas
             </button>
@@ -762,7 +764,7 @@ export default function CrmPipelineContent() {
                 setLeadForm(emptyLeadForm);
                 setCreateOpen(true);
               }}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
+              className="btn-primary min-h-11 gap-2 px-3 text-sm"
             >
               <Plus size={16} /> Novo lead
             </button>
@@ -772,16 +774,20 @@ export default function CrmPipelineContent() {
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <div className="card-base p-4">
-          <p className="text-xs text-muted-foreground">Leads filtrados</p>
-          <p className="mt-2 text-2xl font-bold">{filteredLeads.length}</p>
+          <p className="text-xs font-medium text-muted-foreground">Leads filtrados</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums">{filteredLeads.length}</p>
         </div>
         <div className="card-base p-4">
-          <p className="text-xs text-muted-foreground">SLA/tarefas vencidas</p>
-          <p className="mt-2 text-2xl font-bold text-red-700">{overdueCount}</p>
+          <p className="text-xs font-medium text-muted-foreground">SLA/tarefas vencidas</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-negative-foreground">
+            {overdueCount}
+          </p>
         </div>
         <div className="card-base p-4">
-          <p className="text-xs text-muted-foreground">Convertidos</p>
-          <p className="mt-2 text-2xl font-bold text-emerald-700">{convertedCount}</p>
+          <p className="text-xs font-medium text-muted-foreground">Convertidos</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-positive-foreground">
+            {convertedCount}
+          </p>
         </div>
         <div className="card-base p-4">
           <p className="text-xs text-muted-foreground">Contrato</p>
@@ -832,7 +838,7 @@ export default function CrmPipelineContent() {
           <button
             type="button"
             onClick={loadPipeline}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-muted"
+            className="btn-secondary min-h-11 gap-2 px-3 text-sm"
           >
             <Filter size={16} /> Filtrar
           </button>
@@ -844,7 +850,7 @@ export default function CrmPipelineContent() {
       ) : loading ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-72 rounded-2xl bg-muted animate-pulse" />
+            <div key={index} className="h-72 rounded-xl bg-surface-subtle animate-pulse" />
           ))}
         </div>
       ) : filteredLeads.length === 0 ? (
@@ -856,10 +862,10 @@ export default function CrmPipelineContent() {
       ) : (
         <section className="grid grid-cols-1 gap-4 xl:grid-cols-4">
           {leadsByStage.map(({ stage, leads: stageLeads }) => (
-            <div key={stage.id} className="rounded-2xl border border-border bg-muted/20 p-3">
+            <div key={stage.id} className="rounded-xl border border-border bg-surface-subtle p-3">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-foreground">{stage.label}</h2>
-                <span className="rounded-full bg-card px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                <span className="rounded-full border border-border bg-card px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
                   {stageLeads.length}
                 </span>
               </div>
@@ -873,7 +879,7 @@ export default function CrmPipelineContent() {
                   />
                 ))}
                 {stageLeads.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                  <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
                     Sem leads nesta etapa.
                   </p>
                 ) : null}
@@ -883,7 +889,7 @@ export default function CrmPipelineContent() {
         </section>
       )}
 
-      <div className="rounded-2xl border border-border bg-card p-4 text-xs text-muted-foreground">
+      <div className="rounded-xl border border-border bg-card p-4 text-xs text-muted-foreground">
         Conversao nao chama financeiro nem providers externos. Pacientes convertidos ficam
         disponiveis em{' '}
         <Link className="font-semibold text-primary" href="/clinic/patients">
