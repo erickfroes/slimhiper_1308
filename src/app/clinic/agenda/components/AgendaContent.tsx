@@ -4344,7 +4344,7 @@ export default function AgendaContent() {
 
             {/* View toggle */}
             <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 rounded-xl border border-border bg-surface-subtle p-1">
+              <div className="flex items-center gap-1 rounded-xl border border-border bg-surface-subtle p-1">
                 <button
                   onClick={() => setActiveView('kanban')}
                   className={[
