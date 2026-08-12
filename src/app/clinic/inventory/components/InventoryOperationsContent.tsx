@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Save,
   Search,
-  ShieldAlert,
 } from 'lucide-react';
 import {
   createInventoryLot,
@@ -29,6 +28,7 @@ import {
   type InventoryMovementReason,
   type InventorySnapshot,
 } from '@/services/inventoryApi';
+import { Alert, EmptyState, ErrorState, LoadingSkeleton, RestrictedState } from '@/components/ui';
 
 type MovementMode = 'receipt' | 'consumption' | 'loss' | 'adjustment' | 'transfer';
 
@@ -149,9 +149,10 @@ function inventoryActionErrorMessage(message: string | undefined, action: 'read'
 }
 
 function getAlertTone(severity: string) {
-  if (severity === 'critical') return 'border-red-200 bg-red-50 text-red-800';
+  if (severity === 'critical')
+    return 'border-negative-border bg-negative-bg text-negative-foreground';
   if (severity === 'high') return 'border-orange-200 bg-orange-50 text-orange-800';
-  return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-warning-border bg-warning-bg text-warning-foreground';
 }
 
 function parsePositiveNumber(value: string, fieldLabel: string) {
@@ -512,10 +513,10 @@ export default function InventoryOperationsContent() {
   if (loading) {
     return (
       <main className="p-6 xl:p-8 max-w-screen-2xl mx-auto space-y-4">
-        <div className="h-24 rounded-2xl bg-muted animate-pulse" />
+        <LoadingSkeleton className="h-24" />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="h-56 rounded-2xl bg-muted animate-pulse" />
+            <LoadingSkeleton key={index} className="h-56" />
           ))}
         </div>
       </main>
@@ -526,28 +527,16 @@ export default function InventoryOperationsContent() {
 
   if (error && !snapshot) {
     return (
-      <main className="p-6 xl:p-8 max-w-screen-2xl mx-auto">
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800">
-          <div className="flex items-center gap-3">
-            {forbidden ? (
-              <ShieldAlert className="h-6 w-6" />
-            ) : (
-              <AlertTriangle className="h-6 w-6" />
-            )}
-            <div>
-              <h1 className="text-lg font-semibold">
-                {forbidden ? 'Acesso ao estoque negado' : 'Estoque indisponivel'}
-              </h1>
-              <p className="text-sm">
-                {forbidden ? 'Seu usuario precisa da permissao inventory.read.' : error}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={loadInventory}
-            className="mt-4 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white"
-          >
+      <main className="p-6 xl:p-8 max-w-screen-2xl mx-auto space-y-4">
+        {forbidden ? (
+          <RestrictedState title="Acesso ao estoque negado">
+            Seu usuário precisa da permissão inventory.read.
+          </RestrictedState>
+        ) : (
+          <ErrorState title="Estoque indisponível">{error}</ErrorState>
+        )}
+        <div>
+          <button type="button" onClick={loadInventory} className="btn-secondary min-h-11 px-4">
             Tentar novamente
           </button>
         </div>
@@ -557,7 +546,7 @@ export default function InventoryOperationsContent() {
 
   return (
     <main className="p-6 xl:p-8 max-w-screen-2xl mx-auto space-y-6">
-      <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+      <section className="card-base p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <p className="text-sm font-medium text-primary">Estoque operacional</p>
@@ -573,7 +562,7 @@ export default function InventoryOperationsContent() {
             <button
               type="button"
               onClick={loadInventory}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-semibold"
+              className="btn-secondary min-h-11 gap-2 px-3 text-sm"
             >
               <RefreshCw className="h-4 w-4" /> Atualizar
             </button>
@@ -581,51 +570,55 @@ export default function InventoryOperationsContent() {
               type="button"
               onClick={handleEmitNotifications}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+              className="btn-primary min-h-11 gap-2 px-3 text-sm"
             >
               <Bell className="h-4 w-4" /> Emitir alertas
             </button>
           </div>
         </div>
         {notice ? (
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <Alert className="mt-4" tone="success" title="Operação concluída">
             {notice}
-          </div>
+          </Alert>
         ) : null}
         {error ? (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <Alert className="mt-4" tone="danger" title="Atenção necessária">
             {error}
-          </div>
+          </Alert>
         ) : null}
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="card-base p-4">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>Itens ativos</span>
             <Boxes className="h-5 w-5" />
           </div>
-          <p className="mt-3 text-3xl font-bold">{totals.activeItems}</p>
+          <p className="mt-3 text-3xl font-bold tabular-nums">{totals.activeItems}</p>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="card-base p-4">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>Abaixo do mínimo</span>
             <AlertTriangle className="h-5 w-5" />
           </div>
-          <p className="mt-3 text-3xl font-bold text-orange-600">{totals.criticalItems}</p>
+          <p className="mt-3 text-3xl font-bold tabular-nums text-orange-600">
+            {totals.criticalItems}
+          </p>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="card-base p-4">
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>Lotes críticos</span>
             <ClipboardList className="h-5 w-5" />
           </div>
-          <p className="mt-3 text-3xl font-bold text-red-600">{totals.expiringLots}</p>
+          <p className="mt-3 text-3xl font-bold tabular-nums text-negative-foreground">
+            {totals.expiringLots}
+          </p>
         </div>
       </section>
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_0.9fr]">
         <div className="space-y-4">
-          <div className="rounded-2xl border border-border bg-card p-4">
+          <div className="card-base p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
               <label className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -633,13 +626,13 @@ export default function InventoryOperationsContent() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Buscar por item ou SKU"
-                  className="w-full rounded-xl border border-border bg-background py-2 pl-9 pr-3 text-sm"
+                  className="input-base min-h-11 pl-9 text-sm"
                 />
               </label>
               <select
                 value={categoryFilter}
                 onChange={(event) => setCategoryFilter(event.target.value)}
-                className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                className="input-base min-h-11 text-sm"
               >
                 <option value="all">Todas as categorias</option>
                 {snapshot?.categories.map((category) => (
@@ -651,7 +644,7 @@ export default function InventoryOperationsContent() {
               <select
                 value={locationFilter}
                 onChange={(event) => setLocationFilter(event.target.value)}
-                className="rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                className="input-base min-h-11 text-sm"
               >
                 <option value="all">Todos os locais</option>
                 {snapshot?.locations.map((location) => (
@@ -663,62 +656,119 @@ export default function InventoryOperationsContent() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="border-b border-border px-4 py-3 font-semibold">Saldos por item</div>
+          <div className="overflow-hidden rounded-xl border border-border bg-card card-shadow">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h2 className="font-semibold text-foreground">Saldos por item</h2>
+              <span className="text-xs text-muted-foreground">Selecione para editar</span>
+            </div>
             {filteredItems.length === 0 ? (
-              <div className="p-6 text-sm text-muted-foreground">
-                Nenhum item encontrado para os filtros atuais.
-              </div>
+              <EmptyState
+                icon={Boxes}
+                title="Nenhum item encontrado"
+                description="Ajuste os filtros ou cadastre um item para iniciar o controle de estoque."
+              />
             ) : (
-              <div className="divide-y divide-border">
-                {filteredItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => editItem(item)}
-                    className="w-full p-4 text-left transition hover:bg-muted/50 focus:bg-muted/50 focus:outline-none"
-                  >
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="font-semibold text-foreground">{item.name}</h2>
-                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                            {item.sku || 'sem SKU'}
-                          </span>
-                          {item.status !== 'active' ? (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
-                              {item.status}
+              <>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="bg-surface-subtle text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-3">Item</th>
+                        <th className="px-4 py-3">Categoria</th>
+                        <th className="px-4 py-3 text-right">Estoque atual</th>
+                        <th className="px-4 py-3 text-right">Mínimo</th>
+                        <th className="px-4 py-3 text-right">Reservado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredItems.map((item) => (
+                        <tr key={item.id} className="transition-colors hover:bg-hover">
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => editItem(item)}
+                              className="rounded-sm text-left font-semibold text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {item.name}
+                            </button>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {item.sku || 'Sem SKU'}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {item.categoryName ?? 'Sem categoria'}
+                          </td>
+                          <td
+                            className={[
+                              'px-4 py-3 text-right font-semibold tabular-nums',
+                              item.quantityOnHand <= item.minimumQuantity
+                                ? 'text-orange-700'
+                                : 'text-foreground',
+                            ].join(' ')}
+                          >
+                            {formatQuantity(item.quantityOnHand, item.unit)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                            {formatQuantity(item.minimumQuantity, item.unit)}
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                            {formatQuantity(item.quantityReserved, item.unit)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="divide-y divide-border md:hidden">
+                  {filteredItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => editItem(item)}
+                      className="w-full p-4 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="font-semibold text-foreground">{item.name}</h2>
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                              {item.sku || 'sem SKU'}
                             </span>
-                          ) : null}
+                            {item.status !== 'active' ? (
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                                {item.status}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {item.categoryName ?? 'Sem categoria'} · minimo{' '}
+                            {formatQuantity(item.minimumQuantity, item.unit)} · custo{' '}
+                            {formatCurrency(item.defaultUnitCostCents)}
+                          </p>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {item.categoryName ?? 'Sem categoria'} · minimo{' '}
-                          {formatQuantity(item.minimumQuantity, item.unit)} · custo{' '}
-                          {formatCurrency(item.defaultUnitCostCents)}
-                        </p>
+                        <div className="text-right">
+                          <p
+                            className={
+                              item.quantityOnHand <= item.minimumQuantity
+                                ? 'text-lg font-bold tabular-nums text-orange-700'
+                                : 'text-lg font-bold text-foreground'
+                            }
+                          >
+                            {formatQuantity(item.quantityOnHand, item.unit)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            reservado {formatQuantity(item.quantityReserved, item.unit)}
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p
-                          className={
-                            item.quantityOnHand <= item.minimumQuantity
-                              ? 'text-lg font-bold text-orange-600'
-                              : 'text-lg font-bold text-foreground'
-                          }
-                        >
-                          {formatQuantity(item.quantityOnHand, item.unit)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          reservado {formatQuantity(item.quantityReserved, item.unit)}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
 
-          <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="overflow-hidden rounded-xl border border-border bg-card card-shadow">
             <div className="border-b border-border px-4 py-3 font-semibold">Lotes e validade</div>
             <div className="divide-y divide-border">
               {filteredLots.length === 0 ? (
