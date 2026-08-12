@@ -144,11 +144,11 @@ function statusTone(status: string) {
 
 function StatusPill({ children, tone = 'slate' }: { children: React.ReactNode; tone?: string }) {
   const classes: Record<string, string> = {
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    blue: 'border-blue-200 bg-blue-50 text-blue-700',
-    amber: 'border-amber-200 bg-amber-50 text-amber-700',
-    red: 'border-red-200 bg-red-50 text-red-700',
-    slate: 'border-slate-200 bg-slate-100 text-slate-600',
+    emerald: 'border-positive-border bg-positive-bg text-positive-foreground',
+    blue: 'border-info-border bg-info-bg text-info-foreground',
+    amber: 'border-warning-border bg-warning-bg text-warning-foreground',
+    red: 'border-negative-border bg-negative-bg text-negative-foreground',
+    slate: 'border-border bg-surface-subtle text-muted-foreground',
   };
   return (
     <span
@@ -163,7 +163,7 @@ function StatusPill({ children, tone = 'slate' }: { children: React.ReactNode; t
 
 function UsageBar({ used, limit, label }: { used: number; limit: number; label?: string }) {
   const pct = ratio(used, limit);
-  const color = pct > 90 ? 'bg-red-500' : pct > 75 ? 'bg-amber-400' : 'bg-teal-500';
+  const color = pct > 90 ? 'bg-negative' : pct > 75 ? 'bg-warning' : 'bg-primary';
   return (
     <div className="min-w-[9rem]">
       <div className="mb-1 flex items-center justify-between gap-2 text-xs">

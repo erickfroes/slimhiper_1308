@@ -81,7 +81,7 @@ function AdminSidebar({
     <aside
       id="admin-sidebar"
       className={[
-        'fixed inset-y-0 left-0 z-50 flex w-64 flex-shrink-0 flex-col border-r border-border bg-card shadow-sm sidebar-transition lg:relative lg:z-auto lg:shadow-none',
+        'fixed inset-y-0 left-0 z-50 flex w-64 flex-shrink-0 flex-col border-r border-border bg-surface-subtle sidebar-transition lg:relative lg:z-auto',
         mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         collapsed ? 'lg:w-16' : 'lg:w-64',
       ].join(' ')}
@@ -94,7 +94,7 @@ function AdminSidebar({
         {!collapsed ? (
           <div className="flex flex-col leading-none">
             <span className="text-xs font-bold tracking-tight text-foreground">SlimHiper</span>
-            <span className="text-xs font-semibold text-primary">Admin</span>
+            <span className="text-xs font-semibold text-brand-deep">Platform Admin</span>
           </div>
         ) : null}
         <button
@@ -120,8 +120,8 @@ function AdminSidebar({
                 collapsed ? 'lg:justify-center lg:px-0 gap-3 px-3 py-2.5' : 'gap-3 px-3 py-2.5'
               } ${
                 active
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                  ? 'bg-selected text-brand-deep'
+                  : 'text-muted-foreground hover:bg-hover hover:text-foreground'
               }`}
             >
               <ItemIcon size={16} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
@@ -293,10 +293,10 @@ export default function AdminShell({
               className={[
                 'hidden rounded-full border px-2.5 py-1 text-xs font-semibold sm:inline-flex',
                 adminPermissions.roleKind === 'support'
-                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  ? 'border-info-border bg-info-bg text-info-foreground'
                   : adminPermissions.canMutatePlatform
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-slate-200 bg-slate-100 text-slate-600',
+                    ? 'border-positive-border bg-positive-bg text-positive-foreground'
+                    : 'border-border bg-surface-subtle text-muted-foreground',
               ].join(' ')}
               title={
                 adminPermissions.error ??
