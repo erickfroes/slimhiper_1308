@@ -62,9 +62,11 @@ function formatDateTime(value: string) {
 }
 
 function severityClass(severity: string) {
-  if (severity === 'critical' || severity === 'high') return 'bg-red-50 text-red-700';
-  if (severity === 'low') return 'bg-slate-100 text-slate-600';
-  return 'bg-amber-50 text-amber-700';
+  if (severity === 'critical' || severity === 'high') {
+    return 'border-negative-border bg-negative-bg text-negative-foreground';
+  }
+  if (severity === 'low') return 'border-border bg-surface-subtle text-muted-foreground';
+  return 'border-warning-border bg-warning-bg text-warning-foreground';
 }
 
 function moderationLabel(status?: 'approved' | 'pending_review' | 'removed') {
@@ -80,10 +82,11 @@ function statusLabel(status: InboxConversation['status']) {
 }
 
 function priorityClass(priority?: InboxConversation['priority']) {
-  if (priority === 'urgente') return 'bg-red-50 text-red-700';
-  if (priority === 'alta') return 'bg-amber-50 text-amber-700';
-  if (priority === 'baixa') return 'bg-slate-100 text-slate-600';
-  return 'bg-blue-50 text-blue-700';
+  if (priority === 'urgente')
+    return 'border-negative-border bg-negative-bg text-negative-foreground';
+  if (priority === 'alta') return 'border-warning-border bg-warning-bg text-warning-foreground';
+  if (priority === 'baixa') return 'border-border bg-surface-subtle text-muted-foreground';
+  return 'border-info-border bg-info-bg text-info-foreground';
 }
 
 export default function ClinicInboxContent() {
@@ -277,11 +280,15 @@ export default function ClinicInboxContent() {
       <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <div className="card-base p-4">
           <p className="text-xs font-medium text-muted-foreground">Mensagens não lidas</p>
-          <p className="mt-2 text-2xl font-bold text-foreground">{unreadConversationCount}</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">
+            {unreadConversationCount}
+          </p>
         </div>
         <div className="card-base p-4">
-          <p className="text-xs font-medium text-muted-foreground">Notificações unread</p>
-          <p className="mt-2 text-2xl font-bold text-foreground">{unreadNotificationCount}</p>
+          <p className="text-xs font-medium text-muted-foreground">Notificações não lidas</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">
+            {unreadNotificationCount}
+          </p>
         </div>
         <div className="card-base p-4">
           <p className="text-xs font-medium text-muted-foreground">Escopo</p>

@@ -640,7 +640,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 {communicationsLoading ? (
                   <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-muted-foreground/50" />
                 ) : formattedUnreadNotifications ? (
-                  <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-negative px-1 text-center text-[10px] font-bold leading-[18px] text-white">
+                  <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-primary px-1 text-center text-[10px] font-bold leading-[18px] text-primary-foreground">
                     {formattedUnreadNotifications}
                   </span>
                 ) : null}
