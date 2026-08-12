@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   Smartphone,
   TrendingUp,
-  UserRound,
   UsersRound,
   type LucideIcon,
 } from 'lucide-react';
@@ -33,6 +32,15 @@ export type WorkflowStep = IconContentItem & {
   number: string;
 };
 
+export const heroContent = {
+  eyebrow: 'Clinic OS para operações de transformação corporal',
+  title: 'A operação da sua clínica, conectada do primeiro contato ao acompanhamento.',
+  description:
+    'Agenda, pacientes, prontuário, documentos, financeiro e portal em um fluxo rastreável para a equipe agir com contexto.',
+  primaryCta: { label: 'Agendar demonstração', href: '#demonstracao' },
+  secondaryCta: { label: 'Conhecer a plataforma', href: '#produto' },
+};
+
 export const marketingNavItems: MarketingNavItem[] = [
   { label: 'Produto', href: '#produto' },
   { label: 'Operação', href: '#operacao' },
@@ -42,24 +50,19 @@ export const marketingNavItems: MarketingNavItem[] = [
 
 export const heroProofItems: IconContentItem[] = [
   {
-    title: 'Segurança clínica',
-    description: 'Dados protegidos por acesso e perfis.',
+    title: 'Atendimento conectado',
+    description: 'Agenda, prontuário e evolução no mesmo fluxo.',
     icon: ShieldCheck,
   },
   {
-    title: 'Operação eficiente',
-    description: 'Processos padronizados e auditáveis.',
+    title: 'Operação coordenada',
+    description: 'Equipe, tarefas e etapas com menos ruído.',
     icon: BadgeCheck,
   },
   {
-    title: 'Visão completa',
-    description: 'Indicadores em tempo real para decisões melhores.',
+    title: 'Dados sob controle',
+    description: 'Permissões, auditoria e contexto para decidir.',
     icon: TrendingUp,
-  },
-  {
-    title: 'Experiência do paciente',
-    description: 'Portal, documentos e comunicação integrados.',
-    icon: UserRound,
   },
 ];
 

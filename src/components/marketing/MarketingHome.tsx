@@ -4,6 +4,7 @@ import AppLogo from '@/components/ui/AppLogo';
 import ProductPreview from './ProductPreview';
 import {
   heroProofItems,
+  heroContent,
   marketingNavItems,
   moduleItems,
   planItems,
@@ -81,13 +82,16 @@ function SiteHeader() {
 
 function HeroProofGrid() {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-5">
+    <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
       {heroProofItems.map((item) => (
-        <div key={item.title} className="flex items-start gap-3">
+        <div
+          key={item.title}
+          className="flex items-start gap-3 rounded-xl border border-slate-200/80 bg-white/70 p-3 sm:block sm:border-0 sm:bg-transparent sm:p-0"
+        >
           <IconFrame icon={item.icon} />
-          <div>
+          <div className="sm:mt-3">
             <p className="text-xs font-bold text-slate-950 sm:text-sm">{item.title}</p>
-            <p className="mt-1 hidden text-xs leading-5 text-muted-foreground sm:block sm:text-sm sm:leading-6">
+            <p className="mt-1 text-xs leading-5 text-muted-foreground sm:leading-6">
               {item.description}
             </p>
           </div>
@@ -99,31 +103,42 @@ function HeroProofGrid() {
 
 function HeroSection() {
   return (
-    <section className="border-b border-border bg-card">
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 pb-6 pt-8 sm:px-6 lg:grid-cols-[0.83fr_1.17fr] lg:items-center lg:px-8 lg:pb-8 lg:pt-10">
+    <section className="relative isolate overflow-hidden border-b border-border bg-gradient-to-br from-white via-teal-50/70 to-sky-50/70">
+      <div className="pointer-events-none absolute -left-28 top-10 -z-10 h-72 w-72 rounded-full bg-teal-200/35 blur-3xl" />
+      <div className="pointer-events-none absolute -right-20 top-0 -z-10 h-80 w-80 rounded-full bg-sky-200/35 blur-3xl" />
+      <div className="mx-auto grid max-w-7xl gap-9 px-4 pb-10 pt-12 sm:px-6 sm:pb-14 sm:pt-16 lg:grid-cols-[0.87fr_1.13fr] lg:items-center lg:gap-12 lg:px-8 lg:py-20">
         <div className="max-w-2xl">
-          <h1 className="text-4xl font-extrabold leading-[1.08] text-slate-950 sm:text-5xl lg:text-6xl">
-            O sistema operacional para clínicas de transformação corporal
+          <p className="inline-flex rounded-full border border-primary/20 bg-white/80 px-3 py-1.5 text-xs font-extrabold uppercase tracking-[0.11em] text-primary shadow-sm">
+            {heroContent.eyebrow}
+          </p>
+          <h1 className="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight text-slate-950 sm:text-5xl lg:text-[3.55rem]">
+            {heroContent.title}
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600 sm:text-xl">
-            Pacientes, programas, agenda, documentos, financeiro e portal do paciente em uma
-            operação clínica segura.
+            {heroContent.description}
           </p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-            <a href="#demonstracao" className="btn-primary justify-center px-6 py-3 text-base">
-              Agendar demonstração
+            <a
+              href={heroContent.primaryCta.href}
+              className="btn-primary justify-center px-6 py-3 text-base shadow-lg shadow-teal-700/15"
+            >
+              {heroContent.primaryCta.label}
             </a>
-            <Link href="/auth/login" className="btn-secondary justify-center px-6 py-3 text-base">
-              Entrar no sistema
-            </Link>
+            <a
+              href={heroContent.secondaryCta.href}
+              className="btn-secondary justify-center px-6 py-3 text-base"
+            >
+              {heroContent.secondaryCta.label}
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </a>
           </div>
           <div className="mt-8">
             <HeroProofGrid />
           </div>
         </div>
 
-        <div className="hidden min-w-0 lg:block lg:pl-2">
-          <ProductPreview />
+        <div className="min-w-0 lg:pl-2">
+          <ProductPreview compact />
         </div>
       </div>
     </section>
