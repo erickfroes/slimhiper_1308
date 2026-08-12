@@ -22,6 +22,7 @@ import {
   Send,
   Smartphone,
   Target,
+  UserRound,
   Users,
   Wrench,
 } from 'lucide-react';
@@ -44,55 +45,19 @@ import Tabs from '@/components/ui/Tabs';
 import CommercialCatalogContent, { type CommercialCatalogTab } from './CommercialCatalogContent';
 import { SkeletonCard } from '@/components/LoadingSkeleton';
 
-const colorMap: Record<string, { accent: string; badge: string; dot: string; icon: string }> = {
-  teal: {
-    accent: 'border-l-teal-500',
-    badge: 'bg-teal-50 text-teal-700',
-    dot: 'bg-teal-500',
-    icon: 'text-teal-600',
-  },
-  violet: {
-    accent: 'border-l-violet-500',
-    badge: 'bg-violet-50 text-violet-700',
-    dot: 'bg-violet-500',
-    icon: 'text-violet-600',
-  },
-  amber: {
-    accent: 'border-l-amber-500',
-    badge: 'bg-amber-50 text-amber-700',
-    dot: 'bg-amber-500',
-    icon: 'text-amber-600',
-  },
-  blue: {
-    accent: 'border-l-blue-500',
-    badge: 'bg-blue-50 text-blue-700',
-    dot: 'bg-blue-500',
-    icon: 'text-blue-600',
-  },
-  emerald: {
-    accent: 'border-l-emerald-500',
-    badge: 'bg-emerald-50 text-emerald-700',
-    dot: 'bg-emerald-500',
-    icon: 'text-emerald-600',
-  },
-};
-
-const paymentModelLabel: Record<string, string> = {
-  checkout_pro: 'Preço fixo Mercado Pago',
-  parcelado: 'Parcelado',
-  avista: 'À vista',
-  assinatura: 'Assinatura',
-  hibrido: 'Híbrido',
-};
-
-function formatProgramCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-}
-
 const statusConfig: Record<ProgramStatus, { label: string; className: string }> = {
-  ativo: { label: 'Ativo', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-  arquivado: { label: 'Arquivado', className: 'bg-gray-100 text-gray-500 border border-gray-200' },
-  rascunho: { label: 'Rascunho', className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+  ativo: {
+    label: 'Ativo',
+    className: 'border border-positive-border bg-positive-bg text-positive-foreground',
+  },
+  arquivado: {
+    label: 'Arquivado',
+    className: 'border border-border bg-surface-subtle text-muted-foreground',
+  },
+  rascunho: {
+    label: 'Rascunho',
+    className: 'border border-warning-border bg-warning-bg text-warning-foreground',
+  },
 };
 
 const emptySummary: ClinicProgramsSummary = {
@@ -151,27 +116,19 @@ interface ProgramCardProps {
 function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }: ProgramCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const colors = colorMap[program.color] ?? colorMap['teal'];
   const status = statusConfig[program.status];
-  const maxInstallments =
-    program.financialConfig?.maxInstallments ?? program.financialConfig?.installments ?? 12;
-
   const closeAndRun = (callback: () => void) => {
     setMenuOpen(false);
     callback();
   };
 
   return (
-    <div
-      className={`card-base border-l-4 ${colors.accent} shadow-sm transition-all duration-200 hover:shadow-md focus-within:shadow-md overflow-hidden`}
-    >
+    <div className="card-base overflow-hidden transition-shadow duration-200 hover:card-shadow-md focus-within:card-shadow-md">
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
-            <div
-              className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${colors.badge}`}
-            >
-              <BookOpen size={16} className={colors.icon} />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <BookOpen size={16} />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -258,7 +215,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-4 grid grid-cols-3 gap-2 rounded-lg border border-border bg-surface-subtle p-3">
           <div className="flex items-center gap-1.5">
             <Clock size={13} className="text-muted-foreground flex-shrink-0" />
             <span className="text-xs text-muted-foreground">{program.durationWeeks} semanas</span>
@@ -278,25 +235,28 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {program.phases.slice(0, 4).map((phase) => (
-            <span
-              key={`${program.id}-${phase.name}`}
-              className="inline-flex items-center gap-1 text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full"
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
-              {phase.name} - {phase.durationWeeks}sem
-            </span>
-          ))}
-          {program.phases.length === 0 && (
-            <span className="text-xs text-muted-foreground">Sem fases cadastradas</span>
-          )}
+        <div className="mt-3">
+          <p className={secondaryText}>Estrutura de tratamento</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {program.phases.slice(0, 4).map((phase) => (
+              <span
+                key={`${program.id}-${phase.name}`}
+                className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-xs text-muted-foreground"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                {phase.name} · {phase.durationWeeks} sem
+              </span>
+            ))}
+            {program.phases.length === 0 && (
+              <span className="text-xs text-muted-foreground">Sem fases cadastradas</span>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="border-t border-border" />
 
-      <div className="px-5 py-3 grid grid-cols-2 gap-x-4 gap-y-2">
+      <div className="grid grid-cols-1 gap-4 px-5 py-3 sm:grid-cols-2">
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
             <CheckSquare size={12} className="text-muted-foreground" />
@@ -323,7 +283,7 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
           <div>
             <div className="flex items-center gap-1.5 mb-1">
               <Target size={12} className="text-muted-foreground" />
-              <span className={secondaryText}>Check-ins</span>
+              <span className={secondaryText}>Acompanhamento previsto</span>
             </div>
             <div className="text-xs text-foreground">
               {program.checkInsTotal} - {program.checkInFrequency}
@@ -331,18 +291,16 @@ function ProgramCard({ program, busy, onArchive, onPublish, onClone, onEnroll }:
           </div>
           <div>
             <div className="flex items-center gap-1.5 mb-1">
-              <CreditCard size={12} className="text-muted-foreground" />
-              <span className={secondaryText}>Pagamento</span>
+              <UserRound size={12} className="text-muted-foreground" />
+              <span className={secondaryText}>Equipe responsável</span>
             </div>
             <div className="text-xs text-foreground">
-              {program.paymentModel === 'checkout_pro' || program.financialConfig?.basePrice ? (
-                <>
-                  Preço fixo: {formatProgramCurrency(program.financialConfig?.basePrice ?? 0)} |
-                  Mercado Pago até {maxInstallments}x
-                </>
-              ) : (
-                paymentModelLabel[program.paymentModel]
-              )}
+              {program.team?.length
+                ? program.team
+                    .slice(0, 2)
+                    .map((member) => member.name)
+                    .join(', ')
+                : 'Equipe não informada'}
             </div>
           </div>
         </div>
