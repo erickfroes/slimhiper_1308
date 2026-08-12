@@ -176,17 +176,18 @@ export default function AcceptInviteForm() {
   return (
     <form
       onSubmit={onSubmit}
-      className="w-full max-w-sm space-y-4 rounded-2xl border border-border bg-card p-6"
+      className="w-full space-y-5 rounded-xl border border-border bg-card p-6 card-shadow sm:p-8"
     >
       <div>
-        <h1 className="text-xl font-semibold text-foreground">Criar senha</h1>
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Convite seguro</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Criar senha</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Complete o convite para acessar o workspace SlimHiper.
         </p>
       </div>
 
       {email ? (
-        <div className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+        <div className="rounded-lg border border-border bg-surface-subtle px-3 py-2 text-sm text-muted-foreground">
           {email}
         </div>
       ) : null}
@@ -206,7 +207,7 @@ export default function AcceptInviteForm() {
             placeholder="Nova senha"
             autoComplete="new-password"
             disabled={state === 'saving' || state === 'error'}
-            className="w-full rounded-xl border border-border bg-background p-3 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            className="input-base min-h-11 bg-surface-subtle"
           />
           <input
             type="password"
@@ -217,13 +218,16 @@ export default function AcceptInviteForm() {
             placeholder="Confirmar senha"
             autoComplete="new-password"
             disabled={state === 'saving' || state === 'error'}
-            className="w-full rounded-xl border border-border bg-background p-3 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            className="input-base min-h-11 bg-surface-subtle"
           />
         </>
       ) : null}
 
       {error ? (
-        <p role="alert" className="text-sm text-red-500">
+        <p
+          role="alert"
+          className="rounded-lg border border-negative-border bg-negative-bg p-3 text-sm text-negative-foreground"
+        >
           {error}
         </p>
       ) : null}
@@ -231,7 +235,7 @@ export default function AcceptInviteForm() {
       <button
         type="submit"
         disabled={state !== 'ready'}
-        className="w-full rounded-xl bg-primary py-3 font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+        className="btn-primary min-h-11 w-full justify-center"
       >
         {state === 'saving' ? 'Salvando...' : 'Criar senha e entrar'}
       </button>

@@ -76,10 +76,12 @@ function StatCard({
   const cfg = accentConfig[accent];
 
   return (
-    <div className={['card-base flex flex-col gap-3 p-5', cfg.border].join(' ')}>
+    <div
+      className={['rounded-xl border border-border bg-card p-4 card-shadow', cfg.border].join(' ')}
+    >
       <div className="flex items-center justify-between">
         <div
-          className={['flex h-9 w-9 items-center justify-center rounded-xl', cfg.icon].join(' ')}
+          className={['flex h-9 w-9 items-center justify-center rounded-lg', cfg.icon].join(' ')}
         >
           <Icon size={17} />
         </div>
@@ -260,20 +262,23 @@ function ActionQueuePanel({ actions }: { actions: DashboardActionItem[] }) {
       : actions.filter((action) => action.category === selectedCategory);
 
   return (
-    <section className="card-base p-5">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <section className="rounded-xl border border-brand-mint bg-card p-5 card-shadow md:p-6">
+      <div className="mb-5 flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-selected text-brand-deep">
             <ShieldAlert size={17} />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Quem precisa de acao hoje</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
+              Prioridade clínica
+            </p>
+            <h2 className="mt-1 text-base font-bold text-foreground">Quem precisa de acao hoje</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Itens priorizados por fila, adesao, financeiro, documentos, mensagens e renovacoes.
             </p>
           </div>
         </div>
-        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-border bg-muted/30 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-border bg-surface-subtle px-2.5 py-1 text-xs font-semibold text-muted-foreground">
           <Filter size={13} />
           {filteredActions.length} itens
         </span>
@@ -286,8 +291,8 @@ function ActionQueuePanel({ actions }: { actions: DashboardActionItem[] }) {
           className={[
             'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
             selectedCategory === 'todos'
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-border bg-card text-muted-foreground hover:bg-muted focus-visible:bg-muted',
+              ? 'border-primary bg-selected text-brand-deep'
+              : 'border-border bg-card text-muted-foreground hover:bg-hover focus-visible:bg-hover',
           ].join(' ')}
         >
           Todos {actions.length}
@@ -302,8 +307,8 @@ function ActionQueuePanel({ actions }: { actions: DashboardActionItem[] }) {
               className={[
                 'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                 selectedCategory === category
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-card text-muted-foreground hover:bg-muted focus-visible:bg-muted',
+                  ? 'border-primary bg-selected text-brand-deep'
+                  : 'border-border bg-card text-muted-foreground hover:bg-hover focus-visible:bg-hover',
               ].join(' ')}
             >
               {config.label} {count}
@@ -326,7 +331,7 @@ function ActionQueuePanel({ actions }: { actions: DashboardActionItem[] }) {
             return (
               <div
                 key={action.id}
-                className="rounded-xl border border-border bg-card p-3 transition-colors hover:bg-muted/30"
+                className="rounded-lg border border-border bg-surface-subtle p-3 transition-colors hover:bg-hover"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 gap-3">
@@ -369,7 +374,7 @@ function ActionQueuePanel({ actions }: { actions: DashboardActionItem[] }) {
                   </div>
                   <Link
                     href={action.href}
-                    className="btn-secondary justify-center text-xs sm:min-w-36 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    className="btn-secondary min-h-11 justify-center text-xs sm:min-w-36 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   >
                     {action.ctaLabel}
                     <ChevronRight size={13} />

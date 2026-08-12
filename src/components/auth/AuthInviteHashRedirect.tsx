@@ -8,15 +8,18 @@ export default function AuthInviteHashRedirect() {
     const search = window.location.search;
     const params = new URLSearchParams(hash.replace(/^#/, ''));
     const searchParams = new URLSearchParams(search);
-    const isInviteHash = params.get('type') === 'invite' || hash.includes('access_token=');
+    const hashType = params.get('type');
+    const isRecoveryHash = hashType === 'recovery';
+    const isInviteHash =
+      hashType === 'invite' || (hash.includes('access_token=') && !isRecoveryHash);
     const searchType = searchParams.get('type');
+    const isRecoverySearch = searchType === 'recovery';
     const isInviteSearch =
-      searchType === 'invite' ||
-      searchType === 'recovery' ||
-      searchParams.has('code') ||
-      searchParams.has('token_hash');
+      searchType === 'invite' || searchParams.has('code') || searchParams.has('token_hash');
 
-    if (isInviteHash || isInviteSearch) {
+    if (isRecoveryHash || isRecoverySearch) {
+      window.location.replace(`/auth/reset-password${search}${hash}`);
+    } else if (isInviteHash || isInviteSearch) {
       window.location.replace(`/auth/accept-invite${search}${hash}`);
     }
   }, []);

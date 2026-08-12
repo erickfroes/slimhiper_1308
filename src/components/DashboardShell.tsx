@@ -338,7 +338,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
   }
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-surface-subtle">
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
@@ -350,7 +350,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
       {/* Sidebar */}
       <aside
         className={[
-          'flex flex-col bg-card border-r border-border sidebar-transition z-50 flex-shrink-0',
+          'z-50 flex flex-shrink-0 flex-col border-r border-border bg-clinical-ice sidebar-transition',
           collapsed ? 'w-64 lg:w-16' : 'w-64',
           'fixed lg:relative h-full',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
@@ -359,29 +359,37 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         {/* Logo */}
         <div
           className={[
-            'flex items-center border-b border-border flex-shrink-0',
-            collapsed ? 'gap-2 px-4 py-4 lg:justify-center lg:px-0' : 'gap-2 px-4 py-4',
+            'flex flex-shrink-0 items-center border-b border-border/80',
+            collapsed ? 'gap-2 px-4 py-5 lg:justify-center lg:px-0' : 'gap-2 px-4 py-5',
           ].join(' ')}
         >
           <div className="flex items-center gap-2">
             <AppLogo size={32} />
             {(!collapsed || mobileOpen) && (
               <div className="flex flex-col leading-none lg:hidden">
-                <span className="font-bold text-sm text-foreground tracking-tight">SlimHiper</span>
-                <span className="text-xs text-muted-foreground font-medium">Clinic OS</span>
+                <span className="text-sm font-bold tracking-tight text-brand-ink">SlimHiper</span>
+                <span className="text-xs font-semibold tracking-wide text-primary">Clinic OS</span>
               </div>
             )}
             {!collapsed && !mobileOpen && (
               <div className="hidden flex-col leading-none lg:flex">
-                <span className="font-bold text-sm text-foreground tracking-tight">SlimHiper</span>
-                <span className="text-xs text-muted-foreground font-medium">Clinic OS</span>
+                <span className="text-sm font-bold tracking-tight text-brand-ink">SlimHiper</span>
+                <span className="text-xs font-semibold tracking-wide text-primary">Clinic OS</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Nav items */}
-        <nav className="flex-1 overflow-y-auto scrollbar-thin py-3 px-2 space-y-0.5">
+        <nav
+          className="flex-1 space-y-1 overflow-y-auto px-2 py-4 scrollbar-thin"
+          aria-label="Navegação principal"
+        >
+          {!collapsed && (
+            <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              Navegação
+            </p>
+          )}
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -393,13 +401,13 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 title={collapsed ? item.label : undefined}
                 onClick={() => setMobileOpen(false)}
                 className={[
-                  'relative flex items-center rounded-xl transition-all duration-150 group',
+                  'group relative flex min-h-10 items-center rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                   collapsed
                     ? 'gap-3 px-3 py-2.5 lg:mx-0 lg:justify-center lg:px-0'
                     : 'gap-3 px-3 py-2.5',
                   active
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                    ? 'bg-selected font-semibold text-brand-deep before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-r-full before:bg-primary'
+                    : 'text-muted-foreground hover:bg-hover hover:text-brand-deep',
                 ].join(' ')}
               >
                 <Icon size={18} strokeWidth={active ? 2.5 : 2} className="flex-shrink-0" />
@@ -410,7 +418,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 )}
                 {/* Tooltip for collapsed */}
                 {collapsed && (
-                  <span className="absolute left-full ml-2 hidden px-2 py-1 bg-foreground text-background text-xs font-medium rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50 lg:block">
+                  <span className="pointer-events-none absolute left-full z-50 ml-2 hidden whitespace-nowrap rounded-lg bg-brand-ink px-2 py-1 text-xs font-medium text-primary-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100 lg:block">
                     {item.label}
                   </span>
                 )}
@@ -420,13 +428,13 @@ export default function DashboardShell({ children }: DashboardShellProps) {
         </nav>
 
         {/* Bottom: user + collapse toggle */}
-        <div className="border-t border-border p-2 flex-shrink-0">
+        <div className="flex-shrink-0 border-t border-border/80 p-2">
           {(!collapsed || mobileOpen) && (
             <div className="mb-1 flex items-center gap-1">
               <Link
                 href="/profile"
                 onClick={() => setMobileOpen(false)}
-                className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 title="Abrir perfil"
               >
                 <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -442,7 +450,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 aria-label="Sair da conta"
                 title="Sair"
               >
@@ -453,7 +461,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden items-center justify-center w-full py-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 lg:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="hidden min-h-11 w-full items-center justify-center rounded-lg py-2 text-muted-foreground transition-colors hover:bg-hover hover:text-foreground lg:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             title={collapsed ? 'Expandir menu' : 'Recolher menu'}
           >
             {collapsed ? (
@@ -471,10 +479,10 @@ export default function DashboardShell({ children }: DashboardShellProps) {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
-        <header className="app-topbar flex-shrink-0">
+        <header className="app-topbar z-30 flex-shrink-0 bg-card/95 card-shadow backdrop-blur">
           <button
             type="button"
-            className="lg:hidden btn-ghost p-2"
+            className="btn-ghost min-h-11 min-w-11 justify-center p-2 lg:hidden"
             onClick={() => setMobileOpen(true)}
             aria-label="Abrir menu da clínica"
             aria-expanded={mobileOpen}
@@ -483,7 +491,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
           </button>
 
           {/* Search */}
-          <form onSubmit={handleSearch} className="relative flex-1 max-w-sm">
+          <form onSubmit={handleSearch} className="relative flex-1 max-w-xl">
             <Search
               size={15}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -494,23 +502,23 @@ export default function DashboardShell({ children }: DashboardShellProps) {
               onChange={(event) => setPatientSearch(event.target.value)}
               placeholder="Buscar pacientes..."
               aria-label="Buscar pacientes"
-              className="input-base py-1.5 pl-9 pr-10 text-sm"
+              className="input-base min-h-11 border-border/90 bg-surface-subtle py-2 pl-9 pr-11 text-sm shadow-none focus:bg-card"
             />
             <button
               type="submit"
-              className="btn-ghost absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
+              className="btn-ghost absolute right-1 top-1/2 h-9 w-9 -translate-y-1/2 justify-center p-0"
               aria-label="Executar busca de pacientes"
             >
               <Search size={14} aria-hidden="true" />
             </button>
           </form>
 
-          <div className="ml-auto flex items-center gap-2" ref={topbarMenuRef}>
+          <div className="ml-auto flex items-center gap-1 sm:gap-2" ref={topbarMenuRef}>
             <div className="relative">
               <button
                 ref={messagesButtonRef}
                 type="button"
-                className="relative btn-ghost p-2"
+                className="relative btn-ghost min-h-11 min-w-11 justify-center p-2"
                 aria-label={`Abrir inbox de conversas${totalUnreadMessages ? `, ${totalUnreadMessages} não lidas` : ''}`}
                 aria-haspopup="menu"
                 aria-controls={messagesPanelId}
@@ -619,7 +627,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
               <button
                 ref={notificationsButtonRef}
                 type="button"
-                className="relative btn-ghost p-2"
+                className="relative btn-ghost min-h-11 min-w-11 justify-center p-2"
                 aria-label={`Abrir notificações${totalUnreadNotifications ? `, ${totalUnreadNotifications} não lidas` : ''}`}
                 aria-haspopup="menu"
                 aria-controls={notificationsPanelId}
@@ -726,23 +734,25 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 </div>
               )}
             </div>
-            <Link
-              href="/profile"
-              className="btn-ghost h-7 w-7 rounded-full p-0 bg-primary/10"
-              aria-label="Abrir perfil do usuario"
-              title={userDisplayName}
-            >
-              <User size={14} className="text-primary" aria-hidden="true" />
-            </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="btn-ghost h-7 w-7 rounded-full p-0"
-              aria-label="Sair da conta"
-              title="Sair"
-            >
-              <LogOut size={14} aria-hidden="true" />
-            </button>
+            <div className="ml-1 flex items-center gap-1 border-l border-border pl-2">
+              <Link
+                href="/profile"
+                className="btn-ghost h-11 w-11 justify-center rounded-full bg-selected p-0"
+                aria-label="Abrir perfil do usuario"
+                title={userDisplayName}
+              >
+                <User size={14} className="text-primary" aria-hidden="true" />
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="btn-ghost h-11 w-11 justify-center rounded-full p-0"
+                aria-label="Sair da conta"
+                title="Sair"
+              >
+                <LogOut size={14} aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </header>
 

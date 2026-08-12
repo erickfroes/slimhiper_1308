@@ -24,6 +24,9 @@ module.exports = {
           vital: 'var(--brand-vital)',
           mint: 'var(--brand-mint)',
         },
+        clinical: {
+          ice: 'var(--clinical-ice)',
+        },
         primary: {
           DEFAULT: 'var(--primary)',
           foreground: 'var(--primary-foreground)',

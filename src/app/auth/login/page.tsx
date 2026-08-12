@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import AuthForm from '@/components/auth/AuthForm';
+import AuthLayout from '@/components/auth/AuthLayout';
 import { getCurrentUserContext } from '@/lib/auth/getCurrentUserContext';
 
 export default async function LoginPage() {
@@ -18,8 +19,8 @@ export default async function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <AuthLayout>
       <AuthForm />
-    </div>
+    </AuthLayout>
   );
 }

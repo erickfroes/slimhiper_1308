@@ -1871,7 +1871,11 @@ export default function PatientListContent() {
         title="Pacientes"
         subtitle={`${totalPatients} pacientes no contrato real - ${patients.filter((p) => p.status === 'ativo').length} ativos nesta carga`}
         actions={
-          <button type="button" onClick={openCreatePatient} className="btn-primary text-sm">
+          <button
+            type="button"
+            onClick={openCreatePatient}
+            className="btn-primary min-h-11 text-sm"
+          >
             <Users size={15} />
             Novo Paciente
           </button>
@@ -1922,7 +1926,7 @@ export default function PatientListContent() {
       </div>
 
       {priorityPatients.length > 0 ? (
-        <div className="mb-4 rounded-lg border border-border bg-card p-4">
+        <div className="mb-4 rounded-xl border border-brand-mint bg-card p-4 card-shadow">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-foreground">Mapa de prioridade</h2>
@@ -1947,7 +1951,7 @@ export default function PatientListContent() {
                 key={`priority-${patient.id}`}
                 type="button"
                 onClick={() => void openPatientContext(patient)}
-                className="rounded-lg border border-border bg-muted/20 p-3 text-left transition hover:border-primary/40 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring"
+                className="rounded-lg border border-border bg-surface-subtle p-3 text-left transition hover:border-primary/40 hover:bg-hover focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -1976,8 +1980,8 @@ export default function PatientListContent() {
       ) : null}
 
       {/* Search + Filter bar */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-border bg-card p-3 card-shadow sm:flex-row sm:items-center">
+        <div className="relative flex-1 max-w-xl">
           <Search
             size={15}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -1990,14 +1994,14 @@ export default function PatientListContent() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="input-base pl-9"
+            className="input-base min-h-11 bg-surface-subtle pl-9"
           />
         </div>
 
         <button
           onClick={() => setFilterOpen(!filterOpen)}
           className={[
-            'btn-secondary gap-2 text-sm',
+            'btn-secondary min-h-11 gap-2 text-sm',
             filterOpen || activeFilters > 0 ? 'border-primary text-primary' : '',
           ].join(' ')}
         >
@@ -2011,7 +2015,10 @@ export default function PatientListContent() {
         </button>
 
         {activeFilters > 0 && (
-          <button onClick={clearFilters} className="btn-ghost text-sm gap-1.5 text-negative">
+          <button
+            onClick={clearFilters}
+            className="btn-ghost min-h-11 gap-1.5 text-sm text-negative"
+          >
             <X size={14} />
             Limpar filtros
           </button>
@@ -2646,7 +2653,7 @@ export default function PatientListContent() {
                             event.stopPropagation();
                             void openPatientContext(patient);
                           }}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                          className="min-h-11 min-w-11 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-hover hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
                           aria-label={`Abrir contexto de ${patient.name}`}
                           title="Abrir contexto"
                         >
@@ -2655,7 +2662,7 @@ export default function PatientListContent() {
                         <Link
                           href={`/clinic/patients/${patient.id}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                          className="min-h-11 min-w-11 rounded-lg bg-selected p-1.5 text-brand-deep transition-colors hover:bg-hover hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
                           aria-label={`Abrir Paciente 360 de ${patient.name}`}
                           title="Abrir Paciente 360"
                         >
@@ -2667,7 +2674,7 @@ export default function PatientListContent() {
                             event.stopPropagation();
                             void openEditPatient(patient.id);
                           }}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+                          className="min-h-11 min-w-11 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-hover hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
                           aria-label={`Editar paciente ${patient.name}`}
                           title="Editar paciente"
                         >

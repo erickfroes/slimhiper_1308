@@ -1,9 +1,10 @@
 import AcceptInviteForm from '@/components/auth/AcceptInviteForm';
+import AuthLayout from '@/components/auth/AuthLayout';
 
 export default function AcceptInvitePage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <AuthLayout>
       <AcceptInviteForm />
-    </div>
+    </AuthLayout>
   );
 }

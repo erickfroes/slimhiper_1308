@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import Link from 'next/link';
 
 type AppSessionResponse = {
   authenticated: boolean;
@@ -54,40 +55,65 @@ export default function AuthForm() {
   return (
     <form
       onSubmit={onSubmit}
-      className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 space-y-4"
+      className="w-full space-y-5 rounded-xl border border-border bg-card p-6 card-shadow sm:p-8"
     >
-      <h1 className="text-xl font-semibold text-foreground">Entrar</h1>
-      <input
-        id="login-email"
-        type="email"
-        required
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-        placeholder="E-mail"
-        autoComplete="email"
-        disabled={submitting}
-        className="w-full rounded-xl border border-border bg-background p-3 outline-none disabled:cursor-not-allowed disabled:opacity-60"
-      />
-      <input
-        id="login-password"
-        type="password"
-        required
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        placeholder="Senha"
-        autoComplete="current-password"
-        disabled={submitting}
-        className="w-full rounded-xl border border-border bg-background p-3 outline-none disabled:cursor-not-allowed disabled:opacity-60"
-      />
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Acesso seguro</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+          Entrar na sua clínica
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Use suas credenciais para acessar o SlimHiper.
+        </p>
+      </div>
+      <label className="block space-y-1.5 text-sm font-semibold text-foreground">
+        <span>E-mail</span>
+        <input
+          id="login-email"
+          type="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="E-mail"
+          autoComplete="email"
+          disabled={submitting}
+          className="input-base min-h-11 bg-surface-subtle"
+        />
+      </label>
+      <div className="flex justify-end">
+        <Link
+          href="/auth/forgot-password"
+          className="rounded-sm text-sm font-semibold text-primary hover:text-brand-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Esqueci minha senha
+        </Link>
+      </div>
+      <label className="block space-y-1.5 text-sm font-semibold text-foreground">
+        <span>Senha</span>
+        <input
+          id="login-password"
+          type="password"
+          required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="Senha"
+          autoComplete="current-password"
+          disabled={submitting}
+          className="input-base min-h-11 bg-surface-subtle"
+        />
+      </label>
       {error ? (
-        <p role="alert" className="text-sm text-red-500">
+        <p
+          role="alert"
+          className="rounded-lg border border-negative-border bg-negative-bg p-3 text-sm text-negative-foreground"
+        >
           {error}
         </p>
       ) : null}
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-xl bg-primary text-primary-foreground py-3 font-medium disabled:cursor-not-allowed disabled:opacity-60"
+        className="btn-primary min-h-11 w-full justify-center"
       >
         {submitting ? 'Entrando...' : 'Entrar'}
       </button>
