@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createEdgeContext, logEdgeEvent, observedEdgeHeaders } from '../_shared/observability.ts';
 import { envString } from '../_shared/env.ts';
@@ -120,7 +121,7 @@ function minimizedWebhookPayload(
   };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const context = createEdgeContext('edge.webhook-asaas', req);
   const timestamp = new Date().toISOString();
 
@@ -382,4 +383,4 @@ Deno.serve(async (req) => {
     },
     observedEdgeHeaders(context)
   );
-});
+}, "webhook-asaas"));

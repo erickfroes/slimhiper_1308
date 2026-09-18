@@ -1,10 +1,11 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import {
   findAuthUserByEmail,
+  bindTenantInvitation,
   sendTenantInviteEmail,
-  sendTenantPasswordSetupEmail,
   type TenantInviteDelivery,
 } from '@/lib/auth/tenantInviteEmail';
 import { canInvitePhysicianWithinLimit } from '@/lib/tenant/doctorLimits';
@@ -47,7 +48,7 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const session = await getCurrentAppSession();
 
   if (!session) {
@@ -140,25 +141,17 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!authUser) {
-      const invited = await sendTenantInviteEmail({
-        admin,
-        request,
-        email,
-        tenantId,
-        roleCode,
-        fullName,
-      });
-      authUser = invited.user;
-      inviteDelivery = invited.delivery;
-    } else {
-      await sendTenantPasswordSetupEmail({
-        admin,
-        request,
-        email,
-        tenantId,
-      });
-    }
+    const invited = await sendTenantInviteEmail({
+      admin,
+      request,
+      email,
+      tenantId,
+      roleCode,
+      fullName,
+      invitedBy: session.userId,
+    });
+    authUser = invited.user;
+    inviteDelivery = invited.delivery;
 
     const { error: profileError } = await admin.from('profiles').upsert(
       {
@@ -169,7 +162,7 @@ export async function POST(request: Request) {
         active_tenant_id: tenantId,
         is_active: true,
       },
-      { onConflict: 'id' }
+      { onConflict: 'id', ignoreDuplicates: true }
     );
 
     if (profileError) throw profileError;
@@ -202,6 +195,7 @@ export async function POST(request: Request) {
           .from('tenant_memberships')
           .update(membershipPayload)
           .eq('id', existingMembership.id)
+          .in('status', ['invited', 'revoked'])
           .select('id,status,role_code,unit_id')
           .single()
       : await admin
@@ -243,6 +237,7 @@ export async function POST(request: Request) {
     });
 
     if (auditError) throw auditError;
+    await bindTenantInvitation(admin, invited.invitationId, membershipResult.data.id, authUser.id);
 
     return NextResponse.json({
       data: {
@@ -260,3 +255,5 @@ export async function POST(request: Request) {
     return jsonError('Falha ao convidar usuario da clinica.', 500);
   }
 }
+
+export const POST = withSecureRoute(handlePOST, { scope: 'api/clinic/invitations', limit: 10 });

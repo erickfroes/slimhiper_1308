@@ -84,6 +84,7 @@ sao nomes e finalidade; mantenha vazios em templates versionados.
 | `MERCADOPAGO_WEBHOOK_SECRET`       | Staging/production segregados                                           | Usado para validar `x-signature` fail-closed.                                                       |
 | `MERCADOPAGO_NOTIFICATION_URL`     | Staging/production por ambiente                                         | URL publica do webhook configurada no provider.                                                     |
 | `MERCADOPAGO_TOKEN_ENCRYPTION_KEY` | Local/staging/production segregados                                     | Chave AES-GCM de 32 bytes para tokens OAuth por tenant; gerar em base64 e manter server/Edge only.  |
+| `BILLING_CRON_SECRET`              | Staging/production segregados                                           | Bearer secret de alta entropia para `mercadopago-billing-reconcile`; server/Edge only.              |
 | `MERCADOPAGO_PUBLIC_KEY`           | Somente se SDK/frontend futuro for aprovado                             | Publica, mas nao necessaria para Checkout Pro redirect MVP.                                         |
 | `MERCADOPAGO_CLIENT_ID`            | Marketplace/OAuth por tenant                                            | Server/admin config para gerar a URL de autorizacao OAuth.                                          |
 | `MERCADOPAGO_CLIENT_SECRET`        | Marketplace/OAuth somente se aprovado                                   | Secret server-only.                                                                                 |

@@ -35,6 +35,7 @@ export default function AcceptInviteForm() {
   const [state, setState] = useState<InviteState>('checking');
   const [email, setEmail] = useState('');
   const [tenantId, setTenantId] = useState('');
+  const [inviteToken, setInviteToken] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export default function AcceptInviteForm() {
       const code = url.searchParams.get('code');
       const tokenHash = url.searchParams.get('token_hash');
       const inviteTenantId = url.searchParams.get('tenantId') ?? '';
+      const invitationToken = url.searchParams.get('inviteToken') ?? '';
       const otpType = getInviteOtpType(url.searchParams.get('type'));
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const accessToken = hashParams.get('access_token');
@@ -104,9 +106,18 @@ export default function AcceptInviteForm() {
         return;
       }
 
+      if (!/^[A-Za-z0-9_-]{43}$/.test(invitationToken)) {
+        setError(
+          'O vinculo de seguranca do convite esta ausente ou invalido. Solicite um novo convite.'
+        );
+        setState('error');
+        return;
+      }
+
       window.history.replaceState({}, document.title, '/auth/accept-invite');
       setEmail(data.session.user.email ?? '');
       setTenantId(inviteTenantId);
+      setInviteToken(invitationToken);
       setState('ready');
     }
 
@@ -121,8 +132,8 @@ export default function AcceptInviteForm() {
     event.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError('A senha deve ter pelo menos 8 caracteres.');
+    if (password.length < 12) {
+      setError('A senha deve ter pelo menos 12 caracteres.');
       return;
     }
 
@@ -148,7 +159,7 @@ export default function AcceptInviteForm() {
     const acceptResponse = await fetch('/api/auth/accept-invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenantId: tenantId || undefined }),
+      body: JSON.stringify({ tenantId: tenantId || undefined, inviteToken }),
     });
     const acceptPayload = (await acceptResponse.json().catch(() => null)) as {
       error?: { message?: string } | null;
@@ -201,7 +212,7 @@ export default function AcceptInviteForm() {
           <input
             type="password"
             required
-            minLength={8}
+            minLength={12}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Nova senha"
@@ -212,7 +223,7 @@ export default function AcceptInviteForm() {
           <input
             type="password"
             required
-            minLength={8}
+            minLength={12}
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
             placeholder="Confirmar senha"

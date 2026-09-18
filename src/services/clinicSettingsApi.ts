@@ -1,3 +1,4 @@
+import { secureUpload } from '@/services/secureUpload';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { SafeServiceError } from '@/services/billingApi';
 
@@ -1705,9 +1706,11 @@ export async function updateClinicMemberPersonalProfile(
             ? 'webp'
             : 'jpg';
       const path = `${member.tenantId}/${member.userId}/${Date.now()}.${extension}`;
-      const { error: uploadError } = await supabase.storage
-        .from('user-profile-avatars')
-        .upload(path, input.avatarFile, { upsert: true, contentType: input.avatarFile.type });
+      const { error: uploadError } = await secureUpload(
+        'user-profile-avatars',
+        path,
+        input.avatarFile
+      );
       if (uploadError) {
         return {
           data: null as ClinicSettingsSnapshot | null,

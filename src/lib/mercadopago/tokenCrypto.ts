@@ -46,6 +46,16 @@ export async function encryptMercadoPagoToken(value: string) {
   };
 }
 
+export async function decryptMercadoPagoToken(ciphertext: string, iv: string) {
+  const key = await encryptionKey();
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: base64ToBytes(iv) },
+    key,
+    base64ToBytes(ciphertext)
+  );
+  return new TextDecoder().decode(decrypted);
+}
+
 export async function hashMercadoPagoOAuthState(value: string) {
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(value));
   return Array.from(new Uint8Array(digest))

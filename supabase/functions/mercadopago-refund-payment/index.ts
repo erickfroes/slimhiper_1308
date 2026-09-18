@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { envString } from '../_shared/env.ts';
 import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
@@ -34,7 +35,7 @@ async function tenantHasBillingProviderFeature(
   return false;
 }
 
-async function requireFinancialWrite(params: {
+async function requireRefundPermission(params: {
   supabase: ReturnType<typeof createClient>;
   userId: string;
   tenantId: string;
@@ -53,14 +54,14 @@ async function requireFinancialWrite(params: {
 
   const { data: canWrite, error: permissionError } = await supabase.rpc('has_permission', {
     p_tenant_id: tenantId,
-    p_permission: 'financial.write',
+    p_permission: 'financial.refund.create',
   });
 
   if (permissionError) throw permissionError;
   return canWrite === true;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(Deno.env, req) });
@@ -242,29 +243,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (amountCents > localAmountCents) {
-      return jsonResponse(
-        Deno.env,
-        422,
-        {
-          ok: false,
-          error: {
-            code: 'amount_exceeds_payment',
-            message: 'Refund amount exceeds payment amount.',
-          },
-          meta: { tenantId, timestamp },
-        },
-        req
-      );
-    }
-
-    if (!(await requireFinancialWrite({ supabase, userId: user.id, tenantId }))) {
+    if (!(await requireRefundPermission({ supabase, userId: user.id, tenantId }))) {
       return jsonResponse(
         Deno.env,
         403,
         {
           ok: false,
-          error: { code: 'forbidden', message: 'Missing financial.write permission.' },
+          error: { code: 'forbidden', message: 'Missing financial.refund.create permission.' },
           meta: { tenantId, timestamp },
         },
         req
@@ -287,26 +272,66 @@ Deno.serve(async (req) => {
       );
     }
 
-    const existingRefund = await admin
-      .from('billing_refunds')
-      .select('id,status,amount_cents,processed_at')
-      .eq('tenant_id', tenantId)
-      .eq('provider', MERCADOPAGO_PROVIDER)
-      .eq('metadata->>idempotency_key', idempotencyKey)
-      .maybeSingle();
-
-    if (existingRefund.error) throw existingRefund.error;
-    if (existingRefund.data?.id) {
+    const { data: reservationData, error: reservationError } = await admin.rpc(
+      'reserve_mercadopago_refund',
+      {
+        p_tenant_id: tenantId,
+        p_patient_id: patientId,
+        p_invoice_id: invoiceId,
+        p_payment_id: paymentId || null,
+        p_amount_cents: amountCents,
+        p_reason: reason,
+        p_requested_by: user.id,
+        p_idempotency_key: idempotencyKey,
+      }
+    );
+    if (reservationError) {
+      if (reservationError.message.includes('amount_exceeds_refundable_balance')) {
+        return jsonResponse(
+          Deno.env,
+          422,
+          {
+            ok: false,
+            error: {
+              code: 'amount_exceeds_refundable_balance',
+              message: 'Refund amount exceeds the remaining refundable balance.',
+            },
+            meta: { tenantId, timestamp },
+          },
+          req
+        );
+      }
+      if (reservationError.message.includes('refund_idempotency_conflict')) {
+        return jsonResponse(
+          Deno.env,
+          409,
+          {
+            ok: false,
+            error: {
+              code: 'refund_idempotency_conflict',
+              message: 'Idempotency key is already associated with another refund request.',
+            },
+            meta: { tenantId, timestamp },
+          },
+          req
+        );
+      }
+      throw reservationError;
+    }
+    const reservation = asRecord(reservationData);
+    const refundId = asString(reservation.refundId);
+    if (!refundId) throw new Error('refund_reservation_invalid');
+    if (reservation.reused === true) {
       return jsonResponse(
         Deno.env,
         200,
         {
           ok: true,
           data: {
-            id: existingRefund.data.id,
-            status: existingRefund.data.status,
-            amount_cents: existingRefund.data.amount_cents,
-            processed_at: existingRefund.data.processed_at ?? null,
+            id: refundId,
+            status: asString(reservation.status),
+            amount_cents: Number(reservation.amountCents ?? amountCents),
+            processed_at: asString(reservation.processedAt) || null,
           },
           meta: { tenantId, timestamp, reused: true },
         },
@@ -314,26 +339,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    const refundInsert = await admin
-      .from('billing_refunds')
-      .insert({
-        tenant_id: tenantId,
-        patient_id: patientId,
-        patient_invoice_id: invoiceId,
-        payment_id: paymentId || null,
-        provider: MERCADOPAGO_PROVIDER,
-        status: 'processing',
-        amount_cents: amountCents,
-        reason,
-        requested_by: user.id,
-        metadata: { idempotency_key: idempotencyKey, provider_payment_id: providerPaymentId },
-      })
-      .select('id,status')
-      .single();
-
-    if (refundInsert.error) throw refundInsert.error;
-    const refundId = String(refundInsert.data.id);
-    const fullRefund = amountCents >= localAmountCents;
+    const previouslyRefundedCents = Number(reservation.previouslyRefundedCents ?? 0);
+    const fullRefund = reservation.fullRefund === true;
     const tenantToken = await resolveMercadoPagoTenantAccessToken(Deno.env, admin, tenantId);
     if (!tenantToken.accessToken) {
       await admin
@@ -368,7 +375,11 @@ Deno.serve(async (req) => {
       {
         method: 'POST',
         idempotencyKey,
-        body: JSON.stringify(fullRefund ? {} : { amount: centsToProviderAmount(amountCents) }),
+        body: JSON.stringify(
+          fullRefund && previouslyRefundedCents === 0
+            ? {}
+            : { amount: centsToProviderAmount(amountCents) }
+        ),
       }
     );
 
@@ -402,99 +413,18 @@ Deno.serve(async (req) => {
     const providerRefundId = asString(providerRecord.id) || null;
     const providerStatus = asString(providerRecord.status, 'approved');
     const providerAmountCents = amountToCents(providerRecord.amount) || amountCents;
-    const processedAt = new Date().toISOString();
-
-    await admin
-      .from('billing_refunds')
-      .update({
-        status: 'succeeded',
-        processed_at: processedAt,
-        provider_refund_id: providerRefundId,
-        provider_status: providerStatus,
-        metadata: {
-          idempotency_key: idempotencyKey,
-          provider_payment_id: providerPaymentId,
-          provider_status: providerStatus,
-          provider_amount_cents: providerAmountCents,
-          full_refund: fullRefund,
-        },
-      })
-      .eq('id', refundId)
-      .eq('tenant_id', tenantId);
-
-    await admin.from('billing_provider_events').insert({
-      tenant_id: tenantId,
-      provider: MERCADOPAGO_PROVIDER,
-      provider_event_id: providerRefundId,
-      event_type: 'REFUND_CREATED',
-      resource_type: 'payment',
-      resource_id: providerPaymentId,
-      idempotency_key: `refund:${refundId}`,
-      status: 'processed',
-      processed_at: processedAt,
-      payload_summary: {
-        refund_id: providerRefundId,
-        payment_id: providerPaymentId,
-        amount_cents: providerAmountCents,
-        provider_status: providerStatus,
-      },
-    });
-
-    if (paymentId) {
-      await admin
-        .from('payments')
-        .update({
-          status: fullRefund ? 'refunded' : asString(payment?.status, 'paid'),
-          metadata: {
-            ...asRecord(payment?.metadata),
-            last_refund_id: refundId,
-            refunded_amount_cents: amountCents,
-            refund_status: fullRefund ? 'full' : 'partial',
-          },
-        })
-        .eq('id', paymentId)
-        .eq('tenant_id', tenantId);
-    }
-
-    if (invoiceId && fullRefund) {
-      await admin
-        .from('patient_invoices')
-        .update({
-          status: 'refunded',
-          metadata: { ...asRecord(invoice?.metadata), last_refund_id: refundId },
-        })
-        .eq('id', invoiceId)
-        .eq('tenant_id', tenantId);
-    }
-
-    await admin.from('patient_timeline_events').insert({
-      tenant_id: tenantId,
-      patient_id: patientId,
-      event_type: 'pagamento',
-      category: 'financial',
-      title: fullRefund ? 'Pagamento estornado' : 'Estorno parcial registrado',
-      description: fullRefund
-        ? 'Estorno financeiro processado pelo provedor.'
-        : 'Estorno parcial processado pelo provedor.',
-      status: 'recorded',
-      status_label: fullRefund ? 'estornado' : 'parcial',
-      event_at: processedAt,
-      payload: {
-        provider: MERCADOPAGO_PROVIDER,
-        refundId,
-        invoiceId,
-        paymentId: paymentId || null,
-      },
-    });
-
-    await admin.from('audit_logs').insert({
-      tenant_id: tenantId,
-      user_id: user.id,
-      action: 'billing_refund.succeeded',
-      entity_type: 'billing_refund',
-      entity_id: refundId,
-      metadata: { provider: MERCADOPAGO_PROVIDER, patientId, invoiceId, amountCents, fullRefund },
-    });
+    const { data: finalizedData, error: finalizeError } = await admin.rpc(
+      'finalize_mercadopago_refund',
+      {
+        p_refund_id: refundId,
+        p_provider_refund_id: providerRefundId || '',
+        p_provider_status: providerStatus,
+        p_provider_amount_cents: providerAmountCents,
+      }
+    );
+    if (finalizeError) throw finalizeError;
+    const finalized = asRecord(finalizedData);
+    const processedAt = asString(finalized.processedAt) || new Date().toISOString();
 
     return jsonResponse(
       Deno.env,
@@ -504,7 +434,7 @@ Deno.serve(async (req) => {
         data: {
           id: refundId,
           status: 'succeeded',
-          amount_cents: amountCents,
+          amount_cents: Number(finalized.amountCents ?? amountCents),
           processed_at: processedAt,
         },
         meta: { tenantId, timestamp },
@@ -526,4 +456,4 @@ Deno.serve(async (req) => {
       req
     );
   }
-});
+}, "mercadopago-refund-payment"));

@@ -28,7 +28,10 @@ function canManageTenantMercadoPago(session: AppSession, tenantId: string) {
   if (isPlatformOwnerRole(session.platformRole) || isPlatformAdminRole(session.platformRole)) {
     return true;
   }
-  return session.activeTenant?.id === tenantId && session.permissions.includes('financial.write');
+  const canManageFinancialIntegration =
+    session.permissions.includes('financial.integration.manage') ||
+    session.permissions.includes('financial.write');
+  return session.activeTenant?.id === tenantId && canManageFinancialIntegration;
 }
 
 function appRedirectUrl(request: Request, tenantId: string, status: string, session: AppSession) {

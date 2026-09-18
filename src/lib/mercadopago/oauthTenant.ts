@@ -81,7 +81,11 @@ export async function canManageMercadoPagoOAuthTenant(
   tenantId: string
 ) {
   if (isPlatformMercadoPagoManager(session)) return true;
-  if (session.activeTenant?.id === tenantId && session.permissions.includes('financial.write')) {
+  if (
+    session.activeTenant?.id === tenantId &&
+    (session.permissions.includes('financial.integration.manage') ||
+      session.permissions.includes('financial.write'))
+  ) {
     return true;
   }
 
@@ -123,6 +127,6 @@ export async function canManageMercadoPagoOAuthTenant(
 
   return (permissionsResult.data ?? []).some((row) => {
     const permission = asRecord(asRecord(row).permissions);
-    return asString(permission.code) === 'financial.write';
+    return ['financial.integration.manage', 'financial.write'].includes(asString(permission.code));
   });
 }

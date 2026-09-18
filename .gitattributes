@@ -1,0 +1,4 @@
+# This tracked callback has CRLF history; treat the carriage return as part of EOL.
+src/app/api/admin/mercadopago/oauth/callback/route.ts whitespace=cr-at-eol
+# Preserve existing Windows route endings without treating CR as trailing spaces.
+src/app/api/**/route.ts whitespace=cr-at-eol

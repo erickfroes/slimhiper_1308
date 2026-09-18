@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { randomBytes } from 'node:crypto';
+import { buildContentSecurityPolicy } from '@/lib/security/csp';
 import { updateSession } from '@/lib/supabase/middleware';
 import {
   getAppSessionTargetRoute,
@@ -29,37 +31,43 @@ function redirectUnlessAlreadyThere(
   targetRoute: string
 ) {
   if (request.nextUrl.pathname === targetRoute) return response;
-  return NextResponse.redirect(new URL(targetRoute, request.url));
+  const redirect = NextResponse.redirect(new URL(targetRoute, request.url));
+  for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
+  return redirect;
 }
 
 function getResolvedTargetRoute(appSession: AppSession | null, context: MiddlewareUserContext) {
   return appSession ? getAppSessionTargetRoute(appSession) : getFallbackTargetRoute(context);
 }
 
-export async function middleware(request: NextRequest) {
+async function authorizePage(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  const { supabase, response } = updateSession(request);
+  const session = updateSession(request);
+  const { supabase } = session;
 
   // If Supabase is not configured, allow the request through as unauthenticated.
   if (!supabase) {
     if (
       pathname.startsWith('/admin') ||
       pathname.startsWith('/clinic') ||
+      pathname.startsWith('/paciente-360') ||
       pathname.startsWith('/patient')
     ) {
-      return redirectUnlessAlreadyThere(request, response, '/auth/login');
+      return redirectUnlessAlreadyThere(request, session.response, '/auth/login');
     }
-    return response;
+    return session.response;
   }
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const response = session.response;
 
   if (
     !user &&
     (pathname.startsWith('/admin') ||
       pathname.startsWith('/clinic') ||
+      pathname.startsWith('/paciente-360') ||
       pathname.startsWith('/patient'))
   ) {
     return redirectUnlessAlreadyThere(request, response, '/auth/login');
@@ -107,12 +115,9 @@ export async function middleware(request: NextRequest) {
   }
 
   if (
-    pathname.startsWith('/clinic') &&
+    (pathname.startsWith('/clinic') || pathname.startsWith('/paciente-360')) &&
     !(context.canAccessClinicWorkspace && context.hasActiveTenantMembership)
   ) {
-    if (context.sessionError || context.hasActiveTenantMembership) {
-      return response;
-    }
     return redirectUnlessAlreadyThere(request, response, targetRoute);
   }
 
@@ -123,13 +128,26 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
-export const config = {
-  matcher: [
-    '/',
-    '/auth/login',
-    '/no-workspace',
-    '/admin/:path*',
-    '/clinic/:path*',
-    '/patient/:path*',
-  ],
-};
+export async function proxy(request: NextRequest) {
+  const nonce = randomBytes(24).toString('base64');
+  const policy = buildContentSecurityPolicy(nonce);
+  // Overwrite client-supplied values before SSR; never reuse a submitted nonce.
+  request.headers.set('x-nonce', nonce);
+  request.headers.set('Content-Security-Policy', policy);
+  const path = request.nextUrl.pathname;
+  const needsSession =
+    path === '/' ||
+    path === '/auth/login' ||
+    ['/admin', '/clinic', '/paciente-360', '/patient', '/no-workspace'].some(
+      (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+    );
+  const response = needsSession
+    ? await authorizePage(request)
+    : NextResponse.next({ request: { headers: request.headers } });
+  response.headers.set('Content-Security-Policy', policy);
+  response.headers.set('Referrer-Policy', 'no-referrer');
+  if (!/\.[a-z0-9]+$/i.test(path)) response.headers.set('Cache-Control', 'private, no-store');
+  return response;
+}
+
+export const config = { matcher: ['/((?!api/|_next/static|_next/image|favicon.ico).*)'] };

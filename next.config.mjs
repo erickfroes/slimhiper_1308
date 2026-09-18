@@ -1,71 +1,8 @@
 import { imageHosts } from './image-hosts.config.mjs';
 
 const isProductionBuild = process.env.NODE_ENV === 'production';
-const rocketOrigins = ['https://static.rocket.new', 'https://appanalytics.rocket.new'];
-const imageOrigins = imageHosts.map(({ protocol, hostname }) => `${protocol}://${hostname}`);
-
-function toOrigin(value) {
-  if (!value) return null;
-  try {
-    return new URL(value).origin;
-  } catch {
-    return null;
-  }
-}
-
-function toRealtimeOrigin(origin) {
-  if (!origin) return null;
-  try {
-    const url = new URL(origin);
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-const configuredSupabaseOrigins = [
-  toOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL),
-  toOrigin(process.env.SUPABASE_URL),
-].filter(Boolean);
-
-const supabaseOrigins = Array.from(
-  new Set([
-    'https://*.supabase.co',
-    'wss://*.supabase.co',
-    ...configuredSupabaseOrigins,
-    ...configuredSupabaseOrigins.map(toRealtimeOrigin).filter(Boolean),
-  ])
-);
-
+// The nonce-based CSP is generated per request in src/proxy.ts.
 const securityHeaders = [
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      [
-        "script-src 'self' 'unsafe-inline'",
-        isProductionBuild ? '' : "'unsafe-eval'",
-        ...rocketOrigins,
-      ]
-        .filter(Boolean)
-        .join(' '),
-      "style-src 'self' 'unsafe-inline'",
-      `img-src 'self' data: blob: ${imageOrigins.join(' ')}`,
-      `font-src 'self' data:`,
-      `connect-src 'self' ${supabaseOrigins.join(' ')} ${rocketOrigins.join(' ')}`,
-      "media-src 'self' blob:",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "frame-ancestors 'none'",
-      "worker-src 'self' blob:",
-      "manifest-src 'self'",
-      isProductionBuild ? 'upgrade-insecure-requests' : '',
-    ]
-      .filter(Boolean)
-      .join('; '),
-  },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
@@ -90,9 +27,6 @@ const nextConfig = {
   distDir: process.env.DIST_DIR || '.next',
   typescript: {
     ignoreBuildErrors: false,
-  },
-  eslint: {
-    ignoreDuringBuilds: false,
   },
   images: {
     remotePatterns: imageHosts,

@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 declare const Deno: {
@@ -85,7 +86,7 @@ function isValidReportExportPath(path: string, runId: string, artifactId: string
   );
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const timestamp = new Date().toISOString();
   if (req.method === 'OPTIONS') {
     if (req.headers.get('Origin') && !allowedCorsOrigin(req)) {
@@ -219,4 +220,4 @@ Deno.serve(async (req) => {
       meta: { timestamp },
     });
   }
-});
+}, "clinic-report-export"));

@@ -25,6 +25,7 @@ import {
   Webhook,
 } from 'lucide-react';
 import AdminShell, { type AdminShellSection } from './AdminShell';
+import PlatformBillingMercadoPagoPanel from './PlatformBillingMercadoPagoPanel';
 import { useAdminPermissions, type AdminPermissions } from './adminPermissions';
 import Dialog from '@/components/ui/Dialog';
 import DataState from '@/components/ui/DataState';
@@ -67,7 +68,7 @@ const sectionConfig: Record<
   billing: {
     active: 'financial',
     title: 'Financeiro SaaS',
-    description: 'MRR, assinaturas, trials, inadimplencia e reconciliacao local sem provider call.',
+    description: 'MRR, caixa recebido, assinaturas, trials, inadimplencia e Mercado Pago.',
   },
   usage: {
     active: 'usage',
@@ -809,7 +810,15 @@ function Toolbar({
   );
 }
 
-function BillingSection({ snapshot, search }: { snapshot: PlatformAdminSnapshot; search: string }) {
+function BillingSection({
+  snapshot,
+  search,
+  permissions,
+}: {
+  snapshot: PlatformAdminSnapshot;
+  search: string;
+  permissions: AdminPermissions;
+}) {
   const tenants = snapshot.tenants.filter((tenant) => matchesTenantSearch(tenant, search));
   const providerIssues = snapshot.webhooks.filter(
     (event) =>
@@ -821,6 +830,11 @@ function BillingSection({ snapshot, search }: { snapshot: PlatformAdminSnapshot;
 
   return (
     <div className="space-y-5">
+      <PlatformBillingMercadoPagoPanel
+        canMutate={permissions.canMutatePlatform}
+        canConfigureCredentials={permissions.roleKind === 'owner'}
+      />
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <MetricCard
           icon={CreditCard}
@@ -854,7 +868,8 @@ function BillingSection({ snapshot, search }: { snapshot: PlatformAdminSnapshot;
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-sm font-bold text-foreground">Assinaturas e reconciliacao local</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Acoes provider permanecem fora da UI; divergencias apontam para investigacao e runbook.
+            Visao legada do contrato local; operacoes Mercado Pago ficam no controle financeiro
+            acima.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -1808,13 +1823,17 @@ function SectionContent({
   snapshot,
   search,
   reload,
+  permissions,
 }: {
   section: AdminOperationsSection;
   snapshot: PlatformAdminSnapshot;
   search: string;
   reload: () => void;
+  permissions: AdminPermissions;
 }) {
-  if (section === 'billing') return <BillingSection snapshot={snapshot} search={search} />;
+  if (section === 'billing') {
+    return <BillingSection snapshot={snapshot} search={search} permissions={permissions} />;
+  }
   if (section === 'usage') return <UsageSection snapshot={snapshot} search={search} />;
   if (section === 'storage') return <StorageSection snapshot={snapshot} search={search} />;
   if (section === 'integrations')
@@ -1912,6 +1931,7 @@ export default function AdminOperationsContent({ section }: { section: AdminOper
                   snapshot={snapshot}
                   search={search}
                   reload={loadSnapshot}
+                  permissions={permissions}
                 />
               </>
             ) : null}

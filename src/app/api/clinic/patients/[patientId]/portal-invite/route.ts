@@ -1,10 +1,11 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import {
   findAuthUserByEmail,
+  bindTenantInvitation,
   sendTenantInviteEmail,
-  sendTenantPasswordSetupEmail,
   type TenantInviteDelivery,
 } from '@/lib/auth/tenantInviteEmail';
 
@@ -32,7 +33,7 @@ function maskEmail(value: string) {
   return `${localPart.slice(0, 2)}${localPart.length > 2 ? '***' : '*'}@${domain}`;
 }
 
-export async function POST(request: Request, context: { params: Promise<{ patientId: string }> }) {
+async function handlePOST(request: Request, context: { params: Promise<{ patientId: string }> }) {
   const session = await getCurrentAppSession();
   if (!session) return jsonError('Sessao obrigatoria para convidar paciente.', 401);
 
@@ -103,20 +104,17 @@ export async function POST(request: Request, context: { params: Promise<{ patien
     let authUser = await findAuthUserByEmail(admin, email);
     let inviteDelivery: TenantInviteDelivery = 'password_setup_sent';
 
-    if (!authUser) {
-      const invited = await sendTenantInviteEmail({
-        admin,
-        request,
-        email,
-        tenantId,
-        roleCode: inviteeType,
-        fullName,
-      });
-      authUser = invited.user;
-      inviteDelivery = invited.delivery;
-    } else {
-      await sendTenantPasswordSetupEmail({ admin, request, email, tenantId });
-    }
+    const invited = await sendTenantInviteEmail({
+      admin,
+      request,
+      email,
+      tenantId,
+      roleCode: inviteeType,
+      fullName,
+      invitedBy: session.userId,
+    });
+    authUser = invited.user;
+    inviteDelivery = invited.delivery;
 
     const { error: profileError } = await admin.from('profiles').upsert(
       {
@@ -127,7 +125,7 @@ export async function POST(request: Request, context: { params: Promise<{ patien
         active_tenant_id: tenantId,
         is_active: true,
       },
-      { onConflict: 'id' }
+      { onConflict: 'id', ignoreDuplicates: true }
     );
 
     if (profileError) throw profileError;
@@ -166,6 +164,7 @@ export async function POST(request: Request, context: { params: Promise<{ patien
               updated_at: nowIso,
             })
             .eq('id', existingMembership.id)
+            .in('status', ['invited', 'revoked'])
             .select('id,status,role_code,unit_id')
             .single()
         : await admin
@@ -310,6 +309,7 @@ export async function POST(request: Request, context: { params: Promise<{ patien
     });
 
     if (auditError) throw auditError;
+    await bindTenantInvitation(admin, invited.invitationId, membership.id, authUser.id);
 
     return NextResponse.json({
       data: {
@@ -334,3 +334,8 @@ export async function POST(request: Request, context: { params: Promise<{ patien
     return jsonError('Falha ao enviar convite do portal do paciente.', 500);
   }
 }
+
+export const POST = withSecureRoute(handlePOST, {
+  scope: 'api/clinic/patients/[patientId]/portal-invite',
+  limit: 10,
+});

@@ -20,10 +20,12 @@ import {
   getClinicFinanceOverview,
   getClinicFinanceReconciliation,
   getPaymentReceiptSignedUrl,
+  listPatientBillingPackages,
   reviewPaymentReceipt,
   syncProviderPayment,
+  syncPatientBillingPackage,
 } from '@/services/billingApi';
-import type { ClinicFinanceDivergence } from '@/services/billingApi';
+import type { ClinicFinanceDivergence, PatientBillingPackage } from '@/services/billingApi';
 import Dialog from '@/components/ui/Dialog';
 
 type FinanceOverviewResult = Awaited<ReturnType<typeof getClinicFinanceOverview>>['data'];
@@ -161,11 +163,11 @@ export default function ClinicFinanceiroContent() {
     decision: 'approve' | 'reject';
   } | null>(null);
   const [featureFlags, setFeatureFlags] = useState<Set<string>>(() => new Set());
+  const [billingPackages, setBillingPackages] = useState<PatientBillingPackage[]>([]);
   const [reviewReason, setReviewReason] = useState('');
   const [reviewError, setReviewError] = useState<string | null>(null);
   const reviewReasonRef = useRef<HTMLTextAreaElement>(null);
-  const canUsePaymentProvider =
-    featureFlags.has('financial.mercadopago') || featureFlags.has('financial.asaas');
+  const canUsePaymentProvider = featureFlags.has('financial.mercadopago');
 
   const loadFinanceOverview = useCallback(async () => {
     setLoading(true);
@@ -175,17 +177,20 @@ export default function ClinicFinanceiroContent() {
     setActionError(null);
 
     try {
-      const [overviewResult, reconciliationResult, m13Result] = await Promise.all([
+      const [overviewResult, reconciliationResult, m13Result, packagesResult] = await Promise.all([
         getClinicFinanceOverview(),
         getClinicFinanceReconciliation(),
         getClinicFinanceM13Dashboard(),
+        listPatientBillingPackages(),
       ]);
       setData(overviewResult.data);
       setReconciliation(reconciliationResult.data);
       setM13(m13Result.data);
+      setBillingPackages(packagesResult.data);
       setError(safeServiceMessage(overviewResult.error?.message) ?? null);
       setReconciliationError(safeServiceMessage(reconciliationResult.error?.message) ?? null);
       setM13Error(safeServiceMessage(m13Result.error?.message) ?? null);
+      if (packagesResult.error) setActionError(packagesResult.error.message);
     } catch (requestError) {
       setData(null);
       setReconciliation(null);
@@ -232,6 +237,20 @@ export default function ClinicFinanceiroContent() {
       return;
     }
     window.open(result.data.url, '_blank', 'noopener,noreferrer');
+  };
+
+  const syncPackage = async (packageId: string) => {
+    setActionLoading(`package:${packageId}`);
+    setActionError(null);
+    setActionMessage(null);
+    const result = await syncPatientBillingPackage(packageId);
+    setActionLoading(null);
+    if (result.error) {
+      setActionError(result.error.message);
+      return;
+    }
+    setActionMessage('Plano recorrente sincronizado no Mercado Pago.');
+    await loadFinanceOverview();
   };
 
   const handleReceiptReview = (receiptId: string, decision: 'approve' | 'reject') => {
@@ -731,6 +750,61 @@ export default function ClinicFinanceiroContent() {
               </button>
             ))}
           </div>
+        </div>
+        <div className="mt-5 border-t border-border pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Pacotes recorrentes</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Planos configurados no catalogo da clinica e sincronizados pela conta OAuth do
+                tenant.
+              </p>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {billingPackages.length} pacotes ativos
+            </span>
+          </div>
+          {billingPackages.length ? (
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {billingPackages.map((item) => (
+                <article key={item.id} className="rounded-xl border border-border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{item.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {brl(item.amount)} · {item.billingCycle} · trial {item.trialDays} dias
+                      </p>
+                      {item.providerErrorCode ? (
+                        <p className="mt-1 text-xs text-red-700">
+                          Falha de sincronizacao registrada.
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="rounded-full border border-border px-2 py-1 text-xs">
+                      {item.providerSyncStatus}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!canUsePaymentProvider || actionLoading === `package:${item.id}`}
+                    onClick={() => void syncPackage(item.id)}
+                    className="btn-secondary mt-3 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {actionLoading === `package:${item.id}` ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <RefreshCcw size={13} />
+                    )}
+                    {item.providerSyncStatus === 'active' ? 'Ressincronizar' : 'Sincronizar plano'}
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              Nenhum pacote ativo com preco foi encontrado. Cadastre o pacote no modulo comercial.
+            </p>
+          )}
         </div>
       </section>
 

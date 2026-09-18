@@ -1,11 +1,12 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import {
   findAuthUserByEmail,
+  bindTenantInvitation,
   sendTenantInviteEmail,
-  sendTenantPasswordSetupEmail,
   type TenantInviteDelivery,
 } from '@/lib/auth/tenantInviteEmail';
 import { canInvitePhysicianWithinLimit } from '@/lib/tenant/doctorLimits';
@@ -50,7 +51,7 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-export async function POST(request: Request, context: { params: Promise<{ tenantId: string }> }) {
+async function handlePOST(request: Request, context: { params: Promise<{ tenantId: string }> }) {
   const session = await getCurrentAppSession();
 
   if (!session) {
@@ -174,25 +175,17 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
       }
     }
 
-    if (!authUser) {
-      const invited = await sendTenantInviteEmail({
-        admin,
-        request,
-        email,
-        tenantId,
-        roleCode,
-        fullName,
-      });
-      authUser = invited.user;
-      inviteDelivery = invited.delivery;
-    } else {
-      await sendTenantPasswordSetupEmail({
-        admin,
-        request,
-        email,
-        tenantId,
-      });
-    }
+    const invited = await sendTenantInviteEmail({
+      admin,
+      request,
+      email,
+      tenantId,
+      roleCode,
+      fullName,
+      invitedBy: session.userId,
+    });
+    authUser = invited.user;
+    inviteDelivery = invited.delivery;
 
     const { error: profileError } = await admin.from('profiles').upsert(
       {
@@ -203,7 +196,7 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
         active_tenant_id: tenantId,
         is_active: true,
       },
-      { onConflict: 'id' }
+      { onConflict: 'id', ignoreDuplicates: true }
     );
 
     if (profileError) throw profileError;
@@ -237,6 +230,7 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
           .from('tenant_memberships')
           .update(membershipPayload)
           .eq('id', existingMembership.id)
+          .in('status', ['invited', 'revoked'])
           .select('id,status,role_code,unit_id')
           .single()
       : await admin
@@ -278,6 +272,7 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
     });
 
     if (auditError) throw auditError;
+    await bindTenantInvitation(admin, invited.invitationId, membershipResult.data.id, authUser.id);
 
     return NextResponse.json({
       data: {
@@ -297,3 +292,8 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
     return jsonError('Falha ao convidar usuario do tenant.', 500);
   }
 }
+
+export const POST = withSecureRoute(handlePOST, {
+  scope: 'api/admin/tenants/[tenantId]/invitations',
+  limit: 10,
+});

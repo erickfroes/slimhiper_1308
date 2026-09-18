@@ -1,3 +1,4 @@
+import { secureUpload } from '@/services/secureUpload';
 import type { PatientMeasurementSummary } from '@/domain/types';
 import { isMockDataEnabled } from '@/lib/mockMode';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
@@ -1017,12 +1018,7 @@ export async function uploadProgressPhoto(
       };
     }
 
-    const { error: uploadError } = await supabase.storage
-      .from(prepared.bucket)
-      .upload(prepared.path, file, {
-        contentType: prepared.mimeType,
-        upsert: false,
-      });
+    const { error: uploadError } = await secureUpload(prepared.bucket, prepared.path, file);
 
     if (uploadError) {
       await completeProgressPhotoUpload(prepared.id, 'failed');

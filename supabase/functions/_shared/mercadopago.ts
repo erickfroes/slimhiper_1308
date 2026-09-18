@@ -7,7 +7,7 @@ export type EnvReader = {
 export type Json = Record<string, unknown>;
 
 export const MERCADOPAGO_PROVIDER = 'mercadopago';
-export const MERCADOPAGO_FEATURE_FLAGS = ['financial.mercadopago', 'financial.asaas'] as const;
+export const MERCADOPAGO_FEATURE_FLAGS = ['financial.mercadopago'] as const;
 
 const DEFAULT_MERCADOPAGO_BASE_URL = 'https://api.mercadopago.com';
 const PLACEHOLDER_SECRET_PATTERN =
@@ -21,6 +21,7 @@ export function asRecord(value: unknown): Record<string, unknown> {
 }
 
 export function asString(value: unknown, fallback = ''): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
@@ -258,12 +259,16 @@ export async function decryptMercadoPagoToken(env: EnvReader, ciphertext: unknow
   const key = await tokenEncryptionKey(env);
   if (!key || !ciphertextText || !ivText) return '';
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: base64ToBytes(ivText) },
-    key,
-    base64ToBytes(ciphertextText)
-  );
-  return new TextDecoder().decode(decrypted);
+  try {
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: base64ToBytes(ivText) },
+      key,
+      base64ToBytes(ciphertextText)
+    );
+    return new TextDecoder().decode(decrypted);
+  } catch {
+    return '';
+  }
 }
 
 export async function encryptMercadoPagoTokenForStorage(env: EnvReader, value: string) {
@@ -454,9 +459,11 @@ export function normalizePaymentStatus(value: unknown) {
 export function normalizeSubscriptionStatus(value: unknown) {
   const status = asString(value).toLowerCase();
   if (status === 'authorized') return 'active';
+  if (status === 'pending') return 'pending';
+  if (status === 'rejected') return 'past_due';
   if (status === 'paused') return 'paused';
   if (status === 'cancelled' || status === 'canceled') return 'canceled';
-  return 'active';
+  return 'pending';
 }
 
 export function pickPaymentLink(value: Record<string, unknown>) {
@@ -510,6 +517,20 @@ export async function verifyMercadoPagoWebhookSignature(params: {
   dataId: string;
 }) {
   const secret = envString(params.env, 'MERCADOPAGO_WEBHOOK_SECRET');
+  return verifyMercadoPagoWebhookSignatureWithSecret({
+    req: params.req,
+    dataId: params.dataId,
+    secret,
+  });
+}
+
+export async function verifyMercadoPagoWebhookSignatureWithSecret(params: {
+  req: Request;
+  dataId: string;
+  secret: string;
+  maxAgeMs?: number;
+}) {
+  const secret = params.secret;
   const signatureHeader = params.req.headers.get('x-signature') ?? '';
   const requestId = params.req.headers.get('x-request-id') ?? '';
   const parsed = parseMercadoPagoSignature(signatureHeader);
@@ -517,16 +538,21 @@ export async function verifyMercadoPagoWebhookSignature(params: {
   const v1 = asString(parsed.v1);
 
   if (!secret || !isConfiguredSecret(secret) || !requestId || !params.dataId || !ts || !v1) {
-    return { valid: false, requestId, ts, expected: '', received: v1 };
+    return { valid: false, requestId, ts, expected: '', received: v1, fresh: false };
   }
 
+  const rawTimestamp = Number(ts);
+  const timestampMs = rawTimestamp < 1_000_000_000_000 ? rawTimestamp * 1000 : rawTimestamp;
+  const maxAgeMs = params.maxAgeMs ?? 10 * 60 * 1000;
+  const fresh = Number.isFinite(timestampMs) && Math.abs(Date.now() - timestampMs) <= maxAgeMs;
   const manifest = `id:${params.dataId};request-id:${requestId};ts:${ts};`;
   const expected = await hmacSha256Hex(secret, manifest);
   return {
-    valid: timingSafeEqual(expected, v1),
+    valid: fresh && timingSafeEqual(expected, v1),
     requestId,
     ts,
     expected,
     received: v1,
+    fresh,
   };
 }

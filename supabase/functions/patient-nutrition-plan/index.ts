@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 declare const Deno: {
@@ -225,7 +226,7 @@ function mapActivePlan(params: {
   };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -415,4 +416,4 @@ Deno.serve(async (req) => {
       meta: { timestamp },
     });
   }
-});
+}, "patient-nutrition-plan"));

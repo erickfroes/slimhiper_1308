@@ -1,3 +1,4 @@
+import { secureUpload } from '@/services/secureUpload';
 import type {
   PatientBillingRefund,
   PatientBillingSubscription,
@@ -45,6 +46,20 @@ export interface BillingActionOptions {
 export interface PatientFinancialLocalActionResult {
   id: string;
   status: string;
+}
+
+export interface PatientBillingPackage {
+  id: string;
+  name: string;
+  description: string;
+  amount: number;
+  billingCycle: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+  billingRepetitions: number | null;
+  trialDays: number;
+  providerPlanId: string | null;
+  providerSyncStatus: 'not_synced' | 'syncing' | 'active' | 'error' | 'retired';
+  providerLastSyncedAt: string | null;
+  providerErrorCode: string | null;
 }
 
 export interface ClinicFinanceOverview {
@@ -185,7 +200,6 @@ export const ACTIVE_BILLING_PROVIDER: BillingProvider = 'mercadopago';
 
 const PAYMENT_PROVIDER_DISABLED_MESSAGE =
   'Provedor de pagamento nao esta habilitado no plano deste tenant.';
-const BILLING_PROVIDER_FEATURE_FLAGS = ['financial.mercadopago', 'financial.asaas'] as const;
 const BILLING_EDGE_FUNCTIONS = {
   asaas: {
     customer: 'asaas-create-patient-customer',
@@ -711,9 +725,7 @@ export async function uploadPatientPaymentReceipt(input: {
   const prepared = normalizePreparedPaymentReceipt(preparedPayload);
   if (!prepared) return { data: null, error: { message: 'Contrato invalido do comprovante.' } };
 
-  const { error: uploadError } = await supabase.storage
-    .from(prepared.bucket)
-    .upload(prepared.path, input.file, { contentType: prepared.mimeType, upsert: false });
+  const { error: uploadError } = await secureUpload(prepared.bucket, prepared.path, input.file);
 
   if (uploadError) {
     await supabase.rpc('complete_payment_receipt_upload', {
@@ -964,16 +976,11 @@ async function invoke<T>(
   return unwrap<T>(data);
 }
 
-async function requireBillingProviderFeatureFlag() {
-  let entitlementCheckFailed: SafeServiceError | null = null;
-
-  for (const featureFlag of BILLING_PROVIDER_FEATURE_FLAGS) {
-    const error = await requireClientFeatureFlag(featureFlag, PAYMENT_PROVIDER_DISABLED_MESSAGE);
-    if (!error) return null;
-    if (error.code === 'entitlement_check_failed') entitlementCheckFailed = error;
-  }
-
-  return entitlementCheckFailed ?? { message: PAYMENT_PROVIDER_DISABLED_MESSAGE };
+async function requireBillingProviderFeatureFlag(provider: BillingProvider) {
+  return requireClientFeatureFlag(
+    provider === 'mercadopago' ? 'financial.mercadopago' : 'financial.asaas',
+    PAYMENT_PROVIDER_DISABLED_MESSAGE
+  );
 }
 
 function billingEdgeFunction(
@@ -993,7 +1000,7 @@ export async function createBillingCustomer(
   }
   if (isMockEnabled())
     return { data: { id: `mock-customer-${patientId}` }, error: null as SafeServiceError | null };
-  const entitlementError = await requireBillingProviderFeatureFlag();
+  const entitlementError = await requireBillingProviderFeatureFlag(provider);
   if (entitlementError) return { data: null, error: entitlementError };
   return invoke<{ id: string; status?: string }>(billingEdgeFunction('customer', provider), {
     patient_id: patientId,
@@ -1041,7 +1048,7 @@ export async function createPatientCharge(
     };
 
   const provider = options?.provider ?? ACTIVE_BILLING_PROVIDER;
-  const entitlementError = await requireBillingProviderFeatureFlag();
+  const entitlementError = await requireBillingProviderFeatureFlag(provider);
   if (entitlementError) return { data: null, error: entitlementError };
 
   if (provider === 'asaas') {
@@ -1089,7 +1096,7 @@ export async function createPatientInvoicePaymentLink(
     };
 
   const provider = options?.provider ?? ACTIVE_BILLING_PROVIDER;
-  const entitlementError = await requireBillingProviderFeatureFlag();
+  const entitlementError = await requireBillingProviderFeatureFlag(provider);
   if (entitlementError) return { data: null, error: entitlementError };
 
   const idempotencyKey = normalizeIdempotencyKey(options?.idempotencyKey);
@@ -1129,6 +1136,11 @@ export async function createPatientSubscription(
   if (!patientId.trim()) {
     return { data: null, error: { message: 'Paciente invalido para criar assinatura.' } };
   }
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(packageId)
+  ) {
+    return { data: null, error: { message: 'Selecione um pacote financeiro valido.' } };
+  }
   const amountCents = validateAmountCents(amount);
   if (!amountCents) {
     return { data: null, error: { message: 'Valor invalido para criar assinatura.' } };
@@ -1146,7 +1158,7 @@ export async function createPatientSubscription(
     };
 
   const provider = options?.provider ?? ACTIVE_BILLING_PROVIDER;
-  const entitlementError = await requireBillingProviderFeatureFlag();
+  const entitlementError = await requireBillingProviderFeatureFlag(provider);
   if (entitlementError) return { data: null, error: entitlementError };
 
   if (provider === 'asaas') {
@@ -1174,6 +1186,94 @@ export async function createPatientSubscription(
       ? null
       : { message: 'Contrato invalido retornado pela Edge Function de assinatura.' },
   };
+}
+
+export async function listPatientBillingPackages(): Promise<{
+  data: PatientBillingPackage[];
+  error: SafeServiceError | null;
+}> {
+  if (isMockEnabled()) {
+    return {
+      data: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Plano mensal',
+          description: 'Pacote recorrente de demonstracao',
+          amount: 400,
+          billingCycle: 'monthly',
+          billingRepetitions: null,
+          trialDays: 0,
+          providerPlanId: null,
+          providerSyncStatus: 'not_synced',
+          providerLastSyncedAt: null,
+          providerErrorCode: null,
+        },
+      ],
+      error: null,
+    };
+  }
+
+  const supabase = createBrowserSupabaseClient();
+  const { data, error } = await supabase
+    .from('packages')
+    .select(
+      'id,name,description,price_cents,billing_cycle,billing_repetitions,billing_trial_days,provider_plan_id,provider_sync_status,provider_last_synced_at,provider_error_code'
+    )
+    .eq('status', 'ativo')
+    .gt('price_cents', 0)
+    .order('name');
+  if (error) return { data: [], error: { message: error.message, code: error.code } };
+
+  const allowedCycles = new Set(['weekly', 'biweekly', 'monthly', 'quarterly', 'yearly']);
+  const allowedStatuses = new Set(['not_synced', 'syncing', 'active', 'error', 'retired']);
+  return {
+    data: (data ?? []).map((row) => {
+      const cycle = asString(row.billing_cycle, 'monthly');
+      const status = asString(row.provider_sync_status, 'not_synced');
+      return {
+        id: asString(row.id),
+        name: asString(row.name),
+        description: asString(row.description),
+        amount: Number(row.price_cents ?? 0) / 100,
+        billingCycle: (allowedCycles.has(cycle)
+          ? cycle
+          : 'monthly') as PatientBillingPackage['billingCycle'],
+        billingRepetitions:
+          Number(row.billing_repetitions) > 0 ? Number(row.billing_repetitions) : null,
+        trialDays: Math.max(0, Number(row.billing_trial_days ?? 0)),
+        providerPlanId: asNullableString(row.provider_plan_id),
+        providerSyncStatus: (allowedStatuses.has(status)
+          ? status
+          : 'not_synced') as PatientBillingPackage['providerSyncStatus'],
+        providerLastSyncedAt: asNullableString(row.provider_last_synced_at),
+        providerErrorCode: asNullableString(row.provider_error_code),
+      };
+    }),
+    error: null,
+  };
+}
+
+export async function syncPatientBillingPackage(packageId: string) {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(packageId)
+  ) {
+    return { data: null, error: { message: 'Pacote invalido para sincronizacao.' } };
+  }
+  if (isMockEnabled()) {
+    return {
+      data: { packageId, status: 'active' },
+      error: null as SafeServiceError | null,
+    };
+  }
+  const entitlementError = await requireBillingProviderFeatureFlag('mercadopago');
+  if (entitlementError) return { data: null, error: entitlementError };
+
+  const { data, error } = await createBrowserSupabaseClient().functions.invoke(
+    'mercadopago-sync-patient-plan',
+    { body: { package_id: packageId } }
+  );
+  if (error) return { data: null, error: { message: error.message, code: error.name } };
+  return unwrap<{ packageId: string; providerPlanId?: string; status: string }>(data);
 }
 
 export async function getClinicFinanceOverview() {
@@ -1473,7 +1573,7 @@ export async function refundProviderPayment(input: {
     };
   }
   const provider = input.provider ?? ACTIVE_BILLING_PROVIDER;
-  const entitlementError = await requireBillingProviderFeatureFlag();
+  const entitlementError = await requireBillingProviderFeatureFlag(provider);
   if (entitlementError) return { data: null, error: entitlementError };
   const res = await invoke<unknown>(billingEdgeFunction('refund', provider), {
     payment_id: input.paymentId ?? null,
@@ -1516,7 +1616,7 @@ export async function syncProviderPayment(
       error: null as SafeServiceError | null,
     };
   }
-  const entitlementError = await requireBillingProviderFeatureFlag();
+  const entitlementError = await requireBillingProviderFeatureFlag(provider);
   if (entitlementError) return { data: null, error: entitlementError };
   const res = await invoke<unknown>(billingEdgeFunction('sync', provider), {
     invoice_id: invoiceId,

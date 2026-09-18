@@ -173,6 +173,9 @@ function createEmptyPackageDraft(): CommercialPackageDraft {
     priceCents: 0,
     durationWeeks: 12,
     renewalPolicy: 'manual',
+    billingCycle: 'monthly',
+    billingRepetitions: null,
+    billingTrialDays: 0,
     communityAccess: false,
     priorityChat: false,
     benefits: [],
@@ -1405,7 +1408,63 @@ function PackageDialog({
                 <option value="sem_renovacao">Sem renovacao</option>
               </select>
             </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Ciclo da cobranca</span>
+              <select
+                value={draft.billingCycle}
+                onChange={(event) =>
+                  onDraftChange({
+                    ...draft,
+                    billingCycle: event.target.value as CommercialPackageDraft['billingCycle'],
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              >
+                <option value="weekly">Semanal</option>
+                <option value="biweekly">Quinzenal</option>
+                <option value="monthly">Mensal</option>
+                <option value="quarterly">Trimestral</option>
+                <option value="yearly">Anual</option>
+              </select>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">
+                Quantidade de cobrancas
+              </span>
+              <input
+                type="number"
+                min={1}
+                value={draft.billingRepetitions ?? ''}
+                placeholder="Sem limite"
+                onChange={(event) =>
+                  onDraftChange({
+                    ...draft,
+                    billingRepetitions: event.target.value ? Number(event.target.value) : null,
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">
+                Dias de teste gratis
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={365}
+                value={draft.billingTrialDays}
+                onChange={(event) =>
+                  onDraftChange({ ...draft, billingTrialDays: Number(event.target.value) })
+                }
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </label>
           </div>
+          <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+            A recorrencia sera versionada. Assinaturas existentes preservam preco e ciclo antigos;
+            sincronize a nova versao no Financeiro antes de oferecer o pacote.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
               <input

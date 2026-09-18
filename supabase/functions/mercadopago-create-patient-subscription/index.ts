@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { envString } from '../_shared/env.ts';
 import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
@@ -6,7 +7,6 @@ import {
   asRecord,
   asString,
   bearerToken,
-  centsToProviderAmount,
   corsHeaders,
   isDateInput,
   jsonResponse,
@@ -33,6 +33,10 @@ const cycleMap: Record<string, { local: string; frequency: number; frequencyType
   quarterly: { local: 'quarterly', frequency: 3, frequencyType: 'months' },
   yearly: { local: 'yearly', frequency: 12, frequencyType: 'months' },
 };
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
 
 async function tenantHasBillingProviderFeature(
   admin: ReturnType<typeof createClient>,
@@ -81,7 +85,7 @@ async function resolvePatientTenant(params: {
 
   const { data: canWrite, error: permissionError } = await supabase.rpc('has_permission', {
     p_tenant_id: tenantId,
-    p_permission: 'financial.write',
+    p_permission: 'financial.subscription.manage',
   });
 
   if (permissionError) throw permissionError;
@@ -89,7 +93,10 @@ async function resolvePatientTenant(params: {
     return {
       error: jsonResponse(Deno.env, 403, {
         ok: false,
-        error: { code: 'forbidden', message: 'Missing financial.write permission.' },
+        error: {
+          code: 'forbidden',
+          message: 'Missing financial.subscription.manage permission.',
+        },
       }),
     };
   }
@@ -97,7 +104,7 @@ async function resolvePatientTenant(params: {
   return { tenantId };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(Deno.env, req) });
@@ -172,18 +179,16 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => null);
     const patientId = asString(body?.patient_id);
-    const packageId = asString(body?.package_id ?? body?.packageId) || null;
-    const amountCents = asPositiveInteger(body?.amount_cents);
+    const packageId = asString(body?.package_id ?? body?.packageId);
     const nextDueDate = asString(body?.next_due_date);
     const description = safeText(body?.description || 'Assinatura SlimHiper', 240);
-    const cycle = cycleMap[asString(body?.cycle, 'monthly').toLowerCase()] ?? cycleMap.monthly;
     const idempotencyKey = safeIdempotencyKey(body?.idempotency_key ?? body?.idempotencyKey);
     const sourceModule = safeText(body?.source_module ?? body?.sourceModule, 80);
     const programId = asString(body?.program_id ?? body?.programId) || null;
     const enrollmentId = asString(body?.enrollment_id ?? body?.enrollmentId) || null;
     const serviceId = asString(body?.service_id ?? body?.serviceId) || null;
 
-    if (!patientId || !amountCents || !nextDueDate || !isDateInput(nextDueDate)) {
+    if (!patientId || !isUuid(packageId) || !nextDueDate || !isDateInput(nextDueDate)) {
       return jsonResponse(
         Deno.env,
         400,
@@ -191,7 +196,7 @@ Deno.serve(async (req) => {
           ok: false,
           error: {
             code: 'invalid_request',
-            message: 'patient_id, amount_cents and next_due_date are required.',
+            message: 'patient_id, a valid package_id and next_due_date are required.',
           },
           meta: { timestamp },
         },
@@ -202,6 +207,75 @@ Deno.serve(async (req) => {
     const tenantResolution = await resolvePatientTenant({ supabase, userId: user.id, patientId });
     if (tenantResolution.error) return tenantResolution.error;
     const tenantId = tenantResolution.tenantId as string;
+
+    const { data: packageRow, error: packageError } = await supabase
+      .from('packages')
+      .select(
+        'id,name,status,price_cents,billing_cycle,billing_repetitions,billing_trial_days,provider_plan_id,provider_sync_status'
+      )
+      .eq('tenant_id', tenantId)
+      .eq('id', packageId)
+      .maybeSingle();
+    if (packageError) throw packageError;
+    if (!packageRow || packageRow.status !== 'ativo') {
+      return jsonResponse(
+        Deno.env,
+        422,
+        {
+          ok: false,
+          error: { code: 'invalid_package', message: 'An active billing package is required.' },
+          meta: { tenantId, timestamp },
+        },
+        req
+      );
+    }
+    const { data: billingVersion, error: billingVersionError } = await admin
+      .from('package_billing_versions')
+      .select(
+        'id,amount_cents,billing_cycle,billing_repetitions,trial_days,provider_plan_id,provider_status'
+      )
+      .eq('tenant_id', tenantId)
+      .eq('package_id', packageId)
+      .eq('is_current', true)
+      .maybeSingle();
+    if (billingVersionError) throw billingVersionError;
+    if (!billingVersion) {
+      return jsonResponse(
+        Deno.env,
+        409,
+        {
+          ok: false,
+          error: {
+            code: 'package_billing_version_missing',
+            message: 'Package billing version is required.',
+          },
+          meta: { tenantId, timestamp },
+        },
+        req
+      );
+    }
+    const amountCents = asPositiveInteger(billingVersion.amount_cents);
+    const cycle =
+      cycleMap[asString(billingVersion.billing_cycle).toLowerCase()] ?? cycleMap.monthly;
+    const providerPlanId =
+      asString(billingVersion.provider_status) === 'active'
+        ? asString(billingVersion.provider_plan_id)
+        : '';
+    if (!amountCents || !providerPlanId) {
+      return jsonResponse(
+        Deno.env,
+        409,
+        {
+          ok: false,
+          error: {
+            code: 'package_plan_not_synced',
+            message: 'Sync the current package version with Mercado Pago before subscribing.',
+          },
+          meta: { tenantId, timestamp },
+        },
+        req
+      );
+    }
 
     if (!(await tenantHasBillingProviderFeature(admin, tenantId))) {
       return jsonResponse(
@@ -291,19 +365,34 @@ Deno.serve(async (req) => {
     }
 
     const externalReference = `shr_sub_${crypto.randomUUID().replaceAll('-', '')}`;
+    const siteUrl = envString(Deno.env, 'SITE_URL').replace(/\/+$/, '');
+    if (!siteUrl.startsWith('https://')) {
+      return jsonResponse(
+        Deno.env,
+        503,
+        {
+          ok: false,
+          error: { code: 'server_misconfigured', message: 'SITE_URL must use HTTPS.' },
+          meta: { tenantId, timestamp },
+        },
+        req
+      );
+    }
     const { data: subscription, error: insertError } = await admin
       .from('patient_subscriptions')
       .insert({
         tenant_id: tenantId,
         patient_id: patientId,
         provider: MERCADOPAGO_PROVIDER,
-        status: 'active',
+        status: 'pending',
+        collection_mode: 'provider',
         cycle: cycle.local,
         amount_cents: amountCents,
         next_due_date: nextDueDate,
         source_module: sourceModule || null,
         program_id: programId,
         package_id: packageId,
+        package_billing_version_id: billingVersion.id,
         enrollment_id: enrollmentId,
         service_id: serviceId,
         metadata: {
@@ -316,6 +405,7 @@ Deno.serve(async (req) => {
           package_id: packageId,
           enrollment_id: enrollmentId,
           service_id: serviceId,
+          package_name: safeText(packageRow.name, 120),
         },
       })
       .select('id, status')
@@ -331,17 +421,13 @@ Deno.serve(async (req) => {
         method: 'POST',
         idempotencyKey: idempotencyKey || `subscription:${subscription.id}`,
         body: JSON.stringify({
+          preapproval_plan_id: providerPlanId,
           reason: description,
           external_reference: externalReference,
           payer_email: payerEmail,
           status: 'pending',
-          auto_recurring: {
-            frequency: cycle.frequency,
-            frequency_type: cycle.frequencyType,
-            transaction_amount: centsToProviderAmount(amountCents),
-            currency_id: 'BRL',
-            start_date: `${nextDueDate}T00:00:00.000-03:00`,
-          },
+          back_url: `${siteUrl}/paciente-360/${patientId}?tab=financeiro`,
+          notification_url: `${envString(Deno.env, 'SUPABASE_URL').replace(/\/+$/, '')}/functions/v1/webhook-mercadopago?tenant_id=${tenantId}&source_news=webhooks`,
         }),
       }
     );
@@ -380,6 +466,19 @@ Deno.serve(async (req) => {
     const preapprovalId = asString(providerData.id);
     const paymentLink = pickPaymentLink(providerData);
     if (!preapprovalId) {
+      await admin
+        .from('patient_subscriptions')
+        .update({
+          status: 'canceled',
+          metadata: {
+            provider: MERCADOPAGO_PROVIDER,
+            external_reference: externalReference,
+            idempotency_key: idempotencyKey || null,
+            provider_error_code: 'mercadopago_invalid_response',
+          },
+        })
+        .eq('id', subscription.id)
+        .eq('tenant_id', tenantId);
       return jsonResponse(
         Deno.env,
         502,
@@ -396,11 +495,13 @@ Deno.serve(async (req) => {
     }
 
     const providerStatus = normalizeSubscriptionStatus(providerData.status);
-    await admin
+    const subscriptionUpdate = await admin
       .from('patient_subscriptions')
       .update({
         provider_subscription_id: preapprovalId,
+        provider_plan_id: providerPlanId || null,
         status: providerStatus,
+        collection_mode: 'provider',
         metadata: {
           provider: MERCADOPAGO_PROVIDER,
           description,
@@ -417,6 +518,7 @@ Deno.serve(async (req) => {
       })
       .eq('id', subscription.id)
       .eq('tenant_id', tenantId);
+    if (subscriptionUpdate.error) throw subscriptionUpdate.error;
 
     return jsonResponse(
       Deno.env,
@@ -448,4 +550,4 @@ Deno.serve(async (req) => {
       req
     );
   }
-});
+}, "mercadopago-create-patient-subscription"));

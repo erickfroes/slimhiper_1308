@@ -1,3 +1,4 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -36,7 +37,7 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-export async function PATCH(
+async function handlePATCH(
   request: Request,
   context: { params: Promise<{ tenantId: string; membershipId: string }> }
 ) {
@@ -137,3 +138,8 @@ export async function PATCH(
 
   return NextResponse.json({ data, error: null });
 }
+
+export const PATCH = withSecureRoute(handlePATCH, {
+  scope: 'api/admin/tenants/[tenantId]/memberships/[membershipId]',
+  limit: 30,
+});

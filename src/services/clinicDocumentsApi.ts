@@ -1,4 +1,5 @@
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { literalContainsFilter } from '@/lib/security/postgrest';
 import {
   generatePatientDocument,
   getDocumentSignedUrl,
@@ -611,9 +612,9 @@ export async function getClinicDocumentsWorkspace(
       );
 
     if (normalizedFilters.search) {
-      const escapedSearch = normalizedFilters.search.replace(/[%_]/g, '\\$&');
+      const escapedSearch = literalContainsFilter(normalizedFilters.search);
       documentsQuery = documentsQuery.or(
-        `name.ilike.%${escapedSearch}%,category.ilike.%${escapedSearch}%,status.ilike.%${escapedSearch}%`
+        `name.ilike.${escapedSearch},category.ilike.${escapedSearch},status.ilike.${escapedSearch}`
       );
     }
     if (normalizedFilters.category)
@@ -1167,7 +1168,13 @@ export async function getClinicDocumentAuditEvents({
   templateId?: string | null;
   limit?: number;
 }): Promise<{ data: ClinicDocumentAuditEvent[]; error: SafeServiceError | null }> {
-  if (!documentId.trim()) return { data: [], error: { message: 'Documento obrigatorio.' } };
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(documentId.trim())) {
+    return { data: [], error: { message: 'Documento invalido.' } };
+  }
+  if (templateId && !uuidPattern.test(templateId.trim())) {
+    return { data: [], error: { message: 'Template invalido.' } };
+  }
 
   try {
     const supabase = createBrowserSupabaseClient();

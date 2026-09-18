@@ -1,3 +1,4 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -112,7 +113,7 @@ export async function GET(_request: Request, context: { params: Promise<{ tenant
   });
 }
 
-export async function PATCH(request: Request, context: { params: Promise<{ tenantId: string }> }) {
+async function handlePATCH(request: Request, context: { params: Promise<{ tenantId: string }> }) {
   const session = await getCurrentAppSession();
   if (!session) return jsonError('Sessao obrigatoria para atualizar tenant.', 401);
 
@@ -246,3 +247,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ tenan
 
   return NextResponse.json({ data: { tenantId, changes }, error: null });
 }
+
+export const PATCH = withSecureRoute(handlePATCH, {
+  scope: 'api/admin/tenants/[tenantId]',
+  limit: 30,
+});

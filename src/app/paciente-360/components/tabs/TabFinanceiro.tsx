@@ -34,10 +34,13 @@ import {
   createPatientSubscription,
   getPaymentReceiptSignedUrl,
   getPatientFinancialSummary,
+  listPatientBillingPackages,
   refundPatientPayment,
   registerPatientManualPayment,
   sendPaymentReminder,
   syncProviderPayment,
+  syncPatientBillingPackage,
+  type PatientBillingPackage,
 } from '@/services/billingApi';
 import { asSafePaymentUrl } from '@/lib/safeExternalUrl';
 
@@ -325,6 +328,10 @@ export default function TabFinanceiro({
   const [paymentMethod, setPaymentMethod] = useState<
     'pix' | 'cartao_credito' | 'cartao_debito' | 'boleto' | 'dinheiro' | 'transferencia'
   >('pix');
+  const [billingPackages, setBillingPackages] = useState<PatientBillingPackage[]>([]);
+  const [selectedPackageId, setSelectedPackageId] = useState('');
+  const [packagesLoading, setPackagesLoading] = useState(false);
+  const [packageSyncing, setPackageSyncing] = useState(false);
   const [refundModal, setRefundModal] = useState<{
     paymentId?: string | null;
     invoiceId?: string | null;
@@ -339,6 +346,11 @@ export default function TabFinanceiro({
     createBillingActionKey('subscription', patientId)
   );
   const canWriteFinancial = permissions.includes('financial.write');
+  const canCreateCharges = permissions.includes('financial.charge.create') || canWriteFinancial;
+  const canManageSubscriptions =
+    permissions.includes('financial.subscription.manage') || canWriteFinancial;
+  const canCreateRefunds = permissions.includes('financial.refund.create') || canWriteFinancial;
+  const canReconcile = permissions.includes('financial.reconciliation.manage') || canWriteFinancial;
   const creatingCharge = creatingInvoice || creatingSubscription;
   const isLocalActionLoading = localActionLoading !== null;
 
@@ -380,6 +392,38 @@ export default function TabFinanceiro({
     setInvoiceModal(false);
     setPaymentModal(false);
     setSubModal(true);
+  };
+
+  const loadBillingPackages = useCallback(async () => {
+    setPackagesLoading(true);
+    const result = await listPatientBillingPackages();
+    setPackagesLoading(false);
+    if (result.error) {
+      setCreationError(result.error.message);
+      return;
+    }
+    setBillingPackages(result.data);
+    setSelectedPackageId((current) => current || result.data[0]?.id || '');
+  }, []);
+
+  useEffect(() => {
+    if (canViewFinancial && canManageSubscriptions) void loadBillingPackages();
+  }, [canManageSubscriptions, canViewFinancial, loadBillingPackages]);
+
+  const selectedPackage = billingPackages.find((item) => item.id === selectedPackageId) ?? null;
+
+  const handleSyncSelectedPackage = async () => {
+    if (!selectedPackage) return;
+    setPackageSyncing(true);
+    setCreationError(null);
+    const result = await syncPatientBillingPackage(selectedPackage.id);
+    setPackageSyncing(false);
+    if (result.error) {
+      setCreationError(result.error.message);
+      return;
+    }
+    setCreationNotice('Plano recorrente sincronizado no Mercado Pago.');
+    await loadBillingPackages();
   };
 
   const handleOpenPaymentModal = () => {
@@ -450,8 +494,10 @@ export default function TabFinanceiro({
       setCreationError('Paciente nao identificado para criar assinatura.');
       return;
     }
-    const parsedAmount = getValidatedAmount();
-    if (parsedAmount === null) return;
+    if (!selectedPackage) {
+      setCreationError('Selecione um pacote ativo antes de criar a assinatura.');
+      return;
+    }
     const billingIdentity = getBillingIdentity();
     if (billingIdentity === false) return;
 
@@ -459,9 +505,9 @@ export default function TabFinanceiro({
     try {
       const result = await createPatientSubscription(
         patientId,
-        'default-package',
-        parsedAmount,
-        'monthly',
+        selectedPackage.id,
+        selectedPackage.amount,
+        selectedPackage.billingCycle,
         billingIdentity,
         { idempotencyKey: subscriptionActionKey }
       );
@@ -473,9 +519,11 @@ export default function TabFinanceiro({
         setCreationError('A Edge Function respondeu sem dados da assinatura.');
         return;
       }
-      setPaymentLink(null);
+      setPaymentLink(result.data.paymentLink ?? null);
       setCreationNotice(
-        `Assinatura criada (${result.data.id}) com status ${result.data.status ?? 'registrado'}. A Edge Function de assinatura nao retorna link de pagamento.`
+        result.data.paymentLink
+          ? `Assinatura criada (${result.data.id}). O checkout de autorizacao esta disponivel abaixo.`
+          : `Assinatura criada (${result.data.id}) com status ${result.data.status ?? 'registrado'}.`
       );
       setSubscriptionActionKey(createBillingActionKey('subscription', patientId));
       setSubModal(false);
@@ -896,7 +944,7 @@ export default function TabFinanceiro({
           <button
             type="button"
             className="btn-secondary text-xs flex items-center gap-1.5"
-            disabled={!canWriteFinancial || creatingCharge || isLocalActionLoading}
+            disabled={!canCreateCharges || creatingCharge || isLocalActionLoading}
             onClick={handleOpenInvoiceModal}
           >
             <CreditCard size={13} />
@@ -905,7 +953,7 @@ export default function TabFinanceiro({
           <button
             type="button"
             className="btn-secondary text-xs flex items-center gap-1.5"
-            disabled={!canWriteFinancial || creatingCharge || isLocalActionLoading}
+            disabled={!canManageSubscriptions || creatingCharge || isLocalActionLoading}
             onClick={handleOpenSubscriptionModal}
           >
             <RefreshCw size={13} />
@@ -949,9 +997,9 @@ export default function TabFinanceiro({
           </button>
         </div>
       </div>
-      {!canWriteFinancial && (
+      {!canWriteFinancial && !canCreateCharges && !canManageSubscriptions && (
         <p className="text-xs text-amber-700">
-          Sem permissão financial.write para criar cobranças/assinaturas.
+          Sem permissao para criar cobrancas ou gerenciar assinaturas.
         </p>
       )}
       {creationNotice && (
@@ -1140,19 +1188,43 @@ export default function TabFinanceiro({
         >
           <div className="space-y-3 text-sm" aria-busy={creatingSubscription}>
             <label className="block space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">Valor mensal</span>
-              <input
-                className="border rounded px-2 py-1 w-full"
-                inputMode="decimal"
-                value={amount}
-                disabled={creatingSubscription}
-                onChange={(e) => setAmount(e.target.value)}
-              />
+              <span className="text-xs font-medium text-muted-foreground">Pacote recorrente</span>
+              <select
+                className="input-base w-full text-sm"
+                value={selectedPackageId}
+                disabled={creatingSubscription || packagesLoading}
+                onChange={(event) => setSelectedPackageId(event.target.value)}
+              >
+                {billingPackages.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} — {formatBRL(item.amount)} / {item.billingCycle}
+                  </option>
+                ))}
+              </select>
             </label>
-            <p className="text-xs text-muted-foreground">
-              Contrato local seguro: pacote padrao, ciclo mensal e chave de idempotencia por
-              tentativa; Mercado Pago permanece atras da Edge Function.
-            </p>
+            {selectedPackage ? (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <p>{selectedPackage.description || 'Pacote sem descricao.'}</p>
+                <p className="mt-1">
+                  {formatBRL(selectedPackage.amount)} · {selectedPackage.billingCycle} · trial de{' '}
+                  {selectedPackage.trialDays} dias · sync {selectedPackage.providerSyncStatus}
+                </p>
+                {selectedPackage.providerSyncStatus !== 'active' ? (
+                  <button
+                    type="button"
+                    className="mt-2 font-semibold text-primary"
+                    disabled={packageSyncing}
+                    onClick={() => void handleSyncSelectedPackage()}
+                  >
+                    {packageSyncing ? 'Sincronizando...' : 'Sincronizar plano no Mercado Pago'}
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-xs text-amber-700">
+                Nenhum pacote ativo com preco configurado. Cadastre um pacote antes de continuar.
+              </p>
+            )}
             <label className="block space-y-1">
               <span className="text-xs font-medium text-muted-foreground">
                 CPF/CNPJ para cadastro no provedor
@@ -1169,10 +1241,19 @@ export default function TabFinanceiro({
             <button
               type="button"
               className="btn-primary text-xs"
-              disabled={creatingSubscription}
+              disabled={
+                creatingSubscription ||
+                !selectedPackage ||
+                selectedPackage.providerSyncStatus !== 'active' ||
+                packagesLoading
+              }
               onClick={handleCreateSubscription}
             >
-              {creatingSubscription ? 'Criando...' : 'Confirmar assinatura'}
+              {creatingSubscription
+                ? 'Criando...'
+                : selectedPackage?.providerSyncStatus === 'active'
+                  ? 'Confirmar assinatura'
+                  : 'Sincronize o plano primeiro'}
             </button>
             <button
               type="button"
@@ -1300,7 +1381,7 @@ export default function TabFinanceiro({
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={!canWriteFinancial || isLocalActionLoading}
+                      disabled={!canCreateRefunds || isLocalActionLoading}
                       onClick={() => handleOpenRefundModal(p)}
                     >
                       <Undo2 size={12} /> Estornar
@@ -1397,7 +1478,7 @@ export default function TabFinanceiro({
                         <button
                           type="button"
                           className="flex items-center gap-1 text-xs text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!canWriteFinancial || isLocalActionLoading}
+                          disabled={!canCreateRefunds || isLocalActionLoading}
                           onClick={() => handleOpenRefundModal(p)}
                         >
                           <Undo2 size={12} /> Estornar
@@ -1481,7 +1562,7 @@ export default function TabFinanceiro({
                         <button
                           type="button"
                           className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!canWriteFinancial || isLocalActionLoading}
+                          disabled={!canCreateCharges || isLocalActionLoading}
                           onClick={() => void handleGeneratePaymentLink(c.id)}
                         >
                           <CreditCard size={12} />
@@ -1492,7 +1573,7 @@ export default function TabFinanceiro({
                         <button
                           type="button"
                           className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!canWriteFinancial || isLocalActionLoading}
+                          disabled={!canReconcile || isLocalActionLoading}
                           onClick={() => void handleSyncCharge(c.id)}
                         >
                           <RefreshCw size={12} /> Sync
@@ -1603,7 +1684,7 @@ export default function TabFinanceiro({
                               <button
                                 type="button"
                                 className="flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={!canWriteFinancial || isLocalActionLoading}
+                                disabled={!canCreateCharges || isLocalActionLoading}
                                 onClick={() => void handleGeneratePaymentLink(c.id)}
                               >
                                 <CreditCard size={12} />
@@ -1616,7 +1697,7 @@ export default function TabFinanceiro({
                               <button
                                 type="button"
                                 className="flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={!canWriteFinancial || isLocalActionLoading}
+                                disabled={!canReconcile || isLocalActionLoading}
                                 onClick={() => void handleSyncCharge(c.id)}
                               >
                                 <RefreshCw size={12} /> Sync

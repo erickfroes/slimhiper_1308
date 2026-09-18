@@ -1,3 +1,5 @@
+import { secureEdge } from '../_shared/http-security.ts';
+import { csvEscape } from '../_shared/csv.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 declare const Deno: {
@@ -9,7 +11,14 @@ type Json = Record<string, unknown>;
 
 const corsHeaders = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': (Deno.env.get('APP_ALLOWED_ORIGINS') ?? Deno.env.get('SITE_URL') ?? Deno.env.get('NEXT_PUBLIC_SITE_URL') ?? 'http://localhost:4028').split(',')[0].trim(),
+  'Access-Control-Allow-Origin': (
+    Deno.env.get('APP_ALLOWED_ORIGINS') ??
+    Deno.env.get('SITE_URL') ??
+    Deno.env.get('NEXT_PUBLIC_SITE_URL') ??
+    'http://localhost:4028'
+  )
+    .split(',')[0]
+    .trim(),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
@@ -36,11 +45,6 @@ function normalizeExportFormat(value: unknown): 'csv' | 'pdf' | null {
   const format = asString(value, 'csv').toLowerCase();
   if (format === 'csv' || format === 'pdf') return format;
   return null;
-}
-
-function csvEscape(value: unknown): string {
-  const text = value == null ? '' : String(value);
-  return `"${text.replace(/"/g, '""')}"`;
 }
 
 function toCsv(rows: unknown[]): string {
@@ -188,7 +192,7 @@ async function persistReportArtifact(params: {
   return asRecord(readyRun);
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -386,4 +390,4 @@ Deno.serve(async (req) => {
       meta: { timestamp },
     });
   }
-});
+}, "clinic-reports"));

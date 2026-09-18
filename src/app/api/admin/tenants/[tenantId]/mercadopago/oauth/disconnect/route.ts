@@ -1,3 +1,4 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import {
@@ -40,7 +41,7 @@ function disconnectMercadoPagoSettings(settings: unknown) {
   };
 }
 
-export async function POST(request: Request, context: { params: Promise<{ tenantId: string }> }) {
+async function handlePOST(request: Request, context: { params: Promise<{ tenantId: string }> }) {
   const session = await getCurrentAppSession();
   if (!session) return jsonError('Sessao obrigatoria para desconectar Mercado Pago.', 401);
 
@@ -125,3 +126,8 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
     error: null,
   });
 }
+
+export const POST = withSecureRoute(handlePOST, {
+  scope: 'api/admin/tenants/[tenantId]/mercadopago/oauth/disconnect',
+  limit: 30,
+});

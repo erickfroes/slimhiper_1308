@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
 
@@ -91,7 +92,7 @@ function isValidStoragePath(path: string, tenantId: string, patientId: string, d
   );
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') {
@@ -272,4 +273,4 @@ Deno.serve(async (req) => {
       meta: { timestamp },
     });
   }
-});
+}, "document-signed-url"));

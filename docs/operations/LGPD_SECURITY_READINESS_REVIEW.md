@@ -30,18 +30,18 @@ Fora de escopo nesta branch:
 
 ## Inventario De Dados E Finalidade
 
-| Superficie | Dados | Finalidade | Base legal a confirmar | Controlador/operador | Retencao/descarte | Exportacao/acesso |
-| --- | --- | --- | --- | --- | --- | --- |
-| Auth/perfil/membership | Identidade, e-mail, papel, tenant/unidade, status | Autenticacao, autorizacao e auditoria | Execucao de contrato, legitimo interesse e obrigacao legal conforme contrato | Clinica como controladora; SlimHiper como operador quando aplicavel | Enquanto contrato/obrigacoes vigentes; revogar/desativar acesso ao desligar | Admin/support auditado; titular via canal LGPD |
-| Pacientes e `patient_pii` | Identificacao, contato, dados sensiveis de saude | Atendimento clinico, jornada e prontuario operacional | Saude/tutela da saude, execucao de contrato e consentimentos aplicaveis | Clinica controladora | Retencao clinica/legal definida por contrato; anonimizacao quando cabivel | Staff autorizado; exportacao redigida/autorizada |
-| Paciente 360/prontuario/timeline | Eventos clinicos, exames, tarefas, check-ins | Continuidade do cuidado e operacao clinica | Saude e execucao de contrato | Clinica controladora | Conforme prontuario/contrato; descarte controlado | Staff autorizado; paciente/responsavel apenas escopo liberado |
-| Documentos/D4Sign/storage | Templates, documentos gerados, metadados provider, PDFs | Geracao, assinatura e consulta permissionada | Execucao de contrato, consentimento quando aplicavel | Clinica controladora; D4Sign suboperador | Bucket privado; signed URL curta; descarte por politica documental | Staff autorizado e vinculos paciente/responsavel liberados |
-| Financeiro/Asaas | Cobrancas, faturas, status, IDs provider | Faturamento, conciliacao e suporte | Execucao de contrato e obrigacoes legais/fiscais | Clinica controladora; Asaas suboperador | Conforme fiscal/contratual; payload bruto evitado | Staff financeiro/admin autorizado; portal somente contrato especifico |
-| CRM | Lead, origem/campanha, opt-out, conversao | Prospeccao e relacionamento | Consentimento/legitimo interesse a validar por canal | Clinica controladora | Retencao de nao convertidos por politica; anonimizar/expirar | Reports agregados sem PII por padrao |
-| Comunicacoes/chat | Mensagens, anexos, read receipts, moderacao | Comunicação operacional e jornada | Execucao de contrato/consentimento conforme canal | Clinica controladora | `retention_until`, moderacao e arquivamento | Staff/paciente/responsavel por escopo; conteudo moderado oculto |
-| Relatorios/exports | Dados agregados e, quando permitido, operacionais | Gestao, auditoria e BI | Legitimo interesse/contrato; evitar PII desnecessaria | Clinica controladora | Export temporario e rastreado | Permissao explicita; evidencia sem PII |
-| Logs/audit/observability | Eventos, request/correlation id, tenant pseudonimizado, severidade | Seguranca, diagnostico e auditoria | Legitimo interesse, seguranca e obrigacao legal | SlimHiper/clinica conforme contrato | Retencao operacional minima; nao logar payload bruto | Suporte/security com trilha auditavel |
-| Backups/DR | Snapshots criptografados de dados autorizados | Recuperacao e continuidade | Obrigacao legal/contratual e seguranca | Operador custodiante | RPO/RTO e retencao por ambiente | Restore somente em janela aprovada e evidencias redigidas |
+| Superficie                       | Dados                                                              | Finalidade                                            | Base legal a confirmar                                                       | Controlador/operador                                                | Retencao/descarte                                                           | Exportacao/acesso                                                     |
+| -------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Auth/perfil/membership           | Identidade, e-mail, papel, tenant/unidade, status                  | Autenticacao, autorizacao e auditoria                 | Execucao de contrato, legitimo interesse e obrigacao legal conforme contrato | Clinica como controladora; SlimHiper como operador quando aplicavel | Enquanto contrato/obrigacoes vigentes; revogar/desativar acesso ao desligar | Admin/support auditado; titular via canal LGPD                        |
+| Pacientes e `patient_pii`        | Identificacao, contato, dados sensiveis de saude                   | Atendimento clinico, jornada e prontuario operacional | Saude/tutela da saude, execucao de contrato e consentimentos aplicaveis      | Clinica controladora                                                | Retencao clinica/legal definida por contrato; anonimizacao quando cabivel   | Staff autorizado; exportacao redigida/autorizada                      |
+| Paciente 360/prontuario/timeline | Eventos clinicos, exames, tarefas, check-ins                       | Continuidade do cuidado e operacao clinica            | Saude e execucao de contrato                                                 | Clinica controladora                                                | Conforme prontuario/contrato; descarte controlado                           | Staff autorizado; paciente/responsavel apenas escopo liberado         |
+| Documentos/D4Sign/storage        | Templates, documentos gerados, metadados provider, PDFs            | Geracao, assinatura e consulta permissionada          | Execucao de contrato, consentimento quando aplicavel                         | Clinica controladora; D4Sign suboperador                            | Bucket privado; signed URL curta; descarte por politica documental          | Staff autorizado e vinculos paciente/responsavel liberados            |
+| Financeiro/Asaas                 | Cobrancas, faturas, status, IDs provider                           | Faturamento, conciliacao e suporte                    | Execucao de contrato e obrigacoes legais/fiscais                             | Clinica controladora; Asaas suboperador                             | Conforme fiscal/contratual; payload bruto evitado                           | Staff financeiro/admin autorizado; portal somente contrato especifico |
+| CRM                              | Lead, origem/campanha, opt-out, conversao                          | Prospeccao e relacionamento                           | Consentimento/legitimo interesse a validar por canal                         | Clinica controladora                                                | Retencao de nao convertidos por politica; anonimizar/expirar                | Reports agregados sem PII por padrao                                  |
+| Comunicacoes/chat                | Mensagens, anexos, read receipts, moderacao                        | Comunicação operacional e jornada                     | Execucao de contrato/consentimento conforme canal                            | Clinica controladora                                                | `retention_until`, moderacao e arquivamento                                 | Staff/paciente/responsavel por escopo; conteudo moderado oculto       |
+| Relatorios/exports               | Dados agregados e, quando permitido, operacionais                  | Gestao, auditoria e BI                                | Legitimo interesse/contrato; evitar PII desnecessaria                        | Clinica controladora                                                | Export temporario e rastreado                                               | Permissao explicita; evidencia sem PII                                |
+| Logs/audit/observability         | Eventos, request/correlation id, tenant pseudonimizado, severidade | Seguranca, diagnostico e auditoria                    | Legitimo interesse, seguranca e obrigacao legal                              | SlimHiper/clinica conforme contrato                                 | Retencao operacional minima; nao logar payload bruto                        | Suporte/security com trilha auditavel                                 |
+| Backups/DR                       | Snapshots criptografados de dados autorizados                      | Recuperacao e continuidade                            | Obrigacao legal/contratual e seguranca                                       | Operador custodiante                                                | RPO/RTO e retencao por ambiente                                             | Restore somente em janela aprovada e evidencias redigidas             |
 
 ## RBAC/RLS E Acessos Privilegiados
 
@@ -91,26 +91,44 @@ pseudonimizados quando indispensavel.
 
 - Build de producao deixa de publicar source maps por padrao; habilitacao exige
   `ENABLE_PRODUCTION_SOURCE_MAPS=true` e deve ser aprovada como excecao.
-- `next build` volta a falhar em erro de TypeScript ou ESLint em vez de ignorar
-  falhas silenciosamente.
+- `next build` falha em erros de TypeScript. No Next 16, ESLint e um gate
+  separado (`npm run lint`) e obrigatorio na CI.
 - Headers globais deliberados foram adicionados: CSP, `Referrer-Policy`,
   `X-Content-Type-Options`, `X-Frame-Options`, `X-DNS-Prefetch-Control`,
   `Permissions-Policy` e HSTS em build de producao.
-- A CSP preserva os scripts Rocket existentes, imagens remotas ja configuradas e
-  conexoes Supabase por HTTPS/WSS; `unsafe-eval` fica restrito a builds nao
-  produtivos para compatibilidade de desenvolvimento.
+- Scripts externos Rocket foram removidos do layout global; a CSP passou a
+  permitir apenas o app, imagens remotas ja configuradas e conexoes Supabase por
+  HTTPS/WSS. `unsafe-eval` fica restrito a builds nao produtivos para
+  compatibilidade de desenvolvimento.
+- Convites exigem token aleatorio de uso unico, associado ao e-mail e tenant,
+  armazenado apenas como hash. A aceitacao deixa de depender somente da sessao
+  Supabase do usuario.
+- Funcoes `SECURITY DEFINER` passam a revogar execucao anonima por padrao e
+  recebem `EXECUTE` somente quando a RPC valida o chamador.
+- Cadastro publico foi desabilitado no `supabase/config.toml`; confirmacao de
+  e-mail, senha forte, reautenticacao para troca de senha e fatores MFA foram
+  habilitados para ambientes locais gerenciados pelo CLI.
 
 Excecoes aceitas nesta branch:
 
-- `script-src 'unsafe-inline'` e `style-src 'unsafe-inline'` permanecem para
-  compatibilidade com Next.js/App Router e estilos runtime ate existir projeto de
-  nonce/hash CSP dedicado.
-- Rocket continua permitido porque `src/app/layout.tsx` ja depende desses
-  scripts e a governanca deles nao foi solicitada nesta PR.
-- Rate limit de aplicacao nao foi introduzido globalmente; endpoints criticos
-  seguem dependentes de Supabase/Auth, HMAC, idempotencia, provider sandbox e
-  controles de infraestrutura/edge. Definir rate limiting gerenciado no hosting
-  antes de go-live.
+- Scripts usam nonce por resposta e `strict-dynamic` em `src/proxy.ts`.
+  `style-src 'unsafe-inline'` permanece para estilos runtime React/charts/Sonner;
+  nao autoriza scripts inline. A validacao visual da CSP permanece pendente.
+- Qualquer novo script de terceiro precisa de revisao de privacidade, integridade
+  de supply chain e allowlist CSP antes de ser adicionado a uma rota sensivel.
+- Mutacoes Next e as 31 Edge Functions usam limites de corpo e orcamentos
+  persistentes por identidade. Dependem da migration 830; falham fechadas sem
+  ela. Controles por IP/WAF, Auth, HMAC e idempotencia continuam necessarios.
+
+Estado e limites da validacao das nove fases em 2026-09-18:
+`docs/security/SECURITY_HARDENING_STATUS.md`. Implementacao local nao equivale a
+deploy ou aprovacao para dados reais.
+
+Configuracoes de Auth do projeto hospedado nao sao alteradas por esta branch.
+Antes do deploy, o responsavel deve reproduzir no dashboard/infra de producao:
+cadastro publico desabilitado, confirmacao de e-mail habilitada, politica de
+senha forte, reautenticacao para troca de senha, MFA e CAPTCHA/rate limit
+gerenciados.
 
 ## Politicas, Titular E Contratos
 
@@ -129,17 +147,17 @@ Antes de liberar dados reais, owner humano deve anexar internamente evidencia de
 
 ## Readiness Go/No-Go
 
-| Gate | Status desta PR | Proximo passo |
-| --- | --- | --- |
-| CI/local `type-check`, `lint`, `build`, `git diff --check` | Executado nesta branch e revalidado em 2026-06-05 | Bloquear merge se regredir |
-| Headers/CSP/build hardening | Implementado | Validar em staging/browser por rota critica autenticada |
-| Ambientes e secrets segregados | Documentado em PR 10.1 | Conferencia humana no gerenciador de secrets |
-| Observabilidade e alertas | Smoke read-only local passou; health `warn` por metadata de release ausente | Configurar metadata e validar sink/ack real em staging |
-| Backup/restore/DR | Restore local schema-only sem dados passou em banco temporario | Restore isolado com politica de backup real e evidencia redigida |
-| Incidente/rotacao/rollback/operacao | Documentado em PR 10.4 | Exercicio de mesa e revisao owner |
-| Smokes Fases 1-9 + pos-deploy staging | Passaram local/Docker em 2026-06-05 | Repetir em staging/homologacao e anexar evidencia |
-| Politicas, DPA e canal LGPD | Pendente owner humano | Aprovar juridicamente antes de dado real |
-| Provider producao D4Sign/Asaas | Sandbox ja validado; callback sintetico Asaas local e D4Sign HMAC local passaram | Habilitar producao somente apos go/no-go, rollback e callbacks externos de staging |
+| Gate                                                       | Status desta PR                                                                  | Proximo passo                                                                      |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| CI/local `type-check`, `lint`, `build`, `git diff --check` | Executado nesta branch e revalidado em 2026-06-05                                | Bloquear merge se regredir                                                         |
+| Headers/CSP/build hardening                                | Implementado                                                                     | Validar em staging/browser por rota critica autenticada                            |
+| Ambientes e secrets segregados                             | Documentado em PR 10.1                                                           | Conferencia humana no gerenciador de secrets                                       |
+| Observabilidade e alertas                                  | Smoke read-only local passou; health `warn` por metadata de release ausente      | Configurar metadata e validar sink/ack real em staging                             |
+| Backup/restore/DR                                          | Restore local schema-only sem dados passou em banco temporario                   | Restore isolado com politica de backup real e evidencia redigida                   |
+| Incidente/rotacao/rollback/operacao                        | Documentado em PR 10.4                                                           | Exercicio de mesa e revisao owner                                                  |
+| Smokes Fases 1-9 + pos-deploy staging                      | Passaram local/Docker em 2026-06-05                                              | Repetir em staging/homologacao e anexar evidencia                                  |
+| Politicas, DPA e canal LGPD                                | Pendente owner humano                                                            | Aprovar juridicamente antes de dado real                                           |
+| Provider producao D4Sign/Asaas                             | Sandbox ja validado; callback sintetico Asaas local e D4Sign HMAC local passaram | Habilitar producao somente apos go/no-go, rollback e callbacks externos de staging |
 
 Decisao tecnica desta branch: **NO-GO para producao com dados reais** ate que os
 itens pendentes acima tenham owner, data, evidencia redigida e assinatura humana.

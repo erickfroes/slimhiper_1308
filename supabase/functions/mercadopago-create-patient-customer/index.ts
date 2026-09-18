@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { envString } from '../_shared/env.ts';
 import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
@@ -62,7 +63,7 @@ async function resolvePatientTenant(params: {
 
   const { data: canWrite, error: permissionError } = await supabase.rpc('has_permission', {
     p_tenant_id: tenantId,
-    p_permission: 'financial.write',
+    p_permission: 'financial.charge.create',
   });
 
   if (permissionError) throw permissionError;
@@ -70,7 +71,7 @@ async function resolvePatientTenant(params: {
     return {
       error: jsonResponse(Deno.env, 403, {
         ok: false,
-        error: { code: 'forbidden', message: 'Missing financial.write permission.' },
+        error: { code: 'forbidden', message: 'Missing financial.charge.create permission.' },
       }),
     };
   }
@@ -78,7 +79,7 @@ async function resolvePatientTenant(params: {
   return { tenantId };
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(Deno.env, req) });
@@ -214,4 +215,4 @@ Deno.serve(async (req) => {
       req
     );
   }
-});
+}, "mercadopago-create-patient-customer"));

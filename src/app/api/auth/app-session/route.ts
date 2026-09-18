@@ -1,3 +1,4 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import {
   getAppSessionTargetRoute,
@@ -79,7 +80,7 @@ export async function GET(request: Request) {
   );
 }
 
-export async function DELETE(request: Request) {
+async function handleDELETE(request: Request) {
   const context = createObservabilityContext('api.auth.app-session.logout', request);
   const supabase = await createClient();
 
@@ -104,3 +105,5 @@ export async function DELETE(request: Request) {
     { headers: observedHeaders(context) }
   );
 }
+
+export const DELETE = withSecureRoute(handleDELETE, { scope: 'api/auth/app-session', limit: 30 });

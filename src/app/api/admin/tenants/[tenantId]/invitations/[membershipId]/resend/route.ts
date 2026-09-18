@@ -1,7 +1,8 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { sendTenantInviteEmail } from '@/lib/auth/tenantInviteEmail';
+import { bindTenantInvitation, sendTenantInviteEmail } from '@/lib/auth/tenantInviteEmail';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
 import { isPlatformAdminRole, isPlatformOwnerRole } from '@/services/session/roles';
 
@@ -24,7 +25,7 @@ function maskEmail(value: string) {
   return `${visiblePrefix}${localPart.length > 2 ? '***' : '*'}@${domain}`;
 }
 
-export async function POST(
+async function handlePOST(
   request: Request,
   context: { params: Promise<{ tenantId: string; membershipId: string }> }
 ) {
@@ -85,6 +86,7 @@ export async function POST(
       tenantId,
       roleCode: membership.role_code,
       fullName: normalizeText(profile?.full_name, 160) || undefined,
+      invitedBy: session.userId,
     });
 
     const nowIso = new Date().toISOString();
@@ -96,7 +98,10 @@ export async function POST(
         accepted_at: null,
       })
       .eq('tenant_id', tenantId)
-      .eq('id', membershipId);
+      .eq('id', membershipId)
+      .eq('status', 'invited')
+      .select('id')
+      .single();
 
     if (updateError) throw updateError;
 
@@ -120,6 +125,7 @@ export async function POST(
     });
 
     if (auditError) throw auditError;
+    await bindTenantInvitation(admin, resentInvite.invitationId, membershipId, membership.user_id);
 
     return NextResponse.json({
       data: {
@@ -143,3 +149,8 @@ export async function POST(
     return jsonError('Falha ao reenviar convite do tenant.', 500);
   }
 }
+
+export const POST = withSecureRoute(handlePOST, {
+  scope: 'api/admin/tenants/[tenantId]/invitations/[membershipId]/resend',
+  limit: 10,
+});

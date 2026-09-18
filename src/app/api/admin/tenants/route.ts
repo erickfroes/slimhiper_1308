@@ -1,10 +1,11 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import {
   findAuthUserByEmail,
   sendTenantInviteEmail,
-  sendTenantPasswordSetupEmail,
+  bindTenantInvitation,
   type TenantInviteDelivery,
 } from '@/lib/auth/tenantInviteEmail';
 import { getCurrentAppSession } from '@/services/session/getCurrentAppSession';
@@ -168,7 +169,7 @@ async function rollbackTenantProvisioning(params: {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const session = await getCurrentAppSession();
 
   if (!session) {
@@ -376,26 +377,18 @@ export async function POST(request: Request) {
     let inviteDelivery: TenantInviteDelivery = 'password_setup_sent';
 
     provisioningStep = 'convite_do_owner';
-    if (!authUser) {
-      const invited = await sendTenantInviteEmail({
-        admin,
-        request,
-        email: ownerEmail,
-        tenantId: createdTenantId,
-        roleCode: 'tenant_owner',
-        fullName: ownerName,
-      });
-      authUser = invited.user;
-      createdAuthUserId = invited.delivery === 'supabase_invite_sent' ? invited.user.id : null;
-      inviteDelivery = invited.delivery;
-    } else {
-      await sendTenantPasswordSetupEmail({
-        admin,
-        request,
-        email: ownerEmail,
-        tenantId: createdTenantId,
-      });
-    }
+    const invited = await sendTenantInviteEmail({
+      admin,
+      request,
+      email: ownerEmail,
+      tenantId: createdTenantId,
+      roleCode: 'tenant_owner',
+      fullName: ownerName,
+      invitedBy: session.userId,
+    });
+    authUser = invited.user;
+    createdAuthUserId = invited.delivery === 'supabase_invite_sent' ? invited.user.id : null;
+    inviteDelivery = invited.delivery;
 
     if (!previousProfile) createdProfileUserId = authUser.id;
 
@@ -409,7 +402,7 @@ export async function POST(request: Request) {
         active_tenant_id: createdTenantId,
         is_active: true,
       },
-      { onConflict: 'id' }
+      { onConflict: 'id', ignoreDuplicates: true }
     );
     if (profileError) throw profileError;
 
@@ -468,6 +461,7 @@ export async function POST(request: Request) {
       },
     });
     if (auditError) throw auditError;
+    await bindTenantInvitation(admin, invited.invitationId, membership.id, authUser.id);
 
     return NextResponse.json(
       {
@@ -500,3 +494,5 @@ export async function POST(request: Request) {
     return jsonError(`Falha ao criar tenant na etapa: ${provisioningStep}.`, 500);
   }
 }
+
+export const POST = withSecureRoute(handlePOST, { scope: 'api/admin/tenants', limit: 30 });

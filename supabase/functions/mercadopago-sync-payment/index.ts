@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { envString } from '../_shared/env.ts';
 import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
@@ -32,7 +33,7 @@ async function tenantHasBillingProviderFeature(
   return false;
 }
 
-async function requireFinancialWrite(params: {
+async function requireReconciliationPermission(params: {
   supabase: ReturnType<typeof createClient>;
   userId: string;
   tenantId: string;
@@ -51,7 +52,7 @@ async function requireFinancialWrite(params: {
 
   const { data: canWrite, error: permissionError } = await supabase.rpc('has_permission', {
     p_tenant_id: tenantId,
-    p_permission: 'financial.write',
+    p_permission: 'financial.reconciliation.manage',
   });
 
   if (permissionError) throw permissionError;
@@ -100,6 +101,7 @@ async function upsertPayment(params: {
     patient_id: patientId,
     patient_invoice_id: invoiceId,
     provider: MERCADOPAGO_PROVIDER,
+    collection_mode: 'provider',
     provider_payment_id: providerPaymentId,
     status: paymentStatus,
     amount_cents: amountCents,
@@ -124,7 +126,7 @@ async function upsertPayment(params: {
   return String(insertResult.data.id);
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(Deno.env, req) });
@@ -258,13 +260,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!(await requireFinancialWrite({ supabase, userId: user.id, tenantId }))) {
+    if (!(await requireReconciliationPermission({ supabase, userId: user.id, tenantId }))) {
       return jsonResponse(
         Deno.env,
         403,
         {
           ok: false,
-          error: { code: 'forbidden', message: 'Missing financial.write permission.' },
+          error: {
+            code: 'forbidden',
+            message: 'Missing financial.reconciliation.manage permission.',
+          },
           meta: { tenantId, timestamp },
         },
         req
@@ -493,4 +498,4 @@ Deno.serve(async (req) => {
       req
     );
   }
-});
+}, "mercadopago-sync-payment"));

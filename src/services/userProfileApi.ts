@@ -1,3 +1,4 @@
+import { secureUpload } from '@/services/secureUpload';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type {
   ProfessionalAddress,
@@ -269,9 +270,11 @@ export async function updateCurrentUserProfile(
             ? 'webp'
             : 'jpg';
       const path = `${tenantId}/${currentProfile.userId}/${Date.now()}.${extension}`;
-      const { error: uploadError } = await supabase.storage
-        .from('user-profile-avatars')
-        .upload(path, input.avatarFile, { upsert: true, contentType: input.avatarFile.type });
+      const { error: uploadError } = await secureUpload(
+        'user-profile-avatars',
+        path,
+        input.avatarFile
+      );
       if (uploadError) {
         return {
           data: null,

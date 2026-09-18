@@ -60,6 +60,9 @@ export interface CommercialPackageDraft {
   priceCents: number;
   durationWeeks: number;
   renewalPolicy: CommercialRenewalPolicy;
+  billingCycle: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+  billingRepetitions: number | null;
+  billingTrialDays: number;
   communityAccess: boolean;
   priorityChat: boolean;
   benefits: string[];
@@ -258,6 +261,22 @@ function normalizePackage(value: unknown): CommercialPackage | null {
     priceCents: asInteger(record.priceCents),
     durationWeeks: asInteger(record.durationWeeks),
     renewalPolicy: asEnum(record.renewalPolicy, renewalPolicies, 'manual'),
+    billingCycle: asEnum(
+      record.billingCycle,
+      ['weekly', 'biweekly', 'monthly', 'quarterly', 'yearly'] as const,
+      'monthly'
+    ),
+    billingRepetitions:
+      record.billingRepetitions === null || record.billingRepetitions === undefined
+        ? null
+        : asInteger(record.billingRepetitions),
+    billingTrialDays: asInteger(record.billingTrialDays),
+    providerPlanId: asNullableString(record.providerPlanId),
+    providerSyncStatus: asEnum(
+      record.providerSyncStatus,
+      ['not_synced', 'syncing', 'active', 'error', 'retired'] as const,
+      'not_synced'
+    ),
     communityAccess: asBoolean(record.communityAccess),
     priorityChat: asBoolean(record.priorityChat),
     benefits: normalizeStringList(record.benefits),
@@ -523,6 +542,16 @@ function sanitizePackageDraft(draft: CommercialPackageDraft): CommercialPackageD
     priceCents: Math.max(0, Math.round(draft.priceCents || 0)),
     durationWeeks: Math.max(0, Math.round(draft.durationWeeks || 0)),
     renewalPolicy: renewalPolicies.includes(draft.renewalPolicy) ? draft.renewalPolicy : 'manual',
+    billingCycle: ['weekly', 'biweekly', 'monthly', 'quarterly', 'yearly'].includes(
+      draft.billingCycle
+    )
+      ? draft.billingCycle
+      : 'monthly',
+    billingRepetitions:
+      draft.billingRepetitions === null || draft.billingRepetitions === undefined
+        ? null
+        : Math.max(1, Math.round(draft.billingRepetitions)),
+    billingTrialDays: Math.min(365, Math.max(0, Math.round(draft.billingTrialDays || 0))),
     communityAccess: Boolean(draft.communityAccess),
     priorityChat: Boolean(draft.priorityChat),
     benefits: sanitizeTextList(draft.benefits),
@@ -561,6 +590,9 @@ export function packageToDraft(pkg?: CommercialPackage | null): CommercialPackag
     priceCents: pkg?.priceCents ?? 0,
     durationWeeks: pkg?.durationWeeks ?? 12,
     renewalPolicy: pkg?.renewalPolicy ?? 'manual',
+    billingCycle: pkg?.billingCycle ?? 'monthly',
+    billingRepetitions: pkg?.billingRepetitions ?? null,
+    billingTrialDays: pkg?.billingTrialDays ?? 0,
     communityAccess: pkg?.communityAccess ?? false,
     priorityChat: pkg?.priorityChat ?? false,
     benefits: pkg?.benefits ?? [],
@@ -591,11 +623,43 @@ export async function getClinicCommercialCatalog(): Promise<{
     }
 
     const supabase = createBrowserSupabaseClient();
-    const { data, error } = await supabase.rpc('get_clinic_commercial_catalog');
+    const [{ data, error }, billingResult] = await Promise.all([
+      supabase.rpc('get_clinic_commercial_catalog'),
+      supabase
+        .from('packages')
+        .select(
+          'id,billing_cycle,billing_repetitions,billing_trial_days,provider_plan_id,provider_sync_status'
+        ),
+    ]);
     if (error)
       return { data: null, error: serviceError(error, 'Falha ao carregar catalogo comercial.') };
+    if (billingResult.error) {
+      return {
+        data: null,
+        error: serviceError(billingResult.error, 'Falha ao carregar configuracao recorrente.'),
+      };
+    }
 
-    return { data: normalizeClinicCatalog(data), error: null };
+    const raw = asRecord(data);
+    const billingByPackage = new Map(
+      (billingResult.data ?? []).map((row) => [asString(row.id), row])
+    );
+    const enriched = {
+      ...raw,
+      packages: (Array.isArray(raw.packages) ? raw.packages : []).map((value) => {
+        const row = asRecord(value);
+        const billing = billingByPackage.get(asString(row.id));
+        return {
+          ...row,
+          billingCycle: billing?.billing_cycle ?? 'monthly',
+          billingRepetitions: billing?.billing_repetitions ?? null,
+          billingTrialDays: billing?.billing_trial_days ?? 0,
+          providerPlanId: billing?.provider_plan_id ?? null,
+          providerSyncStatus: billing?.provider_sync_status ?? 'not_synced',
+        };
+      }),
+    };
+    return { data: normalizeClinicCatalog(enriched), error: null };
   } catch (error) {
     return { data: null, error: serviceError(error, 'Falha ao carregar catalogo comercial.') };
   }
@@ -678,11 +742,15 @@ export async function saveCommercialPackage(
     }
 
     const supabase = createBrowserSupabaseClient();
-    const { data, error } = await supabase.rpc('upsert_commercial_package', {
+    const { data, error } = await supabase.rpc('upsert_commercial_package_with_billing', {
       p_package: sanitized,
     });
     if (error) return { data: null, error: serviceError(error, 'Falha ao salvar pacote.') };
-    return { data: normalizeMutation(data), error: null };
+    const mutation = normalizeMutation(data);
+    if (!mutation?.id) {
+      return { data: null, error: { message: 'Pacote salvo sem identificador valido.' } };
+    }
+    return { data: mutation, error: null };
   } catch (error) {
     return { data: null, error: serviceError(error, 'Falha ao salvar pacote.') };
   }

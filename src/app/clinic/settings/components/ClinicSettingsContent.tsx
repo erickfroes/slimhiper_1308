@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import {
   getClinicSettings,
+  disconnectClinicMercadoPagoOAuth,
   inviteClinicMember,
   saveAutoMessageTemplate,
   saveChatServiceHours,
@@ -2558,6 +2559,8 @@ function SectionIntegracoes({
   onSave: () => void;
 }) {
   const [oauthError, setOauthError] = useState<string | null>(null);
+  const [oauthNotice, setOauthNotice] = useState<string | null>(null);
+  const [oauthDisconnectReason, setOauthDisconnectReason] = useState('');
   const [oauthBusy, setOauthBusy] = useState(false);
   const categories = useMemo(
     () => Array.from(new Set(integrations.map((integration) => integration.category))),
@@ -2568,6 +2571,7 @@ function SectionIntegracoes({
   const startMercadoPagoOAuth = async () => {
     setOauthBusy(true);
     setOauthError(null);
+    setOauthNotice(null);
     const { data, error } = await startClinicMercadoPagoOAuth(tenantId);
     setOauthBusy(false);
     if (error || !data) {
@@ -2576,10 +2580,32 @@ function SectionIntegracoes({
     }
     window.location.assign(data.authorizationUrl);
   };
+  const disconnectMercadoPagoOAuth = async () => {
+    setOauthBusy(true);
+    setOauthError(null);
+    setOauthNotice(null);
+    const { error } = await disconnectClinicMercadoPagoOAuth({
+      tenantId,
+      reason: oauthDisconnectReason,
+    });
+    setOauthBusy(false);
+    if (error) {
+      setOauthError(error.message);
+      return;
+    }
+    toggle('mercadopago', false);
+    setOauthDisconnectReason('');
+    setOauthNotice('Mercado Pago desconectado. Novas cobrancas ficam bloqueadas ate reconectar.');
+  };
 
   return (
     <div className="space-y-5">
       {oauthError ? <InlineAlert message={oauthError} /> : null}
+      {oauthNotice ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {oauthNotice}
+        </div>
+      ) : null}
       {categories.map((category) => (
         <div key={category} className="space-y-2">
           <h3 className="text-xs font-semibold uppercase text-muted-foreground">{category}</h3>
@@ -2600,25 +2626,48 @@ function SectionIntegracoes({
                     <p className="text-xs text-muted-foreground">{integration.description}</p>
                   </div>
                   <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
-                    <Toggle
-                      label={integration.name}
-                      checked={enabled}
-                      onChange={(value) => toggle(integration.id, value)}
-                    />
+                    {integration.id !== 'mercadopago' ? (
+                      <Toggle
+                        label={integration.name}
+                        checked={enabled}
+                        onChange={(value) => toggle(integration.id, value)}
+                      />
+                    ) : null}
                     {integration.id === 'mercadopago' ? (
-                      <button
-                        type="button"
-                        onClick={startMercadoPagoOAuth}
-                        disabled={oauthBusy}
-                        className="btn-secondary flex-shrink-0 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {oauthBusy ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <CreditCard size={14} />
-                        )}
-                        {enabled ? 'Reconectar' : 'Conectar'}
-                      </button>
+                      <>
+                        {enabled ? (
+                          <input
+                            value={oauthDisconnectReason}
+                            onChange={(event) => setOauthDisconnectReason(event.target.value)}
+                            placeholder="Motivo da desconexao"
+                            aria-label="Motivo auditavel para desconectar Mercado Pago"
+                            className="input-base min-w-52 py-1.5 text-xs"
+                          />
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={startMercadoPagoOAuth}
+                          disabled={oauthBusy}
+                          className="btn-secondary flex-shrink-0 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {oauthBusy ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <CreditCard size={14} />
+                          )}
+                          {enabled ? 'Reconectar' : 'Conectar'}
+                        </button>
+                        {enabled ? (
+                          <button
+                            type="button"
+                            onClick={() => void disconnectMercadoPagoOAuth()}
+                            disabled={oauthBusy || oauthDisconnectReason.trim().length < 16}
+                            className="btn-secondary flex-shrink-0 py-1.5 text-xs text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Desconectar
+                          </button>
+                        ) : null}
+                      </>
                     ) : null}
                   </div>
                 </div>

@@ -74,6 +74,9 @@ jobs:
       - name: Type check
         run: npm run type-check
 
+      - name: Security regression tests (isolated, synthetic data)
+        run: npm run test:security
+
       - name: Lint
         run: npm run lint
 

@@ -1,3 +1,4 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -89,7 +90,7 @@ async function getAuthorizedSession() {
   return { session, response: null };
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const { session, response } = await getAuthorizedSession();
   if (!session) return response;
 
@@ -175,7 +176,7 @@ export async function POST(request: Request) {
   return NextResponse.json({ data: plan, error: null }, { status: 201 });
 }
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request) {
   const { session, response } = await getAuthorizedSession();
   if (!session) return response;
 
@@ -307,3 +308,6 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({ data: plan, error: null });
 }
+
+export const POST = withSecureRoute(handlePOST, { scope: 'api/admin/platform-plans', limit: 30 });
+export const PATCH = withSecureRoute(handlePATCH, { scope: 'api/admin/platform-plans', limit: 30 });

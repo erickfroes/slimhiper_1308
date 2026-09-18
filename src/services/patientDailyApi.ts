@@ -1,3 +1,4 @@
+import { secureUpload } from '@/services/secureUpload';
 import { createRequiredClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { PatientPortalCheckin, PatientPortalSnapshot } from '@/services/patientPortalApi';
 
@@ -718,11 +719,7 @@ export async function recordPatientDailyMeal(
     const path = asString(uploadRecord.path);
     if (!file || !bucket || !path) return { data: mutation, error: null };
 
-    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
-      cacheControl: '3600',
-      contentType: file.type,
-      upsert: false,
-    });
+    const { error: uploadError } = await secureUpload(bucket, path, file);
 
     if (uploadError) {
       await supabase.rpc('confirm_patient_meal_photo', {

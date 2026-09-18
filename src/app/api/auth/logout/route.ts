@@ -1,3 +1,4 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -27,6 +28,12 @@ async function signOutAndRedirect(request: Request) {
   return response;
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   return signOutAndRedirect(request);
 }
+
+export const POST = withSecureRoute(handlePOST, {
+  scope: 'api/auth/logout',
+  limit: 30,
+  binary: true,
+});

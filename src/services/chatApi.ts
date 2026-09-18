@@ -1,3 +1,4 @@
+import { secureUpload } from '@/services/secureUpload';
 import type {
   PatientChatAttachment,
   PatientChatMessage,
@@ -581,13 +582,7 @@ export async function uploadChatAttachmentForMessage(
     }
 
     const prepared = preparedResult.data;
-    const supabase = getSupabaseClient();
-    const { error: uploadError } = await supabase.storage
-      .from(prepared.bucket)
-      .upload(prepared.path, file, {
-        contentType: prepared.mimeType,
-        upsert: false,
-      });
+    const { error: uploadError } = await secureUpload(prepared.bucket, prepared.path, file);
 
     if (uploadError) {
       await completeChatAttachmentUpload(prepared.id, 'failed');

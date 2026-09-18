@@ -1,3 +1,4 @@
+import { withSecureRoute } from '@/lib/security/route';
 import { NextResponse } from 'next/server';
 import { canAccessPlatformAdminFromSession } from '@/lib/auth/canAccessPlatformAdmin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -137,7 +138,7 @@ export async function GET(_request: Request, context: { params: Promise<{ tenant
   }
 }
 
-export async function POST(request: Request, context: { params: Promise<{ tenantId: string }> }) {
+async function handlePOST(request: Request, context: { params: Promise<{ tenantId: string }> }) {
   const { session, response } = await authorize(true);
   if (!session) return response;
 
@@ -219,3 +220,8 @@ export async function POST(request: Request, context: { params: Promise<{ tenant
     return jsonError('Falha ao salvar modulos do tenant.', 500);
   }
 }
+
+export const POST = withSecureRoute(handlePOST, {
+  scope: 'api/admin/tenants/[tenantId]/entitlements',
+  limit: 30,
+});

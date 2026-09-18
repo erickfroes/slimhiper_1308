@@ -1,3 +1,4 @@
+import { secureUpload } from '@/services/secureUpload';
 import type {
   AdherenceLevel,
   FinancialStatus,
@@ -788,10 +789,7 @@ async function uploadPatientProfilePhoto(tenantId: string, patientId: string, fi
       ?.toLowerCase()
       .replace(/[^a-z0-9]/g, '') || 'jpg';
   const path = `${tenantId}/${patientId}/avatar-${Date.now()}.${extension}`;
-  const supabase = createBrowserSupabaseClient();
-  const { error } = await supabase.storage
-    .from('patient-profile-photos')
-    .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true });
+  const { error } = await secureUpload('patient-profile-photos', path, file);
   if (error) throw error;
   return { path, mimeType: file.type || null, sizeBytes: file.size };
 }

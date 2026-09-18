@@ -1353,6 +1353,11 @@ export interface CommercialPackage {
   priceCents: number;
   durationWeeks: number;
   renewalPolicy: CommercialRenewalPolicy;
+  billingCycle?: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+  billingRepetitions?: number | null;
+  billingTrialDays?: number;
+  providerPlanId?: string | null;
+  providerSyncStatus?: 'not_synced' | 'syncing' | 'active' | 'error' | 'retired';
   communityAccess: boolean;
   priorityChat: boolean;
   benefits: string[];

@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createEdgeContext, logEdgeEvent, observedEdgeHeaders } from '../_shared/observability.ts';
 import { envString } from '../_shared/env.ts';
@@ -9,6 +10,8 @@ import {
   mercadoPagoFetchWithAccessToken,
   MERCADOPAGO_PROVIDER,
   normalizePaymentStatus,
+  normalizeSubscriptionStatus,
+  pickPaymentLink,
   resolveMercadoPagoTenantAccessToken,
   safeErrorMessage,
   sha256Hex,
@@ -53,6 +56,9 @@ function getWebhookResourceType(bodyRecord: Record<string, unknown>) {
   const eventType = asString(bodyRecord.type).toLowerCase();
   const action = asString(bodyRecord.action).toLowerCase();
   if (eventType === 'payment' || action.startsWith('payment.')) return 'payment';
+  if (eventType === 'subscription_authorized_payment') return 'authorized_payment';
+  if (eventType === 'subscription_preapproval_plan') return 'preapproval_plan';
+  if (eventType === 'subscription_preapproval') return 'preapproval';
   if (eventType.includes('preapproval') || action.includes('preapproval')) return 'preapproval';
   return eventType || 'unknown';
 }
@@ -195,6 +201,7 @@ async function upsertPayment(params: {
     patient_id: patientId,
     patient_invoice_id: invoiceId,
     provider: MERCADOPAGO_PROVIDER,
+    collection_mode: 'provider',
     provider_payment_id: providerPaymentId,
     status,
     amount_cents: amountCents,
@@ -219,7 +226,7 @@ async function upsertPayment(params: {
   return String(insertResult.data.id);
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const context = createEdgeContext('edge.webhook-mercadopago', req);
   const timestamp = new Date().toISOString();
 
@@ -232,7 +239,7 @@ Deno.serve(async (req) => {
 
   try {
     const rawText = await req.text();
-    const tenantIdHint = getTenantIdHint(req);
+    let tenantIdHint = getTenantIdHint(req);
     const body = rawText
       ? await Promise.resolve()
           .then(() => JSON.parse(rawText))
@@ -272,14 +279,19 @@ Deno.serve(async (req) => {
 
     const existingProviderEvent = await supabase
       .from('billing_provider_events')
-      .select('id,status')
+      .select('id,status,attempts')
       .eq('provider', MERCADOPAGO_PROVIDER)
       .eq('provider_event_id', providerEventId)
       .maybeSingle();
     if (existingProviderEvent.error) {
       return internalError(context, 'provider_event_lookup_failed');
     }
-    if (existingProviderEvent.data?.id) {
+    if (
+      existingProviderEvent.data?.id &&
+      ['processed', 'ignored', 'rejected', 'dead_letter'].includes(
+        asString(existingProviderEvent.data.status)
+      )
+    ) {
       await logEdgeEvent(context, 'webhook_duplicate', 'info', 'success', {
         provider: MERCADOPAGO_PROVIDER,
         event_type: eventType,
@@ -290,11 +302,15 @@ Deno.serve(async (req) => {
 
     const existingHash = await supabase
       .from('billing_webhook_events')
-      .select('id')
+      .select('id,status')
       .eq('event_hash', eventHash)
       .maybeSingle();
     if (existingHash.error) return internalError(context, 'idempotency_lookup_failed');
-    if (existingHash.data?.id) {
+    if (
+      existingHash.data?.id &&
+      !existingProviderEvent.data?.id &&
+      ['processed', 'ignored'].includes(asString(existingHash.data.status))
+    ) {
       await logEdgeEvent(context, 'webhook_duplicate', 'info', 'success', {
         provider: MERCADOPAGO_PROVIDER,
         event_type: eventType,
@@ -303,52 +319,126 @@ Deno.serve(async (req) => {
       return json(200, { ok: true, idempotent: true }, observedEdgeHeaders(context));
     }
 
-    const { error: webhookInsertError } = await supabase.from('billing_webhook_events').insert({
-      provider: MERCADOPAGO_PROVIDER,
-      event_hash: eventHash,
-      event_type: eventType,
-      payload: minimizedWebhookPayload({
-        bodyRecord,
-        eventHash,
-        dataId,
-        requestId: signature.requestId,
-      }),
-      status: 'received',
-    });
-    if (webhookInsertError) return internalError(context, 'webhook_event_insert_failed');
-
-    if (resourceType !== 'payment' || !dataId) {
-      await supabase.from('billing_provider_events').insert({
-        tenant_id: null,
+    if (!existingHash.data?.id) {
+      const { error: webhookInsertError } = await supabase.from('billing_webhook_events').insert({
         provider: MERCADOPAGO_PROVIDER,
-        provider_event_id: providerEventId,
+        event_hash: eventHash,
         event_type: eventType,
-        resource_type: resourceType,
-        resource_id: dataId || null,
-        idempotency_key: eventHash,
-        status: 'ignored',
-        processed_at: timestamp,
-        error_code:
-          resourceType !== 'payment' ? 'unsupported_resource_type' : 'missing_resource_id',
-        payload_summary: { event: eventType, resource_type: resourceType },
+        payload: minimizedWebhookPayload({
+          bodyRecord,
+          eventHash,
+          dataId,
+          requestId: signature.requestId,
+        }),
+        status: 'received',
       });
+      if (webhookInsertError) return internalError(context, 'webhook_event_insert_failed');
+    } else {
+      await supabase
+        .from('billing_webhook_events')
+        .update({ status: 'received', processed_at: null, error_message: null })
+        .eq('id', existingHash.data.id);
+    }
+
+    let providerEventRowId = asString(existingProviderEvent.data?.id);
+    if (!providerEventRowId) {
+      const { data: insertedProviderEvent, error: providerEventInsertError } = await supabase
+        .from('billing_provider_events')
+        .insert({
+          tenant_id: tenantIdHint || null,
+          provider: MERCADOPAGO_PROVIDER,
+          provider_event_id: providerEventId,
+          event_type: eventType,
+          resource_type: resourceType,
+          resource_id: dataId || null,
+          idempotency_key: eventHash,
+          status: 'received',
+          signature_valid: true,
+          payload_digest: eventHash,
+          attempts: 0,
+          payload_summary: { event: eventType, resource_type: resourceType },
+        })
+        .select('id')
+        .single();
+      if (providerEventInsertError || !insertedProviderEvent?.id) {
+        return internalError(context, 'provider_event_insert_failed');
+      }
+      providerEventRowId = asString(insertedProviderEvent.id);
+    }
+    const providerEventAttempts = Number(existingProviderEvent.data?.attempts ?? 0) + 1;
+    const processingUpdate = await supabase
+      .from('billing_provider_events')
+      .update({
+        status: 'processing',
+        attempts: providerEventAttempts,
+        retry_count: providerEventAttempts,
+        error_code: null,
+        error_message: null,
+        updated_at: timestamp,
+      })
+      .eq('id', providerEventRowId);
+    if (processingUpdate.error) return internalError(context, 'provider_event_update_failed');
+
+    if (
+      !['payment', 'preapproval', 'authorized_payment', 'preapproval_plan'].includes(
+        resourceType
+      ) ||
+      !dataId
+    ) {
+      await supabase
+        .from('billing_provider_events')
+        .update({
+          status: 'ignored',
+          processed_at: timestamp,
+          error_code: !dataId ? 'missing_resource_id' : 'unsupported_resource_type',
+          updated_at: timestamp,
+        })
+        .eq('id', providerEventRowId);
       await supabase
         .from('billing_webhook_events')
         .update({
           status: 'ignored',
           processed_at: timestamp,
-          error_message:
-            resourceType !== 'payment' ? 'unsupported_resource_type' : 'missing_resource_id',
+          error_message: !dataId ? 'missing_resource_id' : 'unsupported_resource_type',
         })
         .eq('event_hash', eventHash);
 
       return json(200, { ok: true, processed: false, ignored: true }, observedEdgeHeaders(context));
     }
 
+    if (!tenantIdHint && resourceType === 'preapproval_plan') {
+      const { data: packageTenant } = await supabase
+        .from('packages')
+        .select('tenant_id')
+        .eq('provider', MERCADOPAGO_PROVIDER)
+        .eq('provider_plan_id', dataId)
+        .limit(1)
+        .maybeSingle();
+      tenantIdHint = asString(packageTenant?.tenant_id);
+    } else if (!tenantIdHint && resourceType === 'preapproval') {
+      const { data: subscriptionTenant } = await supabase
+        .from('patient_subscriptions')
+        .select('tenant_id')
+        .eq('provider', MERCADOPAGO_PROVIDER)
+        .eq('provider_subscription_id', dataId)
+        .limit(1)
+        .maybeSingle();
+      tenantIdHint = asString(subscriptionTenant?.tenant_id);
+    }
+
     const tenantToken = tenantIdHint
       ? await resolveMercadoPagoTenantAccessToken(Deno.env, supabase, tenantIdHint)
       : null;
     if (tenantIdHint && !tenantToken?.accessToken) {
+      await supabase
+        .from('billing_provider_events')
+        .update({
+          status: providerEventAttempts >= 10 ? 'dead_letter' : 'retryable_failed',
+          error_code: tenantToken?.errorCode || 'tenant_mercadopago_not_connected',
+          next_attempt_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+          updated_at: timestamp,
+        })
+        .eq('id', providerEventRowId);
       await supabase
         .from('billing_webhook_events')
         .update({
@@ -363,17 +453,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    const providerPath =
+      resourceType === 'payment'
+        ? `/v1/payments/${encodeURIComponent(dataId)}`
+        : resourceType === 'preapproval'
+          ? `/preapproval/${encodeURIComponent(dataId)}`
+          : resourceType === 'authorized_payment'
+            ? `/authorized_payments/${encodeURIComponent(dataId)}`
+            : `/preapproval_plan/${encodeURIComponent(dataId)}`;
     const providerResponse = tenantToken?.accessToken
-      ? await mercadoPagoFetchWithAccessToken(
-          Deno.env,
-          tenantToken.accessToken,
-          `/v1/payments/${encodeURIComponent(dataId)}`,
-          { method: 'GET' }
-        )
-      : await mercadoPagoFetch(Deno.env, `/v1/payments/${encodeURIComponent(dataId)}`, {
+      ? await mercadoPagoFetchWithAccessToken(Deno.env, tenantToken.accessToken, providerPath, {
+          method: 'GET',
+        })
+      : await mercadoPagoFetch(Deno.env, providerPath, {
           method: 'GET',
         });
     if (!providerResponse.ok) {
+      await supabase
+        .from('billing_provider_events')
+        .update({
+          status: providerEventAttempts >= 10 ? 'dead_letter' : 'retryable_failed',
+          error_code: providerResponse.errorCode || 'provider_fetch_failed',
+          next_attempt_at: new Date(
+            Date.now() + Math.min(3_600_000, 30_000 * 2 ** providerEventAttempts)
+          ).toISOString(),
+          updated_at: timestamp,
+        })
+        .eq('id', providerEventRowId);
       await supabase
         .from('billing_webhook_events')
         .update({
@@ -385,7 +491,231 @@ Deno.serve(async (req) => {
       return internalError(context, 'provider_fetch_failed', { status: providerResponse.status });
     }
 
-    const providerPayment = asRecord(providerResponse.data);
+    const providerResource = asRecord(providerResponse.data);
+
+    if (resourceType === 'preapproval_plan') {
+      const providerPlanStatus = asString(providerResource.status).toLowerCase();
+      const updateResult = await supabase
+        .from('packages')
+        .update({
+          provider_sync_status: providerPlanStatus === 'cancelled' ? 'retired' : 'active',
+          provider_last_synced_at: timestamp,
+          provider_error_code: null,
+        })
+        .eq('tenant_id', tenantIdHint)
+        .eq('provider_plan_id', dataId)
+        .select('id')
+        .limit(1);
+      if (updateResult.error) return internalError(context, 'package_plan_update_failed');
+      await supabase
+        .from('billing_provider_events')
+        .update({
+          tenant_id: tenantIdHint || null,
+          status: updateResult.data?.length ? 'processed' : 'ignored',
+          processed_at: timestamp,
+          error_code: updateResult.data?.length ? null : 'package_not_resolved',
+          updated_at: timestamp,
+        })
+        .eq('id', providerEventRowId);
+      await supabase
+        .from('billing_webhook_events')
+        .update({
+          status: updateResult.data?.length ? 'processed' : 'ignored',
+          processed_at: timestamp,
+          error_message: updateResult.data?.length ? null : 'package_not_resolved',
+        })
+        .eq('event_hash', eventHash);
+      return json(
+        200,
+        { ok: true, processed: Boolean(updateResult.data?.length) },
+        observedEdgeHeaders(context)
+      );
+    }
+
+    if (resourceType === 'preapproval' || resourceType === 'authorized_payment') {
+      const preapprovalId =
+        resourceType === 'preapproval'
+          ? asString(providerResource.id) || dataId
+          : asString(providerResource.preapproval_id) ||
+            asString(asRecord(providerResource.subscription).id);
+      const externalReference = asString(providerResource.external_reference);
+      let subscriptionResult = preapprovalId
+        ? await supabase
+            .from('patient_subscriptions')
+            .select(
+              'id,tenant_id,patient_id,package_id,program_id,enrollment_id,service_id,amount_cents,next_due_date,status,metadata'
+            )
+            .eq('provider', MERCADOPAGO_PROVIDER)
+            .eq('provider_subscription_id', preapprovalId)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (subscriptionResult.error) return internalError(context, 'subscription_lookup_failed');
+      if (!subscriptionResult.data && externalReference) {
+        subscriptionResult = await supabase
+          .from('patient_subscriptions')
+          .select(
+            'id,tenant_id,patient_id,package_id,program_id,enrollment_id,service_id,amount_cents,next_due_date,status,metadata'
+          )
+          .eq('provider', MERCADOPAGO_PROVIDER)
+          .eq('metadata->>external_reference', externalReference)
+          .maybeSingle();
+      }
+      const subscription = subscriptionResult.data;
+      if (
+        !subscription?.id ||
+        (tenantIdHint && tenantIdHint !== asString(subscription.tenant_id))
+      ) {
+        await supabase
+          .from('billing_provider_events')
+          .update({
+            status: 'retryable_failed',
+            error_code: 'subscription_not_resolved',
+            next_attempt_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+            updated_at: timestamp,
+          })
+          .eq('id', providerEventRowId);
+        return internalError(context, 'subscription_not_resolved');
+      }
+
+      const subscriptionTenantId = asString(subscription.tenant_id);
+      const subscriptionPatientId = asString(subscription.patient_id);
+      if (resourceType === 'preapproval') {
+        const providerStatus = asString(providerResource.status);
+        const localStatus = normalizeSubscriptionStatus(providerStatus);
+        const nextPaymentDate = asString(providerResource.next_payment_date);
+        const metadata = asRecord(subscription.metadata);
+        const { error: updateError } = await supabase
+          .from('patient_subscriptions')
+          .update({
+            status: localStatus,
+            provider_subscription_id: preapprovalId,
+            next_due_date: nextPaymentDate
+              ? nextPaymentDate.slice(0, 10)
+              : subscription.next_due_date,
+            metadata: {
+              ...metadata,
+              provider_status: providerStatus,
+              payment_link: pickPaymentLink(providerResource),
+              last_provider_event: eventType,
+            },
+          })
+          .eq('id', subscription.id)
+          .eq('tenant_id', subscriptionTenantId);
+        if (updateError) return internalError(context, 'subscription_update_failed');
+      } else {
+        const providerStatus = asString(providerResource.status).toLowerCase();
+        const paid = ['approved', 'processed'].includes(providerStatus);
+        const failed = ['rejected', 'failed'].includes(providerStatus);
+        const amountCents =
+          amountToCents(providerResource.transaction_amount) ||
+          Number(subscription.amount_cents ?? 0);
+        const paymentId =
+          asString(providerResource.payment_id) || asString(asRecord(providerResource.payment).id);
+        const existingInvoice = await supabase
+          .from('patient_invoices')
+          .select('id,metadata')
+          .eq('provider', MERCADOPAGO_PROVIDER)
+          .eq('provider_invoice_id', dataId)
+          .maybeSingle();
+        if (existingInvoice.error)
+          return internalError(context, 'subscription_invoice_lookup_failed');
+        const invoicePayload = {
+          tenant_id: subscriptionTenantId,
+          patient_id: subscriptionPatientId,
+          provider: MERCADOPAGO_PROVIDER,
+          collection_mode: 'provider',
+          provider_invoice_id: dataId,
+          provider_payment_id: paymentId || null,
+          status: paid ? 'paid' : failed ? 'failed' : 'pending',
+          amount_cents: amountCents,
+          due_date:
+            asString(providerResource.debit_date).slice(0, 10) || subscription.next_due_date,
+          paid_at: paid ? asString(providerResource.date_created) || timestamp : null,
+          description: 'Cobranca recorrente de pacote',
+          package_id: subscription.package_id,
+          program_id: subscription.program_id,
+          enrollment_id: subscription.enrollment_id,
+          service_id: subscription.service_id,
+          source_module: 'mercadopago_subscription',
+          metadata: {
+            ...asRecord(existingInvoice.data?.metadata),
+            provider_status: providerStatus,
+            provider_subscription_id: preapprovalId,
+            authorized_payment_id: dataId,
+          },
+        };
+        let localInvoiceId = asString(existingInvoice.data?.id);
+        if (localInvoiceId) {
+          const updateInvoice = await supabase
+            .from('patient_invoices')
+            .update(invoicePayload)
+            .eq('id', localInvoiceId)
+            .eq('tenant_id', subscriptionTenantId);
+          if (updateInvoice.error)
+            return internalError(context, 'subscription_invoice_update_failed');
+        } else {
+          const insertInvoice = await supabase
+            .from('patient_invoices')
+            .insert(invoicePayload)
+            .select('id')
+            .single();
+          if (insertInvoice.error)
+            return internalError(context, 'subscription_invoice_insert_failed');
+          localInvoiceId = asString(insertInvoice.data.id);
+        }
+        if (paymentId) {
+          await upsertPayment({
+            supabase,
+            tenantId: subscriptionTenantId,
+            patientId: subscriptionPatientId,
+            invoiceId: localInvoiceId,
+            providerPaymentId: paymentId,
+            status: paid ? 'paid' : failed ? 'failed' : 'pending',
+            amountCents,
+            paidAt: paid ? timestamp : null,
+            dueDate: invoicePayload.due_date,
+            method: null,
+            metadata: {
+              provider_event: eventType,
+              provider_status: providerStatus,
+              provider_subscription_id: preapprovalId,
+              authorized_payment_id: dataId,
+            },
+          });
+        }
+        await supabase
+          .from('patient_subscriptions')
+          .update({
+            status: paid ? 'active' : failed ? 'past_due' : subscription.status,
+            metadata: {
+              ...asRecord(subscription.metadata),
+              provider_status: providerStatus,
+              last_authorized_payment_id: dataId,
+            },
+          })
+          .eq('id', subscription.id)
+          .eq('tenant_id', subscriptionTenantId);
+      }
+
+      await supabase
+        .from('billing_provider_events')
+        .update({
+          tenant_id: subscriptionTenantId,
+          local_subscription_id: subscription.id,
+          status: 'processed',
+          processed_at: timestamp,
+          error_code: null,
+          updated_at: timestamp,
+        })
+        .eq('id', providerEventRowId);
+      await supabase
+        .from('billing_webhook_events')
+        .update({ status: 'processed', processed_at: timestamp, error_message: null })
+        .eq('event_hash', eventHash);
+      return json(200, { ok: true, processed: true }, observedEdgeHeaders(context));
+    }
+
+    const providerPayment = providerResource;
     const providerPaymentId = asString(providerPayment.id) || dataId;
     const providerPreferenceId = asString(providerPayment.preference_id);
     const externalReference = asString(providerPayment.external_reference);
@@ -399,23 +729,22 @@ Deno.serve(async (req) => {
     const patientId = asString(invoice?.patient_id) || null;
     const invoiceId = asString(invoice?.id) || null;
     if (tenantIdHint && tenantId && tenantIdHint !== tenantId) {
-      await supabase.from('billing_provider_events').insert({
-        tenant_id: tenantIdHint,
-        provider: MERCADOPAGO_PROVIDER,
-        provider_event_id: providerEventId,
-        event_type: eventType,
-        resource_type: 'payment',
-        resource_id: providerPaymentId,
-        idempotency_key: eventHash,
-        status: 'failed',
-        processed_at: timestamp,
-        error_code: 'tenant_mismatch',
-        payload_summary: {
-          event: eventType,
-          payment_id: providerPaymentId,
-          tenant_hint: tenantIdHint,
-        },
-      });
+      await supabase
+        .from('billing_provider_events')
+        .update({
+          tenant_id: tenantIdHint,
+          resource_id: providerPaymentId,
+          status: 'rejected',
+          processed_at: timestamp,
+          error_code: 'tenant_mismatch',
+          payload_summary: {
+            event: eventType,
+            payment_id: providerPaymentId,
+            tenant_hint: tenantIdHint,
+          },
+          updated_at: timestamp,
+        })
+        .eq('id', providerEventRowId);
       await supabase
         .from('billing_webhook_events')
         .update({
@@ -449,19 +778,20 @@ Deno.serve(async (req) => {
       asString(providerPayment.payment_type_id) ||
       null;
 
-    const { error: providerEventInsertError } = await supabase
+    const { error: providerEventUpdateError } = await supabase
       .from('billing_provider_events')
-      .insert({
+      .update({
         tenant_id: tenantId,
-        provider: MERCADOPAGO_PROVIDER,
-        provider_event_id: providerEventId,
-        event_type: eventType,
         resource_type: 'payment',
         resource_id: providerPaymentId,
-        idempotency_key: eventHash,
-        status: tenantId && patientId && invoiceId ? 'processed' : 'ignored',
-        processed_at: timestamp,
+        local_invoice_id: invoiceId,
+        status: tenantId && patientId && invoiceId ? 'processing' : 'retryable_failed',
+        processed_at: null,
         error_code: tenantId && patientId && invoiceId ? null : 'tenant_not_resolved',
+        next_attempt_at:
+          tenantId && patientId && invoiceId
+            ? timestamp
+            : new Date(Date.now() + 5 * 60_000).toISOString(),
         payload_summary: {
           event: eventType,
           payment_id: providerPaymentId,
@@ -469,9 +799,11 @@ Deno.serve(async (req) => {
           payment_status: providerStatus || null,
           value_cents: amountCents || null,
         },
-      });
+        updated_at: timestamp,
+      })
+      .eq('id', providerEventRowId);
 
-    if (providerEventInsertError) return internalError(context, 'provider_event_insert_failed');
+    if (providerEventUpdateError) return internalError(context, 'provider_event_update_failed');
 
     if (!tenantId || !patientId || !invoiceId) {
       await supabase
@@ -487,11 +819,7 @@ Deno.serve(async (req) => {
         event_type: eventType,
         reason: 'tenant_not_resolved',
       });
-      return json(
-        200,
-        { ok: true, processed: false, resolved: false },
-        observedEdgeHeaders(context)
-      );
+      return internalError(context, 'tenant_not_resolved');
     }
 
     const paymentId = await upsertPayment({
@@ -536,24 +864,35 @@ Deno.serve(async (req) => {
 
     const timeline = timelineForPaymentStatus(mapping.paymentStatus);
     if (timeline) {
-      const { error: timelineError } = await supabase.from('patient_timeline_events').insert({
-        tenant_id: tenantId,
-        patient_id: patientId,
-        event_type: timeline.eventType,
-        category: 'financial',
-        title: timeline.title,
-        description: timeline.description,
-        status: 'recorded',
-        status_label: mapping.invoiceStatus,
-        event_at: timestamp,
-        payload: {
-          provider: MERCADOPAGO_PROVIDER,
-          event_type: eventType,
-          event_hash: eventHash,
-          invoice_id: invoiceId,
-        },
-      });
-      if (timelineError) return internalError(context, 'timeline_insert_failed');
+      const { data: existingTimeline, error: timelineLookupError } = await supabase
+        .from('patient_timeline_events')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('patient_id', patientId)
+        .eq('payload->>event_hash', eventHash)
+        .limit(1)
+        .maybeSingle();
+      if (timelineLookupError) return internalError(context, 'timeline_lookup_failed');
+      if (!existingTimeline?.id) {
+        const { error: timelineError } = await supabase.from('patient_timeline_events').insert({
+          tenant_id: tenantId,
+          patient_id: patientId,
+          event_type: timeline.eventType,
+          category: 'financial',
+          title: timeline.title,
+          description: timeline.description,
+          status: 'recorded',
+          status_label: mapping.invoiceStatus,
+          event_at: timestamp,
+          payload: {
+            provider: MERCADOPAGO_PROVIDER,
+            event_type: eventType,
+            event_hash: eventHash,
+            invoice_id: invoiceId,
+          },
+        });
+        if (timelineError) return internalError(context, 'timeline_insert_failed');
+      }
     }
 
     const { error: processedUpdateError } = await supabase
@@ -565,6 +904,18 @@ Deno.serve(async (req) => {
       })
       .eq('event_hash', eventHash);
     if (processedUpdateError) return internalError(context, 'webhook_event_update_failed');
+
+    const { error: providerProcessedError } = await supabase
+      .from('billing_provider_events')
+      .update({
+        status: 'processed',
+        processed_at: timestamp,
+        error_code: null,
+        error_message: null,
+        updated_at: timestamp,
+      })
+      .eq('id', providerEventRowId);
+    if (providerProcessedError) return internalError(context, 'provider_event_finalize_failed');
 
     await logEdgeEvent(context, 'webhook_processed', 'info', 'success', {
       provider: MERCADOPAGO_PROVIDER,
@@ -580,4 +931,4 @@ Deno.serve(async (req) => {
     });
     return internalError(context, 'unexpected_error');
   }
-});
+}, "webhook-mercadopago"));

@@ -29,10 +29,14 @@ function exists(relativePath) {
   return existsSync(fromRoot(relativePath));
 }
 
-const trackedFiles = git(['ls-files'])
-  .split(/\r?\n/)
-  .filter(Boolean)
-  .map(toPosix);
+const trackedFiles = [
+  ...new Set(
+    git(['ls-files', '--cached', '--others', '--exclude-standard'])
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map(toPosix)
+  ),
+].filter(exists);
 
 const results = [];
 
@@ -99,7 +103,10 @@ for (const scriptName of ['dev', 'build', 'lint', 'type-check']) {
 
 requireFile('Production readiness entrypoint', 'docs/Production_Readiness_Execution_Plan.md');
 requireFile('Production readiness plan', 'docs/operations/PRODUCTION_READINESS_EXECUTION_PLAN.md');
-requireFile('Production readiness stage tracker', 'docs/operations/PRODUCTION_READINESS_STAGE_TRACKER.md');
+requireFile(
+  'Production readiness stage tracker',
+  'docs/operations/PRODUCTION_READINESS_STAGE_TRACKER.md'
+);
 requireFile('Supabase static contract audit', 'scripts/operations/check-supabase-contracts.mjs');
 requireFile('Release process', 'docs/operations/RELEASE_PROCESS.md');
 requireFile('Environment matrix', 'docs/operations/ENVIRONMENT_MATRIX.md');
@@ -151,7 +158,10 @@ const requiredEnvNames = [
 const envExample = exists('.env.example') ? read('.env.example') : '';
 const missingEnvNames = requiredEnvNames.filter((name) => !envExample.includes(`${name}=`));
 if (missingEnvNames.length === 0) {
-  pass('.env.example production checklist', 'required public, backend, provider and smoke names exist');
+  pass(
+    '.env.example production checklist',
+    'required public, backend, provider and smoke names exist'
+  );
 } else {
   fail('.env.example production checklist', `missing names: ${missingEnvNames.join(', ')}`);
 }
@@ -188,6 +198,8 @@ const serviceRoleLiteralRefs = trackedFiles.filter((file) => {
 const allowedServiceRoleLiteral = (file) =>
   file === '.env.example' ||
   file === 'src/lib/supabase/admin.ts' ||
+  // Reviewed Node-only synthetic fixtures; assertQaTarget guards mutations.
+  file === 'scripts/qa/qa-fixtures.mjs' ||
   file.startsWith('scripts/supabase/') ||
   file.startsWith('scripts/operations/') ||
   file.startsWith('supabase/functions/') ||
@@ -198,12 +210,12 @@ const forbiddenServiceRoleLiteralRefs = serviceRoleLiteralRefs.filter(
   (file) => !allowedServiceRoleLiteral(file)
 );
 if (forbiddenServiceRoleLiteralRefs.length === 0) {
-  pass('Service-role literal placement', 'only allowed server/script/docs paths reference the env name');
-} else {
-  fail(
+  pass(
     'Service-role literal placement',
-    forbiddenServiceRoleLiteralRefs.slice(0, 20).join(', ')
+    'only allowed server/script/docs paths reference the env name'
   );
+} else {
+  fail('Service-role literal placement', forbiddenServiceRoleLiteralRefs.slice(0, 20).join(', '));
 }
 
 const mockFlagRefs = trackedFiles.filter((file) => {
@@ -214,10 +226,7 @@ const mockFlagRefs = trackedFiles.filter((file) => {
 const allowedMockFlagRefs = new Set(['src/lib/mockMode.ts']);
 const directMockFlagRefs = mockFlagRefs.filter((file) => !allowedMockFlagRefs.has(file));
 if (directMockFlagRefs.length === 0) {
-  pass(
-    'Mock flag policy',
-    'NEXT_PUBLIC_USE_MOCK_DATA is centralized through src/lib/mockMode.ts'
-  );
+  pass('Mock flag policy', 'NEXT_PUBLIC_USE_MOCK_DATA is centralized through src/lib/mockMode.ts');
 } else {
   warn(
     'Mock flag policy',

@@ -1,3 +1,4 @@
+import { secureEdge } from '../_shared/http-security.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { envString } from '../_shared/env.ts';
 import { tenantHasFeatureFlag } from '../_shared/plan-entitlements.ts';
@@ -89,7 +90,7 @@ async function resolveTenant(params: {
   return membership?.tenant_id ? String(membership.tenant_id) : '';
 }
 
-Deno.serve(async (req) => {
+Deno.serve(secureEdge(async (req) => {
   const timestamp = new Date().toISOString();
 
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -387,4 +388,4 @@ Deno.serve(async (req) => {
       meta: { timestamp },
     });
   }
-});
+}, "asaas-create-tenant-subaccount"));

@@ -243,6 +243,12 @@ function mercadopagoSignature(dataId, requestId, ts) {
     .digest('hex');
 }
 
+function isMercadoPagoTimestampFresh(ts, now = Date.now(), maxAgeMs = 10 * 60 * 1000) {
+  const parsed = Number(ts);
+  const timestampMs = parsed < 1_000_000_000_000 ? parsed * 1000 : parsed;
+  return Number.isFinite(timestampMs) && Math.abs(now - timestampMs) <= maxAgeMs;
+}
+
 function isMercadoPagoSignatureValid(fixture) {
   const payload = toObject(fixture.payload);
   const dataId = getString(payload.data?.id);
@@ -508,6 +514,15 @@ async function run() {
   assertAcceptedMercadoPagoWebhook(mercadoPagoChargeback, 'mercadopagoChargeback');
   assertMercadoPagoDuplicate(mercadoPagoDuplicated, mercadoPagoApproved);
   assertMercadoPagoInvalidSignature(mercadoPagoInvalidSignature);
+  const currentTimestamp = Math.floor(Date.now() / 1000);
+  ok(
+    isMercadoPagoTimestampFresh(String(currentTimestamp)),
+    'current Mercado Pago signature timestamp must be fresh'
+  );
+  ok(
+    !isMercadoPagoTimestampFresh(String(currentTimestamp - 11 * 60)),
+    'stale Mercado Pago signature timestamp must fail closed'
+  );
 
   console.log('Billing fixture contract checks passed:');
   console.log('- confirmed, overdue and cancelled mappings passed');
@@ -515,7 +530,7 @@ async function run() {
     '- Mercado Pago approved, pending, rejected, cancelled, refunded and chargeback mappings passed'
   );
   console.log('- webhook idempotency hash passed');
-  console.log('- Mercado Pago webhook signature checks passed');
+  console.log('- Mercado Pago webhook signature and freshness checks passed');
   console.log('- tenant resolution strategy passed');
   console.log('- invalid token/signature fixtures fail closed');
 }

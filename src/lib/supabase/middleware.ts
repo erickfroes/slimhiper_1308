@@ -31,6 +31,7 @@ export function updateSession(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) => {
           request.cookies.set(name, value);
         });
+        requestHeaders.set('cookie', request.headers.get('cookie') ?? '');
         response = NextResponse.next({
           request: { headers: requestHeaders },
         });
@@ -41,5 +42,10 @@ export function updateSession(request: NextRequest) {
     },
   });
 
-  return { supabase, response };
+  return {
+    supabase,
+    get response() {
+      return response;
+    },
+  };
 }
